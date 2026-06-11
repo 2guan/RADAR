@@ -116,12 +116,12 @@ function Root() {
             darkItemSelectedBg: 'var(--radar-primary-soft)', darkItemSelectedColor: '#fff',
           },
           Table: {
-            headerBg: isDark ? 'rgba(255,255,255,0.03)' : '#f7f9fc',
+            // 白天模式用纯白（更浅更干净），夜间模式用主题色调深色背景（避免纯黑）
+            headerBg: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
             headerColor: isDark ? '#9aa3b2' : '#64748b',
             cellPaddingBlock: 12,
             rowHoverBg: 'var(--radar-primary-soft)',
-            // 表格底色与背景色一致，避免纯黑色
-            colorBgContainer: 'var(--radar-bg)',
+            colorBgContainer: isDark ? 'var(--radar-bg)' : 'var(--radar-surface)',
           },
           Modal: { titleFontSize: 17 },
           Button: { fontWeight: 500, primaryShadow: 'none' },

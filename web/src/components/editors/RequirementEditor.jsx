@@ -1,13 +1,14 @@
 /**
  * 文件：components/editors/RequirementEditor.jsx
  * 用途：需求新增/编辑弹窗（可复用：需求分析页与版本概览均使用）。
- *       重置为高效、精致、紧凑、美观的双栏卡片布局，契合版本生命周期详情风格。
+ *       双栏卡片布局；字体紧凑；需求说明书在基本信息下方；
+ *       协同改造/测试系统采用下拉选择 + 外置已选区双模式展示。
  * 作者：hengguan
  */
 
 import React, { useEffect, useState } from 'react';
-import { Modal, Form, Input, DatePicker, Row, Col, Button, Space, Select, Tag, message } from 'antd';
-import { HistoryOutlined } from '@ant-design/icons';
+import { Modal, Form, Input, DatePicker, Row, Col, Button, Select, Tag, message } from 'antd';
+import { HistoryOutlined, CloseOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import DictSelect from '../DictSelect.jsx';
 import SystemSelect from '../SystemSelect.jsx';
@@ -16,11 +17,99 @@ import AttachmentField from '../AttachmentField.jsx';
 import HistoryDrawer from '../HistoryDrawer.jsx';
 import { apiGet, apiPost, apiPut } from '../../api/client.js';
 
+// ─── 模块级系统列表缓存（与 SystemSelect 共用同一接口，但单独维护以供下方组件使用） ───
+let _sysCache = null;
+
+/**
+ * 协同系统选择器
+ * 上方：普通下拉框（多选但不展示 Tag，选完即收起）
+ * 下方：已选系统区域，逐个展示、可单独删除
+ */
+function CollabSystemSelector({ value = [], onChange, placeholder }) {
+  const [options, setOptions] = useState([]);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (!_sysCache) _sysCache = await apiGet('/systems/all');
+      if (alive) {
+        setOptions(
+          (_sysCache || []).map((s) => ({
+            value: s.sys_code,
+            label: `${s.sys_name}（${s.sys_code}）`,
+            org: s.org || '',
+          }))
+        );
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  const remove = (code) => onChange?.((value || []).filter((v) => v !== code));
+
+  return (
+    <div>
+      {/* 下拉选择框：选中项不在框内以 tag 形式堆叠，改为外置展示 */}
+      <Select
+        mode="multiple"
+        value={value}
+        onChange={onChange}
+        options={options}
+        showSearch
+        allowClear
+        filterOption={(input, opt) =>
+          `${opt.label}${opt.org}`.toLowerCase().includes(input.toLowerCase())
+        }
+        placeholder={placeholder || '点击下拉选择系统（支持模糊搜索）'}
+        style={{ width: '100%', fontSize: 12 }}
+        tagRender={() => null}           // 不在 Select 框内渲染 Tag
+        maxTagCount={0}
+        maxTagPlaceholder={(omitted) =>
+          omitted.length > 0 ? `已选 ${omitted.length} 个，点击展开添加` : null
+        }
+      />
+
+      {/* 已选区域 */}
+      {value && value.length > 0 && (
+        <div
+          style={{
+            marginTop: 8,
+            padding: '8px 10px',
+            background: 'var(--radar-primary-soft)',
+            border: '1px solid var(--radar-border)',
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 6,
+          }}
+        >
+          {value.map((code) => {
+            const opt = options.find((o) => o.value === code);
+            return (
+              <Tag
+                key={code}
+                className="tag-system"
+                style={{ borderRadius: 2, margin: 0, fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                closeIcon={<CloseOutlined style={{ fontSize: 10 }} />}
+                closable
+                onClose={() => remove(code)}
+              >
+                {opt ? `${opt.label}` : code}
+              </Tag>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function RequirementEditor({ open, reqId, defaultReleasePointId, onClose, onSaved }) {
   const [form] = Form.useForm();
-  const [current, setCurrent] = useState(null); // 已加载的需求详情（编辑态）
+  const [current, setCurrent] = useState(null);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [points, setPoints] = useState([]);     // 投产点选项
+  const [points, setPoints] = useState([]);
   const isEdit = !!reqId;
 
   useEffect(() => {
@@ -43,7 +132,6 @@ export default function RequirementEditor({ open, reqId, defaultReleasePointId, 
     const payload = {
       ...v,
       propose_time: v.propose_time ? v.propose_time.format('YYYY-MM-DD') : null,
-      release_point_id: v.release_point_id,
     };
     if (isEdit) {
       await apiPut(`/requirements/${reqId}`, payload);
@@ -52,25 +140,26 @@ export default function RequirementEditor({ open, reqId, defaultReleasePointId, 
       const res = await apiPost('/requirements', payload);
       message.success(`已创建需求 ${res.req_code}，可继续维护附件`);
       const d = await apiGet(`/requirements/${res.id}`);
-      setCurrent(d); // 转为编辑态以维护附件
+      setCurrent(d);
     }
     onSaved?.();
   };
 
   return (
     <Modal
-      open={open} 
-      width={980} 
-      okText="保存" 
-      onOk={save} 
-      onCancel={onClose} 
+      open={open}
+      width={980}
+      okText="保存"
+      onOk={save}
+      onCancel={onClose}
       destroyOnClose
+      styles={{ body: { fontSize: 12 } }}
       title={(
-        <div className="lc-modal-title" style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', paddingRight: 32 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', paddingRight: 32 }}>
           {isEdit || current ? (
             <>
               <span className="lc-id big" style={{ margin: 0 }}>{current?.req_code || 'REQ'}</span>
-              <span className="lc-modal-name" style={{ fontSize: 15, fontWeight: 700 }}>编辑需求</span>
+              <span className="lc-modal-name" style={{ fontSize: 14, fontWeight: 700 }}>编辑需求</span>
               {current?.req_type && (
                 <Tag className="tag-type" style={{ borderRadius: 2, margin: 0, fontSize: 10 }}>{current.req_type}</Tag>
               )}
@@ -78,15 +167,15 @@ export default function RequirementEditor({ open, reqId, defaultReleasePointId, 
           ) : (
             <>
               <span className="lc-id big" style={{ margin: 0, background: 'var(--radar-status-in-progress-soft)', color: 'var(--radar-status-in-progress)' }}>NEW</span>
-              <span className="lc-modal-name" style={{ fontSize: 15, fontWeight: 700 }}>新增需求</span>
+              <span className="lc-modal-name" style={{ fontSize: 14, fontWeight: 700 }}>新增需求</span>
             </>
           )}
           {current && (
-            <Button 
-              size="small" 
-              icon={<HistoryOutlined />} 
+            <Button
+              size="small"
+              icon={<HistoryOutlined />}
               onClick={() => setHistoryOpen(true)}
-              style={{ marginLeft: 'auto', marginRight: 16, borderRadius: 2 }}
+              style={{ marginLeft: 'auto', marginRight: 16, borderRadius: 2, fontSize: 12 }}
             >
               变更历史
             </Button>
@@ -94,107 +183,142 @@ export default function RequirementEditor({ open, reqId, defaultReleasePointId, 
         </div>
       )}
     >
-      <Form form={form} layout="vertical" requiredMark="optional" style={{ marginTop: 16 }}>
-        <Row gutter={16}>
-          {/* 左栏 - 核心内容 */}
+      {/* 全局缩小 Form label 与输入框字号 */}
+      <style>{`
+        .req-editor-form .ant-form-item-label > label { font-size: 12px !important; }
+        .req-editor-form .ant-input,
+        .req-editor-form .ant-input-affix-wrapper,
+        .req-editor-form .ant-select-selector,
+        .req-editor-form .ant-picker { font-size: 12px !important; }
+        .req-editor-form .ant-form-item { margin-bottom: 0; }
+      `}</style>
+
+      <Form
+        form={form}
+        layout="vertical"
+        requiredMark="optional"
+        className="req-editor-form"
+        style={{ marginTop: 14, fontSize: 12 }}
+      >
+        <Row gutter={14}>
+          {/* ── 左栏 ── */}
           <Col xs={24} md={14}>
+
+            {/* 基本信息 */}
             <div className="form-section-card">
               <div className="form-section-title" style={{ marginTop: 0 }}>基本信息</div>
-              <Form.Item name="title" label="需求标题" rules={[{ required: true, message: '请输入需求标题' }]} style={{ marginBottom: 14 }}>
-                <Input placeholder="请输入需求标题" />
+              <Form.Item name="title" label="需求标题" rules={[{ required: true, message: '请输入需求标题' }]} style={{ marginBottom: 10 }}>
+                <Input placeholder="请输入需求标题" size="small" />
               </Form.Item>
-              <Form.Item name="summary" label="需求概述" rules={[{ max: 500, message: '不超过 500 字' }]} style={{ marginBottom: 0 }}>
-                <Input.TextArea rows={4} placeholder="描述该需求的核心背景与业务诉求（500字以内）" showCount maxLength={500} />
+              <Form.Item name="summary" label="需求概述" rules={[{ max: 500, message: '不超过 500 字' }]}>
+                <Input.TextArea rows={3} placeholder="描述该需求的核心背景与业务诉求（500字以内）" showCount maxLength={500} style={{ fontSize: 12 }} />
               </Form.Item>
             </div>
 
+            {/* 需求说明书（附件）—— 移至基本信息下方 */}
+            <div className="form-section-card">
+              <div className="form-section-title" style={{ marginTop: 0 }}>需求说明书<span style={{ fontWeight: 400, color: 'var(--radar-text-secondary)', marginLeft: 6, fontSize: 11 }}>（附件或路径，终态至少 1 个）</span></div>
+              <AttachmentField entityType="requirement" entityId={current?.id} fieldKey="需求说明书" />
+            </div>
+
+            {/* 涉及系统 */}
             <div className="form-section-card">
               <div className="form-section-title" style={{ marginTop: 0 }}>涉及系统</div>
-              <Form.Item 
-                name="main_systems" 
-                label="主责系统（最多选择 2 个，终态必填）" 
-                style={{ marginBottom: 14 }}
-                rules={[
-                  {
-                    validator: (_, value) => {
-                      if (value && value.length > 2) {
-                        return Promise.reject(new Error('主责系统最多只能选择 2 个'));
-                      }
-                      return Promise.resolve();
-                    }
-                  }
-                ]}
+
+              {/* 主责系统：多选标签，最多 2 个 */}
+              <Form.Item
+                name="main_systems"
+                label="主责系统（终态必填，最多 2 个）"
+                style={{ marginBottom: 10 }}
+                rules={[{
+                  validator: (_, val) =>
+                    val && val.length > 2
+                      ? Promise.reject('主责系统最多只能选择 2 个')
+                      : Promise.resolve(),
+                }]}
               >
-                <SystemSelect maxCount={2} maxTagCount="responsive" style={{ width: '100%' }} placeholder="选择主责系统（最多2个）" />
+                <SystemSelect maxCount={2} maxTagCount="responsive" style={{ width: '100%' }} placeholder="选择主责系统（最多 2 个）" />
               </Form.Item>
-              
-              <Form.Item name="collab_dev_systems" label="协同改造系统" style={{ marginBottom: 14 }}>
-                <SystemSelect maxTagCount={undefined} style={{ width: '100%' }} placeholder="选择协同改造系统（可选多个，展示完整）" />
+
+              {/* 协同改造系统：下拉 + 外置已选区 */}
+              <Form.Item name="collab_dev_systems" label="协同改造系统" style={{ marginBottom: 10 }}>
+                <CollabSystemSelector placeholder="点击下拉添加协同改造系统" />
               </Form.Item>
-              
-              <Form.Item name="collab_test_systems" label="协同测试系统" style={{ marginBottom: 0 }}>
-                <SystemSelect maxTagCount={undefined} style={{ width: '100%' }} placeholder="选择协同测试系统（可选多个，展示完整）" />
+
+              {/* 协同测试系统：下拉 + 外置已选区 */}
+              <Form.Item name="collab_test_systems" label="协同测试系统">
+                <CollabSystemSelector placeholder="点击下拉添加协同测试系统" />
               </Form.Item>
             </div>
           </Col>
 
-          {/* 右栏 - 属性、责任人、附件 */}
+          {/* ── 右栏 ── */}
           <Col xs={24} md={10}>
+
+            {/* 分类与状态 */}
             <div className="form-section-card">
               <div className="form-section-title" style={{ marginTop: 0 }}>分类与状态</div>
-              <Form.Item name="release_point_id" label="计划投产点" rules={[{ required: true, message: '请选择计划投产点' }]} style={{ marginBottom: 12 }}>
-                <Select 
-                  placeholder="选择计划投产点" style={{ width: '100%' }} showSearch optionFilterProp="label"
-                  options={points.map((p) => ({ value: p.id, label: `${p.release_date}${p.version_type ? ' · ' + p.version_type : ''}` }))} 
+              <Form.Item name="release_point_id" label="计划投产点" rules={[{ required: true, message: '请选择计划投产点' }]} style={{ marginBottom: 10 }}>
+                <Select
+                  placeholder="选择计划投产点"
+                  size="small"
+                  style={{ width: '100%' }}
+                  showSearch
+                  optionFilterProp="label"
+                  options={points.map((p) => ({
+                    value: p.id,
+                    label: `${p.release_date}${p.version_type ? ' · ' + p.version_type : ''}`,
+                  }))}
                 />
               </Form.Item>
-              
-              <Row gutter={12}>
+
+              <Row gutter={10}>
                 <Col span={12}>
-                  <Form.Item name="status" label="需求状态" style={{ marginBottom: 12 }}>
-                    <DictSelect category="process_status" stage="需求" style={{ width: '100%' }} />
+                  <Form.Item name="status" label="需求状态" style={{ marginBottom: 10 }}>
+                    <DictSelect category="process_status" stage="需求" style={{ width: '100%' }} size="small" />
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item name="req_type" label="需求类型" style={{ marginBottom: 12 }}>
-                    <DictSelect category="req_type" style={{ width: '100%' }} />
+                  <Form.Item name="req_type" label="需求类型" style={{ marginBottom: 10 }}>
+                    <DictSelect category="req_type" style={{ width: '100%' }} size="small" />
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item name="propose_dept" label="农信提出部门" style={{ marginBottom: 0 }}>
-                    <DictSelect category="org" style={{ width: '100%' }} />
+                  <Form.Item name="propose_dept" label="农信提出部门" style={{ marginBottom: 10 }}>
+                    <DictSelect category="org" style={{ width: '100%' }} size="small" />
                   </Form.Item>
                 </Col>
                 <Col span={12}>
                   <Form.Item name="propose_time" label="提出时间" style={{ marginBottom: 0 }}>
-                    <DatePicker style={{ width: '100%' }} placeholder="选择日期" />
+                    <DatePicker size="small" style={{ width: '100%' }} placeholder="选择日期" />
                   </Form.Item>
                 </Col>
               </Row>
             </div>
 
+            {/* 相关负责人 */}
             <div className="form-section-card">
               <div className="form-section-title" style={{ marginTop: 0 }}>相关负责人</div>
-              <Form.Item name="proposer" label="农信提出人" style={{ marginBottom: 12 }}>
-                <PersonPicker style={{ width: '100%' }} placeholder="选择提出人" />
+              <Form.Item name="proposer" label="农信提出人" style={{ marginBottom: 10 }}>
+                <PersonPicker style={{ width: '100%' }} placeholder="选择提出人" size="small" />
               </Form.Item>
-              <Form.Item name="yn_owner" label="云南农信业务负责人" style={{ marginBottom: 12 }}>
-                <PersonPicker style={{ width: '100%' }} placeholder="选择云南农信业务负责人" />
+              <Form.Item name="yn_owner" label="云南农信业务负责人" style={{ marginBottom: 10 }}>
+                <PersonPicker style={{ width: '100%' }} placeholder="选择云南农信业务负责人" size="small" />
               </Form.Item>
-              <Form.Item name="jk_owner" label="建信金科业务负责人" style={{ marginBottom: 0 }}>
-                <PersonPicker style={{ width: '100%' }} placeholder="选择建信金科业务负责人" />
+              <Form.Item name="jk_owner" label="建信金科业务负责人">
+                <PersonPicker style={{ width: '100%' }} placeholder="选择建信金科业务负责人" size="small" />
               </Form.Item>
-            </div>
-
-            <div className="form-section-card">
-              <div className="form-section-title" style={{ marginTop: 0 }}>需求说明书（附件或路径）</div>
-              <AttachmentField entityType="requirement" entityId={current?.id} fieldKey="需求说明书" />
             </div>
           </Col>
         </Row>
       </Form>
 
-      <HistoryDrawer open={historyOpen} entityType="requirement" entityId={current?.id} onClose={() => setHistoryOpen(false)} />
+      <HistoryDrawer
+        open={historyOpen}
+        entityType="requirement"
+        entityId={current?.id}
+        onClose={() => setHistoryOpen(false)}
+      />
     </Modal>
   );
 }
