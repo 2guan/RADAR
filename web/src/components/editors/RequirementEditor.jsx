@@ -185,12 +185,13 @@ export default function RequirementEditor({ open, reqId, defaultReleasePointId, 
     >
       {/* 全局缩小 Form label 与输入框字号 */}
       <style>{`
-        .req-editor-form .ant-form-item-label > label { font-size: 12px !important; }
+        .req-editor-form .ant-form-item-label > label { font-size: 12px !important; font-weight: 600 !important; color: var(--radar-ink) !important; }
         .req-editor-form .ant-input,
         .req-editor-form .ant-input-affix-wrapper,
         .req-editor-form .ant-select-selector,
         .req-editor-form .ant-picker { font-size: 12px !important; }
         .req-editor-form .ant-form-item { margin-bottom: 0; }
+        .req-editor-form .ant-form-item-label { padding-bottom: 2px !important; }
       `}</style>
 
       <Form
@@ -198,16 +199,16 @@ export default function RequirementEditor({ open, reqId, defaultReleasePointId, 
         layout="vertical"
         requiredMark="optional"
         className="req-editor-form"
-        style={{ marginTop: 14, fontSize: 12 }}
+        style={{ marginTop: 10, fontSize: 12 }}
       >
-        <Row gutter={14}>
+        <Row gutter={12}>
           {/* ── 左栏 ── */}
           <Col xs={24} md={14}>
 
             {/* 基本信息 */}
             <div className="form-section-card">
-              <div className="form-section-title" style={{ marginTop: 0 }}>基本信息</div>
-              <Form.Item name="title" label="需求标题" rules={[{ required: true, message: '请输入需求标题' }]} style={{ marginBottom: 10 }}>
+              <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>基本信息</div>
+              <Form.Item name="title" label="需求标题" rules={[{ required: true, message: '请输入需求标题' }]} style={{ marginBottom: 8 }}>
                 <Input placeholder="请输入需求标题" size="small" />
               </Form.Item>
               <Form.Item name="summary" label="需求概述" rules={[{ max: 500, message: '不超过 500 字' }]}>
@@ -217,19 +218,19 @@ export default function RequirementEditor({ open, reqId, defaultReleasePointId, 
 
             {/* 需求说明书（附件）—— 移至基本信息下方 */}
             <div className="form-section-card">
-              <div className="form-section-title" style={{ marginTop: 0 }}>需求说明书<span style={{ fontWeight: 400, color: 'var(--radar-text-secondary)', marginLeft: 6, fontSize: 11 }}>（附件或路径，终态至少 1 个）</span></div>
+              <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>需求说明书<span style={{ fontWeight: 400, color: 'var(--radar-text-secondary)', marginLeft: 6, fontSize: 11 }}>（附件或路径，终态至少 1 个）</span></div>
               <AttachmentField entityType="requirement" entityId={current?.id} fieldKey="需求说明书" />
             </div>
 
             {/* 涉及系统 */}
             <div className="form-section-card">
-              <div className="form-section-title" style={{ marginTop: 0 }}>涉及系统</div>
+              <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>涉及系统</div>
 
               {/* 主责系统：多选标签，最多 2 个 */}
               <Form.Item
                 name="main_systems"
                 label="主责系统（终态必填，最多 2 个）"
-                style={{ marginBottom: 10 }}
+                style={{ marginBottom: 8 }}
                 rules={[{
                   validator: (_, val) =>
                     val && val.length > 2
@@ -241,7 +242,7 @@ export default function RequirementEditor({ open, reqId, defaultReleasePointId, 
               </Form.Item>
 
               {/* 协同改造系统：下拉 + 外置已选区 */}
-              <Form.Item name="collab_dev_systems" label="协同改造系统" style={{ marginBottom: 10 }}>
+              <Form.Item name="collab_dev_systems" label="协同改造系统" style={{ marginBottom: 8 }}>
                 <CollabSystemSelector placeholder="点击下拉添加协同改造系统" />
               </Form.Item>
 
@@ -257,8 +258,8 @@ export default function RequirementEditor({ open, reqId, defaultReleasePointId, 
 
             {/* 分类与状态 */}
             <div className="form-section-card">
-              <div className="form-section-title" style={{ marginTop: 0 }}>分类与状态</div>
-              <Form.Item name="release_point_id" label="计划投产点" rules={[{ required: true, message: '请选择计划投产点' }]} style={{ marginBottom: 10 }}>
+              <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>分类与状态</div>
+              <Form.Item name="release_point_id" label="计划投产点" rules={[{ required: true, message: '请选择计划投产点' }]} style={{ marginBottom: 8 }}>
                 <Select
                   placeholder="选择计划投产点"
                   size="small"
@@ -272,19 +273,19 @@ export default function RequirementEditor({ open, reqId, defaultReleasePointId, 
                 />
               </Form.Item>
 
-              <Row gutter={10}>
+              <Row gutter={8}>
                 <Col span={12}>
-                  <Form.Item name="status" label="需求状态" style={{ marginBottom: 10 }}>
+                  <Form.Item name="status" label="需求状态" style={{ marginBottom: 8 }}>
                     <DictSelect category="process_status" stage="需求" style={{ width: '100%' }} size="small" />
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item name="req_type" label="需求类型" style={{ marginBottom: 10 }}>
+                  <Form.Item name="req_type" label="需求类型" style={{ marginBottom: 8 }}>
                     <DictSelect category="req_type" style={{ width: '100%' }} size="small" />
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item name="propose_dept" label="农信提出部门" style={{ marginBottom: 10 }}>
+                  <Form.Item name="propose_dept" label="农信提出部门" style={{ marginBottom: 8 }}>
                     <DictSelect category="org" style={{ width: '100%' }} size="small" />
                   </Form.Item>
                 </Col>
@@ -298,11 +299,11 @@ export default function RequirementEditor({ open, reqId, defaultReleasePointId, 
 
             {/* 相关负责人 */}
             <div className="form-section-card">
-              <div className="form-section-title" style={{ marginTop: 0 }}>相关负责人</div>
-              <Form.Item name="proposer" label="农信提出人" style={{ marginBottom: 10 }}>
+              <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>相关负责人</div>
+              <Form.Item name="proposer" label="农信提出人" style={{ marginBottom: 8 }}>
                 <PersonPicker style={{ width: '100%' }} placeholder="选择提出人" size="small" />
               </Form.Item>
-              <Form.Item name="yn_owner" label="云南农信业务负责人" style={{ marginBottom: 10 }}>
+              <Form.Item name="yn_owner" label="云南农信业务负责人" style={{ marginBottom: 8 }}>
                 <PersonPicker style={{ width: '100%' }} placeholder="选择云南农信业务负责人" size="small" />
               </Form.Item>
               <Form.Item name="jk_owner" label="建信金科业务负责人">

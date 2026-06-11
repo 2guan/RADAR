@@ -349,12 +349,12 @@ body {
 /* ============ 通用 ============ */
 .clickable { cursor: pointer; transition: box-shadow .2s, transform .2s; }
 .clickable:hover { box-shadow: 0 8px 22px rgba(31,45,80,0.12); transform: translateY(-2px); }
-.form-section-title { font-weight: 600; font-size: 13px; color: var(--radar-primary); border-left: 3px solid var(--radar-primary); padding-left: 8px; margin: 6px 0 12px; }
+.form-section-title { font-weight: 600; font-size: 13px; color: var(--radar-primary); border-left: 3px solid var(--radar-primary); padding-left: 8px; margin: 4px 0 8px; }
 .form-section-card {
   background: var(--radar-surface) !important;
   border: 1px solid var(--radar-border) !important;
-  padding: 14px 18px;
-  margin-bottom: 14px;
+  padding: 10px 14px;
+  margin-bottom: 10px;
   border-radius: 0;
 }
 .form-section-card:last-child {
