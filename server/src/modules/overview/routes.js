@@ -141,8 +141,9 @@ export default async function overviewRoutes(fastify) {
         .map((s) => ({ ...s, signerInfo: resolvePerson(s.signer_name) })),
     } : null;
 
-    // 需求：解析人员与主责系统
+    // 需求：解析人员、主责系统与协同改造系统
     const mainCodes = req.main_systems ? JSON.parse(req.main_systems) : [];
+    const collabCodes = req.collab_dev_systems ? JSON.parse(req.collab_dev_systems) : [];
     const requirement = {
       ...req,
       attachments: attachOf('requirement', req.id),
@@ -150,6 +151,7 @@ export default async function overviewRoutes(fastify) {
       ynOwnerInfo: resolvePerson(req.yn_owner),
       jkOwnerInfo: resolvePerson(req.jk_owner),
       mainSystemsInfo: mainCodes.map(resolveSystem),
+      collabDevSystemsInfo: collabCodes.map(resolveSystem),
     };
 
     return ok({ requirement, dev, sit, nft, sec, uat, release: releaseDetail });

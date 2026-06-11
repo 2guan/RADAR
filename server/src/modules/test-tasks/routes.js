@@ -55,10 +55,35 @@ export default async function testTaskRoutes(fastify) {
         params.push(...sub.params);
       }
     }
-    return ok(listQuery({
+    const result = listQuery({
       table: 'test_task', columns: COLUMNS, searchColumns: SEARCH, query: body,
       baseWhere: wh.join(' AND '), baseParams: params,
+    });
+
+    // 在内存中映射计划投产点与系统名称
+    const reqs = all(`
+      SELECT r.req_code, rp.release_date
+      FROM requirement r
+      LEFT JOIN release_point rp ON r.release_point_id = rp.id
+    `);
+    const reqMap = {};
+    for (const r of reqs) {
+      reqMap[r.req_code] = r.release_date;
+    }
+
+    const systems = all('SELECT sys_code, sys_name FROM system');
+    const sysMap = {};
+    for (const s of systems) {
+      sysMap[s.sys_code] = s.sys_name;
+    }
+
+    result.list = result.list.map((row) => ({
+      ...row,
+      release_date: reqMap[row.req_code] || null,
+      impl_system_name: sysMap[row.impl_system] || row.impl_system,
     }));
+
+    return ok(result);
   });
 
   // 详情

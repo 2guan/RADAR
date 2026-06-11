@@ -47,15 +47,51 @@ export default function DevTasks() {
   };
 
   const columns = [
-    { title: '任务编号', dataIndex: 'task_code', key: 'task_code', sorter: true, width: 220, fixed: 'left' },
-    { title: '任务名称', dataIndex: 'task_name', key: 'task_name', width: 240, ellipsis: true },
-    { title: '关联需求', dataIndex: 'req_code', key: 'req_code', width: 170 },
-    { title: '状态', dataIndex: 'status', key: 'status', width: 110, render: (s) => <StatusBadge status={s} /> },
-    { title: '负责人', dataIndex: 'owner', key: 'owner', width: 100 },
-    { title: '实施系统', dataIndex: 'impl_system', key: 'impl_system', width: 120 },
-    { title: '偏差率', dataIndex: 'deviation_rate', key: 'deviation_rate', width: 90, render: (v) => (v == null ? '—' : `${v}%`) },
+    { title: '状态', dataIndex: 'status', key: 'status', align: 'center', render: (s) => <StatusBadge status={s} /> },
     {
-      title: '操作', key: 'op', width: 120, fixed: 'right',
+      title: '计划投产点',
+      dataIndex: 'release_date',
+      key: 'release_date',
+      render: (val) => (
+        <span style={{ fontFamily: 'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace' }}>
+          {val || '—'}
+        </span>
+      ),
+    },
+    {
+      title: '任务编号',
+      dataIndex: 'task_code',
+      key: 'task_code',
+      sorter: true,
+      render: (val) => (
+        <span style={{ fontFamily: 'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace', fontWeight: 500 }}>
+          {val}
+        </span>
+      ),
+    },
+    { title: '任务名称', dataIndex: 'task_name', key: 'task_name', ellipsis: true },
+    {
+      title: '关联需求',
+      dataIndex: 'req_code',
+      key: 'req_code',
+      render: (val) => (
+        <span style={{ fontFamily: 'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace' }}>
+          {val}
+        </span>
+      ),
+    },
+    { title: '负责人', dataIndex: 'owner', key: 'owner' },
+    {
+      title: '实施系统',
+      dataIndex: 'impl_system_name',
+      key: 'impl_system_name',
+      render: (val) => val ? (
+        <Tag className="status-tag tag-system" style={{ borderRadius: 2, margin: 0 }}>{val}</Tag>
+      ) : '—',
+    },
+    { title: '偏差率', dataIndex: 'deviation_rate', key: 'deviation_rate', render: (v) => (v == null ? '—' : `${v}%`) },
+    {
+      title: '操作', key: 'op', width: 100, fixed: 'right',
       render: (_, row) => (
         <Space size={0} onClick={(e) => e.stopPropagation()}>
           <Can module="dev" action="edit"><Button type="link" size="small" icon={<EditOutlined />} onClick={() => setEditId(row.id)} /></Can>
@@ -74,7 +110,17 @@ export default function DevTasks() {
           <Space direction="vertical" size={4} style={{ width: '100%' }}>
             <Space style={{ justifyContent: 'space-between', width: '100%' }}><strong>{item.task_code}</strong><StatusBadge status={item.status} /></Space>
             <div>{item.task_name}</div>
-            <Space size="small"><Tag>{item.impl_system}</Tag><span>负责人：{item.owner || '—'}</span></Space>
+            {item.release_date && (
+              <div style={{ fontSize: '11px', color: 'var(--radar-text-secondary)' }}>
+                计划投产点：{item.release_date}
+              </div>
+            )}
+            <Space size="small">
+              {item.impl_system_name && (
+                <Tag className="status-tag tag-system" style={{ borderRadius: 2, margin: 0 }}>{item.impl_system_name}</Tag>
+              )}
+              <span>负责人：{item.owner || '—'}</span>
+            </Space>
           </Space>
         )}
         toolbar={[
@@ -91,7 +137,7 @@ export default function DevTasks() {
           <Form.Item name="systems" label="拆分系统（默认主责+协同改造系统，可调整）" rules={[{ required: true, message: '请选择系统' }]}>
             <SystemSelect style={{ width: '100%' }} />
           </Form.Item>
-          <Tag color="green">将为每个所选系统建立一个开发任务，已建立的系统自动跳过</Tag>
+          <Tag className="status-tag-final" style={{ borderRadius: 2 }}>将为每个所选系统建立一个开发任务，已建立的系统自动跳过</Tag>
         </Form>
       </Modal>
 

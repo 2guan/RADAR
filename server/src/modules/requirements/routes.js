@@ -6,7 +6,7 @@
  * 说明：JSON 数组字段（主责/协同系统）入库前序列化；终态时校验主责系统与需求说明书附件。
  */
 
-import { get, run, tx } from '../../db/index.js';
+import { get, run, tx, all } from '../../db/index.js';
 import { listQuery } from '../../lib/query.js';
 import { genRequirementCode } from '../../lib/code-gen.js';
 import { isTerminalStatus } from '../../lib/status.js';
@@ -88,7 +88,28 @@ export default async function requirementRoutes(fastify) {
       table: 'requirement', columns: COLUMNS, searchColumns: SEARCH,
       query: body, baseWhere, baseParams,
     });
-    result.list = result.list.map(decode);
+
+    // 查询所有投产点与系统，在内存中进行映射
+    const rps = all('SELECT id, release_date FROM release_point');
+    const rpMap = {};
+    for (const rp of rps) {
+      rpMap[rp.id] = rp.release_date;
+    }
+
+    const systems = all('SELECT sys_code, sys_name FROM system');
+    const sysMap = {};
+    for (const s of systems) {
+      sysMap[s.sys_code] = s.sys_name;
+    }
+
+    result.list = result.list.map((row) => {
+      const decoded = decode(row);
+      decoded.release_date = rpMap[decoded.release_point_id] || null;
+      decoded.main_systems_names = (decoded.main_systems || []).map((code) => sysMap[code] || code);
+      decoded.collab_dev_systems_names = (decoded.collab_dev_systems || []).map((code) => sysMap[code] || code);
+      return decoded;
+    });
+
     return ok(result);
   });
 

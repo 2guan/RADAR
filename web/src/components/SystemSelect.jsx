@@ -11,7 +11,7 @@ import { apiGet } from '../api/client.js';
 
 let _cache = null;
 
-export default function SystemSelect({ value, onChange, mode = 'multiple', style, placeholder }) {
+export default function SystemSelect({ value, onChange, mode = 'multiple', style, placeholder, maxTagCount = 'responsive', maxCount }) {
   const [options, setOptions] = useState([]);
 
   useEffect(() => {
@@ -36,7 +36,8 @@ export default function SystemSelect({ value, onChange, mode = 'multiple', style
       showSearch
       filterOption={(input, opt) => (opt.label + opt.org).toLowerCase().includes(input.toLowerCase())}
       options={options}
-      maxTagCount="responsive"
+      maxTagCount={maxTagCount}
+      maxCount={maxCount}
     />
   );
 }

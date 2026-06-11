@@ -58,11 +58,20 @@ export default async function releaseRoutes(fastify) {
     sql += ' ORDER BY id DESC';
     const reqs = all(sql, ...params);
 
+    // 查询所有投产点在内存中进行映射
+    const rps = all('SELECT id, release_date FROM release_point');
+    const rpMap = {};
+    for (const rp of rps) {
+      rpMap[rp.id] = rp.release_date;
+    }
+
     const list = reqs.map((r) => {
       const rt = get('SELECT * FROM release_task WHERE req_code = ?', r.req_code);
       const summary = rt ? signoffSummary(rt.id) : { total: 0, signed: 0, rejected: 0 };
       return {
-        req_code: r.req_code, title: r.title,
+        req_code: r.req_code,
+        title: r.title,
+        release_date: rpMap[r.release_point_id] || null,
         release_status: rt?.status || '未发起',
         owner: rt?.owner || null,
         uat_ready: uatAllTerminal(r.req_code),

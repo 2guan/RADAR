@@ -9,6 +9,7 @@ import React, { useEffect, useState } from 'react';
 import { Layout, Select, Button, Dropdown, Avatar, Drawer, Typography, theme as antdTheme } from 'antd';
 import {
   MenuOutlined, BulbOutlined, BulbFilled, UserOutlined, LogoutOutlined, RocketOutlined, RadarChartOutlined, DownOutlined,
+  MenuFoldOutlined, MenuUnfoldOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { useAppStore } from '../stores/app.js';
@@ -26,6 +27,7 @@ export default function MainLayout() {
   const { token } = antdTheme.useToken();
   const { user, platform, theme, toggleTheme, can, releasePointIds, setReleasePointIds } = useAppStore();
 
+  const [siderCollapsed, setSiderCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [points, setPoints] = useState([]);
   const [openMenus, setOpenMenus] = useState({});
@@ -143,7 +145,7 @@ export default function MainLayout() {
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
-      {!isMobile && (
+      {!isMobile && !siderCollapsed && (
         <Sider className="radar-sider" width={236}
           style={{ display: 'flex', flexDirection: 'column', position: 'sticky', top: 0, height: '100vh' }}>
           <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>{siderInner}</div>
@@ -152,6 +154,14 @@ export default function MainLayout() {
 
       <Layout>
         <Header className="radar-header">
+          {!isMobile && (
+            <Button
+              type="text"
+              icon={siderCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+              onClick={() => setSiderCollapsed(!siderCollapsed)}
+              style={{ fontSize: 16, marginRight: 12 }}
+            />
+          )}
           {isMobile && <Button type="text" icon={<MenuOutlined />} onClick={() => setDrawerOpen(true)} />}
           <div className="radar-page-title">{isMobile ? brand : currentLabel}</div>
           <div style={{ flex: 1 }} />

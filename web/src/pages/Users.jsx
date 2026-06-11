@@ -66,13 +66,43 @@ export default function Users() {
   };
 
   const columns = [
-    { title: '手机号', dataIndex: 'phone', key: 'phone', sorter: true, width: 150 },
-    { title: '姓名', dataIndex: 'name', key: 'name', width: 120 },
-    { title: '所属机构', dataIndex: 'org', key: 'org', width: 140 },
-    { title: '角色', dataIndex: 'roles', key: 'roles', width: 240, render: (rs) => (rs || []).map((r) => <Tag key={r.id} color="green">{r.name}</Tag>) },
-    { title: '状态', dataIndex: 'status', key: 'status', width: 90, render: (s) => <Tag color={s === '启用' ? 'green' : 'default'}>{s}</Tag> },
     {
-      title: '操作', key: 'op', width: 160, fixed: 'right',
+      title: '手机号',
+      dataIndex: 'phone',
+      key: 'phone',
+      sorter: true,
+      render: (val) => (
+        <span style={{ fontFamily: 'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace' }}>
+          {val}
+        </span>
+      ),
+    },
+    { title: '姓名', dataIndex: 'name', key: 'name' },
+    { title: '所属机构', dataIndex: 'org', key: 'org' },
+    {
+      title: '角色',
+      dataIndex: 'roles',
+      key: 'roles',
+      render: (rs) => (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, max-content)', gap: '4px 8px' }}>
+          {(rs || []).map((r) => (
+            <Tag key={r.id} color="green" className="status-tag" style={{ margin: 0 }}>{r.name}</Tag>
+          ))}
+        </div>
+      ),
+    },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      key: 'status',
+      render: (s) => (
+        <Tag color={s === '启用' ? 'green' : 'default'} className="status-tag" style={{ borderRadius: 2, margin: 0 }}>
+          {s}
+        </Tag>
+      ),
+    },
+    {
+      title: '操作', key: 'op', width: 120, fixed: 'right',
       render: (_, row) => (
         <Space size={0}>
           <Can module="user" action="edit"><Button type="link" size="small" icon={<EditOutlined />} onClick={() => openEdit(row)} /></Can>
@@ -90,7 +120,11 @@ export default function Users() {
         mobileCard={(item) => (
           <Space direction="vertical" size={4} style={{ width: '100%' }}>
             <Space style={{ justifyContent: 'space-between', width: '100%' }}><strong>{item.name}</strong><span>{item.phone}</span></Space>
-            <div>{(item.roles || []).map((r) => <Tag key={r.id} color="green">{r.name}</Tag>)}</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+              {(item.roles || []).map((r) => (
+                <Tag key={r.id} color="green" className="status-tag" style={{ margin: 0 }}>{r.name}</Tag>
+              ))}
+            </div>
           </Space>
         )}
         toolbar={[

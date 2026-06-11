@@ -121,14 +121,14 @@ const DataTable = forwardRef(function DataTable(props, ref) {
   }
 
   return (
-    <div>
+    <div className="compact-table">
       {header}
       <Table
         rowKey={rowKey}
         loading={loading}
         columns={columns}
         dataSource={data.list}
-        size="middle"
+        size="small"
         scroll={{ x: 'max-content' }}
         components={{ header: { cell: ResizableTitle } }}
         onChange={onTableChange}

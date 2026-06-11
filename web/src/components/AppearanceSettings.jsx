@@ -13,8 +13,9 @@ import { useAppStore } from '../stores/app.js';
 import { PRESET_LIST } from '../theme/presets.js';
 
 export default function AppearanceSettings() {
-  const { preset, setPreset } = useAppStore();
+  const { preset, setPreset, theme } = useAppStore();
   const [saving, setSaving] = useState(false);
+  const isDark = theme === 'dark';
 
   const saveDefault = async () => {
     setSaving(true);
@@ -29,19 +30,22 @@ export default function AppearanceSettings() {
       <div>
         <div className="form-section-title">配色方案（点击即预览）</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 12 }}>
-          {PRESET_LIST.map((p) => (
-            <Card key={p.key} size="small" hoverable onClick={() => setPreset(p.key)}
-              styles={{ body: { padding: 12 } }}
-              style={{ cursor: 'pointer', outline: preset === p.key ? `2px solid ${p.primary}` : 'none' }}>
-              <Space style={{ width: '100%', justifyContent: 'space-between' }}>
-                <Space>
-                  <span style={{ width: 26, height: 26, borderRadius: 8, background: `linear-gradient(135deg, ${p.primary}, ${p.blob2})`, display: 'inline-block' }} />
-                  <span style={{ fontWeight: 600 }}>{p.name}</span>
+          {PRESET_LIST.map((p) => {
+            const colors = isDark ? p.dark : p.light;
+            return (
+              <Card key={p.key} size="small" hoverable onClick={() => setPreset(p.key)}
+                styles={{ body: { padding: 12 } }}
+                style={{ cursor: 'pointer', outline: preset === p.key ? `2px solid ${colors.primary}` : 'none' }}>
+                <Space style={{ width: '100%', justifyContent: 'space-between' }}>
+                  <Space>
+                    <span style={{ width: 26, height: 26, borderRadius: 8, background: `linear-gradient(135deg, ${colors.primary}, ${colors.highlight})`, display: 'inline-block' }} />
+                    <span style={{ fontWeight: 600 }}>{p.name}</span>
+                  </Space>
+                  {preset === p.key && <CheckCircleFilled style={{ color: colors.primary }} />}
                 </Space>
-                {preset === p.key && <CheckCircleFilled style={{ color: p.primary }} />}
-              </Space>
-            </Card>
-          ))}
+              </Card>
+            );
+          })}
         </div>
       </div>
 

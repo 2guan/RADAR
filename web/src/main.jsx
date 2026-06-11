@@ -27,28 +27,61 @@ function Root() {
   const themeMode = useAppStore((s) => s.theme);
   const presetKey = useAppStore((s) => s.preset);
   const preset = getPreset(presetKey);
-  const primary = preset.primary;
   const isDark = themeMode === 'dark';
+
+  const colors = isDark ? preset.dark : preset.light;
+  const primary = colors.primary;
 
   // 同步 CSS 变量（供 styles.css 使用）
   useEffect(() => {
     const root = document.documentElement;
     root.style.setProperty('--radar-primary', primary);
-    root.style.setProperty('--radar-primary-deep', preset.primaryDeep);
-    root.style.setProperty('--radar-primary-fade', primary + (isDark ? '2e' : '1f'));
-    root.style.setProperty('--radar-primary-soft', primary + (isDark ? '22' : '14'));
+    root.style.setProperty('--radar-primary-deep', colors.primaryDeep);
+    root.style.setProperty('--radar-primary-fade', primary + (isDark ? '4d' : '3d'));
+    root.style.setProperty('--radar-primary-soft', primary + (isDark ? '2e' : '22'));
+
+    // 注入高亮色与强调色及变体
+    const highlight = colors.highlight;
+    const accent = colors.accent;
+    root.style.setProperty('--radar-highlight', highlight);
+    root.style.setProperty('--radar-highlight-fade', highlight + (isDark ? '4d' : '3d'));
+    root.style.setProperty('--radar-highlight-soft', highlight + (isDark ? '2e' : '22'));
+    root.style.setProperty('--radar-accent', accent);
+    root.style.setProperty('--radar-accent-fade', accent + (isDark ? '4d' : '3d'));
+    root.style.setProperty('--radar-accent-soft', accent + (isDark ? '2e' : '22'));
+
+    // 注入状态色及变体
+    const statusInitial = colors.statusInitial;
+    const statusInProgress = colors.statusInProgress;
+    const statusFinal = colors.statusFinal;
+
+    root.style.setProperty('--radar-status-initial', statusInitial);
+    root.style.setProperty('--radar-status-initial-fade', statusInitial + (isDark ? '4d' : '3d'));
+    root.style.setProperty('--radar-status-initial-soft', statusInitial + (isDark ? '2e' : '22'));
+
+    root.style.setProperty('--radar-status-in-progress', statusInProgress);
+    root.style.setProperty('--radar-status-in-progress-fade', statusInProgress + (isDark ? '4d' : '3d'));
+    root.style.setProperty('--radar-status-in-progress-soft', statusInProgress + (isDark ? '2e' : '22'));
+
+    root.style.setProperty('--radar-status-final', statusFinal);
+    root.style.setProperty('--radar-status-final-fade', statusFinal + (isDark ? '4d' : '3d'));
+    root.style.setProperty('--radar-status-final-soft', statusFinal + (isDark ? '2e' : '22'));
+
     root.style.setProperty('--radar-text-secondary', isDark ? '#9aa3b2' : '#64748b');
-    root.style.setProperty('--radar-surface', isDark ? '#1a2030' : '#ffffff');
+    root.style.setProperty('--radar-surface', colors.surface);
     root.style.setProperty('--radar-ink', isDark ? '#e6e8ef' : '#1e2330');
-    root.style.setProperty('--radar-border', isDark ? '#2a3346' : '#e8ebf2');
-    root.style.setProperty('--radar-blob1', preset.blob1);
-    root.style.setProperty('--radar-blob2', preset.blob2);
-    // 页面底色与侧栏一致（白/深），不带主题色
-    root.style.setProperty('--radar-bg', isDark ? '#1a2030' : '#ffffff');
+    root.style.setProperty('--radar-border', colors.border);
+    root.style.setProperty('--radar-blob1', colors.blob1);
+    root.style.setProperty('--radar-blob2', colors.blob2);
+    // 页面底色与侧栏一致，跟随主题变化
+    root.style.setProperty('--radar-bg', colors.bgSolid);
+    root.style.setProperty('--radar-bg-gradient', isDark ? preset.bgDark : preset.bgLight);
+    // 登录背景基础底色渐变，在暗黑模式下使用深色渐变
+    root.style.setProperty('--radar-login-bg-base', isDark ? 'linear-gradient(135deg, #0b0f19, #080c14, #05070a)' : 'linear-gradient(135deg, #eef3fb, #e7eefb, #eaf2ff)');
     // 卡片/侧栏/顶栏 实色表面（无磨玻璃）
     root.style.setProperty('--radar-card-shadow', isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 12px rgba(31,45,80,0.06)');
     root.style.colorScheme = themeMode;
-  }, [primary, preset, isDark, themeMode]);
+  }, [primary, colors, isDark, themeMode]);
 
   return (
     <ConfigProvider
@@ -87,6 +120,8 @@ function Root() {
             headerColor: isDark ? '#9aa3b2' : '#64748b',
             cellPaddingBlock: 12,
             rowHoverBg: 'var(--radar-primary-soft)',
+            // 表格底色与背景色一致，避免纯黑色
+            colorBgContainer: 'var(--radar-bg)',
           },
           Modal: { titleFontSize: 17 },
           Button: { fontWeight: 500, primaryShadow: 'none' },

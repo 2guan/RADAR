@@ -6,7 +6,7 @@
  * 说明：全部操作幂等：仅当目标数据不存在时才插入，可安全重复执行。
  */
 
-import { db, get, run, tx } from './index.js';
+import { db, get, run, tx, all } from './index.js';
 import { hashPassword } from '../lib/password.js';
 import { config } from '../config.js';
 
@@ -41,25 +41,25 @@ const CHAIN_MODULES = ['dashboard', 'overview', 'requirement', 'dev', 'test', 'r
 
 // 流程状态字典：[阶段, 属性值, 显示值, 排序, 是否终态]
 const PROCESS_STATUS = [
-  ['需求', '需求登记', '需求登记', 1, false],
-  ['需求', '需求分析', '需求分析', 2, false],
-  ['需求', '需求完成', '需求完成', 3, true],
-  ['开发', '开发承接', '开发承接', 4, false],
-  ['开发', '开发设计', '开发设计', 5, false],
-  ['开发', '开发实施', '开发实施', 6, false],
-  ['开发', '单元测试', '单元测试', 7, false],
-  ['开发', '开发完成', '开发完成', 8, true],
-  ['测试', '测试承接', '测试承接', 9, false],
-  ['测试', '测试方案', '测试方案', 10, false],
-  ['测试', '测试实施', '测试实施', 11, false],
-  ['测试', '测试报告', '测试报告', 12, false],
-  ['测试', '测试完成', '测试完成', 13, true],
-  ['投产', '待评审', '待评审', 14, false],
-  ['投产', '评审通过', '评审通过', 15, false],
-  ['投产', '已上线', '已上线', 16, true],
-  ['评审', '未签署', '未签署', 17, false],
-  ['评审', '已签署', '已签署', 18, true],
-  ['评审', '已驳回', '已驳回', 19, false],
+  ['需求', '需求登记', '需求登记', 1, 'initial'],
+  ['需求', '需求分析', '需求分析', 2, 'in-progress'],
+  ['需求', '需求完成', '需求完成', 3, 'final'],
+  ['开发', '开发承接', '开发承接', 4, 'initial'],
+  ['开发', '开发设计', '开发设计', 5, 'in-progress'],
+  ['开发', '开发实施', '开发实施', 6, 'in-progress'],
+  ['开发', '单元测试', '单元测试', 7, 'in-progress'],
+  ['开发', '开发完成', '开发完成', 8, 'final'],
+  ['测试', '测试承接', '测试承接', 9, 'initial'],
+  ['测试', '测试方案', '测试方案', 10, 'in-progress'],
+  ['测试', '测试实施', '测试实施', 11, 'in-progress'],
+  ['测试', '测试报告', '测试报告', 12, 'in-progress'],
+  ['测试', '测试完成', '测试完成', 13, 'final'],
+  ['投产', '待评审', '待评审', 14, 'in-progress'],
+  ['投产', '评审通过', '评审通过', 15, 'in-progress'],
+  ['投产', '已上线', '已上线', 16, 'final'],
+  ['评审', '未签署', '未签署', 17, 'in-progress'],
+  ['评审', '已签署', '已签署', 18, 'final'],
+  ['评审', '已驳回', '已驳回', 19, 'in-progress'],
 ];
 
 // 投产版本类型
@@ -208,8 +208,8 @@ export function runSeed() {
     }
 
     // 2) 字典
-    for (const [stage, attr, disp, sort, terminal] of PROCESS_STATUS) {
-      seedDict('process_status', attr, disp, sort, { stage, isTerminal: terminal });
+    for (const [stage, attr, disp, sort, stateType] of PROCESS_STATUS) {
+      seedDict('process_status', attr, disp, sort, { stage, stateType, isTerminal: stateType === 'final' });
     }
     for (const [attr, sort] of VERSION_TYPE) seedDict('version_type', attr, attr, sort);
     for (const [attr, sort] of RELEASE_STATUS) seedDict('release_status', attr, attr, sort);
@@ -280,6 +280,24 @@ export function runSeed() {
         'INSERT INTO user_role (user_id, role_id) VALUES (?,?)',
         res.lastInsertRowid, roleIdByCode['超级管理员'],
       );
+    }
+
+    // 7) 自动迁移/升级历史状态数据，将已有流程状态自动打标为对应的类别
+    const rows = all("SELECT id, attr_value, extra FROM dict_item WHERE category = 'process_status'");
+    for (const r of rows) {
+      let extra = {};
+      try { extra = r.extra ? JSON.parse(r.extra) : {}; } catch {}
+      if (!extra.stateType) {
+        if (['需求登记', '开发承接', '测试承接'].includes(r.attr_value)) {
+          extra.stateType = 'initial';
+        } else if (['需求完成', '开发完成', '测试完成', '已上线', '已签署'].includes(r.attr_value)) {
+          extra.stateType = 'final';
+        } else {
+          extra.stateType = 'in-progress';
+        }
+        extra.isTerminal = extra.stateType === 'final';
+        run('UPDATE dict_item SET extra = ? WHERE id = ?', JSON.stringify(extra), r.id);
+      }
     }
   });
 

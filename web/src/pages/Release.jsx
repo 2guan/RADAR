@@ -31,22 +31,41 @@ export default function Release() {
   };
 
   const columns = [
-    { title: '需求编号', dataIndex: 'req_code', key: 'req_code', width: 180 },
-    { title: '需求标题', dataIndex: 'title', key: 'title', width: 240, ellipsis: true },
-    { title: '投产状态', dataIndex: 'release_status', key: 'release_status', width: 120, render: (s) => <StatusBadge status={s} /> },
+    { title: '投产状态', dataIndex: 'release_status', key: 'release_status', align: 'center', render: (s) => <StatusBadge status={s} /> },
     {
-      title: '会签进度', key: 'signoff', width: 180,
+      title: '计划投产点',
+      dataIndex: 'release_date',
+      key: 'release_date',
+      render: (val) => (
+        <span style={{ fontFamily: 'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace' }}>
+          {val || '—'}
+        </span>
+      ),
+    },
+    {
+      title: '需求编号',
+      dataIndex: 'req_code',
+      key: 'req_code',
+      render: (val) => (
+        <span style={{ fontFamily: 'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace', fontWeight: 500 }}>
+          {val}
+        </span>
+      ),
+    },
+    { title: '需求标题', dataIndex: 'title', key: 'title', ellipsis: true },
+    {
+      title: '会签进度', key: 'signoff',
       render: (_, r) => (r.signoff.total ? (
         <Space size={4}>
-          <Tag color="green">签 {r.signoff.signed}</Tag>
-          {r.signoff.rejected > 0 && <Tag color="red">驳 {r.signoff.rejected}</Tag>}
+          <Tag className="status-tag status-tag-final" style={{ margin: 0 }}>签 {r.signoff.signed}</Tag>
+          {r.signoff.rejected > 0 && <Tag className="status-tag status-tag-error" style={{ margin: 0 }}>驳 {r.signoff.rejected}</Tag>}
           <span>/ {r.signoff.total}</span>
         </Space>
       ) : '—'),
     },
-    { title: 'UAT', key: 'uat', width: 90, render: (_, r) => (r.uat_ready ? <Tag color="green">已就绪</Tag> : <Tag>未就绪</Tag>) },
+    { title: 'UAT', key: 'uat', render: (_, r) => (r.uat_ready ? <Tag className="status-tag status-tag-final" style={{ margin: 0 }}>已就绪</Tag> : <Tag className="status-tag status-tag-not-started" style={{ margin: 0 }}>未就绪</Tag>) },
     {
-      title: '操作', key: 'op', width: 160, fixed: 'right',
+      title: '操作', key: 'op', width: 100, fixed: 'right',
       render: (_, r) => (
         <Space onClick={(e) => e.stopPropagation()}>
           {r.initiated
@@ -70,6 +89,11 @@ export default function Release() {
           <Space direction="vertical" size={4} style={{ width: '100%' }}>
             <Space style={{ justifyContent: 'space-between', width: '100%' }}><strong>{r.req_code}</strong><StatusBadge status={r.release_status} /></Space>
             <div>{r.title}</div>
+            {r.release_date && (
+              <div style={{ fontSize: '11px', color: 'var(--radar-text-secondary)' }}>
+                计划投产点：{r.release_date}
+              </div>
+            )}
             {r.initiated ? <Button size="small" onClick={() => setDetailReq(r.req_code)}>查看详情</Button>
               : <Can module="release" action="release.register"><Button size="small" type="primary" disabled={!r.uat_ready} onClick={() => init(r.req_code)}>发起投产</Button></Can>}
           </Space>

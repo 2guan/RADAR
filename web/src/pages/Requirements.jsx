@@ -40,15 +40,68 @@ export default function Requirements() {
   };
 
   const columns = [
-    { title: '需求编号', dataIndex: 'req_code', key: 'req_code', sorter: true, width: 180, fixed: 'left' },
-    { title: '需求标题', dataIndex: 'title', key: 'title', width: 220, ellipsis: true },
-    { title: '状态', dataIndex: 'status', key: 'status', width: 110, render: (s) => <StatusBadge status={s} /> },
-    { title: '需求类型', dataIndex: 'req_type', key: 'req_type', width: 140 },
-    { title: '提出人', dataIndex: 'proposer', key: 'proposer', width: 110 },
-    { title: '提出时间', dataIndex: 'propose_time', key: 'propose_time', sorter: true, width: 120 },
-    { title: '主责系统', dataIndex: 'main_systems', key: 'main_systems', width: 200, render: (arr) => (arr || []).slice(0, 3).map((s) => <Tag key={s}>{s}</Tag>) },
+    { title: '状态', dataIndex: 'status', key: 'status', align: 'center', render: (s) => <StatusBadge status={s} /> },
     {
-      title: '操作', key: 'op', width: 140, fixed: 'right',
+      title: '计划投产点',
+      dataIndex: 'release_date',
+      key: 'release_date',
+      render: (val) => (
+        <span style={{ fontFamily: 'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace' }}>
+          {val || '—'}
+        </span>
+      ),
+    },
+    {
+      title: '需求编号',
+      dataIndex: 'req_code',
+      key: 'req_code',
+      sorter: true,
+      render: (val) => (
+        <span style={{ fontFamily: 'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace', fontWeight: 500 }}>
+          {val}
+        </span>
+      ),
+    },
+    { title: '需求标题', dataIndex: 'title', key: 'title', ellipsis: true },
+    { title: '需求类型', dataIndex: 'req_type', key: 'req_type' },
+    { title: '提出人', dataIndex: 'proposer', key: 'proposer' },
+    {
+      title: '提出时间',
+      dataIndex: 'propose_time',
+      key: 'propose_time',
+      sorter: true,
+      render: (val) => (
+        <span style={{ fontFamily: 'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace' }}>
+          {val || '—'}
+        </span>
+      ),
+    },
+    {
+      title: '主责系统',
+      dataIndex: 'main_systems_names',
+      key: 'main_systems_names',
+      render: (arr) => (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
+          {(arr || []).map((name) => (
+            <Tag key={name} className="status-tag tag-system" style={{ borderRadius: 2, margin: 0 }}>{name}</Tag>
+          ))}
+        </div>
+      ),
+    },
+    {
+      title: '协同改造系统',
+      dataIndex: 'collab_dev_systems_names',
+      key: 'collab_dev_systems_names',
+      render: (arr) => (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
+          {(arr || []).map((name) => (
+            <Tag key={name} className="status-tag tag-system" style={{ borderRadius: 2, margin: 0 }}>{name}</Tag>
+          ))}
+        </div>
+      ),
+    },
+    {
+      title: '操作', key: 'op', width: 100, fixed: 'right',
       render: (_, row) => (
         <Space size={0} onClick={(e) => e.stopPropagation()}>
           <Can module="requirement" action="edit"><Button type="link" size="small" icon={<EditOutlined />} onClick={() => openEdit(row)} /></Can>
@@ -67,7 +120,19 @@ export default function Requirements() {
           <Space direction="vertical" size={4} style={{ width: '100%' }}>
             <Space style={{ justifyContent: 'space-between', width: '100%' }}><strong>{item.req_code}</strong><StatusBadge status={item.status} /></Space>
             <div>{item.title}</div>
-            <div>{(item.main_systems || []).map((s) => <Tag key={s}>{s}</Tag>)}</div>
+            {item.release_date && (
+              <div style={{ fontSize: '11px', color: 'var(--radar-text-secondary)' }}>
+                计划投产点：{item.release_date}
+              </div>
+            )}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+              {(item.main_systems_names || []).map((name) => (
+                <Tag key={name} className="status-tag tag-system" style={{ borderRadius: 2, margin: 0 }}>{name}</Tag>
+              ))}
+              {(item.collab_dev_systems_names || []).map((name) => (
+                <Tag key={name} className="status-tag tag-system" style={{ borderRadius: 2, margin: 0 }}>{name}</Tag>
+              ))}
+            </div>
           </Space>
         )}
         toolbar={[

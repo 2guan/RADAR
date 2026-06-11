@@ -22,7 +22,7 @@ export default function AttachmentField({ entityType, entityId, fieldKey, readOn
   useEffect(() => { reload(); }, [entityId, fieldKey]);
 
   if (!entityId) {
-    return <Tag color="orange">保存记录后可管理附件</Tag>;
+    return <Tag className="status-tag status-tag-error">保存记录后可管理附件</Tag>;
   }
 
   // 上传文件
@@ -82,8 +82,8 @@ export default function AttachmentField({ entityType, entityId, fieldKey, readOn
             ].filter(Boolean)}
           >
             {a.kind === 'file'
-              ? <Space><Tag color="green">文件</Tag>{a.filename}</Space>
-              : <Space><Tag color="cyan">路径</Tag>{a.path_text}</Space>}
+              ? <Space><Tag className="tag-file">文件</Tag>{a.filename}</Space>
+              : <Space><Tag className="tag-path">路径</Tag>{a.path_text}</Space>}
           </List.Item>
         )}
       />

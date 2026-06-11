@@ -10,14 +10,15 @@ export default function ResizableTitle(props) {
   const { onResize, width, ...rest } = props;
   const startX = useRef(0);
   const startW = useRef(0);
+  const thRef = useRef(null);
 
-  if (!width) return <th {...rest} />;
+  if (!onResize) return <th {...rest} />;
 
   const onPointerDown = (e) => {
     e.stopPropagation();
     e.preventDefault();
     startX.current = e.clientX;
-    startW.current = width;
+    startW.current = width || (thRef.current ? thRef.current.getBoundingClientRect().width : 0);
     const onMove = (ev) => {
       const next = Math.max(60, startW.current + (ev.clientX - startX.current));
       onResize(next);
@@ -31,7 +32,7 @@ export default function ResizableTitle(props) {
   };
 
   return (
-    <th {...rest} style={{ ...rest.style, position: 'relative' }}>
+    <th {...rest} ref={thRef} style={{ ...rest.style, position: 'relative' }}>
       {rest.children}
       <span
         onPointerDown={onPointerDown}

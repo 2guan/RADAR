@@ -14,8 +14,8 @@ export default function ChainBar({ nodes }) {
     <div className="chain-bar">
       {nodes.map((n, i) => (
         <div key={n.key} className={`chain-step ${n.state}`} data-last={i === nodes.length - 1 ? '1' : '0'}>
-          <div className={`chain-dot ${n.state}`} />
           <div className={`chain-label ${n.state === 'doing' ? 'doing' : ''}`}>{n.label}</div>
+          <div className={`chain-dot ${n.state}`} />
           <div className="chain-status">
             {n.status ? <StatusBadge status={n.status} /> : <span className="chain-status-none">未开始</span>}
           </div>

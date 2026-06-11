@@ -21,7 +21,7 @@ const BASE_COLS = [
 const PROCESS_COLS = [
   { key: 'stage', title: '阶段' },
   ...BASE_COLS,
-  { key: 'is_terminal', title: '终态' },
+  { key: 'state_type', title: '状态类型' },
 ];
 
 /** 按分类取导入导出列定义 */
@@ -33,7 +33,8 @@ function colsOf(category) {
 function toExport(category, r) {
   const extra = r.extra ? JSON.parse(r.extra) : {};
   if (category === 'process_status') {
-    return { stage: extra.stage || '', attr_value: r.attr_value, display_value: r.display_value, sort: r.sort, is_terminal: extra.isTerminal ? '是' : '' };
+    const stLabel = extra.stateType === 'initial' ? '初始态' : (extra.stateType === 'final' ? '终态' : '进行中');
+    return { stage: extra.stage || '', attr_value: r.attr_value, display_value: r.display_value, sort: r.sort, state_type: stLabel };
   }
   return { attr_value: r.attr_value, display_value: r.display_value, sort: r.sort };
 }
@@ -97,9 +98,17 @@ export default async function dictRoutes(fastify) {
     const apply = () => {
       for (const r of rows) {
         if (!r.attr_value) { stat.skipped++; continue; }
-        const extra = category === 'process_status'
-          ? JSON.stringify({ stage: r.stage || '', isTerminal: ['是', '终态', 'Y', 'true', '1'].includes(String(r.is_terminal).trim()) })
-          : null;
+        let extra = null;
+        if (category === 'process_status') {
+          const stStr = String(r.state_type || '').trim();
+          let stateType = 'in-progress';
+          if (['初始', '初始态', 'initial', 'start'].some(k => stStr.includes(k))) {
+            stateType = 'initial';
+          } else if (['终态', '完成', 'final', 'success', 'end', '是'].some(k => stStr.includes(k))) {
+            stateType = 'final';
+          }
+          extra = JSON.stringify({ stage: r.stage || '', stateType, isTerminal: stateType === 'final' });
+        }
         const exists = get('SELECT id FROM dict_item WHERE category = ? AND attr_value = ?', category, r.attr_value);
         if (exists) {
           if (mode === 'skip') { stat.skipped++; continue; }

@@ -1,8 +1,7 @@
 /**
  * 文件：components/ThemeSwitcher.jsx
- * 用途：外观快捷切换器（顶栏）。下拉选择配色预设。
+ * 用途：外观快捷切换器（顶栏）。下拉仅展示 8 个颜色方块供快速切换配色。
  * 作者：hengguan
- * 说明：偏好保存在本地（覆盖平台默认）；预设清单见 theme/presets.js。
  */
 
 import React from 'react';
@@ -12,27 +11,50 @@ import { useAppStore } from '../stores/app.js';
 import { PRESET_LIST } from '../theme/presets.js';
 
 export default function ThemeSwitcher() {
-  const { preset, setPreset } = useAppStore();
+  const { preset, setPreset, theme } = useAppStore();
+  const isDark = theme === 'dark';
 
   const dropdownRender = () => (
-    <div style={{ padding: 14, borderRadius: 0, width: 230, background: 'var(--radar-surface)', border: '1px solid var(--radar-border)', boxShadow: 'var(--radar-card-shadow)' }}>
-      <div style={{ fontSize: 12, color: 'var(--radar-text-secondary)', marginBottom: 8, fontWeight: 600 }}>配色方案</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
-        {PRESET_LIST.map((p) => (
-          <div
-            key={p.key}
-            onClick={() => setPreset(p.key)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 2, cursor: 'pointer',
-              background: preset === p.key ? 'var(--radar-primary-soft)' : 'transparent',
-              border: `1px solid ${preset === p.key ? p.primary : 'transparent'}`,
-            }}
-          >
-            <span style={{ width: 18, height: 18, borderRadius: 6, background: p.primary, flexShrink: 0, boxShadow: '0 0 0 1px rgba(0,0,0,0.06)' }} />
-            <span style={{ fontSize: 13, flex: 1 }}>{p.name}</span>
-            {preset === p.key && <CheckOutlined style={{ color: p.primary, fontSize: 12 }} />}
-          </div>
-        ))}
+    <div style={{
+      padding: 12,
+      borderRadius: 0,
+      width: 156,
+      background: 'var(--radar-surface)',
+      border: '1px solid var(--radar-border)',
+      boxShadow: 'var(--radar-card-shadow)',
+    }}>
+      <div style={{ fontSize: 12, color: 'var(--radar-text-secondary)', marginBottom: 10, fontWeight: 600, textAlign: 'center' }}>配色方案</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, justifyItems: 'center' }}>
+        {PRESET_LIST.map((p) => {
+          const colors = isDark ? p.dark : p.light;
+          const isSelected = preset === p.key;
+          return (
+            <Tooltip key={p.key} title={p.name} placement="top">
+              <div
+                onClick={() => setPreset(p.key)}
+                style={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                  background: `linear-gradient(135deg, ${colors.primary}, ${colors.highlight})`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: isSelected
+                    ? '0 0 0 2px var(--radar-surface), 0 0 0 4px var(--radar-primary)'
+                    : '0 0 0 1px rgba(0,0,0,0.1)',
+                  transition: 'all 0.15s ease',
+                  transform: isSelected ? 'scale(1.05)' : 'none',
+                }}
+              >
+                {isSelected && (
+                  <CheckOutlined style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }} />
+                )}
+              </div>
+            </Tooltip>
+          );
+        })}
       </div>
     </div>
   );

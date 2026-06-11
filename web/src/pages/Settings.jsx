@@ -8,7 +8,7 @@
  */
 
 import React from 'react';
-import { Card, Tabs, Button, Tag, message, Form, Input, InputNumber, Switch, DatePicker } from 'antd';
+import { Card, Tabs, Button, Tag, message, Form, Input, InputNumber, Switch, DatePicker, Select } from 'antd';
 import { StarOutlined, StarFilled } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import customParseFormat from 'dayjs/plugin/customParseFormat.js';
@@ -51,7 +51,7 @@ function DictManager({ category, title }) {
   );
 }
 
-/** 流程状态管理器（含阶段与终态标识） */
+/** 流程状态管理器（含阶段与状态类别打标） */
 function ProcessStatusManager() {
   return (
     <CrudManager
@@ -60,14 +60,45 @@ function ProcessStatusManager() {
       columns={[
         { title: '阶段', dataIndex: 'extra', key: 'stage', width: 100, render: (e) => parseExtra(e).stage || '—' },
         { title: '属性值', dataIndex: 'attr_value', width: 160 },
-        { title: '显示值', dataIndex: 'display_value', width: 160 },
+        {
+          title: '显示值',
+          dataIndex: 'display_value',
+          width: 160,
+          render: (val, row) => {
+            const extra = parseExtra(row.extra);
+            const stateType = extra.stateType || (extra.isTerminal ? 'final' : 'in-progress');
+            return <Tag className={`status-tag status-tag-${stateType}`} style={{ margin: 0 }}>{val}</Tag>;
+          }
+        },
         { title: '排序', dataIndex: 'sort', width: 80, sorter: true },
-        { title: '终态', dataIndex: 'extra', key: 'terminal', width: 80, render: (e) => (parseExtra(e).isTerminal ? <Tag color="green">终态</Tag> : '—') },
+        {
+          title: '状态类型',
+          dataIndex: 'extra',
+          key: 'stateType',
+          width: 100,
+          render: (e) => {
+            const extra = parseExtra(e);
+            const type = extra.stateType || (extra.isTerminal ? 'final' : 'in-progress');
+            const labelMap = { 'initial': '初始态', 'in-progress': '进行中', 'final': '终态' };
+            return labelMap[type] || '进行中';
+          }
+        },
       ]}
-      transformIn={(row) => ({ ...row, stage: parseExtra(row.extra).stage, isTerminal: !!parseExtra(row.extra).isTerminal })}
+      transformIn={(row) => {
+        const extra = parseExtra(row.extra);
+        return {
+          ...row,
+          stage: extra.stage,
+          stateType: extra.stateType || (extra.isTerminal ? 'final' : 'in-progress')
+        };
+      }}
       transformOut={(v) => ({
         category: 'process_status', attr_value: v.attr_value, display_value: v.display_value, sort: v.sort,
-        extra: JSON.stringify({ stage: v.stage, isTerminal: !!v.isTerminal }),
+        extra: JSON.stringify({
+          stage: v.stage,
+          stateType: v.stateType,
+          isTerminal: v.stateType === 'final'
+        }),
       })}
       fields={() => (
         <>
@@ -77,7 +108,13 @@ function ProcessStatusManager() {
           <Form.Item name="attr_value" label="属性值" rules={[{ required: true }]}><Input /></Form.Item>
           <Form.Item name="display_value" label="显示值" rules={[{ required: true }]}><Input /></Form.Item>
           <Form.Item name="sort" label="排序" initialValue={0}><InputNumber min={0} style={{ width: '100%' }} /></Form.Item>
-          <Form.Item name="isTerminal" label="是否终态" valuePropName="checked"><Switch checkedChildren="终态" unCheckedChildren="过程" /></Form.Item>
+          <Form.Item name="stateType" label="状态类型" rules={[{ required: true }]} initialValue="in-progress">
+            <Select options={[
+              { value: 'initial', label: '初始态' },
+              { value: 'in-progress', label: '进行中' },
+              { value: 'final', label: '终态' },
+            ]} />
+          </Form.Item>
         </>
       )}
     />
