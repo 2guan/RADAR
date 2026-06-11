@@ -1,0 +1,19 @@
+# 依赖
+node_modules/
+# 构建产物
+dist/
+web/dist/
+# 运行时数据（挂载目录）
+data/*.db
+data/*.db-shm
+data/*.db-wal
+attachments/*
+!attachments/.gitkeep
+# 环境与日志
+.env
+*.log
+.DS_Store
+
+# 本地工具/代理配置（不入库）
+.claude/
+.impeccable/

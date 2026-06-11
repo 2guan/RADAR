@@ -1,0 +1,21 @@
+/**
+ * 文件：modules/audit/routes.js
+ * 用途：变更历史（过程留痕）读取接口。按实体类型+实体 id 返回历史编辑记录。
+ * 作者：hengguan
+ */
+
+import { all } from '../../db/index.js';
+import { ok, badRequest } from '../../lib/http.js';
+
+export default async function auditRoutes(fastify) {
+  fastify.get('/audit', { preHandler: fastify.authenticate }, async (request) => {
+    const { entityType, entityId } = request.query;
+    if (!entityType || !entityId) throw badRequest('参数缺失');
+    const rows = all(
+      `SELECT id, action, operator, field, old_value, new_value, created_at
+         FROM audit_log WHERE entity_type = ? AND entity_id = ? ORDER BY id DESC`,
+      entityType, Number(entityId),
+    );
+    return ok(rows);
+  });
+}

@@ -1,0 +1,31 @@
+/**
+ * 文件：router/menu.js
+ * 用途：导航菜单与路由的统一配置。每项含路径、标题、图标、所属权限模块，
+ *       供侧栏菜单渲染与路由守卫共用。
+ * 作者：hengguan
+ */
+
+import React from 'react';
+import {
+  DashboardOutlined, AppstoreOutlined, FileTextOutlined, CodeOutlined,
+  ExperimentOutlined, RocketOutlined, TeamOutlined, SettingOutlined,
+} from '@ant-design/icons';
+
+export const MENU = [
+  { key: '/dashboard', label: '效能仪表盘', module: 'dashboard', icon: React.createElement(DashboardOutlined) },
+  { key: '/overview', label: '版本概览', module: 'overview', icon: React.createElement(AppstoreOutlined) },
+  { key: '/requirements', label: '需求分析', module: 'requirement', icon: React.createElement(FileTextOutlined) },
+  { key: '/dev', label: '开发管理', module: 'dev', icon: React.createElement(CodeOutlined) },
+  {
+    key: '/test', label: '测试管理', module: 'test', icon: React.createElement(ExperimentOutlined),
+    children: [
+      { key: '/test/sit', label: '应用组装测试', module: 'test' },
+      { key: '/test/uat', label: '用户测试', module: 'test' },
+      { key: '/test/nft', label: '非功能测试', module: 'test' },
+      { key: '/test/sec', label: '安全测试', module: 'test' },
+    ],
+  },
+  { key: '/release', label: '投产管理', module: 'release', icon: React.createElement(RocketOutlined) },
+  { key: '/users', label: '人员管理', module: 'user', icon: React.createElement(TeamOutlined) },
+  { key: '/settings', label: '系统设置', module: 'settings', icon: React.createElement(SettingOutlined) },
+];

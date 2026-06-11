@@ -1,0 +1,25 @@
+# ============================================================================
+# 文件：docker-compose.yml
+# 用途：RADAR 平台单服务部署编排。挂载数据库与附件目录到宿主机，保证持久化；
+#       支持在 ARM 服务器上构建运行。
+# 作者：hengguan
+# ============================================================================
+
+services:
+  radar:
+    build: .
+    image: radar:latest
+    container_name: radar
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # 生产环境务必修改 JWT 密钥与管理员密码
+      - NODE_ENV=production
+      - PORT=3000
+      - JWT_SECRET=please-change-this-secret-in-production
+      - ADMIN_PASSWORD=admin2026
+    volumes:
+      # 关键数据挂载到宿主机，容器删除后不丢失
+      - ./data:/app/data
+      - ./attachments:/app/attachments

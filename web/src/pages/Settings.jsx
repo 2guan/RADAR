@@ -1,0 +1,244 @@
+/**
+ * 文件：pages/Settings.jsx
+ * 用途：系统设置页面。聚合基础配置、参数配置、投产点设置、机构系统配置、人员配置；
+ *       所有配置项支持新增/编辑/删除 + 导入/导出/模板下载。
+ * 作者：hengguan
+ * 说明：字典/系统/投产点/角色复用 CrudManager；投产点日期用 DatePicker(存 YYYYMMDD)；
+ *       角色配置含"会签角色"打标；流程状态含阶段/终态（extra JSON）。
+ */
+
+import React from 'react';
+import { Card, Tabs, Button, Tag, message, Form, Input, InputNumber, Switch, DatePicker } from 'antd';
+import { StarOutlined, StarFilled } from '@ant-design/icons';
+import dayjs from 'dayjs';
+import customParseFormat from 'dayjs/plugin/customParseFormat.js';
+import CrudManager from '../components/CrudManager.jsx';
+import AppConfigForm from '../components/AppConfigForm.jsx';
+import AppearanceSettings from '../components/AppearanceSettings.jsx';
+import PermissionMatrix from '../components/PermissionMatrix.jsx';
+import DictSelect from '../components/DictSelect.jsx';
+import { apiPost } from '../api/client.js';
+
+dayjs.extend(customParseFormat);
+
+/** 安全解析 extra（可能是字符串或对象） */
+function parseExtra(e) {
+  if (!e) return {};
+  if (typeof e === 'object') return e;
+  try { return JSON.parse(e); } catch { return {}; }
+}
+
+/** 通用字典管理器（属性值/显示值/排序） */
+function DictManager({ category, title }) {
+  return (
+    <CrudManager
+      apiBase="/dict" title={title} baseQuery={{ filters: [{ field: 'category', op: 'eq', value: category }] }}
+      io={{ enabled: true, params: { category } }}
+      columns={[
+        { title: '属性值', dataIndex: 'attr_value', width: 200 },
+        { title: '显示值', dataIndex: 'display_value', width: 200 },
+        { title: '排序', dataIndex: 'sort', width: 100, sorter: true },
+      ]}
+      transformOut={(v) => ({ ...v, category })}
+      fields={() => (
+        <>
+          <Form.Item name="attr_value" label="属性值" rules={[{ required: true }]}><Input /></Form.Item>
+          <Form.Item name="display_value" label="显示值" rules={[{ required: true }]}><Input /></Form.Item>
+          <Form.Item name="sort" label="排序" initialValue={0}><InputNumber min={0} style={{ width: '100%' }} /></Form.Item>
+        </>
+      )}
+    />
+  );
+}
+
+/** 流程状态管理器（含阶段与终态标识） */
+function ProcessStatusManager() {
+  return (
+    <CrudManager
+      apiBase="/dict" title="流程状态" baseQuery={{ filters: [{ field: 'category', op: 'eq', value: 'process_status' }] }}
+      io={{ enabled: true, params: { category: 'process_status' } }}
+      columns={[
+        { title: '阶段', dataIndex: 'extra', key: 'stage', width: 100, render: (e) => parseExtra(e).stage || '—' },
+        { title: '属性值', dataIndex: 'attr_value', width: 160 },
+        { title: '显示值', dataIndex: 'display_value', width: 160 },
+        { title: '排序', dataIndex: 'sort', width: 80, sorter: true },
+        { title: '终态', dataIndex: 'extra', key: 'terminal', width: 80, render: (e) => (parseExtra(e).isTerminal ? <Tag color="green">终态</Tag> : '—') },
+      ]}
+      transformIn={(row) => ({ ...row, stage: parseExtra(row.extra).stage, isTerminal: !!parseExtra(row.extra).isTerminal })}
+      transformOut={(v) => ({
+        category: 'process_status', attr_value: v.attr_value, display_value: v.display_value, sort: v.sort,
+        extra: JSON.stringify({ stage: v.stage, isTerminal: !!v.isTerminal }),
+      })}
+      fields={() => (
+        <>
+          <Form.Item name="stage" label="阶段" rules={[{ required: true }]}>
+            <Input placeholder="需求 / 开发 / 测试 / 投产 / 评审" />
+          </Form.Item>
+          <Form.Item name="attr_value" label="属性值" rules={[{ required: true }]}><Input /></Form.Item>
+          <Form.Item name="display_value" label="显示值" rules={[{ required: true }]}><Input /></Form.Item>
+          <Form.Item name="sort" label="排序" initialValue={0}><InputNumber min={0} style={{ width: '100%' }} /></Form.Item>
+          <Form.Item name="isTerminal" label="是否终态" valuePropName="checked"><Switch checkedChildren="终态" unCheckedChildren="过程" /></Form.Item>
+        </>
+      )}
+    />
+  );
+}
+
+/** 投产点管理器（日期选择，存 YYYYMMDD；含设为/取消默认） */
+function ReleasePointManager() {
+  return (
+    <CrudManager
+      apiBase="/release-points" title="投产点"
+      io={{ enabled: true }}
+      columns={[
+        { title: '投产日期', dataIndex: 'release_date', width: 140, sorter: true },
+        { title: '版本类型', dataIndex: 'version_type', width: 120 },
+        { title: '默认', dataIndex: 'is_default', width: 90, render: (v) => (v ? <Tag color="green">默认</Tag> : '—') },
+        { title: '备注', dataIndex: 'remark' },
+      ]}
+      transformIn={(row) => ({ ...row, release_date: row.release_date ? dayjs(row.release_date, 'YYYYMMDD') : null })}
+      transformOut={(v) => ({ ...v, release_date: v.release_date ? v.release_date.format('YYYYMMDD') : '' })}
+      fields={() => (
+        <>
+          <Form.Item name="release_date" label="投产日期" rules={[{ required: true, message: '请选择投产日期' }]} extra="存储格式 YYYYMMDD">
+            <DatePicker style={{ width: '100%' }} format="YYYYMMDD" placeholder="选择投产日期" />
+          </Form.Item>
+          <Form.Item name="version_type" label="投产版本类型">
+            <DictSelect category="version_type" style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item name="remark" label="备注"><Input.TextArea rows={2} /></Form.Item>
+        </>
+      )}
+      rowActions={(row, reload) => (
+        row.is_default
+          ? <Button type="link" size="small" icon={<StarFilled style={{ color: '#faad14' }} />}
+              onClick={async () => { await apiPost(`/release-points/${row.id}/cancel-default`); message.success('已取消默认'); reload(); }}>取消默认</Button>
+          : <Button type="link" size="small" icon={<StarOutlined />}
+              onClick={async () => { await apiPost(`/release-points/${row.id}/set-default`); message.success('已设为默认'); reload(); }}>设默认</Button>
+      )}
+    />
+  );
+}
+
+/** 系统管理器 */
+function SystemManager() {
+  return (
+    <CrudManager
+      apiBase="/systems" title="系统"
+      io={{ enabled: true }}
+      columns={[
+        { title: '系统编号', dataIndex: 'sys_code', width: 140 },
+        { title: '系统名称', dataIndex: 'sys_name', width: 220 },
+        { title: '所属机构', dataIndex: 'org', width: 140 },
+        { title: '所属板块', dataIndex: 'sector', width: 120 },
+        { title: '排序', dataIndex: 'sort', width: 80, sorter: true },
+      ]}
+      fields={() => (
+        <>
+          <Form.Item name="sys_code" label="系统编号" rules={[{ required: true }]}><Input /></Form.Item>
+          <Form.Item name="sys_name" label="系统名称" rules={[{ required: true }]}><Input /></Form.Item>
+          <Form.Item name="org" label="所属机构"><DictSelect category="org" style={{ width: '100%' }} /></Form.Item>
+          <Form.Item name="sector" label="所属板块"><DictSelect category="sector" style={{ width: '100%' }} /></Form.Item>
+          <Form.Item name="sort" label="排序" initialValue={0}><InputNumber min={0} style={{ width: '100%' }} /></Form.Item>
+        </>
+      )}
+    />
+  );
+}
+
+/** 角色管理器（含会签角色打标） */
+function RoleManager() {
+  return (
+    <CrudManager
+      apiBase="/roles" title="角色"
+      io={{ enabled: true }}
+      columns={[
+        { title: '角色名称', dataIndex: 'name', width: 150 },
+        { title: '角色标识', dataIndex: 'code', width: 150 },
+        { title: '默认首页', dataIndex: 'default_home', width: 120 },
+        { title: '会签角色', dataIndex: 'is_signoff_role', width: 100, render: (v) => (v ? <Tag color="green">会签</Tag> : '—') },
+        { title: '内置', dataIndex: 'is_builtin', width: 80, render: (v) => (v ? <Tag>内置</Tag> : '—') },
+      ]}
+      transformIn={(row) => ({ ...row, is_signoff_role: !!row.is_signoff_role })}
+      fields={(form, current) => (
+        <>
+          <Form.Item name="name" label="角色名称" rules={[{ required: true }]}><Input /></Form.Item>
+          <Form.Item name="code" label="角色标识" rules={[{ required: true }]}><Input disabled={!!current} /></Form.Item>
+          <Form.Item name="default_home" label="默认首页" initialValue="仪表盘"><Input /></Form.Item>
+          <Form.Item name="is_signoff_role" label="会签角色" valuePropName="checked" extra="打标后该角色将出现在投产管理的评审会签中，且仅该角色人员可签署/驳回">
+            <Switch checkedChildren="是" unCheckedChildren="否" />
+          </Form.Item>
+        </>
+      )}
+    />
+  );
+}
+
+export default function Settings() {
+  // 基础配置子 Tab
+  const baseConfig = (
+    <Tabs items={[
+      {
+        key: 'platform', label: '平台信息',
+        children: <AppConfigForm items={[
+          { key: 'platform.name', label: '平台名称', placeholder: '如 常规投产版本全生命周期流程管控平台' },
+          { key: 'platform.shortName', label: '平台英文简称', placeholder: '如 RADAR' },
+          { key: 'platform.fullName', label: '平台英文全称' },
+          { key: 'platform.copyright', label: '版权信息' },
+        ]} />,
+      },
+      {
+        key: 'code', label: '编号规则',
+        children: <AppConfigForm items={[
+          { key: 'code.requirement', label: '需求编号规则', extra: '占位符：{投产窗口} {序号}' },
+          { key: 'code.dev', label: '开发任务编号规则', extra: '占位符：{需求编号} {序号}' },
+          { key: 'code.test.SIT', label: '应用组装测试编号规则' },
+          { key: 'code.test.UAT', label: '用户测试编号规则' },
+          { key: 'code.test.NFT', label: '非功能测试编号规则' },
+          { key: 'code.test.SEC', label: '安全测试编号规则' },
+        ]} />,
+      },
+    ]} />
+  );
+
+  const paramConfig = (
+    <Tabs items={[
+      { key: 'status', label: '流程状态', children: <ProcessStatusManager /> },
+      { key: 'version', label: '版本类型', children: <DictManager category="version_type" title="版本类型" /> },
+      { key: 'release', label: '投产状态', children: <DictManager category="release_status" title="投产状态" /> },
+      { key: 'reqtype', label: '需求类型', children: <DictManager category="req_type" title="需求类型" /> },
+    ]} />
+  );
+
+  const orgSysConfig = (
+    <Tabs items={[
+      { key: 'org', label: '实施机构', children: <DictManager category="org" title="实施机构" /> },
+      { key: 'sector', label: '业务板块', children: <DictManager category="sector" title="业务板块" /> },
+      { key: 'system', label: '所属系统', children: <SystemManager /> },
+    ]} />
+  );
+
+  const personConfig = (
+    <Tabs items={[
+      { key: 'org', label: '组织机构', children: <DictManager category="org" title="组织机构" /> },
+      { key: 'role', label: '角色配置', children: <RoleManager /> },
+      { key: 'perm', label: '权限矩阵', children: <PermissionMatrix /> },
+    ]} />
+  );
+
+  return (
+    <Card title="系统设置" variant="borderless">
+      <Tabs
+        tabPosition="left"
+        items={[
+          { key: 'base', label: '基础配置', children: baseConfig },
+          { key: 'appearance', label: '外观主题', children: <AppearanceSettings /> },
+          { key: 'param', label: '参数配置', children: paramConfig },
+          { key: 'rp', label: '投产点设置', children: <ReleasePointManager /> },
+          { key: 'orgsys', label: '机构系统配置', children: orgSysConfig },
+          { key: 'person', label: '人员配置', children: personConfig },
+        ]}
+      />
+    </Card>
+  );
+}

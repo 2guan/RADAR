@@ -1,0 +1,229 @@
+/**
+ * 文件：styles.css
+ * 用途：全局样式与设计系统（清爽明快 · 实色卡片，无磨玻璃）。重置、侧栏/顶栏/卡片、
+ *       登录动效、统计卡、全流程进度条、5 列详情、表单分节等。主色与背景由主题预设驱动（CSS 变量）。
+ * 作者：hengguan
+ */
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; padding: 0; }
+body {
+  font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  overflow-x: hidden;
+  color: var(--radar-ink, #1e2330);
+  background: var(--radar-bg, #f4f6fb);
+  background-attachment: fixed;
+}
+
+/* 滚动条 */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: rgba(140,148,168,0.32); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(140,148,168,0.55); }
+.radar-content { overflow-x: hidden; }
+
+/* AntD 容器透明，露出页面渐变背景 */
+.ant-layout { background: transparent !important; }
+
+/* 状态徽章：去掉底色，仅保留边框与文字颜色 */
+.status-tag { background: transparent !important; }
+
+/* 卡片：实色表面 + 细边 + 柔和阴影 + 直角（专业、可信赖） */
+.ant-card {
+  background: var(--radar-surface) !important;
+  border: 1px solid var(--radar-border) !important;
+  box-shadow: var(--radar-card-shadow);
+  border-radius: 0;
+}
+.ant-card .ant-card { box-shadow: none; }
+
+/* ============ 侧边栏 ============ */
+.radar-sider {
+  background: var(--radar-surface) !important;
+  border-right: 1px solid var(--radar-border);
+}
+.radar-brand { display: flex; align-items: center; gap: 10px; padding: 18px 18px 14px; }
+.radar-brand-logo {
+  width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0;
+  background: linear-gradient(135deg, var(--radar-primary), var(--radar-blob2));
+  display: flex; align-items: center; justify-content: center; color: #fff; font-size: 20px;
+  box-shadow: 0 6px 16px var(--radar-primary-fade);
+}
+.radar-brand-name { color: var(--radar-ink); font-weight: 800; font-size: 18px; letter-spacing: 1px; line-height: 1.1; }
+.radar-brand-sub { color: var(--radar-text-secondary); font-size: 10px; letter-spacing: 2px; text-transform: uppercase; font-weight: 600; }
+
+.radar-nav { padding: 6px 12px; flex: 1; overflow-y: auto; }
+.radar-nav-item {
+  display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 14px;
+  border-radius: 0; color: var(--radar-text-secondary); cursor: pointer; margin-bottom: 4px;
+  transition: background .18s, color .18s; font-size: 14px; font-weight: 500;
+  border-left: 3px solid transparent;
+}
+.radar-nav-item .anticon { font-size: 18px; }
+.radar-nav-item:hover { color: var(--radar-primary); background: var(--radar-primary-soft); }
+.radar-nav-item.active { color: var(--radar-primary); background: var(--radar-primary-soft); border-left-color: var(--radar-primary); font-weight: 600; }
+/* 子菜单项：缩进 + 小圆点 */
+.radar-nav-sub { height: 40px; padding-left: 30px; font-size: 13px; }
+.radar-nav-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .55; flex-shrink: 0; }
+
+.radar-sider-user {
+  margin: 8px 12px 14px; padding: 10px 12px; border-radius: 0;
+  background: var(--radar-primary-soft); display: flex; align-items: center; gap: 10px;
+}
+.radar-sider-user .name { color: var(--radar-ink); font-size: 13px; font-weight: 600; }
+.radar-sider-user .role { color: var(--radar-text-secondary); font-size: 11px; }
+
+/* ============ 顶栏 ============ */
+.radar-header {
+  display: flex; align-items: center; gap: 10px; padding: 0 20px;
+  position: sticky; top: 0; z-index: 20;
+  background: var(--radar-surface) !important;
+  border-bottom: 1px solid var(--radar-border);
+}
+.radar-page-title { font-size: 17px; font-weight: 700; color: var(--radar-ink); }
+.radar-rp-pill {
+  display: inline-flex; align-items: center; gap: 4px; min-height: 36px; padding: 0 8px 0 12px;
+  border-radius: 0; background: transparent; color: var(--radar-primary); font-weight: 600; font-size: 12px;
+  border: 1px solid var(--radar-border);
+}
+/* 选中项标签：去掉灰色底色与边框 */
+.radar-rp-pill .ant-select-selection-item {
+  color: var(--radar-primary) !important; font-weight: 600; font-size: 12px; border-radius: 0 !important;
+  background: transparent !important; border: none !important; padding-inline-start: 4px;
+}
+.radar-rp-pill .ant-select-selection-placeholder { font-size: 12px; }
+
+/* ============ 页头 ============ */
+.page-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 12px; }
+.page-head h2 { margin: 0; font-size: 20px; font-weight: 700; color: var(--radar-ink); }
+.page-head .sub { color: var(--radar-text-secondary); font-size: 13px; margin-top: 2px; }
+
+/* ============ 统计卡（实色） ============ */
+.stat-card {
+  background: var(--radar-surface);
+  border: 1px solid var(--radar-border); border-radius: 0;
+  padding: 16px 18px; height: 100%; transition: box-shadow .2s, transform .2s; position: relative; overflow: hidden;
+  box-shadow: var(--radar-card-shadow);
+}
+.stat-card:hover { transform: translateY(-3px); box-shadow: 0 12px 30px rgba(31,45,80,0.12); }
+.stat-card .icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 19px; }
+.stat-card .label { color: var(--radar-text-secondary); font-size: 13px; }
+.stat-card .value { font-size: 30px; font-weight: 800; line-height: 1; letter-spacing: -0.5px; }
+.stat-card .total { color: var(--radar-text-secondary); font-weight: 700; font-size: 15px; }
+.stat-card .done-text { font-size: 12px; color: var(--radar-text-secondary); margin-top: 6px; }
+
+/* ============ 登录页：主题色系渐变动效 + 实色卡 ============ */
+.login-bg {
+  min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px;
+  position: relative; overflow: hidden;
+  background:
+    radial-gradient(circle at 18% 22%, var(--radar-blob1, #2E6BFF) 0%, transparent 38%),
+    radial-gradient(circle at 82% 30%, var(--radar-blob2, #22D3EE) 0%, transparent 40%),
+    radial-gradient(circle at 60% 85%, var(--radar-primary-deep, #1E50D8) 0%, transparent 45%),
+    linear-gradient(135deg, #eef3fb, #e7eefb, #eaf2ff);
+  background-size: 160% 160%, 160% 160%, 160% 160%, 200% 200%;
+  animation: loginGradient 22s ease infinite;
+}
+@keyframes loginGradient { 0%{background-position:0% 50%,100% 50%,50% 0%,0% 50%} 50%{background-position:100% 50%,0% 50%,50% 100%,100% 50%} 100%{background-position:0% 50%,100% 50%,50% 0%,0% 50%} }
+.login-bg::before, .login-bg::after { content:''; position:absolute; border-radius:50%; filter: blur(24px); opacity:.5; pointer-events:none; }
+.login-bg::before { width:420px;height:420px; background:radial-gradient(circle, var(--radar-blob1), transparent 62%); top:-120px; left:-80px; animation: floatA 16s ease-in-out infinite; }
+.login-bg::after { width:480px;height:480px; background:radial-gradient(circle, var(--radar-blob2), transparent 62%); bottom:-150px; right:-110px; animation: floatB 18s ease-in-out infinite; }
+@keyframes floatA { 0%,100%{transform:translate(0,0)} 50%{transform:translate(46px,34px)} }
+@keyframes floatB { 0%,100%{transform:translate(0,0)} 50%{transform:translate(-46px,-34px)} }
+.login-card { background: #ffffff !important; border: 1px solid var(--radar-border) !important; }
+.brand-gradient {
+  background: linear-gradient(90deg, var(--radar-primary), var(--radar-blob2)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+
+/* ============ 全流程进度条（连续细线时间轴） ============ */
+.chain-bar { display: flex; align-items: flex-start; width: 100%; min-width: max-content; }
+.chain-step {
+  flex: 1 0 60px; display: flex; flex-direction: column; align-items: center;
+  position: relative; padding: 0 1px;
+}
+/* 连线：从当前节点圆心向右延伸至下一节点圆心，连续相接 */
+.chain-step::before {
+  content: ''; position: absolute; top: 4px; left: 50%; width: 100%; height: 2px;
+  background: var(--radar-border); z-index: 0;
+}
+.chain-step[data-last="1"]::before { display: none; }
+.chain-step.done::before { background: var(--radar-primary); }
+.chain-dot {
+  position: relative; z-index: 1; width: 9px; height: 9px; border-radius: 50%;
+  border: 1.5px solid var(--radar-border); background: var(--radar-surface); transition: all .2s;
+}
+.chain-dot.done { background: var(--radar-primary); border-color: var(--radar-primary); }
+.chain-dot.doing { background: var(--radar-surface); border-color: var(--radar-primary); box-shadow: 0 0 0 3px var(--radar-primary-fade); }
+.chain-label { font-size: 11px; margin-top: 6px; color: var(--radar-text-secondary); white-space: nowrap; font-weight: 500; }
+.chain-label.doing { color: var(--radar-primary); font-weight: 600; }
+.chain-status { margin-top: 4px; }
+/* 阶段状态标签：去掉底色，仅保留文字与边框颜色 */
+.chain-status .ant-tag { font-size: 10px; line-height: 16px; padding: 0 5px; margin: 0; background: transparent !important; }
+.chain-status-none { font-size: 10px; color: var(--radar-text-secondary); opacity: .5; }
+
+/* ============ 全生命周期详情（页签式） ============ */
+.lc-modal-title { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.lc-modal-name { font-size: 18px; font-weight: 700; color: var(--radar-ink); }
+
+/* 页签内任务网格：多任务自动换行，永不横向滚动 */
+.lc-tab-grid { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; }
+.lc-tab-grid > .lc-card { flex: 1 1 300px; max-width: 440px; }
+
+/* 详情卡片（直角；状态独立一行靠右上角） */
+.lc-card { border: 1px solid var(--radar-border); background: var(--radar-surface); padding: 14px; cursor: pointer; transition: border-color .18s, box-shadow .18s; }
+.lc-card:hover { border-color: var(--radar-primary); box-shadow: 0 4px 14px rgba(31,45,80,0.08); }
+.lc-card-lg { max-width: 640px; }
+.lc-card-status { display: flex; justify-content: flex-end; min-height: 22px; margin-bottom: 2px; }
+.lc-id { display: inline-block; font-size: 12px; font-weight: 700; color: var(--radar-text-secondary); background: rgba(120,130,150,0.12); padding: 2px 8px; letter-spacing: .3px; }
+.lc-id.big { font-size: 13px; color: var(--radar-primary); background: var(--radar-primary-soft); }
+.lc-title { font-weight: 600; font-size: 14px; color: var(--radar-ink); line-height: 1.4; margin-top: 6px; }
+.lc-title.lg { font-size: 16px; }
+
+/* 字段行 */
+.lc-field { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; margin-top: 10px; color: var(--radar-ink); }
+.lc-field.col { flex-direction: column; gap: 6px; }
+.lc-flabel { color: var(--radar-text-secondary); flex-shrink: 0; min-width: 96px; font-size: 12px; line-height: 22px; }
+.lc-field.col .lc-flabel { line-height: 1.4; }
+.lc-fvalue { flex: 1; min-width: 0; }
+.lc-text { font-size: 13px; color: var(--radar-ink); line-height: 1.6; }
+.lc-muted { color: var(--radar-text-secondary); }
+
+/* 人员 / 系统 小卡片 */
+.mini-card { border: 1px solid var(--radar-border); background: var(--radar-surface); padding: 7px 10px; display: inline-flex; gap: 9px; }
+.mini-card.person { align-items: center; }
+.mini-card.system { flex-direction: column; gap: 2px; align-items: flex-start; }
+.mini-body { display: flex; flex-direction: column; line-height: 1.35; min-width: 0; }
+.mini-title { font-size: 13px; font-weight: 600; color: var(--radar-ink); }
+.mini-sub { font-size: 11px; color: var(--radar-text-secondary); }
+.mini-code { font-size: 11px; color: var(--radar-text-secondary); font-weight: 400; margin-left: 6px; }
+.mini-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* 投产卡片小节 */
+.lc-section { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 13px; color: var(--radar-ink); margin: 14px 0 8px; }
+.lc-kv { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; padding: 4px 0; color: var(--radar-ink); border-bottom: 1px dashed var(--radar-border); }
+.lc-sys-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
+
+/* 附件 / 路径行 */
+.lc-file { display: flex; align-items: center; gap: 8px; border: 1px solid var(--radar-border); padding: 6px 8px; font-size: 12px; color: var(--radar-ink); }
+.lc-file-field { font-weight: 600; flex-shrink: 0; }
+.lc-file-name { color: var(--radar-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lc-empty { font-size: 12px; color: var(--radar-text-secondary); opacity: .6; padding: 16px 0; text-align: center; }
+
+/* ============ 通用 ============ */
+.clickable { cursor: pointer; transition: box-shadow .2s, transform .2s; }
+.clickable:hover { box-shadow: 0 8px 22px rgba(31,45,80,0.12); transform: translateY(-2px); }
+.form-section-title { font-weight: 600; font-size: 13px; color: var(--radar-primary); border-left: 3px solid var(--radar-primary); padding-left: 8px; margin: 6px 0 12px; }
+.meta-bar { display: flex; flex-wrap: wrap; gap: 8px 24px; padding: 10px 14px; margin-bottom: 16px; background: var(--radar-primary-soft); border-radius: 0; font-size: 13px; }
+.meta-bar .meta-item { display: flex; gap: 6px; align-items: center; }
+.meta-bar .meta-label { color: var(--radar-text-secondary); }
+
+/* 版本概览：机构框内的需求卡片 */
+.ov-req-card {
+  border: 1px solid var(--radar-border); background: var(--radar-surface); padding: 14px; height: 100%;
+}
+.ov-req-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+
+/* 需求/任务编号 主色胶囊 */
+.code-pill {
+  display: inline-flex; align-items: center; font-weight: 700; font-size: 13px;
+  color: var(--radar-primary); background: var(--radar-primary-soft); padding: 2px 10px; border-radius: 2px; letter-spacing: .3px;
+}
