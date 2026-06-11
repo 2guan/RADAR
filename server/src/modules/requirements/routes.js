@@ -35,11 +35,11 @@ const COLUMNS = [
 const SEARCH = ['req_code', 'title', 'summary', 'proposer'];
 const JSON_FIELDS = ['main_systems', 'collab_dev_systems', 'collab_test_systems'];
 const WRITABLE = [
-  'title', 'summary', 'status', 'req_type', 'propose_dept', 'proposer', 'yn_owner', 'jk_owner',
+  'req_code', 'title', 'summary', 'status', 'req_type', 'propose_dept', 'proposer', 'yn_owner', 'jk_owner',
   'propose_time', 'main_systems', 'collab_dev_systems', 'collab_test_systems', 'release_point_id',
 ];
 const LABELS = {
-  title: '需求标题', summary: '需求概述', status: '需求状态', req_type: '需求类型',
+  req_code: '需求编号', title: '需求标题', summary: '需求概述', status: '需求状态', req_type: '需求类型',
   propose_dept: '农信提出部门', proposer: '农信提出人', yn_owner: '云南农信业务负责人',
   jk_owner: '建信金科业务负责人', propose_time: '提出时间', main_systems: '主责系统',
   collab_dev_systems: '协同改造系统', collab_test_systems: '协同测试系统', release_point_id: '计划投产点',
@@ -164,6 +164,12 @@ export default async function requirementRoutes(fastify) {
     const body = request.body || {};
     const picked = pick(body);
 
+    // 如果提交了新编号，校验唯一性（排除自身）
+    if (picked.req_code && picked.req_code !== old.req_code) {
+      const dup = get('SELECT id FROM requirement WHERE req_code = ? AND id != ?', picked.req_code, id);
+      if (dup) throw badRequest('需求编号已存在，请更换');
+    }
+
     // 终态校验：用提交后的状态与主责系统
     const newStatus = picked.status ?? old.status;
     const newMain = picked.main_systems ?? (old.main_systems ? JSON.parse(old.main_systems) : []);
@@ -182,6 +188,25 @@ export default async function requirementRoutes(fastify) {
       auditUpdate('requirement', id, old.req_code, request.currentUser?.name, oldReadable, newReadable, LABELS);
     }
     return ok({ id });
+  });
+
+  // 生成编号（前端点击「生成」按钮调用）
+  fastify.get('/requirements/gen-code', { preHandler: fastify.requirePerm('requirement', 'view') }, async (request) => {
+    const releasePointId = request.query.releasePointId;
+    if (!releasePointId) throw badRequest('缺少 releasePointId');
+    const rp = get('SELECT release_date FROM release_point WHERE id = ?', releasePointId);
+    if (!rp) throw badRequest('投产点不存在');
+    return ok({ req_code: genRequirementCode(rp.release_date) });
+  });
+
+  // 校验编号唯一性（前端实时校验调用）
+  fastify.get('/requirements/check-code', { preHandler: fastify.requirePerm('requirement', 'view') }, async (request) => {
+    const { code, excludeId } = request.query;
+    if (!code) return ok({ exists: false });
+    const row = excludeId
+      ? get('SELECT id FROM requirement WHERE req_code = ? AND id != ?', code, excludeId)
+      : get('SELECT id FROM requirement WHERE req_code = ?', code);
+    return ok({ exists: !!row });
   });
 
   // 删除

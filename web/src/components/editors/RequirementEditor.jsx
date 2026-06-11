@@ -6,9 +6,9 @@
  * 作者：hengguan
  */
 
-import React, { useEffect, useState } from 'react';
-import { Modal, Form, Input, DatePicker, Row, Col, Button, Select, Tag, message } from 'antd';
-import { HistoryOutlined, CloseOutlined } from '@ant-design/icons';
+import React, { useEffect, useRef, useState } from 'react';
+import { Modal, Form, Input, DatePicker, Row, Col, Button, Select, Tag, Space, message, Tooltip } from 'antd';
+import { HistoryOutlined, CloseOutlined, ThunderboltOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import DictSelect from '../DictSelect.jsx';
 import SystemSelect from '../SystemSelect.jsx';
@@ -110,7 +110,11 @@ export default function RequirementEditor({ open, reqId, defaultReleasePointId, 
   const [current, setCurrent] = useState(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [points, setPoints] = useState([]);
+  const [genLoading, setGenLoading] = useState(false); // 生成编号加载态
   const isEdit = !!reqId;
+
+  // 防抖 timer ref，供编号唯一性校验使用
+  const debounceRef = useRef(null);
 
   useEffect(() => {
     if (!open) return;
@@ -144,6 +148,45 @@ export default function RequirementEditor({ open, reqId, defaultReleasePointId, 
     }
     onSaved?.();
   };
+
+  /** 点击「生成编号」按钮 */
+  const generateCode = async () => {
+    const releasePointId = form.getFieldValue('release_point_id');
+    if (!releasePointId) {
+      message.warning('请先选择「计划投产点」');
+      return;
+    }
+    setGenLoading(true);
+    try {
+      const res = await apiGet('/requirements/gen-code', { releasePointId });
+      form.setFieldValue('req_code', res.req_code);
+      // 触发校验以更新状态
+      form.validateFields(['req_code']);
+      message.success(`已生成编号：${res.req_code}`);
+    } catch (e) {
+      message.error('生成失败，请稍后重试');
+    } finally {
+      setGenLoading(false);
+    }
+  };
+
+  /** 防抖异步校验需求编号唯一性 */
+  const checkCodeUnique = (code) =>
+    new Promise((resolve, reject) => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      const trimmed = (code || '').trim();
+      if (!trimmed) { resolve(); return; }
+      debounceRef.current = setTimeout(async () => {
+        try {
+          const params = { code: trimmed };
+          if (reqId) params.excludeId = reqId;
+          const res = await apiGet('/requirements/check-code', params);
+          res.exists ? reject('需求编号已存在') : resolve();
+        } catch {
+          resolve(); // 网络异常不阻断表单
+        }
+      }, 400);
+    });
 
   return (
     <Modal
@@ -208,6 +251,40 @@ export default function RequirementEditor({ open, reqId, defaultReleasePointId, 
             {/* 基本信息 */}
             <div className="form-section-card">
               <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>基本信息</div>
+
+              {/* 需求编号 */}
+              <Form.Item
+                name="req_code"
+                label="需求编号"
+                style={{ marginBottom: 8 }}
+                rules={[
+                  { pattern: /^\S+$/, message: '编号不能包含空格' },
+                  { validator: (_, val) => checkCodeUnique(val) },
+                ]}
+                validateTrigger={['onBlur', 'onChange']}
+              >
+                <Input
+                  placeholder="手填或点击「生成编号」自动生成"
+                  size="small"
+                  style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', letterSpacing: '0.3px' }}
+                  suffix={
+                    <Tooltip title="根据所选投产点自动生成编号">
+                      <Button
+                        type="link"
+                        size="small"
+                        icon={<ThunderboltOutlined />}
+                        loading={genLoading}
+                        onClick={generateCode}
+                        style={{ padding: 0, height: 'auto', fontSize: 13, color: 'var(--radar-primary)' }}
+                      >
+                        生成
+                      </Button>
+                    </Tooltip>
+                  }
+                />
+              </Form.Item>
+
+              {/* 需求标题 */}
               <Form.Item name="title" label="需求标题" rules={[{ required: true, message: '请输入需求标题' }]} style={{ marginBottom: 8 }}>
                 <Input placeholder="请输入需求标题" size="small" />
               </Form.Item>
