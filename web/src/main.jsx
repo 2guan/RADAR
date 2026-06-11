@@ -122,6 +122,11 @@ function Root() {
             cellPaddingBlock: 12,
             rowHoverBg: 'var(--radar-primary-soft)',
             colorBgContainer: isDark ? 'var(--radar-bg)' : 'var(--radar-surface)',
+            // 排序列背景：必须显式给定真实颜色。否则 AntD 会基于 colorBgContainer（此处为
+            // CSS 变量字符串，无法被颜色算法解析）推导，结果回退成纯黑，导致排序整列变黑。
+            headerSortActiveBg: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+            headerSortHoverBg: isDark ? 'rgba(255,255,255,0.045)' : 'rgba(0,0,0,0.03)',
+            bodySortBg: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
           },
           Modal: { titleFontSize: 17 },
           Button: { fontWeight: 500, primaryShadow: 'none' },

@@ -47,12 +47,12 @@ export default function ReleaseDetail({ open, reqCode, onClose, onChanged }) {
     const [status, setStatus] = useState(rs.status);
     const editable = can('release', 'release.register');
     return (
-      <Space wrap>
+      <Space wrap size={6}>
         <StatusBadge status={status} />
         <b>{rs.system_code}</b>
         <span style={{ color: 'var(--radar-text-secondary)' }}>{rs.impl_org || '—'}</span>
-        <DatePicker placeholder="实际投产时间" value={time} onChange={setTime} disabled={!editable} />
-        <Select value={status} style={{ width: 110 }} onChange={setStatus} disabled={!editable}
+        <DatePicker size="small" placeholder="实际投产时间" value={time} onChange={setTime} disabled={!editable} />
+        <Select size="small" value={status} style={{ width: 100 }} onChange={setStatus} disabled={!editable}
           options={['待投产', '已投产', '已取消'].map((s) => ({ value: s, label: s }))} />
         {editable && (
           <Button size="small" type="primary" onClick={async () => {
@@ -82,7 +82,20 @@ export default function ReleaseDetail({ open, reqCode, onClose, onChanged }) {
   ];
 
   return (
-    <Modal open={open} width={880} footer={null} onCancel={onClose} title={`投产详情 · ${reqCode || ''}`} destroyOnHidden>
+    <Modal
+      open={open}
+      width={880}
+      footer={null}
+      onCancel={onClose}
+      destroyOnHidden
+      title={(
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingRight: 32 }}>
+          <span className="lc-id big" style={{ margin: 0 }}>{reqCode || 'REQ'}</span>
+          <span style={{ fontSize: 14, fontWeight: 700 }}>投产详情</span>
+          {detail?.releaseTask && <StatusBadge status={detail.releaseTask.status} />}
+        </div>
+      )}
+    >
       {!detail ? <Empty /> : !detail.releaseTask ? (
         <Empty description="该需求尚未发起投产评审" />
       ) : (

@@ -69,6 +69,14 @@ function pick(body) {
   return out;
 }
 
+/** 统计需求（按编号）已关联的开发/测试任务数量 */
+function linkedTaskCount(reqCode) {
+  if (!reqCode) return 0;
+  const d = get('SELECT COUNT(*) AS c FROM dev_task WHERE req_code = ?', reqCode);
+  const t = get('SELECT COUNT(*) AS c FROM test_task WHERE req_code = ?', reqCode);
+  return (d?.c || 0) + (t?.c || 0);
+}
+
 /** 终态校验 */
 function validateTerminal(reqId, statusAttr, mainSystems) {
   if (!isTerminalStatus(statusAttr)) return;
@@ -102,11 +110,20 @@ export default async function requirementRoutes(fastify) {
       sysMap[s.sys_code] = s.sys_name;
     }
 
+    // 已关联开发/测试任务的需求编号集合（用于禁用编号修改与删除）
+    const linkedCodes = new Set(
+      [
+        ...all('SELECT DISTINCT req_code FROM dev_task').map((r) => r.req_code),
+        ...all('SELECT DISTINCT req_code FROM test_task').map((r) => r.req_code),
+      ].filter(Boolean),
+    );
+
     result.list = result.list.map((row) => {
       const decoded = decode(row);
       decoded.release_date = rpMap[decoded.release_point_id] || null;
       decoded.main_systems_names = (decoded.main_systems || []).map((code) => sysMap[code] || code);
       decoded.collab_dev_systems_names = (decoded.collab_dev_systems || []).map((code) => sysMap[code] || code);
+      decoded.has_tasks = linkedCodes.has(decoded.req_code);
       return decoded;
     });
 
@@ -117,7 +134,7 @@ export default async function requirementRoutes(fastify) {
   fastify.get('/requirements/:id', { preHandler: fastify.requirePerm('requirement', 'view') }, async (request) => {
     const row = get('SELECT * FROM requirement WHERE id = ?', request.params.id);
     if (!row) throw notFound();
-    return ok({ ...decode(row), attachments: listByEntity('requirement', row.id) });
+    return ok({ ...decode(row), has_tasks: linkedTaskCount(row.req_code) > 0, attachments: listByEntity('requirement', row.id) });
   });
 
   // 新增
@@ -166,6 +183,8 @@ export default async function requirementRoutes(fastify) {
 
     // 如果提交了新编号，校验唯一性（排除自身）
     if (picked.req_code && picked.req_code !== old.req_code) {
+      // 已关联开发/测试任务的需求，编号不可修改
+      if (linkedTaskCount(old.req_code) > 0) throw badRequest('该需求已关联开发/测试任务，需求编号不可修改');
       const dup = get('SELECT id FROM requirement WHERE req_code = ? AND id != ?', picked.req_code, id);
       if (dup) throw badRequest('需求编号已存在，请更换');
     }
@@ -214,6 +233,8 @@ export default async function requirementRoutes(fastify) {
     const id = request.params.id;
     const row = get('SELECT * FROM requirement WHERE id = ?', id);
     if (!row) throw notFound();
+    // 已关联开发/测试任务的需求不可删除
+    if (linkedTaskCount(row.req_code) > 0) throw badRequest('该需求已关联开发/测试任务，无法删除');
     run('DELETE FROM requirement WHERE id = ?', id);
     auditDelete('requirement', id, row.req_code, request.currentUser?.name);
     return ok(null, '删除成功');

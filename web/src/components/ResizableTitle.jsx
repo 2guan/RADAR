@@ -37,7 +37,10 @@ export default function ResizableTitle(props) {
       <span
         onPointerDown={onPointerDown}
         style={{
-          position: 'absolute', right: -4, top: 0, height: '100%', width: 8,
+          // 紧贴单元格右边缘内侧，不使用负 right 偏移：
+          // 负偏移会让最后一列的拖拽手柄溢出表格 4px，在 Windows（占位滚动条）下
+          // 触发整页/表格的横向滚动条，即便列表本可一屏显示。
+          position: 'absolute', right: 0, top: 0, height: '100%', width: 8,
           cursor: 'col-resize', userSelect: 'none', touchAction: 'none', zIndex: 1,
         }}
       />

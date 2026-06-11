@@ -1,11 +1,12 @@
 /**
  * 文件：components/HistoryDrawer.jsx
- * 用途：变更历史抽屉。展示某业务记录的历史编辑记录（用户、修改栏位、修改前后内容、时间）。
+ * 用途：变更历史弹窗。展示某业务记录的历史编辑记录（用户、修改栏位、修改前后内容、时间）。
+ *       采用页面居中弹窗（Modal）而非右侧抽屉，避免遮挡过多内容。
  * 作者：hengguan
  */
 
 import React, { useEffect, useState } from 'react';
-import { Drawer, Timeline, Tag, Empty, Spin, Typography } from 'antd';
+import { Modal, Timeline, Tag, Empty, Spin, Typography } from 'antd';
 import { apiGet } from '../api/client.js';
 
 export default function HistoryDrawer({ open, onClose, entityType, entityId }) {
@@ -27,7 +28,15 @@ export default function HistoryDrawer({ open, onClose, entityType, entityId }) {
   }[a] || <Tag>{a}</Tag>);
 
   return (
-    <Drawer title="历史编辑记录" open={open} onClose={onClose} width={460}>
+    <Modal
+      title="历史编辑记录"
+      open={open}
+      onCancel={onClose}
+      footer={null}
+      width={560}
+      destroyOnHidden
+      styles={{ body: { maxHeight: '60vh', overflowY: 'auto', paddingTop: 12 } }}
+    >
       {loading ? <Spin /> : (
         list.length === 0 ? <Empty description="暂无变更记录" /> : (
           <Timeline
@@ -54,6 +63,6 @@ export default function HistoryDrawer({ open, onClose, entityType, entityId }) {
           />
         )
       )}
-    </Drawer>
+    </Modal>
   );
 }

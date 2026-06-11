@@ -11,7 +11,9 @@ import { apiGet } from '../api/client.js';
 
 let _cache = null;
 
-export default function SystemSelect({ value, onChange, mode = 'multiple', style, placeholder, maxTagCount = 'responsive', maxCount }) {
+export default function SystemSelect({ value, onChange, mode = 'multiple', single, style, placeholder, maxTagCount = 'responsive', maxCount, size }) {
+  // single=true 时为单选（Ant 单选模式 mode=undefined）
+  const realMode = single ? undefined : mode;
   const [options, setOptions] = useState([]);
 
   useEffect(() => {
@@ -31,7 +33,7 @@ export default function SystemSelect({ value, onChange, mode = 'multiple', style
 
   return (
     <Select
-      mode={mode} value={value} onChange={onChange} allowClear
+      mode={realMode} value={value} onChange={onChange} allowClear size={size}
       placeholder={placeholder || '选择系统（支持模糊搜索）'} style={{ minWidth: 200, ...style }}
       showSearch
       filterOption={(input, opt) => (opt.label + opt.org).toLowerCase().includes(input.toLowerCase())}

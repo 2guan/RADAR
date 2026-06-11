@@ -11,22 +11,23 @@ import { Modal, Form, Input, DatePicker, Row, Col, Button, Select, Tag, Space, m
 import { HistoryOutlined, CloseOutlined, ThunderboltOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import DictSelect from '../DictSelect.jsx';
-import SystemSelect from '../SystemSelect.jsx';
 import PersonPicker from '../PersonPicker.jsx';
 import AttachmentField from '../AttachmentField.jsx';
 import HistoryDrawer from '../HistoryDrawer.jsx';
+import { getStatusType } from '../StatusBadge.jsx';
 import { apiGet, apiPost, apiPut } from '../../api/client.js';
 
 // ─── 模块级系统列表缓存（与 SystemSelect 共用同一接口，但单独维护以供下方组件使用） ───
 let _sysCache = null;
 
 /**
- * 协同系统选择器
- * 上方：普通下拉框（多选但不展示 Tag，选完即收起）
- * 下方：已选系统区域，逐个展示、可单独删除
+ * 系统选择子区块：标题在左、选择框在右，已选系统逐个展示在下方、可单独删除。
+ * single=true 时为单选：已选一个后再选会自动替换（主责系统）；否则不限个数（协同系统）。
  */
-function CollabSystemSelector({ value = [], onChange, placeholder }) {
+function SystemPickerField({ title, hint, value = [], onChange, single, placeholder }) {
   const [options, setOptions] = useState([]);
+  // 单选时只保留最后一次选择，达到「自动替换」效果
+  const handleChange = (vals) => onChange?.(single ? (vals || []).slice(-1) : vals);
 
   useEffect(() => {
     let alive = true;
@@ -48,26 +49,35 @@ function CollabSystemSelector({ value = [], onChange, placeholder }) {
   const remove = (code) => onChange?.((value || []).filter((v) => v !== code));
 
   return (
-    <div>
-      {/* 下拉选择框：选中项不在框内以 tag 形式堆叠，改为外置展示 */}
-      <Select
-        mode="multiple"
-        value={value}
-        onChange={onChange}
-        options={options}
-        showSearch
-        allowClear
-        filterOption={(input, opt) =>
-          `${opt.label}${opt.org}`.toLowerCase().includes(input.toLowerCase())
-        }
-        placeholder={placeholder || '点击下拉选择系统（支持模糊搜索）'}
-        style={{ width: '100%', fontSize: 12 }}
-        tagRender={() => null}           // 不在 Select 框内渲染 Tag
-        maxTagCount={0}
-        maxTagPlaceholder={(omitted) =>
-          omitted.length > 0 ? `已选 ${omitted.length} 个，点击展开添加` : null
-        }
-      />
+    <div style={{ marginBottom: 12 }}>
+      {/* 标题（左）+ 选择框（右） */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--radar-ink)', whiteSpace: 'nowrap' }}>
+          {title}
+          {hint && (
+            <span style={{ fontWeight: 400, fontSize: 11, color: 'var(--radar-text-secondary)', marginLeft: 4 }}>{hint}</span>
+          )}
+        </span>
+        <Select
+          mode="multiple"
+          value={value}
+          onChange={handleChange}
+          options={options}
+          size="small"
+          showSearch
+          allowClear
+          filterOption={(input, opt) =>
+            `${opt.label}${opt.org}`.toLowerCase().includes(input.toLowerCase())
+          }
+          placeholder={placeholder || '点击下拉选择系统（支持模糊搜索）'}
+          style={{ flex: 1, minWidth: 0, fontSize: 12 }}
+          tagRender={() => null}           // 不在 Select 框内渲染 Tag
+          maxTagCount={0}
+          maxTagPlaceholder={(omitted) =>
+            omitted.length > 0 ? `已选 ${omitted.length} 个` : null
+          }
+        />
+      </div>
 
       {/* 已选区域 */}
       {value && value.length > 0 && (
@@ -107,11 +117,15 @@ function CollabSystemSelector({ value = [], onChange, placeholder }) {
 
 export default function RequirementEditor({ open, reqId, defaultReleasePointId, onClose, onSaved }) {
   const [form] = Form.useForm();
+  // 监听需求状态，供标题栏内联选择器响应式回显
+  const statusValue = Form.useWatch('status', form);
   const [current, setCurrent] = useState(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [points, setPoints] = useState([]);
   const [genLoading, setGenLoading] = useState(false); // 生成编号加载态
   const isEdit = !!reqId;
+  // 已关联开发/测试任务时，需求编号锁定不可改
+  const codeLocked = !!current?.has_tasks;
 
   // 防抖 timer ref，供编号唯一性校验使用
   const debounceRef = useRef(null);
@@ -142,11 +156,10 @@ export default function RequirementEditor({ open, reqId, defaultReleasePointId, 
       message.success('已保存');
     } else {
       const res = await apiPost('/requirements', payload);
-      message.success(`已创建需求 ${res.req_code}，可继续维护附件`);
-      const d = await apiGet(`/requirements/${res.id}`);
-      setCurrent(d);
+      message.success(`已创建需求 ${res.req_code}`);
     }
     onSaved?.();
+    onClose?.();   // 保存成功后关闭弹窗
   };
 
   /** 点击「生成编号」按钮 */
@@ -198,50 +211,46 @@ export default function RequirementEditor({ open, reqId, defaultReleasePointId, 
       destroyOnClose
       styles={{ body: { fontSize: 12 } }}
       title={(
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', paddingRight: 32 }}>
+        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 10, rowGap: 6, minWidth: 0, width: '100%', paddingRight: 76 }}>
           {isEdit || current ? (
-            <>
-              <span className="lc-id big" style={{ margin: 0 }}>{current?.req_code || 'REQ'}</span>
-              <span className="lc-modal-name" style={{ fontSize: 14, fontWeight: 700 }}>编辑需求</span>
-              {current?.req_type && (
-                <Tag className="tag-type" style={{ borderRadius: 2, margin: 0, fontSize: 10 }}>{current.req_type}</Tag>
-              )}
-            </>
+            <span className="lc-id big" style={{ margin: 0 }}>{current?.req_code || 'REQ'}</span>
           ) : (
-            <>
-              <span className="lc-id big" style={{ margin: 0, background: 'var(--radar-status-in-progress-soft)', color: 'var(--radar-status-in-progress)' }}>NEW</span>
-              <span className="lc-modal-name" style={{ fontSize: 14, fontWeight: 700 }}>新增需求</span>
-            </>
+            <span className="lc-id big" style={{ margin: 0, background: 'var(--radar-status-in-progress-soft)', color: 'var(--radar-status-in-progress)' }}>NEW</span>
           )}
-          {current && (
-            <Button
+          {/* 需求状态：标题栏内联编辑，点击即可切换；按主题状态色显示，宽度随内容自适应 */}
+          <span className={`status-select status-select-${getStatusType(statusValue)}`}>
+            <DictSelect
+              category="process_status"
+              stage="需求"
               size="small"
-              icon={<HistoryOutlined />}
-              onClick={() => setHistoryOpen(true)}
-              style={{ marginLeft: 'auto', marginRight: 16, borderRadius: 2, fontSize: 12 }}
-            >
-              变更历史
-            </Button>
+              allowClear={false}
+              showSearch={false}
+              popupClassName="status-select-dropdown"
+              value={statusValue}
+              onChange={(v) => form.setFieldValue('status', v)}
+              placeholder="需求状态"
+              style={{ width: (statusValue ? Array.from(String(statusValue)).length : 4) * 13 + 15 }}
+            />
+          </span>
+          {current && (
+            <Tooltip title="变更历史">
+              <Button
+                type="text"
+                icon={<HistoryOutlined style={{ fontSize: 16 }} />}
+                onClick={() => setHistoryOpen(true)}
+                aria-label="变更历史"
+                style={{ position: 'absolute', top: 12, right: 48, width: 32, height: 32, borderRadius: 2, color: 'var(--radar-text-secondary)' }}
+              />
+            </Tooltip>
           )}
         </div>
       )}
     >
-      {/* 全局缩小 Form label 与输入框字号 */}
-      <style>{`
-        .req-editor-form .ant-form-item-label > label { font-size: 12px !important; font-weight: 600 !important; color: var(--radar-ink) !important; }
-        .req-editor-form .ant-input,
-        .req-editor-form .ant-input-affix-wrapper,
-        .req-editor-form .ant-select-selector,
-        .req-editor-form .ant-picker { font-size: 12px !important; }
-        .req-editor-form .ant-form-item { margin-bottom: 0; }
-        .req-editor-form .ant-form-item-label { padding-bottom: 2px !important; }
-      `}</style>
-
       <Form
         form={form}
         layout="vertical"
-        requiredMark="optional"
-        className="req-editor-form"
+        requiredMark={false}
+        className="editor-form"
         style={{ marginTop: 10, fontSize: 12 }}
       >
         <Row gutter={12}>
@@ -252,108 +261,51 @@ export default function RequirementEditor({ open, reqId, defaultReleasePointId, 
             <div className="form-section-card">
               <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>基本信息</div>
 
-              {/* 需求编号 */}
-              <Form.Item
-                name="req_code"
-                label="需求编号"
-                style={{ marginBottom: 8 }}
-                rules={[
-                  { pattern: /^\S+$/, message: '编号不能包含空格' },
-                  { validator: (_, val) => checkCodeUnique(val) },
-                ]}
-                validateTrigger={['onBlur', 'onChange']}
-              >
-                <Input
-                  placeholder="手填或点击「生成编号」自动生成"
-                  size="small"
-                  style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', letterSpacing: '0.3px' }}
-                  suffix={
-                    <Tooltip title="根据所选投产点自动生成编号">
-                      <Button
-                        type="link"
-                        size="small"
-                        icon={<ThunderboltOutlined />}
-                        loading={genLoading}
-                        onClick={generateCode}
-                        style={{ padding: 0, height: 'auto', fontSize: 13, color: 'var(--radar-primary)' }}
-                      >
-                        生成
-                      </Button>
-                    </Tooltip>
-                  }
-                />
-              </Form.Item>
-
-              {/* 需求标题 */}
-              <Form.Item name="title" label="需求标题" rules={[{ required: true, message: '请输入需求标题' }]} style={{ marginBottom: 8 }}>
-                <Input placeholder="请输入需求标题" size="small" />
-              </Form.Item>
-              <Form.Item name="summary" label="需求概述" rules={[{ max: 500, message: '不超过 500 字' }]}>
-                <Input.TextArea rows={3} placeholder="描述该需求的核心背景与业务诉求（500字以内）" showCount maxLength={500} style={{ fontSize: 12 }} />
-              </Form.Item>
-            </div>
-
-            {/* 需求说明书（附件）—— 移至基本信息下方 */}
-            <div className="form-section-card">
-              <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>需求说明书<span style={{ fontWeight: 400, color: 'var(--radar-text-secondary)', marginLeft: 6, fontSize: 11 }}>（附件或路径，终态至少 1 个）</span></div>
-              <AttachmentField entityType="requirement" entityId={current?.id} fieldKey="需求说明书" />
-            </div>
-
-            {/* 涉及系统 */}
-            <div className="form-section-card">
-              <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>涉及系统</div>
-
-              {/* 主责系统：多选标签，最多 2 个 */}
-              <Form.Item
-                name="main_systems"
-                label="主责系统（终态必填，最多 2 个）"
-                style={{ marginBottom: 8 }}
-                rules={[{
-                  validator: (_, val) =>
-                    val && val.length > 2
-                      ? Promise.reject('主责系统最多只能选择 2 个')
-                      : Promise.resolve(),
-                }]}
-              >
-                <SystemSelect maxCount={2} maxTagCount="responsive" style={{ width: '100%' }} placeholder="选择主责系统（最多 2 个）" />
-              </Form.Item>
-
-              {/* 协同改造系统：下拉 + 外置已选区 */}
-              <Form.Item name="collab_dev_systems" label="协同改造系统" style={{ marginBottom: 8 }}>
-                <CollabSystemSelector placeholder="点击下拉添加协同改造系统" />
-              </Form.Item>
-
-              {/* 协同测试系统：下拉 + 外置已选区 */}
-              <Form.Item name="collab_test_systems" label="协同测试系统">
-                <CollabSystemSelector placeholder="点击下拉添加协同测试系统" />
-              </Form.Item>
-            </div>
-          </Col>
-
-          {/* ── 右栏 ── */}
-          <Col xs={24} md={10}>
-
-            {/* 分类与状态 */}
-            <div className="form-section-card">
-              <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>分类与状态</div>
-              <Form.Item name="release_point_id" label="计划投产点" rules={[{ required: true, message: '请选择计划投产点' }]} style={{ marginBottom: 8 }}>
-                <Select
-                  placeholder="选择计划投产点"
-                  size="small"
-                  style={{ width: '100%' }}
-                  showSearch
-                  optionFilterProp="label"
-                  options={points.map((p) => ({
-                    value: p.id,
-                    label: `${p.release_date}${p.version_type ? ' · ' + p.version_type : ''}`,
-                  }))}
-                />
-              </Form.Item>
+              {/* 需求状态改由标题栏内联编辑，此处保留隐藏字段以保证保存 */}
+              <Form.Item name="status" hidden><Input /></Form.Item>
 
               <Row gutter={8}>
+                {/* 需求编号 + 需求类型 */}
                 <Col span={12}>
-                  <Form.Item name="status" label="需求状态" style={{ marginBottom: 8 }}>
-                    <DictSelect category="process_status" stage="需求" style={{ width: '100%' }} size="small" />
+                  <Form.Item
+                    name="req_code"
+                    label={(
+                      <span>
+                        需求编号
+                        {codeLocked && (
+                          <span style={{ marginLeft: 6, fontWeight: 400, fontSize: 11, color: 'var(--radar-text-secondary)' }}>
+                            （已关联，不可改）
+                          </span>
+                        )}
+                      </span>
+                    )}
+                    style={{ marginBottom: 8 }}
+                    rules={[
+                      { pattern: /^\S+$/, message: '编号不能包含空格' },
+                      { validator: (_, val) => checkCodeUnique(val) },
+                    ]}
+                    validateTrigger={['onBlur', 'onChange']}
+                  >
+                    <Input
+                      placeholder="手填或点击「生成」"
+                      size="small"
+                      disabled={codeLocked}
+                      style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', letterSpacing: '0.3px' }}
+                      suffix={codeLocked ? null : (
+                        <Tooltip title="根据所选投产点自动生成编号">
+                          <Button
+                            type="link"
+                            size="small"
+                            icon={<ThunderboltOutlined />}
+                            loading={genLoading}
+                            onClick={generateCode}
+                            style={{ padding: 0, height: 'auto', fontSize: 13, color: 'var(--radar-primary)' }}
+                          >
+                            生成
+                          </Button>
+                        </Tooltip>
+                      )}
+                    />
                   </Form.Item>
                 </Col>
                 <Col span={12}>
@@ -361,31 +313,91 @@ export default function RequirementEditor({ open, reqId, defaultReleasePointId, 
                     <DictSelect category="req_type" style={{ width: '100%' }} size="small" />
                   </Form.Item>
                 </Col>
+
+                {/* 计划投产点 + 提出时间 */}
+                <Col span={12}>
+                  <Form.Item name="release_point_id" label="计划投产点" rules={[{ required: true, message: '请选择计划投产点' }]} style={{ marginBottom: 8 }}>
+                    <Select
+                      placeholder="选择计划投产点"
+                      size="small"
+                      style={{ width: '100%' }}
+                      showSearch
+                      optionFilterProp="label"
+                      options={points.map((p) => ({
+                        value: p.id,
+                        label: `${p.release_date}${p.version_type ? ' · ' + p.version_type : ''}`,
+                      }))}
+                    />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item name="propose_time" label="提出时间" style={{ marginBottom: 8 }}>
+                    <DatePicker size="small" style={{ width: '100%' }} placeholder="选择日期" />
+                  </Form.Item>
+                </Col>
+              </Row>
+
+              {/* 需求标题 */}
+              <Form.Item name="title" label="需求标题" rules={[{ required: true, message: '请输入需求标题' }]} style={{ marginBottom: 8 }}>
+                <Input placeholder="请输入需求标题" size="small" />
+              </Form.Item>
+              <Form.Item name="summary" label="需求概述" rules={[{ max: 500, message: '不超过 500 字' }]} style={{ marginBottom: 18 }}>
+                <Input.TextArea rows={3} placeholder="描述该需求的核心背景与业务诉求（500字以内）" showCount maxLength={500} style={{ fontSize: 12 }} />
+              </Form.Item>
+            </div>
+
+            {/* 相关负责人 */}
+            <div className="form-section-card">
+              <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>相关负责人</div>
+              <Row gutter={8}>
+                {/* 农信提出部门 + 农信提出人 */}
                 <Col span={12}>
                   <Form.Item name="propose_dept" label="农信提出部门" style={{ marginBottom: 8 }}>
                     <DictSelect category="org" style={{ width: '100%' }} size="small" />
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item name="propose_time" label="提出时间" style={{ marginBottom: 0 }}>
-                    <DatePicker size="small" style={{ width: '100%' }} placeholder="选择日期" />
+                  <Form.Item name="proposer" label="农信提出人" style={{ marginBottom: 8 }}>
+                    <PersonPicker style={{ width: '100%' }} placeholder="选择提出人" size="small" />
                   </Form.Item>
                 </Col>
               </Row>
-            </div>
-
-            {/* 相关负责人 */}
-            <div className="form-section-card">
-              <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>相关负责人</div>
-              <Form.Item name="proposer" label="农信提出人" style={{ marginBottom: 8 }}>
-                <PersonPicker style={{ width: '100%' }} placeholder="选择提出人" size="small" />
-              </Form.Item>
               <Form.Item name="yn_owner" label="云南农信业务负责人" style={{ marginBottom: 8 }}>
                 <PersonPicker style={{ width: '100%' }} placeholder="选择云南农信业务负责人" size="small" />
               </Form.Item>
-              <Form.Item name="jk_owner" label="建信金科业务负责人">
+              <Form.Item name="jk_owner" label="建信金科业务负责人" style={{ marginBottom: 0 }}>
                 <PersonPicker style={{ width: '100%' }} placeholder="选择建信金科业务负责人" size="small" />
               </Form.Item>
+            </div>
+          </Col>
+
+          {/* ── 右栏 ── */}
+          <Col xs={24} md={10}>
+
+            {/* 涉及系统 */}
+            <div className="form-section-card">
+              <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>涉及系统</div>
+
+              {/* 主责系统：标题右侧选择框，单选（再选自动替换），已选展示在下方 */}
+              <Form.Item name="main_systems" noStyle>
+                <SystemPickerField title="主责系统" single placeholder="选择主责系统" />
+              </Form.Item>
+
+              {/* 协同改造系统：标题右侧选择框，可多选，已选展示在下方 */}
+              <Form.Item name="collab_dev_systems" noStyle>
+                <SystemPickerField title="协同改造系统" placeholder="添加协同改造系统" />
+              </Form.Item>
+
+              {/* 协同测试系统：标题右侧选择框，可多选，已选展示在下方 */}
+              <Form.Item name="collab_test_systems" noStyle>
+                <SystemPickerField title="协同测试系统" placeholder="添加协同测试系统" />
+              </Form.Item>
+            </div>
+
+            {/* 需求说明书（附件） */}
+            <div className="form-section-card">
+              <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>需求说明书<span style={{ fontWeight: 400, color: 'var(--radar-text-secondary)', marginLeft: 6, fontSize: 11 }}>（附件或路径，终态至少 1 个）</span></div>
+              <AttachmentField entityType="requirement" entityId={current?.id} fieldKey="需求说明书" />
             </div>
           </Col>
         </Row>

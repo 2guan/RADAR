@@ -8,7 +8,7 @@ import React, { useEffect, useState } from 'react';
 import { Select, Spin } from 'antd';
 import { apiGet } from '../api/client.js';
 
-export default function PersonPicker({ value, onChange, style, placeholder }) {
+export default function PersonPicker({ value, onChange, style, placeholder, size }) {
   const [options, setOptions] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -27,7 +27,7 @@ export default function PersonPicker({ value, onChange, style, placeholder }) {
 
   return (
     <Select
-      value={value} onChange={onChange} allowClear showSearch
+      value={value} onChange={onChange} allowClear showSearch size={size}
       placeholder={placeholder || '搜索并选择人员'} style={{ minWidth: 160, ...style }}
       filterOption={false} onSearch={search}
       notFoundContent={loading ? <Spin size="small" /> : '无匹配人员'}
