@@ -106,13 +106,19 @@ export default async function dashboardRoutes(fastify) {
   });
 
   // 维度元数据：某数据源可用的维度、图表类型、各数据源清单
+  // 不带 source 时一次性返回所有数据源的维度（dimsBySource），供前端一个请求预载全部元数据，
+  // 免去逐源 7 次往返（公网下尤为关键）。
   fastify.get('/dashboard/dimensions', { preHandler: fastify.requirePerm('dashboard', 'view') }, async (request) => {
     const source = request.query.source;
     const sources = Object.entries(SOURCES).map(([value, v]) => ({ value, label: v.label }));
     const chartTypes = CHART_TYPES;
-    if (!source || !SOURCES[source]) return ok({ sources, chartTypes, dimensions: [] });
-    const dimensions = SOURCES[source].dims.map((key) => ({ key, ...DIMENSIONS[key] }));
-    return ok({ sources, chartTypes, dimensions });
+    const dimsOf = (src) => SOURCES[src].dims.map((key) => ({ key, ...DIMENSIONS[key] }));
+    if (!source || !SOURCES[source]) {
+      const dimsBySource = {};
+      for (const src of Object.keys(SOURCES)) dimsBySource[src] = dimsOf(src);
+      return ok({ sources, chartTypes, dimensions: [], dimsBySource });
+    }
+    return ok({ sources, chartTypes, dimensions: dimsOf(source) });
   });
 
   // 分析图表数据聚合（1D/2D + 过滤 + 分组归并）

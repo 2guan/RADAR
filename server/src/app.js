@@ -12,6 +12,7 @@ import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import multipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
+import compress from '@fastify/compress';
 import fs from 'node:fs';
 
 import { config } from './config.js';
@@ -42,6 +43,13 @@ export async function buildApp() {
   const app = Fastify({
     logger: { level: config.isProd ? 'info' : 'warn' },
     bodyLimit: config.upload.maxFileSize + 1024 * 1024,
+  });
+
+  // ---- 响应压缩：公网/VPN 访问下显著降低 JS 包与 JSON 传输量（gzip 为主，CPU 开销可控）----
+  await app.register(compress, {
+    global: true,
+    encodings: ['gzip', 'deflate'],
+    threshold: 1024, // 小于 1KB 不压缩，避免负收益
   });
 
   // ---- 安全与基础插件 ----
@@ -97,7 +105,21 @@ export async function buildApp() {
 
   // ---- 前端静态资源（生产模式，SPA 回退到 index.html）----
   if (fs.existsSync(config.webDist)) {
-    await app.register(fastifyStatic, { root: config.webDist, prefix: '/' });
+    await app.register(fastifyStatic, {
+      root: config.webDist,
+      prefix: '/',
+      // 自行管理 Cache-Control，避免与内置 maxAge/immutable 的优先级冲突：
+      // Vite 产物（/assets/*.[hash].*）带内容 hash 可永久强缓存；
+      // index.html 必须每次回源校验，否则新部署的资源引用无法生效。
+      cacheControl: false,
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith('index.html')) {
+          res.setHeader('Cache-Control', 'no-cache');
+        } else {
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        }
+      },
+    });
     app.setNotFoundHandler((request, reply) => {
       if (request.raw.url.startsWith('/api')) {
         return reply.code(404).send({ code: 404, data: null, message: '接口不存在' });

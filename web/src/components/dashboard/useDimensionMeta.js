@@ -12,51 +12,63 @@ import { apiGet } from '../../api/client.js';
 // 需要预载的字典分类（覆盖所有 dict:* optionSource）
 const DICT_CATS = ['process_status', 'req_type', 'org', 'sector'];
 
+// 会话级缓存：元数据基本不变，缓存后再次进入仪表盘瞬时就绪，避免重复往返。
+// 缓存 Promise（而非结果）以合并并发首载；失败时清空以便重试。
+let metaCache = null;
+
+/** 一次并发拉取并归一化全部维度元数据 */
+async function fetchMeta() {
+  // 维度(含 dimsBySource)/字典/系统/投产点彼此独立，单波并发即可（约 1 个往返）
+  const [base, dictArr, systems, rps] = await Promise.all([
+    apiGet('/dashboard/dimensions'),
+    Promise.all(DICT_CATS.map((c) => apiGet(`/dict/by-category/${c}`).then((rows) => [c, rows || []]))),
+    apiGet('/systems/all').then((r) => r || []),
+    apiGet('/release-points/all').then((r) => r || []),
+  ]);
+
+  const sources = base.sources || [];
+  const dimsBySource = base.dimsBySource || {};
+  const dimByKey = {};
+  for (const dims of Object.values(dimsBySource)) {
+    for (const d of dims) dimByKey[d.key] = d;
+  }
+
+  const dictOptions = {}; const dictLabel = {};
+  for (const [c, rows] of dictArr) {
+    dictOptions[c] = rows.map((r) => ({ value: r.attr_value, label: r.display_value || r.attr_value }));
+    dictLabel[c] = Object.fromEntries(rows.map((r) => [r.attr_value, r.display_value || r.attr_value]));
+  }
+
+  const systemList = systems.map((s) => ({ value: s.sys_code, label: s.sys_name }));
+  const sysLabel = Object.fromEntries(systems.map((s) => [s.sys_code, s.sys_name]));
+
+  const rpLabel = {};
+  const rpList = rps.map((p) => {
+    const label = `${p.release_date}${p.version_type ? ' ' + p.version_type : ''}`;
+    rpLabel[String(p.id)] = label;
+    return { value: String(p.id), label };
+  });
+
+  return { sources, chartTypes: base.chartTypes || [], dimsBySource, dimByKey, dictOptions, dictLabel, systemList, sysLabel, rpList, rpLabel };
+}
+
+const EMPTY_META = {
+  sources: [], chartTypes: [], dimsBySource: {}, dimByKey: {},
+  dictOptions: {}, dictLabel: {}, systemList: [], sysLabel: {}, rpList: [], rpLabel: {},
+};
+
 export function useDimensionMeta() {
   const [ready, setReady] = useState(false);
-  const [meta, setMeta] = useState({
-    sources: [], chartTypes: [], dimsBySource: {}, dimByKey: {},
-    dictOptions: {}, dictLabel: {}, systemList: [], sysLabel: {}, rpList: [], rpLabel: {},
-  });
+  const [meta, setMeta] = useState(EMPTY_META);
 
   useEffect(() => {
     let alive = true;
-    (async () => {
-      // 基础：数据源 + 图表类型
-      const base = await apiGet('/dashboard/dimensions');
-      const sources = base.sources || [];
-      // 各源维度（并行）
-      const dimsArr = await Promise.all(
-        sources.map((s) => apiGet('/dashboard/dimensions', { source: s.value }).then((r) => [s.value, r.dimensions || []])),
-      );
-      const dimsBySource = {}; const dimByKey = {};
-      for (const [src, dims] of dimsArr) {
-        dimsBySource[src] = dims;
-        for (const d of dims) dimByKey[d.key] = d;
-      }
-      // 字典
-      const dictArr = await Promise.all(DICT_CATS.map((c) => apiGet(`/dict/by-category/${c}`).then((rows) => [c, rows || []])));
-      const dictOptions = {}; const dictLabel = {};
-      for (const [c, rows] of dictArr) {
-        dictOptions[c] = rows.map((r) => ({ value: r.attr_value, label: r.display_value || r.attr_value }));
-        dictLabel[c] = Object.fromEntries(rows.map((r) => [r.attr_value, r.display_value || r.attr_value]));
-      }
-      // 系统
-      const systems = (await apiGet('/systems/all')) || [];
-      const systemList = systems.map((s) => ({ value: s.sys_code, label: s.sys_name }));
-      const sysLabel = Object.fromEntries(systems.map((s) => [s.sys_code, s.sys_name]));
-      // 投产点
-      const rps = (await apiGet('/release-points/all')) || [];
-      const rpLabel = {}; const rpList = rps.map((p) => {
-        const label = `${p.release_date}${p.version_type ? ' ' + p.version_type : ''}`;
-        rpLabel[String(p.id)] = label;
-        return { value: String(p.id), label };
-      });
-
-      if (!alive) return;
-      setMeta({ sources, chartTypes: base.chartTypes || [], dimsBySource, dimByKey, dictOptions, dictLabel, systemList, sysLabel, rpList, rpLabel });
-      setReady(true);
-    })();
+    if (!metaCache) {
+      metaCache = fetchMeta().catch((e) => { metaCache = null; throw e; });
+    }
+    metaCache
+      .then((m) => { if (alive) { setMeta(m); setReady(true); } })
+      .catch(() => { /* 失败保持未就绪，下次进入会重试 */ });
     return () => { alive = false; };
   }, []);
 
