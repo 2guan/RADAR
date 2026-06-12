@@ -203,7 +203,7 @@ body {
 }
 /* 连线：从当前节点圆心向右延伸至下一节点圆心，连续相接 */
 .chain-step::before {
-  content: ''; position: absolute; top: 22px; left: 50%; width: 100%; height: 2px;
+  content: ''; position: absolute; top: 23px; left: 50%; width: 100%; height: 2px;
   background: var(--radar-border); z-index: 0;
 }
 .chain-step[data-last="1"]::before { display: none; }
@@ -214,7 +214,7 @@ body {
 }
 .chain-dot.done { background: var(--radar-primary); border-color: var(--radar-primary); }
 .chain-dot.doing { background: var(--radar-surface); border-color: var(--radar-primary); box-shadow: 0 0 0 3px var(--radar-primary-fade); }
-.chain-label { font-size: 11px; margin-top: 0; margin-bottom: 4px; color: var(--radar-text-secondary); white-space: nowrap; font-weight: 500; }
+.chain-label { font-size: 11px; line-height: 16px; margin-top: 0; margin-bottom: 4px; color: var(--radar-text-secondary); white-space: nowrap; font-weight: 500; }
 .chain-label.doing { color: var(--radar-primary); font-weight: 600; }
 .chain-status { margin-top: 4px; }
 /* 阶段状态标签：去掉底色，仅保留文字与边框颜色 */
