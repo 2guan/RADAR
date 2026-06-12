@@ -24,7 +24,7 @@ body {
 /* AntD 容器透明，露出页面渐变背景 */
 .ant-layout { background: transparent !important; }
 
-/* 状态徽章与实体属性标签：统一边框加微底色的莫兰迪高档风格 */
+/* 状态徽章与实体属性标签：统一边框加微底色的清雅高档风格 */
 .status-tag {
   border-radius: 2px !important;
 }
