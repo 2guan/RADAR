@@ -237,7 +237,7 @@ body {
 .lc-id { display: inline-block; font-size: 11px; font-weight: 700; color: var(--radar-text-secondary); background: rgba(120,130,150,0.12); padding: 1px 6px; letter-spacing: .3px; margin-bottom: 6px; }
 .lc-id.big { font-size: 12px; color: var(--radar-primary); background: var(--radar-primary-soft); }
 .lc-title { font-weight: 600; font-size: 13px; color: var(--radar-ink); line-height: 1.35; margin-top: 4px; padding-right: 70px; }
-.lc-title.lg { font-size: 14px; }
+.lc-title.lg { font-size: 14px; padding-right: 0; }
 
 /* 字段行 */
 .lc-field { display: flex; gap: 8px; align-items: flex-start; font-size: 12px; margin-top: 8px; color: var(--radar-ink); }
