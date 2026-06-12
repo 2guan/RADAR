@@ -90,11 +90,30 @@ export default async function releaseRoutes(fastify) {
     const rt = get('SELECT * FROM release_task WHERE req_code = ?', reqCode);
     const systems = rt ? all('SELECT * FROM release_system WHERE release_task_id = ? ORDER BY id', rt.id) : [];
     const signoffs = rt ? all('SELECT * FROM release_signoff WHERE release_task_id = ? ORDER BY id', rt.id) : [];
+    const devTasks = all('SELECT status FROM dev_task WHERE req_code = ?', reqCode);
+    const sitTasks = all('SELECT status FROM test_task WHERE req_code = ? AND test_type = ?', reqCode, 'SIT');
+    const uatTasks = all('SELECT status FROM test_task WHERE req_code = ? AND test_type = ?', reqCode, 'UAT');
+    const nftTasks = all('SELECT status FROM test_task WHERE req_code = ? AND test_type = ?', reqCode, 'NFT');
+    const secTasks = all('SELECT status FROM test_task WHERE req_code = ? AND test_type = ?', reqCode, 'SEC');
+
     return ok({
-      requirement: { req_code: req.req_code, title: req.title },
+      requirement: {
+        req_code: req.req_code,
+        title: req.title,
+        release_date: req.release_date,
+        summary: req.summary,
+        status: req.status
+      },
       releaseTask: rt || null,
       systems, signoffs,
       uatReady: uatAllTerminal(reqCode),
+      taskStatuses: {
+        dev: devTasks.map(t => t.status),
+        sit: sitTasks.map(t => t.status),
+        uat: uatTasks.map(t => t.status),
+        nft: nftTasks.map(t => t.status),
+        sec: secTasks.map(t => t.status),
+      }
     });
   });
 
@@ -134,13 +153,27 @@ export default async function releaseRoutes(fastify) {
     return ok({ id }, '投产评审已发起');
   });
 
-  // 更新投产任务负责人
+  // 更新投产任务负责人及状态
   fastify.put('/release/:reqCode', { preHandler: fastify.requirePerm('release', 'edit') }, async (request) => {
     const rt = get('SELECT * FROM release_task WHERE req_code = ?', request.params.reqCode);
     if (!rt) throw notFound('投产任务未发起');
-    const { owner } = request.body || {};
-    run(`UPDATE release_task SET owner=?, updated_at=datetime('now','localtime') WHERE id=?`, owner ?? rt.owner, rt.id);
-    auditUpdate('release', rt.id, rt.req_code, request.currentUser?.name, rt, { owner }, { owner: '投产负责人' });
+    const { owner, status } = request.body || {};
+
+    const updateData = {};
+    if (owner !== undefined) updateData.owner = owner;
+    if (status !== undefined) updateData.status = status;
+
+    const keys = Object.keys(updateData);
+    if (keys.length > 0) {
+      run(
+        `UPDATE release_task SET ${keys.map(k => `${k}=?`).join(',')}, updated_at=datetime('now','localtime') WHERE id=?`,
+        ...keys.map(k => updateData[k]), rt.id
+      );
+
+      const labels = { owner: '投产负责人', status: '投产状态' };
+      auditUpdate('release', rt.id, rt.req_code, request.currentUser?.name, rt, updateData, labels);
+    }
+
     return ok({ id: rt.id });
   });
 

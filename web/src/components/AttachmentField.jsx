@@ -6,13 +6,18 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { Upload, Button, Input, Space, List, Tag, Popconfirm, message } from 'antd';
-import { UploadOutlined, LinkOutlined, DownloadOutlined, DeleteOutlined } from '@ant-design/icons';
+import { Upload, Button, Input, Space, List, Tag, Popconfirm, message, Modal } from 'antd';
+import { UploadOutlined, LinkOutlined, DownloadOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons';
 import { apiGet, apiPost, apiDelete, rawClient, TOKEN_KEY } from '../api/client.js';
 
 export default function AttachmentField({ entityType, entityId, fieldKey, readOnly }) {
   const [list, setList] = useState([]);
   const [pathText, setPathText] = useState('');
+
+  // 弹窗编辑路径状态
+  const [editOpen, setEditOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
+  const [editText, setEditText] = useState('');
 
   const reload = async () => {
     if (!entityId) { setList([]); return; }
@@ -22,7 +27,7 @@ export default function AttachmentField({ entityType, entityId, fieldKey, readOn
   useEffect(() => { reload(); }, [entityId, fieldKey]);
 
   if (!entityId) {
-    return <Tag className="status-tag status-tag-error">保存记录后可管理附件</Tag>;
+    return <Tag className="status-tag status-tag-error" style={{ fontSize: 11 }}>保存记录后可管理附件</Tag>;
   }
 
   // 上传文件
@@ -64,42 +69,128 @@ export default function AttachmentField({ entityType, entityId, fieldKey, readOn
 
   const remove = async (a) => { await apiDelete(`/attachments/${a.id}`); reload(); };
 
+  const handleEditPathClick = (item) => {
+    if (readOnly) return;
+    setEditingItem(item);
+    setEditText(item.path_text || '');
+    setEditOpen(true);
+  };
+
   return (
     <div>
-      <List
-        size="small"
-        locale={{ emptyText: '暂无附件/路径' }}
-        dataSource={list}
-        renderItem={(a) => (
-          <List.Item
-            actions={readOnly ? [] : [
-              a.kind === 'file'
-                ? <Button type="link" size="small" icon={<DownloadOutlined />} onClick={() => download(a)}>下载</Button>
-                : null,
-              <Popconfirm title="确认删除？" onConfirm={() => remove(a)}>
-                <Button type="link" size="small" danger icon={<DeleteOutlined />} />
-              </Popconfirm>,
-            ].filter(Boolean)}
-          >
-            {a.kind === 'file'
-              ? <Space><Tag className="tag-file">文件</Tag>{a.filename}</Space>
-              : <Space><Tag className="tag-path">路径</Tag>{a.path_text}</Space>}
-          </List.Item>
-        )}
-      />
+      {list.length === 0 ? (
+        <div style={{ fontSize: 11, color: 'var(--radar-text-secondary)', padding: '4px 0' }}>暂无附件/路径</div>
+      ) : (
+        <List
+          size="small"
+          dataSource={list}
+          renderItem={(a) => (
+            <List.Item
+              style={{ padding: '3px 0' }}
+              actions={[
+                a.kind === 'file' ? (
+                  <Button key="dl" type="link" size="small" style={{ padding: 0, height: 'auto', fontSize: 11 }} icon={<DownloadOutlined style={{ fontSize: 11 }} />} onClick={() => download(a)} />
+                ) : null,
+                (a.kind === 'path' && !readOnly) ? (
+                  <Button key="edit" type="link" size="small" style={{ padding: 0, height: 'auto', fontSize: 11 }} icon={<EditOutlined style={{ fontSize: 11 }} />} onClick={() => handleEditPathClick(a)} />
+                ) : null,
+                !readOnly ? (
+                  <Popconfirm key="del" title="确认删除？" onConfirm={() => remove(a)}>
+                    <Button type="link" size="small" danger style={{ padding: 0, height: 'auto', fontSize: 11 }} icon={<DeleteOutlined style={{ fontSize: 11 }} />} />
+                  </Popconfirm>
+                ) : null,
+              ].filter(Boolean)}
+            >
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, flex: 1, minWidth: 0 }}>
+                {a.kind === 'file' ? (
+                  <>
+                    <Tag className="tag-file" style={{ borderRadius: 2, margin: 0, fontSize: 10, padding: '0 4px', height: 18, lineHeight: '16px', flexShrink: 0 }}>文件</Tag>
+                    <span style={{
+                      fontSize: 11,
+                      lineHeight: '14px',
+                      color: 'var(--radar-ink)',
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                      wordBreak: 'break-all',
+                      flex: 1,
+                    }}>
+                      {a.filename}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Tag className="tag-path" style={{ borderRadius: 2, margin: 0, fontSize: 10, padding: '0 4px', height: 18, lineHeight: '16px', flexShrink: 0 }}>路径</Tag>
+                    <span
+                      style={{
+                        fontSize: 11,
+                        lineHeight: '14px',
+                        color: 'var(--radar-ink)',
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden',
+                        wordBreak: 'break-all',
+                        flex: 1,
+                      }}
+                    >
+                      {a.path_text}
+                    </span>
+                  </>
+                )}
+              </div>
+            </List.Item>
+          )}
+        />
+      )}
       {!readOnly && (
-        <Space.Compact style={{ width: '100%', marginTop: 8 }}>
+        <div style={{ display: 'flex', width: '100%', marginTop: 8 }}>
+          <Upload customRequest={customUpload} showUploadList={false} style={{ flexShrink: 0 }}>
+            <Button size="small" icon={<UploadOutlined style={{ fontSize: 11 }} />} style={{ fontSize: 11, borderTopLeftRadius: 2, borderBottomLeftRadius: 2, borderTopRightRadius: 0, borderBottomRightRadius: 0, height: 24 }}>上传文件</Button>
+          </Upload>
+          <Button size="small" onClick={addPath} style={{ flexShrink: 0, fontSize: 11, borderRadius: 0, height: 24, borderLeft: 0 }}>添加路径</Button>
           <Input
             placeholder="填写文件路径，如 \\\\server\\share\\file.docx"
             value={pathText} onChange={(e) => setPathText(e.target.value)} onPressEnter={addPath}
-            prefix={<LinkOutlined />}
+            prefix={<LinkOutlined style={{ fontSize: 11, color: 'var(--radar-text-secondary)' }} />}
+            size="small"
+            style={{ flex: 1, fontSize: 11, borderTopRightRadius: 2, borderBottomRightRadius: 2, borderTopLeftRadius: 0, borderBottomLeftRadius: 0, height: 24, borderLeft: 0 }}
           />
-          <Button onClick={addPath}>添加路径</Button>
-          <Upload customRequest={customUpload} showUploadList={false}>
-            <Button icon={<UploadOutlined />}>上传文件</Button>
-          </Upload>
-        </Space.Compact>
+        </div>
       )}
+
+      {/* 修改路径弹窗 */}
+      <Modal
+        open={editOpen}
+        title="修改路径"
+        onCancel={() => setEditOpen(false)}
+        onOk={async () => {
+          if (!editingItem) return;
+          try {
+            await apiPost('/attachments/edit-path', { id: editingItem.id, pathText: editText.trim() });
+            message.success('路径已修改');
+            setEditOpen(false);
+            reload();
+          } catch (e) {
+            message.error(e.message || '修改失败');
+          }
+        }}
+        width={500}
+        destroyOnClose
+        okText="确认"
+        cancelText="取消"
+      >
+        <div style={{ padding: '12px 0' }}>
+          <Input
+            placeholder="请输入新的文件路径"
+            value={editText}
+            onChange={(e) => setEditText(e.target.value)}
+            style={{ fontSize: 12 }}
+            size="small"
+          />
+        </div>
+      </Modal>
     </div>
   );
 }

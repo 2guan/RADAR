@@ -4,8 +4,8 @@
  * 作者：hengguan
  */
 
-import React, { useRef, useState } from 'react';
-import { Card, Button, Space, Modal, Form, Select, Tag, Popconfirm, message } from 'antd';
+import React, { useRef, useState, useMemo } from 'react';
+import { Card, Button, Space, Modal, Form, Tag, Popconfirm, message, Table, Input, Spin, List, Radio, Checkbox } from 'antd';
 import { ToolOutlined, EditOutlined, DeleteOutlined, HistoryOutlined } from '@ant-design/icons';
 import DataTable from '../components/DataTable.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
@@ -15,35 +15,88 @@ import TaskEditor from '../components/editors/TaskEditor.jsx';
 import Can from '../components/Can.jsx';
 import { apiPost, apiDelete } from '../api/client.js';
 import { useAppStore } from '../stores/app.js';
+import { useResponsive } from '../hooks/useResponsive.js';
+import ResizableTitle from '../components/ResizableTitle.jsx';
 
 export default function DevTasks() {
   const tableRef = useRef();
+  const { isMobile } = useResponsive();
   const releasePointIds = useAppStore((s) => s.releasePointIds);
   const [editId, setEditId] = useState(null);
   const [historyId, setHistoryId] = useState(null);
   const [intakeOpen, setIntakeOpen] = useState(false);
   const [reqList, setReqList] = useState([]);
-  const [intakeForm] = Form.useForm();
+  const [searchText, setSearchText] = useState('');
+  const [selectedReq, setSelectedReq] = useState(null);
+  const [previewList, setPreviewList] = useState([]);
+  const [selectedNewSystems, setSelectedNewSystems] = useState([]);
+  const [loadingPreview, setLoadingPreview] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [reqColWidths, setReqColWidths] = useState({});
+  const [prevColWidths, setPrevColWidths] = useState({});
 
   const fetcher = (q) => apiPost('/dev-tasks/list', { ...q, releasePointIds });
   const onDelete = async (row) => { await apiDelete(`/dev-tasks/${row.id}`); message.success('已删除'); tableRef.current?.reload(); };
 
   const openIntake = async () => {
     const res = await apiPost('/requirements/list', { releasePointIds, pageSize: 0 });
-    setReqList(res.list || []);
-    intakeForm.resetFields();
+    const list = (res.list || []).filter(
+      (r) => !r.release_stage_type || (r.release_stage_type !== 'in-progress' && r.release_stage_type !== 'final')
+    );
+    setReqList(list);
+    setSearchText('');
+    setSelectedReq(null);
+    setPreviewList([]);
+    setSelectedNewSystems([]);
     setIntakeOpen(true);
   };
-  const onPickReq = (reqCode) => {
-    const r = reqList.find((x) => x.req_code === reqCode);
-    intakeForm.setFieldsValue({ systems: [...new Set([...(r?.main_systems || []), ...(r?.collab_dev_systems || [])])] });
+
+  const handleSelectReq = async (record) => {
+    setSelectedReq(record);
+    if (record) {
+      setLoadingPreview(true);
+      try {
+        const res = await apiPost('/dev-tasks/intake-preview', { reqCode: record.req_code });
+        setPreviewList(res || []);
+        // Default check all "新建任务" (exists is false)
+        const checkable = (res || [])
+          .filter((t) => !t.exists)
+          .map((t) => t.sysCode);
+        setSelectedNewSystems(checkable);
+      } catch (err) {
+        message.error(err.message || '加载预览失败');
+      } finally {
+        setLoadingPreview(false);
+      }
+    } else {
+      setPreviewList([]);
+      setSelectedNewSystems([]);
+    }
   };
+
   const doIntake = async () => {
-    const v = await intakeForm.validateFields();
-    const res = await apiPost('/dev-tasks/intake', { reqCode: v.reqCode, systems: v.systems });
-    message.success(`已承接 ${res.length} 个开发任务`);
-    setIntakeOpen(false);
-    tableRef.current?.reload();
+    if (!selectedReq) {
+      message.warning('请先选择需求');
+      return;
+    }
+    if (!selectedNewSystems.length) {
+      message.warning('请至少勾选一个需要新建的任务');
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await apiPost('/dev-tasks/intake', {
+        reqCode: selectedReq.req_code,
+        systems: selectedNewSystems,
+      });
+      message.success(`已成功承接 ${res.length} 个开发任务`);
+      setIntakeOpen(false);
+      tableRef.current?.reload();
+    } catch (err) {
+      message.error(err.message || '承接失败');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const columns = [
@@ -101,6 +154,146 @@ export default function DevTasks() {
       ),
     },
   ];
+  const reqColumns = [
+    {
+      title: '计划投产点',
+      dataIndex: 'release_date',
+      key: 'release_date',
+      width: 100,
+      render: (val) => (
+        <span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace' }}>
+          {val || '—'}
+        </span>
+      ),
+    },
+    {
+      title: '需求编号',
+      dataIndex: 'req_code',
+      key: 'req_code',
+      width: 130,
+      render: (val) => (
+        <span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', fontWeight: 500 }}>
+          {val}
+        </span>
+      ),
+    },
+    {
+      title: '需求标题',
+      dataIndex: 'title',
+      key: 'title',
+      ellipsis: true,
+    },
+    {
+      title: '主责系统',
+      dataIndex: 'main_systems_names',
+      key: 'main_systems_names',
+      render: (arr) => (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+          {(arr || []).map((name) => (
+            <Tag key={name} className="status-tag tag-system" style={{ borderRadius: 2, margin: 0, fontSize: 10, lineHeight: '16px' }}>{name}</Tag>
+          ))}
+        </div>
+      ),
+    },
+  ];
+
+  const previewColumns = [
+    {
+      title: '建立状态',
+      dataIndex: 'status',
+      key: 'status',
+      width: 100,
+      align: 'center',
+      render: (val, record) => {
+        const isExist = record.exists;
+        return (
+          <Tag className={isExist ? 'status-tag status-tag-final' : 'status-tag status-tag-in-progress'} style={{ margin: 0 }}>
+            {val}
+          </Tag>
+        );
+      },
+    },
+    {
+      title: '实施系统',
+      dataIndex: 'sysName',
+      key: 'sysName',
+      render: (val, record) => (
+        <span style={{ fontWeight: 500 }}>
+          {val} <span style={{ color: 'var(--radar-text-secondary)', fontSize: 11, fontWeight: 400 }}>({record.sysCode})</span>
+        </span>
+      ),
+    },
+    {
+      title: '角色',
+      dataIndex: 'role',
+      key: 'role',
+      width: 80,
+      align: 'center',
+      render: (val) => (
+        <Tag className="status-tag" style={{
+          borderColor: val === '主责' ? 'var(--radar-primary)' : 'var(--radar-accent)',
+          color: val === '主责' ? 'var(--radar-primary)' : 'var(--radar-accent)',
+          background: val === '主责' ? 'var(--radar-primary-soft)' : 'var(--radar-accent-soft)',
+          margin: 0
+        }}>
+          {val}
+        </Tag>
+      ),
+    },
+    {
+      title: '计划生成任务编号',
+      dataIndex: 'taskCode',
+      key: 'taskCode',
+      render: (val) => (
+        <span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace' }}>
+          {val}
+        </span>
+      ),
+    },
+    {
+      title: '开发任务名称',
+      dataIndex: 'taskName',
+      key: 'taskName',
+      ellipsis: true,
+    },
+  ];
+
+  // 列宽拖拽支持
+  const handleReqResize = (key) => (w) => setReqColWidths((prev) => ({ ...prev, [key]: w }));
+  const resizableReqColumns = useMemo(() => reqColumns.map((c) => {
+    const width = reqColWidths[c.dataIndex || c.key] || c.width;
+    return {
+      ...c,
+      width,
+      onHeaderCell: (col) => ({
+        width: col.width,
+        onResize: handleReqResize(c.dataIndex || c.key),
+      }),
+    };
+  }), [reqColumns, reqColWidths]);
+
+  const handlePrevResize = (key) => (w) => setPrevColWidths((prev) => ({ ...prev, [key]: w }));
+  const resizablePreviewColumns = useMemo(() => previewColumns.map((c) => {
+    const width = prevColWidths[c.dataIndex || c.key] || c.width;
+    return {
+      ...c,
+      width,
+      onHeaderCell: (col) => ({
+        width: col.width,
+        onResize: handlePrevResize(c.dataIndex || c.key),
+      }),
+    };
+  }), [previewColumns, prevColWidths]);
+
+  const filteredReqs = reqList.filter((r) => {
+    if (!searchText) return true;
+    const txt = searchText.toLowerCase();
+    const relDate = (r.release_date || '').toLowerCase();
+    const code = (r.req_code || '').toLowerCase();
+    const title = (r.title || '').toLowerCase();
+    const systems = (r.main_systems_names || []).join(',').toLowerCase();
+    return relDate.includes(txt) || code.includes(txt) || title.includes(txt) || systems.includes(txt);
+  });
 
   return (
     <Card title="开发管理" variant="borderless">
@@ -128,17 +321,189 @@ export default function DevTasks() {
         ]}
       />
 
-      <Modal open={intakeOpen} title="开发承接" onCancel={() => setIntakeOpen(false)} onOk={doIntake} okText="承接">
-        <Form form={intakeForm} layout="vertical">
-          <Form.Item name="reqCode" label="选择需求" rules={[{ required: true, message: '请选择需求' }]}>
-            <Select showSearch optionFilterProp="label" placeholder="选择需求" onChange={onPickReq}
-              options={reqList.map((r) => ({ value: r.req_code, label: `${r.req_code} ${r.title}` }))} />
-          </Form.Item>
-          <Form.Item name="systems" label="拆分系统（默认主责+协同改造系统，可调整）" rules={[{ required: true, message: '请选择系统' }]}>
-            <SystemSelect style={{ width: '100%' }} />
-          </Form.Item>
-          <Tag className="status-tag-final" style={{ borderRadius: 2 }}>将为每个所选系统建立一个开发任务，已建立的系统自动跳过</Tag>
-        </Form>
+      <Modal
+        open={intakeOpen}
+        title="开发承接"
+        width={920}
+        onCancel={() => setIntakeOpen(false)}
+        onOk={doIntake}
+        confirmLoading={saving}
+        okText="承接"
+        styles={{ body: { padding: '12px 0 0 0' } }}
+        destroyOnClose
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* 1. 选择需求 */}
+          <div className="form-section-card" style={{ marginBottom: 0 }}>
+            <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>1. 选择需求</div>
+            <div style={{ marginBottom: 8 }}>
+              <Input.Search
+                placeholder="搜索投产点、需求编号、需求标题、主责系统..."
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                size="small"
+                style={{ width: isMobile ? '100%' : 320 }}
+                allowClear
+                className="super-compact-table-search"
+              />
+            </div>
+            {isMobile ? (
+              <List
+                dataSource={filteredReqs}
+                rowKey="req_code"
+                size="small"
+                pagination={{ pageSize: 5, size: 'small', showSizeChanger: false }}
+                renderItem={(r) => {
+                  const isSelected = selectedReq?.req_code === r.req_code;
+                  return (
+                    <Card
+                      size="small"
+                      style={{
+                        marginBottom: 8,
+                        cursor: 'pointer',
+                        borderColor: isSelected ? 'var(--radar-primary)' : 'var(--radar-border)',
+                        background: isSelected ? 'var(--radar-primary-soft)' : 'var(--radar-surface)',
+                      }}
+                      onClick={() => handleSelectReq(r)}
+                    >
+                      <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                        <Space style={{ justifyContent: 'space-between', width: '100%' }}>
+                          <span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', fontWeight: 600 }}>
+                            {r.req_code}
+                          </span>
+                          <Radio checked={isSelected} />
+                        </Space>
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>{r.title}</div>
+                        <div style={{ fontSize: 11, color: 'var(--radar-text-secondary)' }}>
+                          计划投产点：{r.release_date || '—'}
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+                          {(r.main_systems_names || []).map((name) => (
+                            <Tag key={name} className="status-tag tag-system" style={{ borderRadius: 2, margin: 0, fontSize: 10 }}>{name}</Tag>
+                          ))}
+                        </div>
+                      </Space>
+                    </Card>
+                  );
+                }}
+              />
+            ) : (
+              <Table
+                dataSource={filteredReqs}
+                columns={resizableReqColumns}
+                components={{ header: { cell: ResizableTitle } }}
+                rowKey="req_code"
+                size="small"
+                className="super-compact-table"
+                pagination={{ pageSize: 5, size: 'small', showSizeChanger: false }}
+                rowSelection={{
+                  type: 'radio',
+                  selectedRowKeys: selectedReq ? [selectedReq.req_code] : [],
+                  onChange: (_, rows) => {
+                    if (rows.length) handleSelectReq(rows[0]);
+                  },
+                }}
+                onRow={(record) => ({
+                  onClick: () => handleSelectReq(record),
+                  style: { cursor: 'pointer' },
+                })}
+              />
+            )}
+          </div>
+
+          {/* 2. 确认拆分开发任务 */}
+          <div className="form-section-card" style={{ marginBottom: 0 }}>
+            <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>2. 确认拆分开发任务</div>
+            {selectedReq ? (
+              <Spin spinning={loadingPreview}>
+                {isMobile ? (
+                  <List
+                    dataSource={previewList}
+                    rowKey="sysCode"
+                    size="small"
+                    renderItem={(item) => {
+                      const isChecked = selectedNewSystems.includes(item.sysCode);
+                      const toggleCheck = () => {
+                        if (item.exists) return;
+                        if (isChecked) {
+                          setSelectedNewSystems(selectedNewSystems.filter(c => c !== item.sysCode));
+                        } else {
+                          setSelectedNewSystems([...selectedNewSystems, item.sysCode]);
+                        }
+                      };
+                      return (
+                        <Card
+                          size="small"
+                          style={{
+                            marginBottom: 8,
+                            borderColor: isChecked ? 'var(--radar-primary)' : 'var(--radar-border)',
+                          }}
+                          onClick={toggleCheck}
+                        >
+                          <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                            <Space style={{ justifyContent: 'space-between', width: '100%' }}>
+                              <Space>
+                                <Checkbox
+                                  checked={item.exists ? false : isChecked}
+                                  disabled={item.exists}
+                                  onClick={(e) => e.stopPropagation()}
+                                  onChange={toggleCheck}
+                                />
+                                <strong style={{ fontSize: 13 }}>{item.sysName}</strong>
+                                <span style={{ color: 'var(--radar-text-secondary)', fontSize: 11 }}>({item.sysCode})</span>
+                              </Space>
+                              <Tag className={item.exists ? 'status-tag status-tag-final' : 'status-tag status-tag-in-progress'} style={{ margin: 0 }}>
+                                {item.status}
+                              </Tag>
+                            </Space>
+                            <div style={{ fontSize: 11, color: 'var(--radar-text-secondary)', marginTop: 4 }}>
+                              角色：
+                              <Tag className="status-tag" style={{
+                                borderColor: item.role === '主责' ? 'var(--radar-primary)' : 'var(--radar-accent)',
+                                color: item.role === '主责' ? 'var(--radar-primary)' : 'var(--radar-accent)',
+                                background: item.role === '主责' ? 'var(--radar-primary-soft)' : 'var(--radar-accent-soft)',
+                                margin: 0,
+                                fontSize: 10,
+                                lineHeight: '14px'
+                              }}>
+                                {item.role}
+                              </Tag>
+                            </div>
+                            <div style={{ fontSize: 11, color: 'var(--radar-text-secondary)' }}>
+                              计划生成任务编号：<span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace' }}>{item.taskCode}</span>
+                            </div>
+                            <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--radar-ink)' }}>
+                              任务名称：{item.taskName}
+                            </div>
+                          </Space>
+                        </Card>
+                      );
+                    }}
+                  />
+                ) : (
+                  <Table
+                    dataSource={previewList}
+                    columns={resizablePreviewColumns}
+                    components={{ header: { cell: ResizableTitle } }}
+                    rowKey="sysCode"
+                    size="small"
+                    className="super-compact-table"
+                    pagination={false}
+                    rowSelection={{
+                      selectedRowKeys: selectedNewSystems,
+                      onChange: (keys) => setSelectedNewSystems(keys),
+                      getCheckboxProps: (record) => ({
+                        disabled: record.exists,
+                      }),
+                    }}
+                  />
+                )}
+              </Spin>
+            ) : (
+              <div className="lc-empty" style={{ padding: '24px 0' }}>请在上方选择一条需求进行承接</div>
+            )}
+          </div>
+        </div>
       </Modal>
 
       <TaskEditor open={!!editId} kind="dev" taskId={editId} onClose={() => setEditId(null)} onSaved={() => tableRef.current?.reload()} />

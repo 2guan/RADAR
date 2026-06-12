@@ -6,16 +6,16 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { Layout, Select, Button, Dropdown, Avatar, Drawer, Typography, theme as antdTheme } from 'antd';
+import { Layout, Select, Button, Dropdown, Avatar, Drawer, Typography, Form, Input, Modal, message, theme as antdTheme } from 'antd';
 import {
   MenuOutlined, BulbOutlined, BulbFilled, UserOutlined, LogoutOutlined, RocketOutlined, RadarChartOutlined, DownOutlined,
-  MenuFoldOutlined, MenuUnfoldOutlined,
+  MenuFoldOutlined, MenuUnfoldOutlined, KeyOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { useAppStore } from '../stores/app.js';
 import { useResponsive } from '../hooks/useResponsive.js';
 import { MENU } from '../router/menu.js';
-import { apiGet } from '../api/client.js';
+import { apiGet, apiPost } from '../api/client.js';
 import ThemeSwitcher from '../components/ThemeSwitcher.jsx';
 
 const { Header, Sider, Content } = Layout;
@@ -31,6 +31,32 @@ export default function MainLayout() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [points, setPoints] = useState([]);
   const [openMenus, setOpenMenus] = useState({});
+
+  const [changePwdOpen, setChangePwdOpen] = useState(false);
+  const [pwdForm] = Form.useForm();
+  const [pwdSaving, setPwdSaving] = useState(false);
+
+  const handleSavePwd = async () => {
+    try {
+      const v = await pwdForm.validateFields();
+      if (v.newPassword !== v.confirmPassword) {
+        message.error('两次输入的新密码不一致');
+        return;
+      }
+      setPwdSaving(true);
+      await apiPost('/auth/change-password', {
+        oldPassword: v.oldPassword,
+        newPassword: v.newPassword,
+      });
+      message.success('密码修改成功');
+      setChangePwdOpen(false);
+      pwdForm.resetFields();
+    } catch (err) {
+      message.error(err.message || '修改失败');
+    } finally {
+      setPwdSaving(false);
+    }
+  };
 
   useEffect(() => { apiGet('/release-points/all').then(setPoints).catch(() => {}); }, []);
 
@@ -105,13 +131,16 @@ export default function MainLayout() {
       <div className="radar-nav">
         {visibleMenu.map(renderNavItem)}
       </div>
-      <div className="radar-sider-user">
-        <Avatar size={32} icon={<UserOutlined />} style={{ background: token.colorPrimary, flexShrink: 0 }} />
-        <div style={{ overflow: 'hidden' }}>
-          <div className="name" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user?.name}</div>
-          <div className="role">{user?.roles?.map((r) => r.name).join('、') || '—'}</div>
+      <Dropdown menu={userMenu} trigger={['click']}>
+        <div className="radar-sider-user" style={{ cursor: 'pointer' }}>
+          <Avatar size={32} icon={<UserOutlined />} style={{ background: token.colorPrimary, flexShrink: 0 }} />
+          <div style={{ overflow: 'hidden', flex: 1 }}>
+            <div className="name" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user?.name}</div>
+            <div className="role">{user?.roles?.map((r) => r.name).join('、') || '—'}</div>
+          </div>
+          <DownOutlined style={{ fontSize: 10, color: 'var(--radar-text-secondary)' }} />
         </div>
-      </div>
+      </Dropdown>
     </>
   );
 
@@ -123,8 +152,11 @@ export default function MainLayout() {
       variant="borderless"
       size="small"
       maxTagCount="responsive"
+      showSearch
+      filterOption={(input, option) => option.label.toLowerCase().includes(input.toLowerCase())}
       style={{ minWidth: 260, fontSize: 12 }}
       className="radar-rp-select"
+      popupClassName="radar-rp-select-dropdown"
       suffixIcon={<DownOutlined style={{ color: token.colorPrimary }} />}
       onChange={(ids) => setReleasePointIds(ids)}
       options={points.map((p) => ({
@@ -136,11 +168,17 @@ export default function MainLayout() {
 
   const userMenu = {
     items: [
-      { key: 'name', label: `${user?.name}（${user?.roles?.map((r) => r.name).join('、') || '—'}）`, disabled: true },
+      { key: 'password', icon: <KeyOutlined />, label: '修改密码' },
       { type: 'divider' },
       { key: 'logout', icon: <LogoutOutlined />, label: '退出登录' },
     ],
-    onClick: ({ key }) => { if (key === 'logout') useAppStore.getState().logout(); },
+    onClick: ({ key }) => {
+      if (key === 'logout') {
+        useAppStore.getState().logout();
+      } else if (key === 'password') {
+        setChangePwdOpen(true);
+      }
+    },
   };
 
   return (
@@ -171,12 +209,7 @@ export default function MainLayout() {
           </div>
           <ThemeSwitcher />
           <Button type="text" shape="circle" icon={theme === 'dark' ? <BulbFilled /> : <BulbOutlined />} onClick={toggleTheme} title="切换白天/夜间" />
-          <Dropdown menu={userMenu}>
-            <span style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Avatar size="small" icon={<UserOutlined />} style={{ background: token.colorPrimary }} />
-              {!isMobile && <span style={{ fontSize: 13 }}>{user?.name}</span>}
-            </span>
-          </Dropdown>
+          {/* Global top-right profile removed */}
         </Header>
 
         <Content className="radar-content" style={{ margin: isMobile ? 12 : 20, overflow: 'auto hidden' }}>
@@ -188,6 +221,58 @@ export default function MainLayout() {
         styles={{ body: { padding: 0 }, header: { display: 'none' } }} className="radar-drawer radar-sider">
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>{siderInner}</div>
       </Drawer>
+
+      <Modal
+        title="修改密码"
+        open={changePwdOpen}
+        onOk={handleSavePwd}
+        confirmLoading={pwdSaving}
+        onCancel={() => {
+          setChangePwdOpen(false);
+          pwdForm.resetFields();
+        }}
+        destroyOnClose
+        okText="保存"
+        cancelText="取消"
+        width={400}
+      >
+        <Form form={pwdForm} layout="vertical" style={{ marginTop: 16 }}>
+          <Form.Item
+            name="oldPassword"
+            label="旧密码"
+            rules={[{ required: true, message: '请输入旧密码' }]}
+          >
+            <Input.Password placeholder="请输入当前使用的旧密码" />
+          </Form.Item>
+          <Form.Item
+            name="newPassword"
+            label="新密码"
+            rules={[
+              { required: true, message: '请输入新密码' },
+              { min: 6, message: '密码长度不能小于 6 位' }
+            ]}
+          >
+            <Input.Password placeholder="请输入新密码" />
+          </Form.Item>
+          <Form.Item
+            name="confirmPassword"
+            label="确认新密码"
+            rules={[
+              { required: true, message: '请确认新密码' },
+              ({ getFieldValue }) => ({
+                validator(_, value) {
+                  if (!value || getFieldValue('newPassword') === value) {
+                    return Promise.resolve();
+                  }
+                  return Promise.reject(new Error('两次输入的新密码不一致'));
+                },
+              }),
+            ]}
+          >
+            <Input.Password placeholder="请再次输入新密码" />
+          </Form.Item>
+        </Form>
+      </Modal>
     </Layout>
   );
 }

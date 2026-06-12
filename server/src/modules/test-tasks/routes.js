@@ -93,41 +93,154 @@ export default async function testTaskRoutes(fastify) {
     return ok({ ...row, attachments: listByEntity('test', row.id) });
   });
 
+  // 测试承接预览
+  fastify.post('/test-tasks/intake-preview', { preHandler: fastify.requirePerm('test', 'test.intake') }, async (request) => {
+    const { reqCode, testType } = request.body || {};
+    if (!reqCode) throw badRequest('请选择需求');
+    if (!testType) throw badRequest('请选择测试类型');
+    const req = get('SELECT * FROM requirement WHERE req_code = ?', reqCode);
+    if (!req) throw notFound('需求不存在');
+
+    const main = req.main_systems ? JSON.parse(req.main_systems) : [];
+    const collab = req.collab_test_systems ? JSON.parse(req.collab_test_systems) : [];
+
+    const existingTasks = all('SELECT impl_system, task_code, task_name, status FROM test_task WHERE req_code = ? AND test_type = ?', reqCode, testType);
+
+    const systems = all('SELECT sys_code, sys_name FROM system');
+    const sysMap = new Map(systems.map(s => [s.sys_code, s.sys_name]));
+
+    const tplRow = get(`SELECT value FROM app_config WHERE key = 'code.test.${testType}'`);
+    const tpl = tplRow?.value || `${testType}_{需求编号}_{序号}`;
+    const prefix = tpl.replace('{需求编号}', reqCode).replace('{序号}', '');
+
+    const existingCodes = all(`SELECT task_code FROM test_task WHERE task_code LIKE ?`, `${prefix}%`);
+    let max = 0;
+    for (const r of existingCodes) {
+      const tail = String(r.task_code).slice(prefix.length);
+      const n = parseInt(tail, 10);
+      if (Number.isFinite(n) && n > max) max = n;
+    }
+
+    let currentMax = max;
+
+    // 1. Overall (Merged) mode row: task name is exactly `${testType}-${req.title}`
+    const overallExist = existingTasks.find(t => t.task_name === `${testType}-${req.title}`);
+    let overallTaskCode = '';
+    let overallTaskName = `${testType}-${req.title}`;
+    if (overallExist) {
+      overallTaskCode = overallExist.task_code;
+      overallTaskName = overallExist.task_name;
+    } else {
+      const seq = String(currentMax + 1).padStart(3, '0');
+      overallTaskCode = tpl.replace('{需求编号}', reqCode).replace('{序号}', seq);
+    }
+
+    const firstMainSysCode = main[0] || null;
+    const firstMainSysName = firstMainSysCode ? (sysMap.get(firstMainSysCode) || firstMainSysCode) : '';
+
+    const overallRow = {
+      sysCode: firstMainSysCode || 'overall',
+      sysName: firstMainSysName ? `${firstMainSysName}` : '整体测试',
+      role: '整体',
+      exists: !!overallExist,
+      taskCode: overallTaskCode,
+      taskName: overallTaskName,
+      status: overallExist ? '已建任务' : '新建任务',
+    };
+
+    // 2. Split mode rows
+    const splitRows = [];
+    const allSystems = [];
+    const seen = new Set();
+    for (const sysCode of main) {
+      if (!seen.has(sysCode)) {
+        seen.add(sysCode);
+        allSystems.push({ sysCode, role: '主责' });
+      }
+    }
+    for (const sysCode of collab) {
+      if (!seen.has(sysCode)) {
+        seen.add(sysCode);
+        allSystems.push({ sysCode, role: '协同' });
+      }
+    }
+
+    let splitMax = max;
+    for (const item of allSystems) {
+      const sysName = sysMap.get(item.sysCode) || item.sysCode;
+      const exist = existingTasks.find(t => t.impl_system === item.sysCode && t.task_name === `${testType}-${req.title}-${sysName}`);
+      if (exist) {
+        splitRows.push({
+          sysCode: item.sysCode,
+          sysName,
+          role: item.role,
+          exists: true,
+          taskCode: exist.task_code,
+          taskName: exist.task_name,
+          status: '已建任务',
+        });
+      } else {
+        splitMax++;
+        const seq = String(splitMax).padStart(3, '0');
+        const taskCode = tpl.replace('{需求编号}', reqCode).replace('{序号}', seq);
+        const taskName = `${testType}-${req.title}-${sysName}`;
+        splitRows.push({
+          sysCode: item.sysCode,
+          sysName,
+          role: item.role,
+          exists: false,
+          taskCode,
+          taskName,
+          status: '新建任务',
+        });
+      }
+    }
+
+    return ok({
+      overall: [overallRow],
+      split: splitRows,
+    });
+  });
+
   // 测试承接
   fastify.post('/test-tasks/intake', { preHandler: fastify.requirePerm('test', 'test.intake') }, async (request) => {
-    const { reqCode, testType, systems } = request.body || {};
+    const { reqCode, testType, systems, splitMode } = request.body || {};
     if (!reqCode) throw badRequest('请选择需求');
     if (!TYPE_NAME[testType]) throw badRequest('测试类型非法');
     const req = get('SELECT * FROM requirement WHERE req_code = ?', reqCode);
     if (!req) throw notFound('需求不存在');
 
-    // 目标系统：指定则按系统拆分；否则默认建 1 个（取主责系统首个）
     const main = req.main_systems ? JSON.parse(req.main_systems) : [];
-    const collab = req.collab_test_systems ? JSON.parse(req.collab_test_systems) : [];
-    let targets;
-    if (Array.isArray(systems) && systems.length) {
-      targets = systems;
+    const firstMainSysCode = main[0] || null;
+
+    const systemsList = all('SELECT sys_code, sys_name FROM system');
+    const sysMap = new Map(systemsList.map(s => [s.sys_code, s.sys_name]));
+
+    let targets = [];
+    if (splitMode === 'overall') {
+      targets = [{ sysCode: firstMainSysCode, taskName: `${testType}-${req.title}`, isSplit: false }];
     } else {
-      targets = [main[0] || collab[0] || null]; // 默认 1 个
+      const sysCodes = Array.isArray(systems) && systems.length ? systems : [];
+      for (const sysCode of sysCodes) {
+        const sysName = sysMap.get(sysCode) || sysCode;
+        targets.push({ sysCode, taskName: `${testType}-${req.title}-${sysName}`, isSplit: true });
+      }
     }
-    // 同类型下已承接的系统跳过（null 表示未指定系统，允许多次）
-    const existing = new Set(
-      all('SELECT impl_system FROM test_task WHERE req_code = ? AND test_type = ?', reqCode, testType)
-        .map((r) => r.impl_system).filter(Boolean),
-    );
-    targets = targets.filter((s) => !s || !existing.has(s));
-    if (!targets.length) throw badRequest('所选系统均已承接该类型测试');
+
+    const existing = all('SELECT impl_system, task_name FROM test_task WHERE req_code = ? AND test_type = ?', reqCode, testType);
+    targets = targets.filter(t => !existing.some(e => e.task_name === t.taskName));
+
+    if (!targets.length) throw badRequest('所选测试任务已全部建立');
 
     const created = tx(() => {
       const out = [];
-      for (const sysCode of targets) {
-        const sys = sysCode ? get('SELECT * FROM system WHERE sys_code = ?', sysCode) : null;
+      for (const t of targets) {
+        const sys = t.sysCode ? get('SELECT * FROM system WHERE sys_code = ?', t.sysCode) : null;
         const taskCode = genTestCode(testType, reqCode);
-        const taskName = `${testType}-${req.title}${sys ? '-' + sys.sys_name : ''}`;
         const res = run(
           `INSERT INTO test_task (req_code, task_code, task_name, test_type, status, impl_system, impl_org, registrar, register_time)
            VALUES (?,?,?,?,?,?,?,?,?)`,
-          reqCode, taskCode, taskName, testType, '测试承接', sysCode || null, sys?.org || null,
+          reqCode, taskCode, t.taskName, testType, '测试承接', t.sysCode || null, sys?.org || null,
           request.currentUser?.name, new Date().toISOString().slice(0, 10),
         );
         auditCreate('test', res.lastInsertRowid, taskCode, request.currentUser?.name);

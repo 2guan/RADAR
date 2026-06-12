@@ -144,8 +144,10 @@ export default async function overviewRoutes(fastify) {
     // 需求：解析人员、主责系统与协同改造系统
     const mainCodes = req.main_systems ? JSON.parse(req.main_systems) : [];
     const collabCodes = req.collab_dev_systems ? JSON.parse(req.collab_dev_systems) : [];
+    const rp = req.release_point_id ? get('SELECT release_date FROM release_point WHERE id = ?', req.release_point_id) : null;
     const requirement = {
       ...req,
+      release_date: rp ? rp.release_date : null,
       attachments: attachOf('requirement', req.id),
       proposerInfo: resolvePerson(req.proposer),
       ynOwnerInfo: resolvePerson(req.yn_owner),
@@ -155,5 +157,24 @@ export default async function overviewRoutes(fastify) {
     };
 
     return ok({ requirement, dev, sit, nft, sec, uat, release: releaseDetail });
+  });
+
+  // 需求全流程变更历史
+  fastify.get('/overview/:reqCode/audit', { preHandler: fastify.requirePerm('overview', 'view') }, async (request) => {
+    const reqCode = request.params.reqCode;
+    const req = get('SELECT id FROM requirement WHERE req_code = ?', reqCode);
+    if (!req) throw notFound('需求不存在');
+
+    const rows = all(
+      `SELECT id, entity_type, entity_code, action, operator, field, old_value, new_value, created_at
+       FROM audit_log
+       WHERE (entity_type = 'requirement' AND entity_id = ?)
+          OR (entity_type = 'dev' AND entity_id IN (SELECT id FROM dev_task WHERE req_code = ?))
+          OR (entity_type = 'test' AND entity_id IN (SELECT id FROM test_task WHERE req_code = ?))
+          OR (entity_type = 'release' AND entity_id IN (SELECT id FROM release_task WHERE req_code = ?))
+       ORDER BY id DESC`,
+      req.id, reqCode, reqCode, reqCode
+    );
+    return ok(rows);
   });
 }

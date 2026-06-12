@@ -123,6 +123,12 @@ body {
 .radar-sider-user {
   margin: 8px 12px 14px; padding: 10px 12px; border-radius: 0;
   background: var(--radar-primary-soft); display: flex; align-items: center; gap: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.radar-sider-user:hover {
+  filter: brightness(0.96);
+  opacity: 0.9;
 }
 .radar-sider-user .name { color: var(--radar-ink); font-size: 13px; font-weight: 600; }
 .radar-sider-user .role { color: var(--radar-text-secondary); font-size: 11px; }
@@ -430,7 +436,7 @@ body {
   color: var(--radar-ink);
   padding: 8px 12px;
   background: var(--radar-primary-soft);
-  border-left: 4px solid var(--radar-primary);
+  border-bottom: 3px solid var(--radar-primary);
   margin-bottom: 4px;
   display: flex;
   justify-content: space-between;
@@ -475,4 +481,55 @@ body {
   font-weight: 600 !important;
 }
 
+/* 更加紧凑的表格，用于弹窗内列表，减少行距与内边距 */
+.super-compact-table .ant-table-thead > tr > th,
+.super-compact-table .ant-table-tbody > tr > td {
+  padding: 4px 8px !important;
+  font-size: 12px !important;
+}
+.super-compact-table .ant-table-cell {
+  font-size: 12px !important;
+}
+.super-compact-table .ant-table-pagination {
+  margin: 6px 0 !important;
+  font-size: 11px !important;
+}
+.super-compact-table .ant-pagination-item,
+.super-compact-table .ant-pagination-prev,
+.super-compact-table .ant-pagination-next,
+.super-compact-table .ant-pagination-total-text {
+  font-size: 11px !important;
+  height: 20px !important;
+  line-height: 18px !important;
+  min-width: 20px !important;
+}
+.super-compact-table-search input::placeholder {
+  font-size: 11px !important;
+}
+
+/* 右上角投产点选择框及下拉列表样式：数字使用等宽/等衬线字体，中文使用微软雅黑 */
+.radar-rp-select,
+.radar-rp-select .ant-select-selection-search-input,
+.radar-rp-select .ant-select-selection-item,
+.radar-rp-select .ant-select-selection-placeholder,
+.radar-rp-select-dropdown .ant-select-item-option-content {
+  font-family: SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, "Microsoft YaHei", -apple-system, sans-serif, monospace !important;
+}
+
+/* 卡片底部的整行折叠/展开热区栏 */
+.card-expand-bar {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  margin: 6px -12px -12px -12px;
+  padding: 4px 0;
+  border-top: 1px dashed var(--radar-border);
+  transition: background-color 0.2s, color 0.2s;
+  color: var(--radar-text-secondary);
+}
+.card-expand-bar:hover {
+  background-color: var(--radar-primary-soft);
+  color: var(--radar-primary);
+}
 

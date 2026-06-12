@@ -16,6 +16,7 @@ import AttachmentField from '../AttachmentField.jsx';
 import HistoryDrawer from '../HistoryDrawer.jsx';
 import { getStatusType } from '../StatusBadge.jsx';
 import { apiGet, apiPost, apiPut } from '../../api/client.js';
+import { useAppStore } from '../../stores/app.js';
 
 // ─── 模块级系统列表缓存（与 SystemSelect 共用同一接口，但单独维护以供下方组件使用） ───
 let _sysCache = null;
@@ -24,10 +25,17 @@ let _sysCache = null;
  * 系统选择子区块：标题在左、选择框在右，已选系统逐个展示在下方、可单独删除。
  * single=true 时为单选：已选一个后再选会自动替换（主责系统）；否则不限个数（协同系统）。
  */
-function SystemPickerField({ title, hint, value = [], onChange, single, placeholder }) {
+function SystemPickerField({ title, hint, value = [], onChange, single, placeholder, readonly }) {
   const [options, setOptions] = useState([]);
-  // 单选时只保留最后一次选择，达到「自动替换」效果
-  const handleChange = (vals) => onChange?.(single ? (vals || []).slice(-1) : vals);
+  
+  const handleChange = (vals) => {
+    if (single) {
+      onChange?.(vals.slice(-1));
+    } else {
+      const combined = [...new Set([...(value || []), ...vals])];
+      onChange?.(combined);
+    }
+  };
 
   useEffect(() => {
     let alive = true;
@@ -48,6 +56,8 @@ function SystemPickerField({ title, hint, value = [], onChange, single, placehol
 
   const remove = (code) => onChange?.((value || []).filter((v) => v !== code));
 
+  const filteredOptions = options.filter(opt => !(value || []).includes(opt.value));
+
   return (
     <div style={{ marginBottom: 12 }}>
       {/* 标题（左）+ 选择框（右） */}
@@ -60,22 +70,18 @@ function SystemPickerField({ title, hint, value = [], onChange, single, placehol
         </span>
         <Select
           mode="multiple"
-          value={value}
+          value={[]}
           onChange={handleChange}
-          options={options}
+          options={filteredOptions}
           size="small"
           showSearch
-          allowClear
+          allowClear={false}
           filterOption={(input, opt) =>
             `${opt.label}${opt.org}`.toLowerCase().includes(input.toLowerCase())
           }
           placeholder={placeholder || '点击下拉选择系统（支持模糊搜索）'}
-          style={{ flex: 1, minWidth: 0, fontSize: 12 }}
-          tagRender={() => null}           // 不在 Select 框内渲染 Tag
-          maxTagCount={0}
-          maxTagPlaceholder={(omitted) =>
-            omitted.length > 0 ? `已选 ${omitted.length} 个` : null
-          }
+          style={{ flex: 1, minWidth: 0, fontSize: 12, ...(readonly ? { pointerEvents: 'none' } : {}) }}
+          tabIndex={readonly ? -1 : undefined}
         />
       </div>
 
@@ -99,8 +105,8 @@ function SystemPickerField({ title, hint, value = [], onChange, single, placehol
                 key={code}
                 className="tag-system"
                 style={{ borderRadius: 2, margin: 0, fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                closeIcon={<CloseOutlined style={{ fontSize: 10 }} />}
-                closable
+                closeIcon={readonly ? null : <CloseOutlined style={{ fontSize: 10 }} />}
+                closable={!readonly}
                 onClose={() => remove(code)}
               >
                 {opt ? `${opt.label}` : code}
@@ -123,7 +129,9 @@ export default function RequirementEditor({ open, reqId, defaultReleasePointId, 
   const [historyOpen, setHistoryOpen] = useState(false);
   const [points, setPoints] = useState([]);
   const [genLoading, setGenLoading] = useState(false); // 生成编号加载态
+  const { can } = useAppStore();
   const isEdit = !!reqId;
+  const readonly = isEdit ? !can('requirement', 'edit') : !can('requirement', 'create');
   // 已关联开发/测试任务时，需求编号锁定不可改
   const codeLocked = !!current?.has_tasks;
 
@@ -209,6 +217,8 @@ export default function RequirementEditor({ open, reqId, defaultReleasePointId, 
       onOk={save}
       onCancel={onClose}
       destroyOnClose
+      okButtonProps={readonly ? { style: { display: 'none' } } : undefined}
+      cancelText={readonly ? '关闭' : '取消'}
       styles={{ body: { fontSize: 12 } }}
       title={(
         <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 10, rowGap: 6, minWidth: 0, width: '100%', paddingRight: 76 }}>
@@ -229,7 +239,7 @@ export default function RequirementEditor({ open, reqId, defaultReleasePointId, 
               value={statusValue}
               onChange={(v) => form.setFieldValue('status', v)}
               placeholder="需求状态"
-              style={{ width: (statusValue ? Array.from(String(statusValue)).length : 4) * 13 + 15 }}
+              style={{ width: (statusValue ? Array.from(String(statusValue)).length : 4) * 13 + 15, ...(readonly ? { pointerEvents: 'none' } : {}) }}
             />
           </span>
           {current && (
@@ -289,9 +299,9 @@ export default function RequirementEditor({ open, reqId, defaultReleasePointId, 
                     <Input
                       placeholder="手填或点击「生成」"
                       size="small"
-                      disabled={codeLocked}
+                      readOnly={readonly || codeLocked}
                       style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', letterSpacing: '0.3px' }}
-                      suffix={codeLocked ? null : (
+                      suffix={(codeLocked || readonly) ? null : (
                         <Tooltip title="根据所选投产点自动生成编号">
                           <Button
                             type="link"
@@ -310,17 +320,18 @@ export default function RequirementEditor({ open, reqId, defaultReleasePointId, 
                 </Col>
                 <Col span={12}>
                   <Form.Item name="req_type" label="需求类型" style={{ marginBottom: 8 }}>
-                    <DictSelect category="req_type" style={{ width: '100%' }} size="small" />
+                    <DictSelect category="req_type" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} size="small" />
                   </Form.Item>
                 </Col>
 
                 {/* 计划投产点 + 提出时间 */}
                 <Col span={12}>
-                  <Form.Item name="release_point_id" label="计划投产点" rules={[{ required: true, message: '请选择计划投产点' }]} style={{ marginBottom: 8 }}>
+                  <Form.Item name="release_point_id" label="计划投产点" rules={[{ required: !readonly, message: '请选择计划投产点' }]} style={{ marginBottom: 8 }}>
                     <Select
                       placeholder="选择计划投产点"
                       size="small"
-                      style={{ width: '100%' }}
+                      style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }}
+                      tabIndex={readonly ? -1 : undefined}
                       showSearch
                       optionFilterProp="label"
                       options={points.map((p) => ({
@@ -332,17 +343,17 @@ export default function RequirementEditor({ open, reqId, defaultReleasePointId, 
                 </Col>
                 <Col span={12}>
                   <Form.Item name="propose_time" label="提出时间" style={{ marginBottom: 8 }}>
-                    <DatePicker size="small" style={{ width: '100%' }} placeholder="选择日期" />
+                    <DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" />
                   </Form.Item>
                 </Col>
               </Row>
 
               {/* 需求标题 */}
-              <Form.Item name="title" label="需求标题" rules={[{ required: true, message: '请输入需求标题' }]} style={{ marginBottom: 8 }}>
-                <Input placeholder="请输入需求标题" size="small" />
+              <Form.Item name="title" label="需求标题" rules={[{ required: !readonly, message: '请输入需求标题' }]} style={{ marginBottom: 8 }}>
+                <Input placeholder="请输入需求标题" size="small" readOnly={readonly} />
               </Form.Item>
               <Form.Item name="summary" label="需求概述" rules={[{ max: 500, message: '不超过 500 字' }]} style={{ marginBottom: 18 }}>
-                <Input.TextArea rows={3} placeholder="描述该需求的核心背景与业务诉求（500字以内）" showCount maxLength={500} style={{ fontSize: 12 }} />
+                <Input.TextArea rows={3} placeholder="描述该需求的核心背景与业务诉求（500字以内）" showCount={!readonly} maxLength={500} style={{ fontSize: 12 }} readOnly={readonly} />
               </Form.Item>
             </div>
 
@@ -353,20 +364,20 @@ export default function RequirementEditor({ open, reqId, defaultReleasePointId, 
                 {/* 农信提出部门 + 农信提出人 */}
                 <Col span={12}>
                   <Form.Item name="propose_dept" label="农信提出部门" style={{ marginBottom: 8 }}>
-                    <DictSelect category="org" style={{ width: '100%' }} size="small" />
+                    <DictSelect category="org" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} size="small" />
                   </Form.Item>
                 </Col>
                 <Col span={12}>
                   <Form.Item name="proposer" label="农信提出人" style={{ marginBottom: 8 }}>
-                    <PersonPicker style={{ width: '100%' }} placeholder="选择提出人" size="small" />
+                    <PersonPicker style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择提出人" size="small" />
                   </Form.Item>
                 </Col>
               </Row>
               <Form.Item name="yn_owner" label="云南农信业务负责人" style={{ marginBottom: 8 }}>
-                <PersonPicker style={{ width: '100%' }} placeholder="选择云南农信业务负责人" size="small" />
+                <PersonPicker style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择云南农信业务负责人" size="small" />
               </Form.Item>
               <Form.Item name="jk_owner" label="建信金科业务负责人" style={{ marginBottom: 0 }}>
-                <PersonPicker style={{ width: '100%' }} placeholder="选择建信金科业务负责人" size="small" />
+                <PersonPicker style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择建信金科业务负责人" size="small" />
               </Form.Item>
             </div>
           </Col>
@@ -380,24 +391,24 @@ export default function RequirementEditor({ open, reqId, defaultReleasePointId, 
 
               {/* 主责系统：标题右侧选择框，单选（再选自动替换），已选展示在下方 */}
               <Form.Item name="main_systems" noStyle>
-                <SystemPickerField title="主责系统" single placeholder="选择主责系统" />
+                <SystemPickerField title="主责系统" single placeholder="搜索/选择主责系统" readonly={readonly} />
               </Form.Item>
 
               {/* 协同改造系统：标题右侧选择框，可多选，已选展示在下方 */}
               <Form.Item name="collab_dev_systems" noStyle>
-                <SystemPickerField title="协同改造系统" placeholder="添加协同改造系统" />
+                <SystemPickerField title="协同改造系统" placeholder="搜索/选择协同改造系统" readonly={readonly} />
               </Form.Item>
 
               {/* 协同测试系统：标题右侧选择框，可多选，已选展示在下方 */}
               <Form.Item name="collab_test_systems" noStyle>
-                <SystemPickerField title="协同测试系统" placeholder="添加协同测试系统" />
+                <SystemPickerField title="协同测试系统" placeholder="搜索/选择系统测试系统" readonly={readonly} />
               </Form.Item>
             </div>
 
             {/* 需求说明书（附件） */}
             <div className="form-section-card">
               <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>需求说明书<span style={{ fontWeight: 400, color: 'var(--radar-text-secondary)', marginLeft: 6, fontSize: 11 }}>（附件或路径，终态至少 1 个）</span></div>
-              <AttachmentField entityType="requirement" entityId={current?.id} fieldKey="需求说明书" />
+              <AttachmentField entityType="requirement" entityId={current?.id} fieldKey="需求说明书" readOnly={readonly} />
             </div>
           </Col>
         </Row>

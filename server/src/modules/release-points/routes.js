@@ -47,7 +47,11 @@ export default async function releasePointRoutes(fastify) {
 
   // 全部（供顶栏选择器，任意登录用户）
   fastify.get('/release-points/all', { preHandler: fastify.authenticate }, async () => {
-    return ok(all('SELECT * FROM release_point WHERE is_archived = 0 ORDER BY release_date DESC'));
+    const today = todayStr();
+    const list = all('SELECT * FROM release_point WHERE is_archived = 0');
+    const future = list.filter(p => p.release_date >= today).sort((a, b) => a.release_date.localeCompare(b.release_date));
+    const past = list.filter(p => p.release_date < today).sort((a, b) => a.release_date.localeCompare(b.release_date));
+    return ok([...future, ...past]);
   });
 
   // 当前投产窗口

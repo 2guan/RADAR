@@ -90,6 +90,85 @@ export default async function devTaskRoutes(fastify) {
     return ok({ ...row, attachments: listByEntity('dev', row.id) });
   });
 
+  // 开发承接预览
+  fastify.post('/dev-tasks/intake-preview', { preHandler: fastify.requirePerm('dev', 'dev.intake') }, async (request) => {
+    const { reqCode } = request.body || {};
+    if (!reqCode) throw badRequest('请选择需求');
+    const req = get('SELECT * FROM requirement WHERE req_code = ?', reqCode);
+    if (!req) throw notFound('需求不存在');
+
+    const main = req.main_systems ? JSON.parse(req.main_systems) : [];
+    const collab = req.collab_dev_systems ? JSON.parse(req.collab_dev_systems) : [];
+
+    const existingTasks = all('SELECT impl_system, task_code, task_name, status FROM dev_task WHERE req_code = ?', reqCode);
+    const existingMap = new Map(existingTasks.map(t => [t.impl_system, t]));
+
+    const systems = all('SELECT sys_code, sys_name FROM system');
+    const sysMap = new Map(systems.map(s => [s.sys_code, s.sys_name]));
+
+    const allSystems = [];
+    const seen = new Set();
+    for (const sysCode of main) {
+      if (!seen.has(sysCode)) {
+        seen.add(sysCode);
+        allSystems.push({ sysCode, role: '主责' });
+      }
+    }
+    for (const sysCode of collab) {
+      if (!seen.has(sysCode)) {
+        seen.add(sysCode);
+        allSystems.push({ sysCode, role: '协同' });
+      }
+    }
+
+    const tplRow = get("SELECT value FROM app_config WHERE key = 'code.dev'");
+    const tpl = tplRow?.value || 'RW_{需求编号}_{序号}';
+    const prefix = tpl.replace('{需求编号}', reqCode).replace('{序号}', '');
+
+    const existingCodes = all(`SELECT task_code FROM dev_task WHERE task_code LIKE ?`, `${prefix}%`);
+    let max = 0;
+    for (const r of existingCodes) {
+      const tail = String(r.task_code).slice(prefix.length);
+      const n = parseInt(tail, 10);
+      if (Number.isFinite(n) && n > max) max = n;
+    }
+
+    const list = [];
+    let currentMax = max;
+
+    for (const item of allSystems) {
+      const sysName = sysMap.get(item.sysCode) || item.sysCode;
+      const exist = existingMap.get(item.sysCode);
+      if (exist) {
+        list.push({
+          sysCode: item.sysCode,
+          sysName,
+          role: item.role,
+          exists: true,
+          taskCode: exist.task_code,
+          taskName: exist.task_name,
+          status: '已建任务',
+        });
+      } else {
+        currentMax++;
+        const seq = String(currentMax).padStart(3, '0');
+        const taskCode = tpl.replace('{需求编号}', reqCode).replace('{序号}', seq);
+        const taskName = `RW-${req.title}-${sysName}`;
+        list.push({
+          sysCode: item.sysCode,
+          sysName,
+          role: item.role,
+          exists: false,
+          taskCode,
+          taskName,
+          status: '新建任务',
+        });
+      }
+    }
+
+    return ok(list);
+  });
+
   // 开发承接（按系统拆分）
   fastify.post('/dev-tasks/intake', { preHandler: fastify.requirePerm('dev', 'dev.intake') }, async (request) => {
     const { reqCode, systems } = request.body || {};

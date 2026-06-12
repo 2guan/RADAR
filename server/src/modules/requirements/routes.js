@@ -118,12 +118,41 @@ export default async function requirementRoutes(fastify) {
       ].filter(Boolean),
     );
 
+    // 查询所有需求的投产状态
+    const releaseTasks = all('SELECT req_code, status FROM release_task');
+    const rtMap = {};
+    for (const rt of releaseTasks) {
+      rtMap[rt.req_code] = rt.status;
+    }
+
+    // 从流程状态配置中获取“投产”阶段的状态类型配置，避免硬编码
+    const processItems = all("SELECT attr_value, extra FROM dict_item WHERE category = 'process_status'");
+    const processStatusMap = {};
+    for (const item of processItems) {
+      try {
+        const extra = JSON.parse(item.extra);
+        if (extra.stage === '投产') {
+          processStatusMap[item.attr_value] = extra.stateType; // 'final' / 'in-progress'
+        }
+      } catch {}
+    }
+
     result.list = result.list.map((row) => {
       const decoded = decode(row);
       decoded.release_date = rpMap[decoded.release_point_id] || null;
       decoded.main_systems_names = (decoded.main_systems || []).map((code) => sysMap[code] || code);
       decoded.collab_dev_systems_names = (decoded.collab_dev_systems || []).map((code) => sysMap[code] || code);
       decoded.has_tasks = linkedCodes.has(decoded.req_code);
+
+      const rtStatus = rtMap[decoded.req_code] || null;
+      let releaseStageType = null;
+      if (rtStatus === '已投产') {
+        releaseStageType = processStatusMap['已上线'] || 'final';
+      } else if (rtStatus === '待投产') {
+        releaseStageType = processStatusMap['待评审'] || 'in-progress';
+      }
+      decoded.release_stage_type = releaseStageType;
+
       return decoded;
     });
 

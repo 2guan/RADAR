@@ -18,6 +18,7 @@ import AttachmentField from '../AttachmentField.jsx';
 import HistoryDrawer from '../HistoryDrawer.jsx';
 import { getStatusType } from '../StatusBadge.jsx';
 import { apiGet, apiPut } from '../../api/client.js';
+import { useAppStore } from '../../stores/app.js';
 
 const CFG = {
   dev: {
@@ -39,6 +40,8 @@ export default function TaskEditor({ open, kind = 'dev', taskId, onClose, onSave
   const statusValue = Form.useWatch('status', form);
   const [current, setCurrent] = useState(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const { can } = useAppStore();
+  const readonly = !can(cfg.entity, 'edit');
 
   useEffect(() => {
     if (!open || !taskId) return;
@@ -74,6 +77,8 @@ export default function TaskEditor({ open, kind = 'dev', taskId, onClose, onSave
       onOk={save}
       onCancel={onClose}
       destroyOnHidden
+      okButtonProps={readonly ? { style: { display: 'none' } } : undefined}
+      cancelText={readonly ? '关闭' : '取消'}
       styles={{ body: { fontSize: 12 } }}
       title={(
         <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 10, rowGap: 6, minWidth: 0, width: '100%', paddingRight: 76 }}>
@@ -90,7 +95,7 @@ export default function TaskEditor({ open, kind = 'dev', taskId, onClose, onSave
               value={statusValue}
               onChange={(val) => form.setFieldValue('status', val)}
               placeholder={cfg.statusLabel}
-              style={{ width: (statusValue ? Array.from(String(statusValue)).length : 4) * 13 + 15 }}
+              style={{ width: (statusValue ? Array.from(String(statusValue)).length : 4) * 13 + 15, ...(readonly ? { pointerEvents: 'none' } : {}) }}
             />
           </span>
           {current && (
@@ -126,35 +131,35 @@ export default function TaskEditor({ open, kind = 'dev', taskId, onClose, onSave
               <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>基本信息</div>
 
               <Form.Item name="task_name" label="任务名称" style={{ marginBottom: 8 }}>
-                <Input placeholder="请输入任务名称" size="small" />
+                <Input placeholder="请输入任务名称" size="small" readOnly={readonly} />
               </Form.Item>
 
               {kind === 'dev' && (
                 <Form.Item name="content" label="开发内容概述" style={{ marginBottom: 8 }}>
-                  <Input.TextArea rows={2} placeholder="简要描述开发内容" style={{ fontSize: 12 }} />
+                  <Input.TextArea rows={2} placeholder="简要描述开发内容" style={{ fontSize: 12 }} readOnly={readonly} />
                 </Form.Item>
               )}
 
               <Row gutter={8}>
                 <Col span={12}>
                   <Form.Item name="owner" label={cfg.ownerLabel} style={{ marginBottom: 8 }}>
-                    <PersonPicker style={{ width: '100%' }} size="small" placeholder="选择负责人" />
+                    <PersonPicker style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} size="small" placeholder="选择负责人" />
                   </Form.Item>
                 </Col>
                 <Col span={12}>
                   <Form.Item name="impl_system" label="实施系统" style={{ marginBottom: 8 }}>
-                    <SystemSelect single size="small" style={{ width: '100%' }} placeholder="选择实施系统" />
+                    <SystemSelect single size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择实施系统" />
                   </Form.Item>
                 </Col>
                 <Col span={12}>
                   <Form.Item name="impl_org" label={cfg.orgLabel} style={{ marginBottom: kind === 'test' ? 8 : 0 }}>
-                    <DictSelect category="org" style={{ width: '100%' }} size="small" />
+                    <DictSelect category="org" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} size="small" />
                   </Form.Item>
                 </Col>
                 {kind === 'test' && (
                   <Col span={12}>
                     <Form.Item name="impl_agency" label="实施机构" style={{ marginBottom: 0 }}>
-                      <DictSelect category="org" style={{ width: '100%' }} size="small" />
+                      <DictSelect category="org" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} size="small" />
                     </Form.Item>
                   </Col>
                 )}
@@ -164,25 +169,27 @@ export default function TaskEditor({ open, kind = 'dev', taskId, onClose, onSave
             <div className="form-section-card">
               <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>排期<span style={{ fontWeight: 400, color: 'var(--radar-text-secondary)', marginLeft: 6, fontSize: 11 }}>（终态必填）</span></div>
               <Row gutter={8}>
-                <Col span={12}><Form.Item name="plan_start" label="计划开始" style={{ marginBottom: 8 }}><DatePicker size="small" style={{ width: '100%' }} placeholder="选择日期" /></Form.Item></Col>
-                <Col span={12}><Form.Item name="plan_end" label="计划结束" style={{ marginBottom: 8 }}><DatePicker size="small" style={{ width: '100%' }} placeholder="选择日期" /></Form.Item></Col>
-                <Col span={12}><Form.Item name="actual_start" label="实际开始" style={{ marginBottom: 0 }}><DatePicker size="small" style={{ width: '100%' }} placeholder="选择日期" /></Form.Item></Col>
-                <Col span={12}><Form.Item name="actual_end" label="实际结束" style={{ marginBottom: 0 }}><DatePicker size="small" style={{ width: '100%' }} placeholder="选择日期" /></Form.Item></Col>
+                <Col span={12}><Form.Item name="plan_start" label="计划开始" style={{ marginBottom: 8 }}><DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" /></Form.Item></Col>
+                <Col span={12}><Form.Item name="plan_end" label="计划结束" style={{ marginBottom: 8 }}><DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" /></Form.Item></Col>
+                <Col span={12}><Form.Item name="actual_start" label="实际开始" style={{ marginBottom: 0 }}><DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" /></Form.Item></Col>
+                <Col span={12}><Form.Item name="actual_end" label="实际结束" style={{ marginBottom: 0 }}><DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" /></Form.Item></Col>
               </Row>
             </div>
           </Col>
 
           {/* ── 右栏：阶段附件 ── */}
           <Col xs={24} md={10}>
-            <div className="form-section-card">
-              <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>阶段附件<span style={{ fontWeight: 400, color: 'var(--radar-text-secondary)', marginLeft: 6, fontSize: 11 }}>（终态至少 1 个）</span></div>
-              {cfg.attachFields.map((f) => (
-                <div key={f} style={{ marginBottom: 12 }}>
-                  <div style={{ marginBottom: 6, fontWeight: 600, fontSize: 12, color: 'var(--radar-ink)' }}>{f}</div>
-                  <AttachmentField entityType={cfg.entity} entityId={current?.id} fieldKey={f} />
+            {cfg.attachFields.map((f) => (
+              <div className="form-section-card" key={f} style={{ marginBottom: 12 }}>
+                <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>
+                  {f}
+                  <span style={{ fontWeight: 400, color: 'var(--radar-text-secondary)', marginLeft: 6, fontSize: 11 }}>
+                    （附件或路径）
+                  </span>
                 </div>
-              ))}
-            </div>
+                <AttachmentField entityType={cfg.entity} entityId={current?.id} fieldKey={f} readOnly={readonly} />
+              </div>
+            ))}
           </Col>
         </Row>
       </Form>

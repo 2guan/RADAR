@@ -16,6 +16,31 @@ function truthy(v) {
   return ['是', 'Y', 'y', 'true', '1', '会签'].includes(String(v ?? '').trim());
 }
 
+/** 同步修改或删除的会签角色到所有未完成的投产任务中 */
+function syncModifySignoffRole(roleId, roleName, isSignoffRole, oldIsSignoffRole, oldName) {
+  const tasks = all("SELECT id FROM release_task WHERE status NOT IN ('已投产', '已取消')");
+  if (!tasks.length) return;
+  const taskIds = tasks.map(t => t.id);
+
+  if (isSignoffRole === 1) {
+    // 1. 如果角色名有修改，则同步更新投产任务中的会签角色名称
+    if (roleName !== oldName) {
+      run(`UPDATE release_signoff SET role_name = ? WHERE role_id = ? AND release_task_id IN (${taskIds.join(',')})`, roleName, roleId);
+    }
+    // 2. 如果之前不是会签角色，现在是，则在所有未投产的任务中补齐
+    for (const tid of taskIds) {
+      const exists = get('SELECT id FROM release_signoff WHERE release_task_id = ? AND role_id = ?', tid, roleId);
+      if (!exists) {
+        run("INSERT INTO release_signoff (release_task_id, role_id, role_name, result) VALUES (?,?,?,?)",
+          tid, roleId, roleName, '未签署');
+      }
+    }
+  } else {
+    // 3. 如果之前是会签角色，现在取消了，则自动删除这些未完成任务中的对应会签记录
+    run(`DELETE FROM release_signoff WHERE role_id = ? AND release_task_id IN (${taskIds.join(',')})`, roleId);
+  }
+}
+
 export default async function roleRoutes(fastify) {
   // 权限目录（供矩阵 UI 渲染）
   fastify.get('/permissions/catalog', { preHandler: fastify.authenticate }, async () => ok(PERM_CATALOG));
@@ -40,11 +65,16 @@ export default async function roleRoutes(fastify) {
     const { name, code, default_home, is_signoff_role } = request.body || {};
     if (!name || !code) throw badRequest('角色名称与标识必填');
     if (get('SELECT id FROM role WHERE code = ?', code)) throw badRequest('角色标识已存在');
+    const sign = is_signoff_role ? 1 : 0;
     const res = run(
       'INSERT INTO role (name, code, default_home, is_builtin, is_signoff_role) VALUES (?,?,?,0,?)',
-      name, code, default_home || '仪表盘', is_signoff_role ? 1 : 0,
+      name, code, default_home || '仪表盘', sign,
     );
-    return ok({ id: res.lastInsertRowid });
+    const roleId = res.lastInsertRowid;
+    if (sign === 1) {
+      syncModifySignoffRole(roleId, name, 1, 0, name);
+    }
+    return ok({ id: roleId });
   });
 
   // 修改角色
@@ -53,11 +83,13 @@ export default async function roleRoutes(fastify) {
     const old = get('SELECT * FROM role WHERE id = ?', id);
     if (!old) throw notFound();
     const { name, default_home, is_signoff_role } = request.body || {};
+    const newSign = is_signoff_role === undefined ? old.is_signoff_role : (is_signoff_role ? 1 : 0);
+    const newName = name ?? old.name;
     run(
       `UPDATE role SET name=?, default_home=?, is_signoff_role=?, updated_at=datetime('now','localtime') WHERE id=?`,
-      name ?? old.name, default_home ?? old.default_home,
-      is_signoff_role === undefined ? old.is_signoff_role : (is_signoff_role ? 1 : 0), id,
+      newName, default_home ?? old.default_home, newSign, id,
     );
+    syncModifySignoffRole(id, newName, newSign, old.is_signoff_role, old.name);
     return ok({ id });
   });
 
@@ -123,16 +155,20 @@ export default async function roleRoutes(fastify) {
     upsert: (r, mode) => {
       if (!r.name || !r.code) return 'skipped';
       const sign = truthy(r.is_signoff_role) ? 1 : 0;
-      const exists = get('SELECT id FROM role WHERE code = ?', r.code);
+      const exists = get('SELECT id, name, is_signoff_role FROM role WHERE code = ?', r.code);
       if (exists) {
         if (mode === 'skip') return 'skipped';
         if (mode === 'rollback') throw badRequest(`角色标识重复：${r.code}，已回滚`);
         run('UPDATE role SET name=?, default_home=?, is_signoff_role=?, updated_at=datetime(\'now\',\'localtime\') WHERE id=?',
           r.name, r.default_home || '仪表盘', sign, exists.id);
+        syncModifySignoffRole(exists.id, r.name, sign, exists.is_signoff_role, exists.name);
         return 'updated';
       }
-      run('INSERT INTO role (name, code, default_home, is_builtin, is_signoff_role) VALUES (?,?,?,0,?)',
+      const res = run('INSERT INTO role (name, code, default_home, is_builtin, is_signoff_role) VALUES (?,?,?,0,?)',
         r.name, r.code, r.default_home || '仪表盘', sign);
+      if (sign === 1) {
+        syncModifySignoffRole(res.lastInsertRowid, r.name, 1, 0, r.name);
+      }
       return 'inserted';
     },
   });
