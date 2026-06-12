@@ -58,6 +58,21 @@ export default function MainLayout() {
     }
   };
 
+  const userMenu = {
+    items: [
+      { key: 'password', icon: <KeyOutlined />, label: '修改密码' },
+      { type: 'divider' },
+      { key: 'logout', icon: <LogoutOutlined />, label: '退出登录' },
+    ],
+    onClick: ({ key }) => {
+      if (key === 'logout') {
+        useAppStore.getState().logout();
+      } else if (key === 'password') {
+        setChangePwdOpen(true);
+      }
+    },
+  };
+
   useEffect(() => { apiGet('/release-points/all').then(setPoints).catch(() => {}); }, []);
 
   // 当前路径进入某子菜单时，自动展开其父级
@@ -166,20 +181,7 @@ export default function MainLayout() {
     />
   );
 
-  const userMenu = {
-    items: [
-      { key: 'password', icon: <KeyOutlined />, label: '修改密码' },
-      { type: 'divider' },
-      { key: 'logout', icon: <LogoutOutlined />, label: '退出登录' },
-    ],
-    onClick: ({ key }) => {
-      if (key === 'logout') {
-        useAppStore.getState().logout();
-      } else if (key === 'password') {
-        setChangePwdOpen(true);
-      }
-    },
-  };
+  // userMenu has been moved up to be declared before siderInner
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
