@@ -17,6 +17,7 @@ import HistoryDrawer from '../HistoryDrawer.jsx';
 import { getStatusType } from '../StatusBadge.jsx';
 import { apiGet, apiPost, apiPut } from '../../api/client.js';
 import { useAppStore } from '../../stores/app.js';
+import { useResponsive } from '../../hooks/useResponsive.js';
 
 // ─── 模块级系统列表缓存（与 SystemSelect 共用同一接口，但单独维护以供下方组件使用） ───
 let _sysCache = null;
@@ -130,6 +131,7 @@ export default function RequirementEditor({ open, reqId, defaultReleasePointId, 
   const [points, setPoints] = useState([]);
   const [genLoading, setGenLoading] = useState(false); // 生成编号加载态
   const { can } = useAppStore();
+  const { isMobile } = useResponsive();
   const isEdit = !!reqId;
   const readonly = isEdit ? !can('requirement', 'edit') : !can('requirement', 'create');
   // 已关联开发/测试任务时，需求编号锁定不可改
@@ -282,7 +284,7 @@ export default function RequirementEditor({ open, reqId, defaultReleasePointId, 
                     label={(
                       <span>
                         需求编号
-                        {codeLocked && (
+                        {codeLocked && !isMobile && (
                           <span style={{ marginLeft: 6, fontWeight: 400, fontSize: 11, color: 'var(--radar-text-secondary)' }}>
                             （已关联，不可改）
                           </span>
@@ -361,13 +363,13 @@ export default function RequirementEditor({ open, reqId, defaultReleasePointId, 
             <div className="form-section-card">
               <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>相关负责人</div>
               <Row gutter={8}>
-                {/* 农信提出部门 + 农信提出人 */}
-                <Col span={12}>
+                {/* 农信提出部门 + 农信提出人：手机端各占一行（充满），PC 端双栏 */}
+                <Col span={isMobile ? 24 : 12}>
                   <Form.Item name="propose_dept" label="农信提出部门" style={{ marginBottom: 8 }}>
                     <DictSelect category="org" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} size="small" />
                   </Form.Item>
                 </Col>
-                <Col span={12}>
+                <Col span={isMobile ? 24 : 12}>
                   <Form.Item name="proposer" label="农信提出人" style={{ marginBottom: 8 }}>
                     <PersonPicker style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择提出人" size="small" />
                   </Form.Item>

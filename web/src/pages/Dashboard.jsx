@@ -151,7 +151,9 @@ export default function Dashboard() {
   };
 
   return (
-    <div>
+    // overflowX:hidden 吸收各 Row 栅格槽（gutter 16 → 负 -8 外边距）造成的 8px 横向溢出，
+    // 消除仪表盘底部的横向滚动条；根容器高度自适应，不会引入纵向滚动条。
+    <div style={{ overflowX: 'hidden' }}>
       {/* 5 原子指标卡 */}
       <Row gutter={[16, 16]} wrap>
         {cards.map((c) => {

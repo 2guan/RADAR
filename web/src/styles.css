@@ -593,3 +593,51 @@ body {
   color: var(--radar-ink); font-weight: 600;
 }
 .dash-pivot .pivot-total-row > td { font-weight: 700; background: var(--radar-primary-soft); }
+
+/* 配置表移动端卡片：字段名 ： 值 两栏对齐，操作按钮置底右对齐 */
+.crud-card-row {
+  display: flex; justify-content: space-between; gap: 12px;
+  padding: 3px 0; font-size: 13px; line-height: 1.5;
+}
+.crud-card-row + .crud-card-row { border-top: 1px dashed var(--radar-border); }
+.crud-card-label { color: var(--radar-text-secondary); white-space: nowrap; flex-shrink: 0; }
+.crud-card-value { text-align: right; min-width: 0; word-break: break-word; }
+.crud-card-ops { margin-top: 6px; text-align: right; }
+
+/* ============ 移动端统一收口：弹窗/抽屉/表单控件不再横向溢出 ============ */
+@media (max-width: 767px) {
+  /* 弹窗：宽度收敛进视口、上移留白、缩小内边距，纵向超长由页面滚动 */
+  .ant-modal {
+    max-width: calc(100vw - 16px) !important;
+    margin: 8px auto !important;
+    top: 8px !important;
+  }
+  .ant-modal-content { padding: 16px !important; }
+  /* 抽屉：左右抽屉宽度不超过视口 */
+  .ant-drawer-right .ant-drawer-content-wrapper,
+  .ant-drawer-left .ant-drawer-content-wrapper { max-width: 90vw !important; }
+  /* 表单控件：一律不超过容器宽度，消除固定像素宽导致的"输入框超长" */
+  .ant-modal .ant-form-item,
+  .editor-form .ant-form-item { max-width: 100%; }
+  .ant-modal .ant-input,
+  .ant-modal .ant-input-number,
+  .ant-modal .ant-input-affix-wrapper,
+  .ant-modal .ant-picker,
+  .ant-modal .ant-select,
+  .ant-modal .ant-cascader,
+  .editor-form .ant-input,
+  .editor-form .ant-input-number,
+  .editor-form .ant-picker,
+  .editor-form .ant-select { max-width: 100% !important; }
+
+  /* 全流程时间轴：手机端更紧凑——缩小节点基宽与字号，
+     使无「非功能/安全测试」时（5 节点）能铺满容器、无横向滚动条；
+     含 NFT/SEC（≥6 节点）仍超出容器、保留横向滚动。 */
+  .chain-step { flex-basis: 46px; padding: 0; }
+  .chain-label { font-size: 10px; line-height: 14px; margin-bottom: 3px; }
+  .chain-dot { width: 8px; height: 8px; }
+  .chain-step::before { top: 20px; }
+  .chain-status { margin-top: 3px; }
+  .chain-status .ant-tag { font-size: 9px; padding: 0 3px; line-height: 14px; }
+  .chain-status-none { font-size: 9px; }
+}

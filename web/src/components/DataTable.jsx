@@ -86,13 +86,29 @@ const DataTable = forwardRef(function DataTable(props, ref) {
     setSort(arr);
   };
 
-  const header = (
+  const searchInput = (
+    <Input
+      allowClear prefix={<SearchOutlined />} placeholder={searchPlaceholder}
+      value={keyword} onChange={(e) => onKeyword(e.target.value)}
+      style={{ width: isMobile ? '100%' : 240 }}
+    />
+  );
+  // 移动端：搜索框独占一行，过滤器/刷新/操作按钮在下一行换行排布，避免横向溢出
+  const header = isMobile ? (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ marginBottom: 8 }}>{searchInput}</div>
+      <Space wrap style={{ width: '100%', justifyContent: 'space-between' }}>
+        <Space wrap>
+          {extraFilters}
+          <Button icon={<ReloadOutlined />} onClick={load}>刷新</Button>
+        </Space>
+        <Space wrap>{toolbar}</Space>
+      </Space>
+    </div>
+  ) : (
     <Space wrap style={{ marginBottom: 12, width: '100%', justifyContent: 'space-between' }}>
       <Space wrap>
-        <Input
-          allowClear prefix={<SearchOutlined />} placeholder={searchPlaceholder}
-          value={keyword} onChange={(e) => onKeyword(e.target.value)} style={{ width: 240 }}
-        />
+        {searchInput}
         {extraFilters}
         <Button icon={<ReloadOutlined />} onClick={load}>刷新</Button>
       </Space>

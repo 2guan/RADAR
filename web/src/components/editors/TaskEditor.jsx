@@ -19,6 +19,7 @@ import HistoryDrawer from '../HistoryDrawer.jsx';
 import { getStatusType } from '../StatusBadge.jsx';
 import { apiGet, apiPut } from '../../api/client.js';
 import { useAppStore } from '../../stores/app.js';
+import { useResponsive } from '../../hooks/useResponsive.js';
 
 const CFG = {
   dev: {
@@ -41,6 +42,7 @@ export default function TaskEditor({ open, kind = 'dev', taskId, onClose, onSave
   const [current, setCurrent] = useState(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const { can } = useAppStore();
+  const { isMobile } = useResponsive();
   const readonly = !can(cfg.entity, 'edit');
 
   useEffect(() => {
@@ -140,28 +142,34 @@ export default function TaskEditor({ open, kind = 'dev', taskId, onClose, onSave
                 </Form.Item>
               )}
 
+              {/* 负责人/实施系统/实施方：手机端各占一行（充满），PC 端双栏不变；测试详情手机端隐藏「实施机构」 */}
               <Row gutter={8}>
-                <Col span={12}>
+                <Col span={isMobile ? 24 : 12}>
                   <Form.Item name="owner" label={cfg.ownerLabel} style={{ marginBottom: 8 }}>
                     <PersonPicker style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} size="small" placeholder="选择负责人" />
                   </Form.Item>
                 </Col>
-                <Col span={12}>
+                <Col span={isMobile ? 24 : 12}>
                   <Form.Item name="impl_system" label="实施系统" style={{ marginBottom: 8 }}>
                     <SystemSelect single size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择实施系统" />
                   </Form.Item>
                 </Col>
-                <Col span={12}>
-                  <Form.Item name="impl_org" label={cfg.orgLabel} style={{ marginBottom: kind === 'test' ? 8 : 0 }}>
+                <Col span={isMobile ? 24 : 12}>
+                  <Form.Item name="impl_org" label={cfg.orgLabel} style={{ marginBottom: (kind === 'test' && !isMobile) ? 8 : 0 }}>
                     <DictSelect category="org" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} size="small" />
                   </Form.Item>
                 </Col>
                 {kind === 'test' && (
-                  <Col span={12}>
-                    <Form.Item name="impl_agency" label="实施机构" style={{ marginBottom: 0 }}>
-                      <DictSelect category="org" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} size="small" />
-                    </Form.Item>
-                  </Col>
+                  isMobile ? (
+                    // 手机端隐藏「实施机构」，但保留字段以免保存时丢值
+                    <Form.Item name="impl_agency" hidden><Input /></Form.Item>
+                  ) : (
+                    <Col span={12}>
+                      <Form.Item name="impl_agency" label="实施机构" style={{ marginBottom: 0 }}>
+                        <DictSelect category="org" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} size="small" />
+                      </Form.Item>
+                    </Col>
+                  )
                 )}
               </Row>
             </div>

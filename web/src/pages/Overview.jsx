@@ -7,9 +7,10 @@
  */
 import React, { useEffect, useState, useMemo } from 'react';
 import {
-  Card, Row, Col, Tag, Typography, Empty, Modal, Space, Spin, Select, Avatar, Tabs, Button, Table, Radio, message, Timeline, Tooltip,
+  Card, Row, Col, Tag, Typography, Empty, Modal, Space, Spin, Select, Avatar, Tabs, Button, Table, Radio, message, Timeline, Tooltip, List, Checkbox,
 } from 'antd';
 import { SafetyCertificateOutlined, DeploymentUnitOutlined, DownloadOutlined, DownOutlined, UpOutlined, HistoryOutlined } from '@ant-design/icons';
+import { useResponsive } from '../hooks/useResponsive.js';
 import ChainBar from '../components/ChainBar.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
 import RequirementEditor from '../components/editors/RequirementEditor.jsx';
@@ -284,7 +285,84 @@ function ReleaseDetailCard({ release, onEdit }) {
 
 const TEST_TYPE_LABEL = { SIT: '应用组装测试', UAT: '用户测试', NFT: '非功能测试', SEC: '安全测试' };
 
+/** 承接弹窗·移动端：已选需求卡片（单条、预选、不可改） */
+function IntakeReqCard({ requirement }) {
+  const r = requirement || {};
+  return (
+    <Card size="small" style={{ borderColor: 'var(--radar-primary)', background: 'var(--radar-primary-soft)' }}>
+      <Space direction="vertical" size={4} style={{ width: '100%' }}>
+        <Space style={{ justifyContent: 'space-between', width: '100%' }}>
+          <span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', fontWeight: 600 }}>{r.req_code}</span>
+          <Radio checked />
+        </Space>
+        <div style={{ fontWeight: 600, fontSize: 13 }}>{r.title}</div>
+        <div style={{ fontSize: 11, color: 'var(--radar-text-secondary)' }}>计划投产点：{r.release_date || '—'}</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+          {(r.mainSystemsInfo || []).map((sys) => (
+            <Tag key={sys.sys_code} className="status-tag tag-system" style={{ borderRadius: 2, margin: 0, fontSize: 10 }}>{sys.sys_name || sys.sys_code}</Tag>
+          ))}
+        </div>
+      </Space>
+    </Card>
+  );
+}
+
+/** 承接弹窗·移动端：拆分任务预览卡片（可勾选，已存在则禁用） */
+function IntakePreviewCard({ item, isChecked, onToggle }) {
+  return (
+    <Card
+      size="small"
+      style={{ marginBottom: 8, borderColor: isChecked ? 'var(--radar-primary)' : 'var(--radar-border)' }}
+      onClick={onToggle}
+    >
+      <Space direction="vertical" size={4} style={{ width: '100%' }}>
+        <Space style={{ justifyContent: 'space-between', width: '100%' }}>
+          <Space>
+            <Checkbox checked={item.exists ? false : isChecked} disabled={item.exists} onClick={(e) => e.stopPropagation()} onChange={onToggle} />
+            <strong style={{ fontSize: 13 }}>{item.sysName}</strong>
+            {item.sysCode !== 'overall' && <span style={{ color: 'var(--radar-text-secondary)', fontSize: 11 }}>({item.sysCode})</span>}
+          </Space>
+          <Tag className={item.exists ? 'status-tag status-tag-final' : 'status-tag status-tag-in-progress'} style={{ margin: 0 }}>{item.status}</Tag>
+        </Space>
+        <div style={{ fontSize: 11, color: 'var(--radar-text-secondary)', marginTop: 4 }}>
+          角色：
+          <Tag className="status-tag" style={{
+            borderColor: item.role === '主责' ? 'var(--radar-primary)' : (item.role === '整体' ? 'var(--radar-ink)' : 'var(--radar-accent)'),
+            color: item.role === '主责' ? 'var(--radar-primary)' : (item.role === '整体' ? 'var(--radar-ink)' : 'var(--radar-accent)'),
+            background: item.role === '主责' ? 'var(--radar-primary-soft)' : (item.role === '整体' ? 'var(--radar-bg)' : 'var(--radar-accent-soft)'),
+            margin: 0, fontSize: 10, lineHeight: '14px',
+          }}>{item.role}</Tag>
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--radar-text-secondary)' }}>
+          计划生成任务编号：<span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace' }}>{item.taskCode}</span>
+        </div>
+        <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--radar-ink)' }}>任务名称：{item.taskName}</div>
+      </Space>
+    </Card>
+  );
+}
+
+/** 承接弹窗·移动端：预览列表（卡片版），勾选逻辑与表格 rowSelection 等价 */
+function IntakePreviewList({ list, selected, setSelected }) {
+  return (
+    <List
+      dataSource={list}
+      rowKey="sysCode"
+      size="small"
+      renderItem={(item) => {
+        const isChecked = selected.includes(item.sysCode);
+        const toggle = () => {
+          if (item.exists) return;
+          setSelected(isChecked ? selected.filter((c) => c !== item.sysCode) : [...selected, item.sysCode]);
+        };
+        return <IntakePreviewCard item={item} isChecked={isChecked} onToggle={toggle} />;
+      }}
+    />
+  );
+}
+
 function DevIntakeModal({ open, requirement, onClose, onSaved }) {
+  const { isMobile } = useResponsive();
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [previewList, setPreviewList] = useState([]);
   const [selectedNewSystems, setSelectedNewSystems] = useState([]);
@@ -474,41 +552,49 @@ function DevIntakeModal({ open, requirement, onClose, onSaved }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div className="form-section-card" style={{ marginBottom: 0 }}>
             <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>1. 选择需求</div>
-            <Table
-              dataSource={[requirement]}
-              rowKey="req_code"
-              size="small"
-              className="super-compact-table"
-              pagination={false}
-              components={{ header: { cell: ResizableTitle } }}
-              columns={resizableReqColumns}
-              rowSelection={{
-                type: 'radio',
-                selectedRowKeys: [requirement.req_code],
-                getCheckboxProps: () => ({ disabled: true }),
-              }}
-            />
+            {isMobile ? (
+              <IntakeReqCard requirement={requirement} />
+            ) : (
+              <Table
+                dataSource={[requirement]}
+                rowKey="req_code"
+                size="small"
+                className="super-compact-table"
+                pagination={false}
+                components={{ header: { cell: ResizableTitle } }}
+                columns={resizableReqColumns}
+                rowSelection={{
+                  type: 'radio',
+                  selectedRowKeys: [requirement.req_code],
+                  getCheckboxProps: () => ({ disabled: true }),
+                }}
+              />
+            )}
           </div>
 
           <div className="form-section-card" style={{ marginBottom: 0 }}>
             <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>2. 确认拆分开发任务</div>
             <Spin spinning={loadingPreview}>
-              <Table
-                dataSource={previewList}
-                columns={resizablePreviewColumns}
-                components={{ header: { cell: ResizableTitle } }}
-                rowKey="sysCode"
-                size="small"
-                className="super-compact-table"
-                pagination={false}
-                rowSelection={{
-                  selectedRowKeys: selectedNewSystems,
-                  onChange: (keys) => setSelectedNewSystems(keys),
-                  getCheckboxProps: (record) => ({
-                    disabled: record.exists,
-                  }),
-                }}
-              />
+              {isMobile ? (
+                <IntakePreviewList list={previewList} selected={selectedNewSystems} setSelected={setSelectedNewSystems} />
+              ) : (
+                <Table
+                  dataSource={previewList}
+                  columns={resizablePreviewColumns}
+                  components={{ header: { cell: ResizableTitle } }}
+                  rowKey="sysCode"
+                  size="small"
+                  className="super-compact-table"
+                  pagination={false}
+                  rowSelection={{
+                    selectedRowKeys: selectedNewSystems,
+                    onChange: (keys) => setSelectedNewSystems(keys),
+                    getCheckboxProps: (record) => ({
+                      disabled: record.exists,
+                    }),
+                  }}
+                />
+              )}
             </Spin>
           </div>
         </div>
@@ -518,6 +604,7 @@ function DevIntakeModal({ open, requirement, onClose, onSaved }) {
 }
 
 function TestIntakeModal({ open, requirement, testType, onClose, onSaved }) {
+  const { isMobile } = useResponsive();
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [previewData, setPreviewData] = useState({ overall: [], split: [] });
   const [splitMode, setSplitMode] = useState('overall');
@@ -719,20 +806,24 @@ function TestIntakeModal({ open, requirement, testType, onClose, onSaved }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div className="form-section-card" style={{ marginBottom: 0 }}>
             <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>1. 选择需求</div>
-            <Table
-              dataSource={[requirement]}
-              rowKey="req_code"
-              size="small"
-              className="super-compact-table"
-              pagination={false}
-              components={{ header: { cell: ResizableTitle } }}
-              columns={resizableReqColumns}
-              rowSelection={{
-                type: 'radio',
-                selectedRowKeys: [requirement.req_code],
-                getCheckboxProps: () => ({ disabled: true }),
-              }}
-            />
+            {isMobile ? (
+              <IntakeReqCard requirement={requirement} />
+            ) : (
+              <Table
+                dataSource={[requirement]}
+                rowKey="req_code"
+                size="small"
+                className="super-compact-table"
+                pagination={false}
+                components={{ header: { cell: ResizableTitle } }}
+                columns={resizableReqColumns}
+                rowSelection={{
+                  type: 'radio',
+                  selectedRowKeys: [requirement.req_code],
+                  getCheckboxProps: () => ({ disabled: true }),
+                }}
+              />
+            )}
           </div>
 
           <div className="form-section-card" style={{ marginBottom: 0 }}>
@@ -746,22 +837,26 @@ function TestIntakeModal({ open, requirement, testType, onClose, onSaved }) {
           <div className="form-section-card" style={{ marginBottom: 0 }}>
             <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>3. 确认承接测试任务</div>
             <Spin spinning={loadingPreview}>
-              <Table
-                dataSource={currentPreviewList}
-                columns={resizablePreviewColumns}
-                components={{ header: { cell: ResizableTitle } }}
-                rowKey="sysCode"
-                size="small"
-                className="super-compact-table"
-                pagination={false}
-                rowSelection={{
-                  selectedRowKeys: selectedNewSystems,
-                  onChange: (keys) => setSelectedNewSystems(keys),
-                  getCheckboxProps: (record) => ({
-                    disabled: record.exists,
-                  }),
-                }}
-              />
+              {isMobile ? (
+                <IntakePreviewList list={currentPreviewList} selected={selectedNewSystems} setSelected={setSelectedNewSystems} />
+              ) : (
+                <Table
+                  dataSource={currentPreviewList}
+                  columns={resizablePreviewColumns}
+                  components={{ header: { cell: ResizableTitle } }}
+                  rowKey="sysCode"
+                  size="small"
+                  className="super-compact-table"
+                  pagination={false}
+                  rowSelection={{
+                    selectedRowKeys: selectedNewSystems,
+                    onChange: (keys) => setSelectedNewSystems(keys),
+                    getCheckboxProps: (record) => ({
+                      disabled: record.exists,
+                    }),
+                  }}
+                />
+              )}
             </Spin>
           </div>
         </div>

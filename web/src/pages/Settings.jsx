@@ -12,6 +12,7 @@ import { Card, Tabs, Button, Tag, message, Form, Input, InputNumber, Switch, Dat
 import { StarOutlined, StarFilled } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import customParseFormat from 'dayjs/plugin/customParseFormat.js';
+import { useResponsive } from '../hooks/useResponsive.js';
 import CrudManager from '../components/CrudManager.jsx';
 import AppConfigForm from '../components/AppConfigForm.jsx';
 import AppearanceSettings from '../components/AppearanceSettings.jsx';
@@ -212,6 +213,7 @@ function RoleManager() {
 }
 
 export default function Settings() {
+  const { isMobile } = useResponsive();
   // 基础配置子 Tab
   const baseConfig = (
     <Tabs items={[
@@ -266,7 +268,7 @@ export default function Settings() {
   return (
     <Card title="系统设置" variant="borderless">
       <Tabs
-        tabPosition="left"
+        tabPosition={isMobile ? 'top' : 'left'}
         items={[
           { key: 'base', label: '基础配置', children: baseConfig },
           { key: 'appearance', label: '外观主题', children: <AppearanceSettings /> },

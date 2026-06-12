@@ -171,7 +171,7 @@ export default function MainLayout() {
       maxTagCount="responsive"
       showSearch
       filterOption={(input, option) => option.label.toLowerCase().includes(input.toLowerCase())}
-      style={{ minWidth: 260, fontSize: 12 }}
+      style={isMobile ? { width: 120, minWidth: 0, maxWidth: '34vw', fontSize: 12 } : { minWidth: 260, fontSize: 12 }}
       className="radar-rp-select"
       popupClassName="radar-rp-select-dropdown"
       suffixIcon={<DownOutlined style={{ color: token.colorPrimary }} />}

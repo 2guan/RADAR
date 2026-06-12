@@ -90,10 +90,32 @@ export default function CrudManager({
     </Can>,
   ] : [];
 
+  // 移动端卡片：由列定义自动生成"字段名 ： 值"行，末行展示操作按钮，避免表格横向滚动
+  const mobileCard = (row) => {
+    const opCol = fullColumns.find((c) => c.key === 'op');
+    const dataCols = fullColumns.filter((c) => c.key !== 'op' && (c.dataIndex || c.render));
+    return (
+      <div>
+        {dataCols.map((c) => {
+          const raw = c.dataIndex ? row[c.dataIndex] : undefined;
+          const val = c.render ? c.render(raw, row) : raw;
+          return (
+            <div key={c.key || c.dataIndex} className="crud-card-row">
+              <span className="crud-card-label">{c.title}</span>
+              <span className="crud-card-value">{val == null || val === '' ? '—' : val}</span>
+            </div>
+          );
+        })}
+        {opCol && <div className="crud-card-ops">{opCol.render(null, row)}</div>}
+      </div>
+    );
+  };
+
   return (
     <>
       <DataTable
         ref={tableRef} columns={fullColumns} fetcher={fetcher} baseQuery={baseQuery} rowKey={rowKey}
+        mobileCard={mobileCard}
         toolbar={[
           <Can key="add" module="settings" action="create"><Button type="primary" icon={<PlusOutlined />} onClick={() => openEdit(null)}>新增</Button></Can>,
           ...ioToolbar,
