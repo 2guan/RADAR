@@ -917,7 +917,11 @@ export default function Overview() {
         />
       </div>
 
-      {loading ? <Spin /> : shownGroups.length === 0 ? <Empty description="当前投产窗口暂无需求" /> : shownGroups.map((g) => (
+      {loading ? (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
+          <Spin size="large" />
+        </div>
+      ) : shownGroups.length === 0 ? <Empty description="当前投产窗口暂无需求" /> : shownGroups.map((g) => (
         <Card
           key={g.org} variant="borderless" style={{ marginBottom: 20 }} styles={{ body: { padding: 16 } }}
           title={(
@@ -976,7 +980,11 @@ export default function Overview() {
             </Tooltip>
           </div>
         )}>
-        {detailLoading || !detail ? <Spin /> : (
+        {detailLoading || !detail ? (
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 360 }}>
+            <Spin size="large" />
+          </div>
+        ) : (
           isTabMode ? (
             <Tabs
               items={[
