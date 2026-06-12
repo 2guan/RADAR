@@ -593,6 +593,16 @@ body {
   color: var(--radar-ink); font-weight: 600;
 }
 .dash-pivot .pivot-total-row > td { font-weight: 700; background: var(--radar-primary-soft); }
+/* 透视表手机端紧凑：缩小字号与单元格内边距，使列自适应容器、不出横向滚动条 */
+.dash-pivot-compact .ant-table-cell,
+.dash-pivot-compact .ant-table-thead > tr > th,
+.dash-pivot-compact .ant-table-tbody > tr > td {
+  padding: 3px 3px !important;
+  font-size: 10px !important;
+  line-height: 1.25 !important;
+  word-break: break-word;
+}
+.dash-pivot-compact .ant-table-tbody > tr > td a { font-size: 10px; }
 
 /* 配置表移动端卡片：字段名 ： 值 两栏对齐，操作按钮置底右对齐 */
 .crud-card-row {

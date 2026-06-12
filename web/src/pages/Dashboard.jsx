@@ -7,7 +7,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Card, Row, Col, Progress, Button, Empty, message, Modal, Table, Grid, Spin,
+  Card, Row, Col, Progress, Button, Empty, message, Modal, Table, Grid, Spin, List,
 } from 'antd';
 import {
   FileTextOutlined, CodeOutlined, ExperimentOutlined, UserOutlined, RocketOutlined, PlusOutlined,
@@ -16,6 +16,7 @@ import { apiGet, apiPost, apiPut, apiDelete } from '../api/client.js';
 import { useAppStore } from '../stores/app.js';
 import { METRIC_COLORS } from '../theme/presets.js';
 import { useDimensionMeta } from '../components/dashboard/useDimensionMeta.js';
+import { useResponsive } from '../hooks/useResponsive.js';
 import ChartEditor from '../components/dashboard/ChartEditor.jsx';
 import DashboardChart from '../components/dashboard/DashboardChart.jsx';
 
@@ -41,6 +42,7 @@ export default function Dashboard() {
   const { releasePointIds, theme, can } = useAppStore();
   const meta = useDimensionMeta();
   const screens = useBreakpoint();
+  const { isMobile } = useResponsive();
   const [metrics, setMetrics] = useState({});
   const [charts, setCharts] = useState([]);
   const [chartData, setChartData] = useState({});   // chartId → 聚合数据
@@ -196,16 +198,39 @@ export default function Dashboard() {
       {/* 钻取记录列表 */}
       <Modal open={drill.open} title={`钻取明细 · ${drill.title}`} footer={null} width={900}
         onCancel={() => setDrill({ ...drill, open: false })}>
-        <Table size="small" rowKey={(r, i) => `${r.code}_${i}`} loading={drill.loading} dataSource={drill.rows}
-          pagination={{ pageSize: 10, showSizeChanger: true }}
-          columns={[
-            { title: '编号', dataIndex: 'code', width: 160 },
-            { title: '名称', dataIndex: 'name', ellipsis: true },
-            { title: '状态', dataIndex: 'status', width: 96 },
-            { title: '系统', dataIndex: 'system', ellipsis: true },
-            { title: '机构', dataIndex: 'org', width: 120 },
-            { title: '负责人', dataIndex: 'owner', width: 90 },
-          ]} />
+        {isMobile ? (
+          // 手机端：钻取明细改用卡片列表，避免表格横向滚动
+          <List
+            loading={drill.loading}
+            dataSource={drill.rows}
+            rowKey={(r, i) => `${r.code}_${i}`}
+            locale={{ emptyText: <Empty description="暂无数据" /> }}
+            pagination={{ pageSize: 8, size: 'small', showSizeChanger: false }}
+            renderItem={(r) => (
+              <Card size="small" style={{ marginBottom: 10 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+                  <span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', fontWeight: 600, fontSize: 12 }}>{r.code || '—'}</span>
+                  {r.status && <span style={{ fontSize: 11, color: 'var(--radar-text-secondary)', whiteSpace: 'nowrap' }}>{r.status}</span>}
+                </div>
+                {r.name && <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>{r.name}</div>}
+                <div className="crud-card-row"><span className="crud-card-label">系统</span><span className="crud-card-value">{r.system || '—'}</span></div>
+                <div className="crud-card-row"><span className="crud-card-label">机构</span><span className="crud-card-value">{r.org || '—'}</span></div>
+                <div className="crud-card-row"><span className="crud-card-label">负责人</span><span className="crud-card-value">{r.owner || '—'}</span></div>
+              </Card>
+            )}
+          />
+        ) : (
+          <Table size="small" rowKey={(r, i) => `${r.code}_${i}`} loading={drill.loading} dataSource={drill.rows}
+            pagination={{ pageSize: 10, showSizeChanger: true }}
+            columns={[
+              { title: '编号', dataIndex: 'code', width: 160 },
+              { title: '名称', dataIndex: 'name', ellipsis: true },
+              { title: '状态', dataIndex: 'status', width: 96 },
+              { title: '系统', dataIndex: 'system', ellipsis: true },
+              { title: '机构', dataIndex: 'org', width: 120 },
+              { title: '负责人', dataIndex: 'owner', width: 90 },
+            ]} />
+        )}
       </Modal>
     </div>
   );

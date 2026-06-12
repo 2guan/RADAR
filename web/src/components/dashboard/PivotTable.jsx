@@ -7,6 +7,7 @@
 
 import React from 'react';
 import { Table } from 'antd';
+import { useResponsive } from '../../hooks/useResponsive.js';
 
 const groupLabelSet = (groups) => new Set([...(groups || []).map((g) => g.label), '其它']);
 const colorOf = (groups, label) => (groups || []).find((g) => g.label === label)?.color;
@@ -19,6 +20,9 @@ function tint(hex, alpha) {
 
 /** @param {object} p { cfg, data, labelOf, dimName, onCell } onCell(filters) 触发钻取 */
 export default function PivotTable({ cfg, data, labelOf, dimName = (d) => d, onCell }) {
+  const { isMobile } = useResponsive();
+  // 手机端透视表：去掉横向滚动、改用紧凑样式（小字号/窄间距），令表格自适应容器宽度
+  const pivotClass = `dash-pivot${isMobile ? ' dash-pivot-compact' : ''}`;
   const rows = data || [];
   const is2D = rows[0] && 'name_y' in rows[0];
 
@@ -33,7 +37,7 @@ export default function PivotTable({ cfg, data, labelOf, dimName = (d) => d, onC
     }));
     ds.push({ key: '__total', __name: '合计', value: total, __isTotal: true });
     return (
-      <Table className="dash-pivot" size="small" pagination={false} dataSource={ds}
+      <Table className={pivotClass} size="small" pagination={false} dataSource={ds}
         rowClassName={(r) => (r.__isTotal ? 'pivot-total-row' : '')}
         columns={[
           { title: dimName(cfg.dimension), dataIndex: '__name', align: 'center' },
@@ -92,7 +96,8 @@ export default function PivotTable({ cfg, data, labelOf, dimName = (d) => d, onC
   ];
 
   return (
-    <Table className="dash-pivot" size="small" pagination={false} scroll={{ x: 'max-content' }}
+    <Table className={pivotClass} size="small" pagination={false}
+      scroll={isMobile ? undefined : { x: 'max-content' }}
       dataSource={ds} columns={columns} rowClassName={(r) => (r.__isTotal ? 'pivot-total-row' : '')} />
   );
 }
