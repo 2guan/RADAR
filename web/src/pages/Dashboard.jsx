@@ -136,7 +136,7 @@ export default function Dashboard() {
                   <span className="value" style={{ color: 'var(--radar-ink)' }}>{m.total}</span>
                 </div>
                 <Progress percent={pct} showInfo={false} strokeColor={c.color} trailColor="var(--radar-border)" strokeWidth={6} style={{ marginTop: 12, marginBottom: 2 }} />
-                <div className="done-text"><b style={{ color: c.color }}>{m.terminal}</b> 已完成</div>
+                <div className="done-text"><b style={{ color: c.color }}>{m.terminal}/{m.total}</b> 已完成</div>
               </div>
             </Col>
           );
