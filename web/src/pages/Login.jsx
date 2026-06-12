@@ -37,9 +37,38 @@ export default function Login() {
   const name = platform['platform.name'] || '日常需求研发流程管理平台';
   const shortName = platform['platform.shortName'] || 'RADAR';
   const fullName = platform['platform.fullName'] || '';
+  const copyright = platform['platform.copyright'] || '';
 
   return (
     <div className="login-bg">
+      {/* 动态雷达背景：同心圆 + 十字准线 + 旋转扫描波束 + 脉冲目标点（与品牌呼应） */}
+      <div className="login-radar" aria-hidden="true">
+        <svg viewBox="0 0 600 600" preserveAspectRatio="xMidYMid slice">
+          <defs>
+            <linearGradient id="radarSweepGrad" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stopColor="var(--radar-primary)" stopOpacity="0" />
+              <stop offset="100%" stopColor="var(--radar-primary)" stopOpacity="0.45" />
+            </linearGradient>
+          </defs>
+          <g className="radar-grid">
+            <circle className="ring" cx="300" cy="300" r="90" />
+            <circle className="ring" cx="300" cy="300" r="170" />
+            <circle className="ring" cx="300" cy="300" r="250" />
+            <circle className="ring" cx="300" cy="300" r="300" />
+            <line className="cross" x1="0" y1="300" x2="600" y2="300" />
+            <line className="cross" x1="300" y1="0" x2="300" y2="600" />
+            <line className="cross" x1="88" y1="88" x2="512" y2="512" />
+            <line className="cross" x1="512" y1="88" x2="88" y2="512" />
+          </g>
+          <g className="radar-sweep">
+            <path d="M300 300 L300 0 A300 300 0 0 0 89.7 89.7 Z" fill="url(#radarSweepGrad)" />
+            <line x1="300" y1="300" x2="300" y2="0" className="sweep-edge" />
+          </g>
+          <circle className="blip blip-a" cx="402" cy="206" r="4" />
+          <circle className="blip blip-b" cx="214" cy="392" r="4" />
+          <circle className="blip blip-c" cx="430" cy="372" r="4" />
+        </svg>
+      </div>
       <Card
         className="login-card"
         style={{ width: 410, maxWidth: '100%', borderRadius: 0, boxShadow: '0 24px 70px rgba(31,45,80,0.22)' }}
@@ -64,6 +93,11 @@ export default function Login() {
           </Form.Item>
         </Form>
       </Card>
+      {copyright && (
+        <footer className="login-footer">
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>{copyright}</Typography.Text>
+        </footer>
+      )}
     </div>
   );
 }

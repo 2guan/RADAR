@@ -88,6 +88,8 @@ export default function MainLayout() {
 
   const visibleMenu = MENU.filter((m) => can(m.module, 'view'));
   const brand = platform['platform.shortName'] || 'RADAR';
+  // 平台名称（系统设置-基础设置中维护，联动显示于品牌区与登录页）
+  const platformName = platform['platform.name'] || '日常需求研发流程管理平台';
 
   const go = (key) => { navigate(key); setDrawerOpen(false); };
   const toggleMenu = (key) => setOpenMenus((p) => ({ ...p, [key]: !p[key] }));
@@ -138,9 +140,9 @@ export default function MainLayout() {
     <>
       <div className="radar-brand">
         <div className="radar-brand-logo"><RadarChartOutlined /></div>
-        <div>
+        <div style={{ minWidth: 0 }}>
           <div className="radar-brand-name">{brand}</div>
-          <div className="radar-brand-sub">R&amp;D Management</div>
+          <div className="radar-brand-sub" title={platformName}>{platformName}</div>
         </div>
       </div>
       <div className="radar-nav">

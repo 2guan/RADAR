@@ -6,7 +6,7 @@
  */
 
 export const PERM_CATALOG = [
-  { key: 'dashboard', label: '效能仪表盘', actions: [{ key: 'view', label: '查看' }] },
+  { key: 'dashboard', label: '效能仪表盘', actions: [{ key: 'view', label: '查看' }, { key: 'manage', label: '管理系统图表' }] },
   { key: 'overview', label: '版本概览', actions: [{ key: 'view', label: '查看' }] },
   {
     key: 'requirement', label: '需求分析',

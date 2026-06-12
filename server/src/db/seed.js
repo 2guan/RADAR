@@ -26,7 +26,7 @@ const ROLES = [
 
 // 模块 -> 该模块支持的全部操作键
 const MODULE_ACTIONS = {
-  dashboard: ['view'],
+  dashboard: ['view', 'manage'],
   overview: ['view'],
   requirement: ['view', 'create', 'edit', 'delete', 'import', 'export'],
   dev: ['view', 'create', 'edit', 'delete', 'import', 'export', 'dev.intake'],

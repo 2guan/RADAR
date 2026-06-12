@@ -12,7 +12,8 @@ services:
     container_name: radar
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      # 宿主机对外端口:容器内端口（容器内仍为 3000）
+      - "3510:3000"
     environment:
       # 生产环境务必修改 JWT 密钥与管理员密码
       - NODE_ENV=production

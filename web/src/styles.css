@@ -104,7 +104,11 @@ body {
   box-shadow: 0 6px 16px var(--radar-primary-fade);
 }
 .radar-brand-name { color: var(--radar-ink); font-weight: 800; font-size: 18px; letter-spacing: 1px; line-height: 1.1; }
-.radar-brand-sub { color: var(--radar-text-secondary); font-size: 10px; letter-spacing: 2px; text-transform: uppercase; font-weight: 600; }
+.radar-brand-sub {
+  color: var(--radar-text-secondary); font-size: 11px; letter-spacing: .3px; font-weight: 600;
+  line-height: 1.3; margin-top: 2px;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
 
 .radar-nav { padding: 6px 12px; flex: 1; overflow-y: auto; }
 .radar-nav-item {
@@ -190,7 +194,34 @@ body {
 .login-bg::after { width:480px;height:480px; background:radial-gradient(circle, var(--radar-blob2), transparent 62%); bottom:-150px; right:-110px; animation: floatB 18s ease-in-out infinite; }
 @keyframes floatA { 0%,100%{transform:translate(0,0)} 50%{transform:translate(46px,34px)} }
 @keyframes floatB { 0%,100%{transform:translate(0,0)} 50%{transform:translate(-46px,-34px)} }
-.login-card { background: var(--radar-surface) !important; border: 1px solid var(--radar-border) !important; }
+.login-card { background: var(--radar-surface) !important; border: 1px solid var(--radar-border) !important; position: relative; z-index: 1; }
+.login-footer { position: absolute; bottom: 20px; left: 0; right: 0; text-align: center; padding: 0 16px; z-index: 1; }
+
+/* 动态雷达背景 */
+.login-radar {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  pointer-events: none; z-index: 0; opacity: .55;
+}
+.login-radar svg { width: min(150vh, 150vw); height: min(150vh, 150vw); }
+.login-radar .ring { fill: none; stroke: var(--radar-primary); stroke-opacity: .16; stroke-width: 1.2; }
+.login-radar .cross { stroke: var(--radar-primary); stroke-opacity: .1; stroke-width: 1; }
+.login-radar .radar-sweep { transform-origin: 300px 300px; animation: radarSweep 4.5s linear infinite; }
+.login-radar .sweep-edge { stroke: var(--radar-primary); stroke-opacity: .7; stroke-width: 1.5; }
+.login-radar .blip { fill: var(--radar-primary); opacity: 0; transform-origin: center; }
+.login-radar .blip-a { animation: radarBlip 4.5s linear infinite; animation-delay: .5s; }
+.login-radar .blip-b { animation: radarBlip 4.5s linear infinite; animation-delay: 2.6s; }
+.login-radar .blip-c { animation: radarBlip 4.5s linear infinite; animation-delay: 3.4s; }
+@keyframes radarSweep { to { transform: rotate(360deg); } }
+@keyframes radarBlip {
+  0%   { opacity: 0; }
+  4%   { opacity: .9; }
+  40%  { opacity: 0; }
+  100% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .login-radar .radar-sweep, .login-radar .blip { animation: none; }
+  .login-radar .blip { opacity: .6; }
+}
 .brand-gradient {
   background: linear-gradient(90deg, var(--radar-primary), var(--radar-blob2)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
 }
@@ -533,3 +564,32 @@ body {
   color: var(--radar-primary);
 }
 
+
+/* ===== 分析图表（仪表盘） ===== */
+.dash-section-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin: 22px 0 12px;
+}
+.dash-section-head .title {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 16px; font-weight: 700; color: var(--radar-ink);
+}
+.dash-section-head .title::before {
+  content: ""; width: 4px; height: 16px; background: var(--radar-primary);
+}
+.dash-chart-card { position: relative; height: 100%; }
+.dash-chart-card .dash-chart-title {
+  position: relative; font-size: 14px; font-weight: 600; color: var(--radar-ink);
+  padding-bottom: 6px;
+}
+.dash-chart-card .dash-chart-title::after {
+  content: ""; position: absolute; left: 0; bottom: 0; width: 120%; max-width: 160px; height: 3px;
+  background: linear-gradient(90deg, var(--radar-primary-fade), transparent);
+}
+.dash-chart-actions { opacity: 0; transition: opacity .18s; }
+.dash-chart-card:hover .dash-chart-actions { opacity: 1; }
+.dash-pivot .ant-table-thead > tr > th {
+  background: var(--radar-primary-soft) !important;
+  color: var(--radar-ink); font-weight: 600;
+}
+.dash-pivot .pivot-total-row > td { font-weight: 700; background: var(--radar-primary-soft); }
