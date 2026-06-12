@@ -5,13 +5,12 @@
  * 作者：hengguan
  */
 
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Card, Button, Tooltip, Popconfirm, Empty, Spin } from 'antd';
 import {
   EditOutlined, DeleteOutlined, ArrowLeftOutlined, ArrowRightOutlined,
 } from '@ant-design/icons';
 import ReactECharts from 'echarts-for-react';
-import { apiPost } from '../../api/client.js';
 import { buildOption } from './chartOption.js';
 import PivotTable from './PivotTable.jsx';
 
@@ -28,24 +27,11 @@ function reverse(groups, label, dim, raws, labelOf) {
 }
 
 export default function DashboardChart({
-  chart, releasePointIds, theme, editable, isFirst, isLast, onEdit, onDelete, onMove, onDrill, labelOf, dimName, forcedHeight,
+  chart, data = [], loading = false, theme, editable, isFirst, isLast, onEdit, onDelete, onMove, onDrill, labelOf, dimName, forcedHeight,
 }) {
   const cfg = typeof chart.config === 'string' ? JSON.parse(chart.config) : (chart.config || {});
-  const [data, setData] = useState([]);
-  const [loading, setLoading] = useState(true);
   const isDark = theme === 'dark';
   const height = forcedHeight != null ? forcedHeight : (chart.height ?? 320);
-
-  useEffect(() => {
-    let alive = true;
-    setLoading(true);
-    apiPost('/dashboard/chart-data', {
-      source: cfg.source, dimension: cfg.dimension, xAxisDimension: cfg.xAxisDimension,
-      filters: cfg.filters, groups: cfg.groups, xAxisGroups: cfg.xAxisGroups, releasePointIds,
-    }).then((d) => { if (alive) { setData(d?.data || []); setLoading(false); } })
-      .catch(() => { if (alive) setLoading(false); });
-    return () => { alive = false; };
-  }, [chart.id, JSON.stringify(cfg), JSON.stringify(releasePointIds)]);
 
   const handleEchartClick = (p) => {
     if (!onDrill || p.seriesName === '合计') return;

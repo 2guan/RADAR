@@ -27,35 +27,41 @@ const DataTable = forwardRef(function DataTable(props, ref) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [sort, setSort] = useState([]);
+  const [nonce, setNonce] = useState(0);
   const [colWidths, setColWidths] = useState({});
   const baseRef = useRef(baseQuery);
   baseRef.current = baseQuery;
+  const keywordRef = useRef(keyword);
+  keywordRef.current = keyword;
+  // 请求序号：仅采纳最新一次响应，丢弃过期返回，避免乱序覆盖
+  const seqRef = useRef(0);
 
-  // 拉取数据
+  // 拉取数据（统一由 effect 驱动，避免重复触发）
   const load = async () => {
+    const seq = ++seqRef.current;
     setLoading(true);
     try {
-      const res = await fetcher({ ...baseRef.current, page, pageSize, keyword, sort });
-      setData(res || { list: [], total: 0 });
+      const res = await fetcher({ ...baseRef.current, page, pageSize, keyword: keywordRef.current, sort });
+      if (seq === seqRef.current) setData(res || { list: [], total: 0 });
     } finally {
-      setLoading(false);
+      if (seq === seqRef.current) setLoading(false);
     }
   };
 
-  useEffect(() => { load(); }, [page, pageSize, JSON.stringify(sort), JSON.stringify(baseQuery)]);
+  useEffect(() => { load(); }, [page, pageSize, JSON.stringify(sort), JSON.stringify(baseQuery), nonce]);
 
-  // 暴露 reload
+  // 暴露 reload：回到首页并触发一次（nonce 保证即便已在首页也会刷新）
   useImperativeHandle(ref, () => ({
-    reload: () => { setPage(1); load(); },
+    reload: () => { setPage(1); setNonce((n) => n + 1); },
     getQuery: () => ({ ...baseRef.current, keyword, sort }),
   }));
 
-  // 搜索（防抖）
+  // 搜索（防抖）：仅更新状态并触发一次 effect
   const debounceRef = useRef();
   const onKeyword = (v) => {
     setKeyword(v);
     clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => { setPage(1); load(); }, 350);
+    debounceRef.current = setTimeout(() => { setPage(1); setNonce((n) => n + 1); }, 350);
   };
 
   // 列宽拖拽

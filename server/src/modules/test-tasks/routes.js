@@ -60,15 +60,21 @@ export default async function testTaskRoutes(fastify) {
       baseWhere: wh.join(' AND '), baseParams: params,
     });
 
-    // 在内存中映射计划投产点与系统名称
-    const reqs = all(`
-      SELECT r.req_code, rp.release_date
-      FROM requirement r
-      LEFT JOIN release_point rp ON r.release_point_id = rp.id
-    `);
+    // 仅针对当前页任务涉及的需求映射计划投产点，避免随翻页整表扫描 requirement
+    const pageCodes = [...new Set(result.list.map((r) => r.req_code).filter(Boolean))];
     const reqMap = {};
-    for (const r of reqs) {
-      reqMap[r.req_code] = r.release_date;
+    if (pageCodes.length) {
+      const ph = pageCodes.map(() => '?').join(',');
+      const reqs = all(
+        `SELECT r.req_code, rp.release_date
+           FROM requirement r
+           LEFT JOIN release_point rp ON r.release_point_id = rp.id
+          WHERE r.req_code IN (${ph})`,
+        ...pageCodes,
+      );
+      for (const r of reqs) {
+        reqMap[r.req_code] = r.release_date;
+      }
     }
 
     const systems = all('SELECT sys_code, sys_name FROM system');

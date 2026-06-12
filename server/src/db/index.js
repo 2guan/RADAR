@@ -21,6 +21,26 @@ export const db = new DatabaseSync(config.dbFile);
 db.exec('PRAGMA journal_mode = WAL;');
 db.exec('PRAGMA foreign_keys = ON;');
 db.exec('PRAGMA busy_timeout = 5000;');
+// 读性能 PRAGMA：WAL 下 NORMAL 同步级别安全且少 fsync；排序/临时表走内存；
+// 加大页缓存(~16MB)与内存映射(256MB)，显著降低整表扫描与重复查询的磁盘开销
+db.exec('PRAGMA synchronous = NORMAL;');
+db.exec('PRAGMA temp_store = MEMORY;');
+db.exec('PRAGMA cache_size = -16000;');
+db.exec('PRAGMA mmap_size = 268435456;');
+
+/**
+ * 预编译语句缓存：同一 SQL 仅编译一次后复用，避免热点路径（列表枚举/N+1）反复 prepare。
+ * 缓存以 SQL 文本为键；语句可携不同参数多次执行，线程模型为同步单连接，安全。
+ */
+const stmtCache = new Map();
+function prepare(sql) {
+  let stmt = stmtCache.get(sql);
+  if (!stmt) {
+    stmt = db.prepare(sql);
+    stmtCache.set(sql, stmt);
+  }
+  return stmt;
+}
 
 /**
  * 查询单行。
@@ -29,7 +49,7 @@ db.exec('PRAGMA busy_timeout = 5000;');
  * @returns {object|undefined}
  */
 export function get(sql, ...params) {
-  return db.prepare(sql).get(...params);
+  return prepare(sql).get(...params);
 }
 
 /**
@@ -37,14 +57,14 @@ export function get(sql, ...params) {
  * @returns {object[]}
  */
 export function all(sql, ...params) {
-  return db.prepare(sql).all(...params);
+  return prepare(sql).all(...params);
 }
 
 /**
  * 执行写操作（INSERT/UPDATE/DELETE），返回 { changes, lastInsertRowid }。
  */
 export function run(sql, ...params) {
-  return db.prepare(sql).run(...params);
+  return prepare(sql).run(...params);
 }
 
 /**

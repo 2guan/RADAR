@@ -43,6 +43,8 @@ export default function Dashboard() {
   const screens = useBreakpoint();
   const [metrics, setMetrics] = useState({});
   const [charts, setCharts] = useState([]);
+  const [chartData, setChartData] = useState({});   // chartId → 聚合数据
+  const [chartLoading, setChartLoading] = useState(true);
   const [editor, setEditor] = useState({ open: false, chart: null, scope: 'user' });
   const [drill, setDrill] = useState({ open: false, title: '', rows: [], loading: false });
 
@@ -53,6 +55,25 @@ export default function Dashboard() {
 
   useEffect(() => { loadMetrics(); }, [JSON.stringify(releasePointIds)]);
   useEffect(() => { loadCharts(); }, []);
+
+  // 所有图表数据一次性批量拉取：图表集合或投产窗口变化时重算，避免每图一请求
+  const chartSig = useMemo(
+    () => JSON.stringify(charts.map((c) => [c.id, c.config])),
+    [charts],
+  );
+  useEffect(() => {
+    if (!charts.length) { setChartData({}); setChartLoading(false); return undefined; }
+    let alive = true;
+    setChartLoading(true);
+    const payload = charts.map((c) => ({
+      id: c.id,
+      config: typeof c.config === 'string' ? JSON.parse(c.config) : (c.config || {}),
+    }));
+    apiPost('/dashboard/chart-data-batch', { charts: payload, releasePointIds })
+      .then((d) => { if (alive) { setChartData(d?.data || {}); setChartLoading(false); } })
+      .catch(() => { if (alive) setChartLoading(false); });
+    return () => { alive = false; };
+  }, [chartSig, JSON.stringify(releasePointIds)]);
 
   const sysCharts = useMemo(() => charts.filter((c) => c.scope === 'system'), [charts]);
   const myCharts = useMemo(() => charts.filter((c) => c.scope === 'user'), [charts]);
@@ -114,7 +135,7 @@ export default function Dashboard() {
             {list.map((ch, i) => (
               <Col key={ch.id} xs={24} lg={ch.col_span || 12}>
                 <DashboardChart
-                  chart={ch} releasePointIds={releasePointIds} theme={theme}
+                  chart={ch} data={chartData[ch.id] || []} loading={chartLoading} theme={theme}
                   editable={editable} isFirst={i === 0} isLast={i === list.length - 1}
                   forcedHeight={screens.lg ? heights[ch.id] : undefined}
                   onEdit={() => setEditor({ open: true, chart: ch, scope })}

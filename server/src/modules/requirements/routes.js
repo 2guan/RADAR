@@ -97,7 +97,7 @@ export default async function requirementRoutes(fastify) {
       query: body, baseWhere, baseParams,
     });
 
-    // 查询所有投产点与系统，在内存中进行映射
+    // 投产点与系统为主数据（量小），整表载入做编号→名称映射
     const rps = all('SELECT id, release_date FROM release_point');
     const rpMap = {};
     for (const rp of rps) {
@@ -110,19 +110,21 @@ export default async function requirementRoutes(fastify) {
       sysMap[s.sys_code] = s.sys_name;
     }
 
-    // 已关联开发/测试任务的需求编号集合（用于禁用编号修改与删除）
-    const linkedCodes = new Set(
-      [
-        ...all('SELECT DISTINCT req_code FROM dev_task').map((r) => r.req_code),
-        ...all('SELECT DISTINCT req_code FROM test_task').map((r) => r.req_code),
-      ].filter(Boolean),
-    );
-
-    // 查询所有需求的投产状态
-    const releaseTasks = all('SELECT req_code, status FROM release_task');
+    // 仅针对当前页的需求编号做关联查询，避免随翻页整表扫描 dev_task/test_task/release_task
+    const pageCodes = result.list.map((r) => r.req_code).filter(Boolean);
+    const linkedCodes = new Set();
     const rtMap = {};
-    for (const rt of releaseTasks) {
-      rtMap[rt.req_code] = rt.status;
+    if (pageCodes.length) {
+      const ph = pageCodes.map(() => '?').join(',');
+      for (const r of all(`SELECT DISTINCT req_code FROM dev_task WHERE req_code IN (${ph})`, ...pageCodes)) {
+        linkedCodes.add(r.req_code);
+      }
+      for (const r of all(`SELECT DISTINCT req_code FROM test_task WHERE req_code IN (${ph})`, ...pageCodes)) {
+        linkedCodes.add(r.req_code);
+      }
+      for (const rt of all(`SELECT req_code, status FROM release_task WHERE req_code IN (${ph})`, ...pageCodes)) {
+        rtMap[rt.req_code] = rt.status;
+      }
     }
 
     // 从流程状态配置中获取“投产”阶段的状态类型配置，避免硬编码

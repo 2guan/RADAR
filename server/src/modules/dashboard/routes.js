@@ -129,6 +129,36 @@ export default async function dashboardRoutes(fastify) {
     return ok({ data });
   });
 
+  // 批量聚合：一次请求算出多张图表，按数据源仅载入一次、上下文仅构造一次，
+  // 取代「每张图表各发一次请求 + 各自整表扫描」的放大开销（仪表盘打开瞬时返回）。
+  fastify.post('/dashboard/chart-data-batch', { preHandler: fastify.requirePerm('dashboard', 'view') }, async (request) => {
+    const { charts = [] } = request.body || {};
+    const codes = reqCodesInWindow(windowIds(request.body));
+    const ctx = buildContext();
+    const rowsCache = new Map(); // source → 该窗口下的记录集（同源复用）
+    const loadOnce = (source) => {
+      if (!rowsCache.has(source)) rowsCache.set(source, loadRows(source, codes));
+      return rowsCache.get(source);
+    };
+
+    const result = {};
+    for (const ch of charts) {
+      const cfg = ch?.config || {};
+      const source = cfg.source || 'requirement';
+      // 非法配置返回空数据而非整体失败，保证其余图表正常
+      if (!SOURCES[source] || !isValidDim(source, cfg.dimension)) { result[ch.id] = []; continue; }
+      const xDim = cfg.xAxisDimension && isValidDim(source, cfg.xAxisDimension) ? cfg.xAxisDimension : undefined;
+      try {
+        result[ch.id] = aggregate({
+          source, dimension: cfg.dimension, xAxisDimension: xDim,
+          filters: cfg.filters, groups: cfg.groups, xAxisGroups: cfg.xAxisGroups,
+          rows: loadOnce(source), ctx,
+        });
+      } catch { result[ch.id] = []; }
+    }
+    return ok({ data: result });
+  });
+
   // 钻取：返回与图元对应的底层记录列表
   fastify.post('/dashboard/chart-drilldown', { preHandler: fastify.requirePerm('dashboard', 'view') }, async (request) => {
     const { source = 'requirement', filters } = request.body || {};

@@ -22,19 +22,19 @@ function nodeState(tasks) {
   return { state: allTerminal ? 'done' : 'doing', text, status };
 }
 
-/** 取需求实施机构：主责系统首个所属机构，回退提出部门 */
-function reqOrg(req) {
+/** 取需求实施机构：主责系统首个所属机构，回退提出部门（sysMap 预载，免逐条查询） */
+function reqOrg(req, sysMap) {
   const main = req.main_systems ? JSON.parse(req.main_systems) : [];
   if (main.length) {
-    const sys = get('SELECT org FROM system WHERE sys_code = ?', main[0]);
-    if (sys?.org) return sys.org;
+    const org = sysMap[main[0]]?.org;
+    if (org) return org;
   }
   return req.propose_dept || '未分配机构';
 }
 
-/** 系统编号转名称（标签展示用） */
-function sysNames(codes) {
-  return (codes || []).map((c) => get('SELECT sys_name FROM system WHERE sys_code = ?', c)?.sys_name || c);
+/** 系统编号转名称（标签展示用；sysMap 预载） */
+function sysNames(codes, sysMap) {
+  return (codes || []).map((c) => sysMap[c]?.name || c);
 }
 
 /** 按姓名解析人员（姓名 + 所属机构 + 手机号），找不到则仅返回姓名 */
@@ -51,14 +51,16 @@ function resolveSystem(code) {
     || { sys_code: code, sys_name: code, org: null, sector: null };
 }
 
-/** 构建单需求链路概要 */
-function buildChain(req) {
-  const dev = all('SELECT status FROM dev_task WHERE req_code = ?', req.req_code);
-  const sit = all('SELECT status FROM test_task WHERE req_code = ? AND test_type = ?', req.req_code, 'SIT');
-  const nft = all('SELECT status FROM test_task WHERE req_code = ? AND test_type = ?', req.req_code, 'NFT');
-  const sec = all('SELECT status FROM test_task WHERE req_code = ? AND test_type = ?', req.req_code, 'SEC');
-  const uat = all('SELECT status FROM test_task WHERE req_code = ? AND test_type = ?', req.req_code, 'UAT');
-  const rt = get('SELECT status FROM release_task WHERE req_code = ?', req.req_code);
+/** 构建单需求链路概要（dev/test/rt 状态均由预载 Map 提供，免逐需求查询） */
+function buildChain(req, devMap, testMap, rtMap) {
+  const dev = devMap[req.req_code] || [];
+  const t = testMap[req.req_code] || {};
+  const sit = t.SIT || [];
+  const nft = t.NFT || [];
+  const sec = t.SEC || [];
+  const uat = t.UAT || [];
+  const rtStatus = rtMap[req.req_code];
+  const rt = rtStatus ? { status: rtStatus } : null;
 
   // 阶段顺序：需求 / 开发 / 应用组装 / 非功能测试(按需) / 安全测试(按需) / 用户测试 / 投产
   const nodes = [
@@ -91,11 +93,30 @@ export default async function overviewRoutes(fastify) {
     sql += ' ORDER BY id DESC';
     const reqs = all(sql, ...params);
 
+    // 关联状态与系统主数据一次性载入并分桶，替代逐需求 N+1 查询
+    const sysMap = {};
+    for (const s of all('SELECT sys_code, sys_name, org FROM system')) {
+      sysMap[s.sys_code] = { name: s.sys_name, org: s.org };
+    }
+    const devMap = {};
+    for (const d of all('SELECT req_code, status FROM dev_task')) {
+      (devMap[d.req_code] ||= []).push({ status: d.status });
+    }
+    const testMap = {};
+    for (const t of all('SELECT req_code, test_type, status FROM test_task')) {
+      const bucket = (testMap[t.req_code] ||= {});
+      (bucket[t.test_type] ||= []).push({ status: t.status });
+    }
+    const rtMap = {};
+    for (const rt of all('SELECT req_code, status FROM release_task')) {
+      rtMap[rt.req_code] = rt.status;
+    }
+
     const groups = {};
     for (const r of reqs) {
-      const org = reqOrg(r);
-      const chain = buildChain(r);
-      const names = sysNames(r.main_systems ? JSON.parse(r.main_systems) : []);
+      const org = reqOrg(r, sysMap);
+      const chain = buildChain(r, devMap, testMap, rtMap);
+      const names = sysNames(r.main_systems ? JSON.parse(r.main_systems) : [], sysMap);
       const card = {
         req_code: r.req_code,
         title: r.title,
