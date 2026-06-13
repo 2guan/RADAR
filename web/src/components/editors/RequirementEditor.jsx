@@ -4,6 +4,7 @@
  *       双栏卡片布局；字体紧凑；需求说明书在基本信息下方；
  *       协同改造/测试系统采用下拉选择 + 外置已选区双模式展示。
  * 作者：hengguan
+ * 说明：需求明细抽屉编辑器，支持需求的创建、编辑、归属主责系统、附件关联以及各项开发/测试任务的联动修改。
  */
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -80,7 +81,7 @@ function SystemPickerField({ title, hint, value = [], onChange, single, placehol
           filterOption={(input, opt) =>
             `${opt.label}${opt.org}`.toLowerCase().includes(input.toLowerCase())
           }
-          placeholder={placeholder || '点击下拉选择系统（支持模糊搜索）'}
+          placeholder={placeholder || '系统检索'}
           style={{ flex: 1, minWidth: 0, fontSize: 12, ...(readonly ? { pointerEvents: 'none' } : {}) }}
           tabIndex={readonly ? -1 : undefined}
         />
@@ -393,17 +394,17 @@ export default function RequirementEditor({ open, reqId, defaultReleasePointId, 
 
               {/* 主责系统：标题右侧选择框，单选（再选自动替换），已选展示在下方 */}
               <Form.Item name="main_systems" noStyle>
-                <SystemPickerField title="主责系统" single placeholder="搜索/选择主责系统" readonly={readonly} />
+                <SystemPickerField title="主责系统" single placeholder="主责系统检索" readonly={readonly} />
               </Form.Item>
 
               {/* 协同改造系统：标题右侧选择框，可多选，已选展示在下方 */}
               <Form.Item name="collab_dev_systems" noStyle>
-                <SystemPickerField title="协同改造系统" placeholder="搜索/选择协同改造系统" readonly={readonly} />
+                <SystemPickerField title="协同改造系统" placeholder="协同改造系统检索" readonly={readonly} />
               </Form.Item>
 
               {/* 协同测试系统：标题右侧选择框，可多选，已选展示在下方 */}
               <Form.Item name="collab_test_systems" noStyle>
-                <SystemPickerField title="协同测试系统" placeholder="搜索/选择系统测试系统" readonly={readonly} />
+                <SystemPickerField title="协同测试系统" placeholder="协同测试系统检索" readonly={readonly} />
               </Form.Item>
             </div>
 

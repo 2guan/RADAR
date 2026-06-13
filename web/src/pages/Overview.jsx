@@ -4,6 +4,7 @@
  *       卡片含编号、所属系统、当前阶段状态与全流程进度条；点击卡片弹出 5 列全生命周期详情，
  *       点击任一阶段卡片打开对应阶段的编辑弹窗（可编辑、保存留痕、回写概览）。
  * 作者：hengguan
+ * 说明：系统概览和个人待办面板，以工作流看板形式展示个人的开发和测试任务，支持拖拽状态更新。
  */
 import React, { useEffect, useState, useMemo } from 'react';
 import {
@@ -1026,8 +1027,8 @@ export default function Overview() {
   ];
 
   const filterConfigs = [
-    { field: 'req_code', label: '需求编号', type: 'input', isPrimary: true, op: 'like', placeholder: '输入需求编号模糊搜索' },
-    { field: 'content', label: '需求内容', type: 'input', isPrimary: true, op: 'like', placeholder: '输入需求标题或概述模糊搜索' },
+    { field: 'req_code', label: '需求编号', type: 'input', isPrimary: true, op: 'like', placeholder: '需求编号检索' },
+    { field: 'content', label: '需求内容', type: 'input', isPrimary: true, op: 'like', placeholder: '需求标题或概述检索' },
     { field: 'release_point_id', label: '计划投产点', type: 'select', op: 'in', options: pointOptions },
     { field: 'org', label: '实施机构', type: 'select', op: 'in', options: orgOptions },
     { field: 'stage', label: '任务阶段', type: 'select', op: 'in', options: stageOptions },

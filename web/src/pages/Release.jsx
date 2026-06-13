@@ -2,6 +2,7 @@
  * 文件：pages/Release.jsx
  * 用途：投产管理页面。需求投产列表（投产/会签进度）+ 发起投产评审 + 投产详情（复用 ReleaseDetail）。
  * 作者：hengguan
+ * 说明：投产清单展示与配置页面，可查询不同投产点所包含的需求和各个节点的签字确认状态。
  */
 
 import React, { useRef, useState, useEffect } from 'react';
@@ -23,13 +24,14 @@ export default function Release() {
 
   const [filterQuery, setFilterQuery] = useState([]);
   
-  // 下拉列表选项数据源
+  // 各种下拉选择面板的数据源缓存状态
   const [points, setPoints] = useState([]);
   const [orgs, setOrgs] = useState([]);
   const [statuses, setStatuses] = useState([]);
   const [users, setUsers] = useState([]);
   const [systems, setSystems] = useState([]);
 
+  // 初始化拉取数据，并筛选流程状态为“投产”相关的状态，同时硬编码“未发起”作为基线状态选项
   useEffect(() => {
     apiGet('/release-points/all').then(setPoints).catch(() => {});
     apiGet('/dict/by-category/org').then(setOrgs).catch(() => {});
@@ -41,15 +43,17 @@ export default function Release() {
     apiGet('/systems/all').then(setSystems).catch(() => {});
   }, []);
 
+  // 整理数据项为 Select 组件需要的 options 格式
   const pointOptions = points.map(p => ({ value: p.id, label: p.release_date }));
   const orgOptions = orgs.map(o => ({ value: o.attr_value, label: o.display_value }));
   const statusOptions = statuses.map(s => ({ value: s.attr_value, label: s.display_value }));
   const userOptions = users.map(u => ({ value: u.name, label: `${u.name} (${u.phone})` }));
   const systemOptions = systems.map(s => ({ value: s.sys_code, label: `${s.sys_code} - ${s.sys_name}` }));
 
+  // 查询条件配置，指定关键字匹配模式（模糊匹配 like 或 包含/等于 eq/in）
   const filterConfigs = [
-    { field: 'req_code', label: '需求编号', type: 'input', isPrimary: true, op: 'like', placeholder: '输入需求编号模糊搜索' },
-    { field: 'content', label: '需求标题/概述', type: 'input', isPrimary: true, op: 'like', placeholder: '输入需求标题或概述模糊搜索' },
+    { field: 'req_code', label: '需求编号', type: 'input', isPrimary: true, op: 'like', placeholder: '需求编号检索' },
+    { field: 'content', label: '需求标题/概述', type: 'input', isPrimary: true, op: 'like', placeholder: '需求标题或概述检索' },
     { field: 'release_point_id', label: '计划投产点', type: 'select', op: 'in', options: pointOptions },
     { field: 'org', label: '实施机构', type: 'select', op: 'in', options: orgOptions },
     { field: 'status', label: '投产状态', type: 'select', op: 'in', options: statusOptions },
@@ -57,6 +61,9 @@ export default function Release() {
     { field: 'systems', label: '涉及系统', type: 'select', op: 'in', options: systemOptions },
   ];
 
+  /**
+   * 监听过滤器变化并转换为 SQL 标准条件参数数组，剔除空值
+   */
   const handleFilterChange = (vals) => {
     const arr = Object.entries(vals)
       .map(([field, value]) => {
@@ -67,15 +74,20 @@ export default function Release() {
     setFilterQuery(arr);
   };
 
+  // 绑定全局选择的“当前投产点”和下方过滤器，执行后端分页检索
   const fetcher = (q) => apiPost('/release/list', { ...q, releasePointIds, filters: filterQuery });
 
+  /**
+   * 发起投产评审
+   * 在后端生成投产审批记录与会签项，成功后置为已发起并打开详情抽屉
+   */
   const init = async (reqCode) => {
     try {
       await apiPost(`/release/${reqCode}/init`);
       message.success('已发起投产评审');
       tableRef.current?.reload();
       setDetailReq(reqCode);
-    } catch { /* 已提示 */ }
+    } catch { /* 异常由全局拦截器统一报错 */ }
   };
 
   const columns = [

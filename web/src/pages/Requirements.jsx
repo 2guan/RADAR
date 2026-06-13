@@ -3,6 +3,7 @@
  * 用途：需求分析页面。需求列表（默认按当前投产窗口过滤）+ 新增/编辑（复用 RequirementEditor）
  *       + 历史记录 + 导入导出/模板。
  * 作者：hengguan
+ * 说明：需求列表管理页面，支持新建、批量导入、状态筛选、模糊搜索和投产点关联，提供入口至需求编辑器。
  */
 
 import React, { useRef, useState, useEffect } from 'react';
@@ -59,8 +60,8 @@ export default function Requirements() {
   const systemOptions = systems.map(s => ({ value: s.sys_code, label: `${s.sys_code} - ${s.sys_name}` }));
 
   const filterConfigs = [
-    { field: 'req_code', label: '需求编号', type: 'input', isPrimary: true, op: 'like', placeholder: '输入需求编号模糊搜索' },
-    { field: 'content', label: '需求内容', type: 'input', isPrimary: true, op: 'like', placeholder: '输入需求标题或概述模糊搜索' },
+    { field: 'req_code', label: '需求编号', type: 'input', isPrimary: true, op: 'like', placeholder: '需求编号检索' },
+    { field: 'content', label: '需求内容', type: 'input', isPrimary: true, op: 'like', placeholder: '需求标题或概述检索' },
     { field: 'release_point_id', label: '计划投产点', type: 'select', op: 'in', options: pointOptions },
     { field: 'org', label: '实施机构', type: 'select', op: 'in', options: orgOptions },
     { field: 'status', label: '需求状态', type: 'select', op: 'in', options: statusOptions },

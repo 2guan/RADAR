@@ -17,7 +17,7 @@ import ResizableTitle from './ResizableTitle.jsx';
 const DataTable = forwardRef(function DataTable(props, ref) {
   const {
     columns: rawColumns, fetcher, rowKey = 'id', toolbar, extraFilters,
-    onRowClick, mobileCard, searchPlaceholder = '关键字搜索（输入即搜）', baseQuery = {},
+    onRowClick, mobileCard, searchPlaceholder = '关键字检索', baseQuery = {},
     showSearch = true,
   } = props;
   const { isMobile } = useResponsive();

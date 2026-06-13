@@ -32,7 +32,7 @@ function parseExtra(e) {
 /** 通用字典管理器（属性值/显示值/排序） */
 function DictManager({ category, title }) {
   const filterConfigs = [
-    { field: 'dict_query', label: title, type: 'input', isPrimary: true, placeholder: `模糊输入属性值或显示值` },
+    { field: 'dict_query', label: title, type: 'input', isPrimary: true, placeholder: `${title}检索` },
   ];
 
   return (
@@ -69,7 +69,7 @@ function ProcessStatusManager() {
 
   const filterConfigs = [
     { field: 'stage', label: '阶段', type: 'select', op: 'eq', isPrimary: true, options: stageOptions },
-    { field: 'dict_query', label: '流程状态', type: 'input', isPrimary: true, placeholder: '输入属性值或显示值搜索' },
+    { field: 'dict_query', label: '流程状态', type: 'input', isPrimary: true, placeholder: '流程状态检索' },
     { field: 'state_type', label: '状态类型', type: 'select', op: 'eq', isPrimary: true, options: [
       { value: 'initial', label: '初始态' },
       { value: 'in-progress', label: '进行中' },
@@ -156,8 +156,8 @@ function ReleasePointManager() {
   const pointOptions = points.map(p => ({ value: p.release_date, label: p.release_date }));
 
   const filterConfigs = [
-    { field: 'release_date', label: '投产日期', type: 'select', op: 'eq', isPrimary: true, options: pointOptions, placeholder: '选择或输入投产日期模糊搜索' },
-    { field: 'version_type_query', label: '版本类型', type: 'input', isPrimary: true, placeholder: '输入版本类型或备注搜索' },
+    { field: 'release_date', label: '投产日期', type: 'select', op: 'eq', isPrimary: true, options: pointOptions, placeholder: '投产日期检索' },
+    { field: 'version_type_query', label: '版本类型', type: 'input', isPrimary: true, placeholder: '版本类型或备注检索' },
   ];
 
   return (
@@ -212,7 +212,7 @@ function SystemManager() {
   const sectorOptions = sectors.map(s => ({ value: s.attr_value, label: s.display_value }));
 
   const filterConfigs = [
-    { field: 'sys_code', label: '系统名称', type: 'select', op: 'in', isPrimary: true, options: systemOptions, placeholder: '选择或输入系统编号/名称模糊搜索' },
+    { field: 'sys_code', label: '系统名称', type: 'select', op: 'in', isPrimary: true, options: systemOptions, placeholder: '系统名称检索' },
     { field: 'org', label: '所属机构', type: 'select', op: 'in', isPrimary: true, options: orgOptions },
     { field: 'sector', label: '所属板块', type: 'select', op: 'in', isPrimary: true, options: sectorOptions },
   ];
@@ -245,7 +245,7 @@ function SystemManager() {
 /** 角色管理器（含会签角色打标） */
 function RoleManager() {
   const filterConfigs = [
-    { field: 'name_query', label: '角色名称', type: 'input', isPrimary: true, placeholder: '输入角色名称或标识搜索' },
+    { field: 'name_query', label: '角色名称', type: 'input', isPrimary: true, placeholder: '角色名称或标识检索' },
     { field: 'is_signoff_role', label: '会签角色', type: 'select', op: 'eq', isPrimary: true, options: [
       { value: 1, label: '是' },
       { value: 0, label: '否' },

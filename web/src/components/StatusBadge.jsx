@@ -2,6 +2,7 @@
  * 文件：components/StatusBadge.jsx
  * 用途：流程状态徽章。根据状态类型（初始态、进行中、终态）关联对应的 CSS 主题变量类名。
  * 作者：hengguan
+ * 说明：带有特定底色和圆点标识的实体状态徽章，支持需求、开发任务和测试任务的状态渲染。
  */
 
 import React from 'react';

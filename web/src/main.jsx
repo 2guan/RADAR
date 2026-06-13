@@ -3,6 +3,7 @@
  * 用途：前端应用渲染入口。挂载 React 根、注入 AntD 中文 ConfigProvider，
  *       根据 配色预设 + 明暗模式 同步 AntD token 与 CSS 变量。
  * 作者：hengguan
+ * 说明：应用程序的顶层入口，负责全局 ConfigProvider 的装配、中文本地化、CSS 变量同步与 React 挂载。
  */
 
 import React, { useEffect } from 'react';

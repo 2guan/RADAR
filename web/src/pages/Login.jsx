@@ -2,6 +2,7 @@
  * 文件：pages/Login.jsx
  * 用途：登录页。读取平台公开信息渲染标题，提交登录后保存 token 并加载用户信息跳转首页。
  * 作者：hengguan
+ * 说明：系统登录页面，提供账号/密码验证、登录异常提示、并自适应拉取系统主题和平台品牌名称。
  */
 
 import React, { useEffect, useState } from 'react';

@@ -3,6 +3,7 @@
  * 用途：测试管理。SIT/UAT/NFT/SEC 拆为 4 个独立页面，复用同一面板（TestPanel）：
  *       列表 + 测试承接 + 编辑（复用 TaskEditor）+ 历史。各页面对应侧栏"测试管理"子菜单。
  * 作者：hengguan
+ * 说明：测试任务工作流管理页面，用于跟踪测试阶段（SIT/UAT/等）、测试结论及主测试责任人。
  */
 
 import React, { useRef, useState, useMemo, useEffect, forwardRef, useImperativeHandle } from 'react';
@@ -72,8 +73,8 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
   const systemOptions = systems.map(s => ({ value: s.sys_code, label: `${s.sys_code} - ${s.sys_name}` }));
 
   const filterConfigs = [
-    { field: 'task_code', label: '测试任务编号', type: 'input', isPrimary: true, op: 'like', placeholder: '输入测试任务编号模糊搜索' },
-    { field: 'content', label: '测试内容', type: 'input', isPrimary: true, op: 'like', placeholder: '输入测试任务名称模糊搜索' },
+    { field: 'task_code', label: '测试任务编号', type: 'input', isPrimary: true, op: 'like', placeholder: '测试任务编号检索' },
+    { field: 'content', label: '测试内容', type: 'input', isPrimary: true, op: 'like', placeholder: '测试任务名称检索' },
     { field: 'release_point_id', label: '计划投产点', type: 'select', op: 'in', options: pointOptions },
     { field: 'org', label: '实施机构', type: 'select', op: 'in', options: orgOptions },
     { field: 'status', label: '测试状态', type: 'select', op: 'in', options: statusOptions },
@@ -422,7 +423,7 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
             <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>1. 选择需求</div>
             <div style={{ marginBottom: 8 }}>
               <Input.Search
-                placeholder="搜索投产点、需求编号、需求标题、主责系统..."
+                placeholder="投产点、需求编号、需求标题、主责系统检索..."
                 value={searchText}
                 onChange={(e) => setSearchText(e.target.value)}
                 size="small"

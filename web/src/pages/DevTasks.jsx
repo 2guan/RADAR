@@ -2,6 +2,7 @@
  * 文件：pages/DevTasks.jsx
  * 用途：开发管理页面。开发任务列表 + 开发承接（按系统拆分）+ 编辑（复用 TaskEditor）+ 历史。
  * 作者：hengguan
+ * 说明：开发任务列表与进度跟踪页面，记录开发责任人、开发状态、设计/编码/联调完成情况。
  */
 
 import React, { useRef, useState, useMemo, useEffect } from 'react';
@@ -41,13 +42,14 @@ export default function DevTasks() {
 
   const [filterQuery, setFilterQuery] = useState([]);
   
-  // 下拉列表选项数据源
+  // 下拉列表选项数据源的缓存状态
   const [points, setPoints] = useState([]);
   const [orgs, setOrgs] = useState([]);
   const [statuses, setStatuses] = useState([]);
   const [users, setUsers] = useState([]);
   const [systems, setSystems] = useState([]);
 
+  // 初始化拉取：投产点列表、机构、以“开发”为阶段的流程状态、活跃用户、所有系统，用于筛选和表单
   useEffect(() => {
     apiGet('/release-points/all').then(setPoints).catch(() => {});
     apiGet('/dict/by-category/org').then(setOrgs).catch(() => {});
@@ -59,15 +61,17 @@ export default function DevTasks() {
     apiGet('/systems/all').then(setSystems).catch(() => {});
   }, []);
 
+  // 映射选择项为标准的 value/label 结构
   const pointOptions = points.map(p => ({ value: p.id, label: p.release_date }));
   const orgOptions = orgs.map(o => ({ value: o.attr_value, label: o.display_value }));
   const statusOptions = statuses.map(s => ({ value: s.attr_value, label: s.display_value }));
   const userOptions = users.map(u => ({ value: u.name, label: `${u.name} (${u.phone})` }));
   const systemOptions = systems.map(s => ({ value: s.sys_code, label: `${s.sys_code} - ${s.sys_name}` }));
 
+  // 过滤器项配置，支持按任务编号、内容模糊搜索，以及按投产点、状态、负责人、实施系统多选
   const filterConfigs = [
-    { field: 'task_code', label: '开发任务编号', type: 'input', isPrimary: true, op: 'like', placeholder: '输入开发任务编号模糊搜索' },
-    { field: 'content', label: '开发内容', type: 'input', isPrimary: true, op: 'like', placeholder: '输入开发任务名称或内容模糊搜索' },
+    { field: 'task_code', label: '开发任务编号', type: 'input', isPrimary: true, op: 'like', placeholder: '开发任务编号检索' },
+    { field: 'content', label: '开发内容', type: 'input', isPrimary: true, op: 'like', placeholder: '开发任务名称或内容检索' },
     { field: 'release_point_id', label: '计划投产点', type: 'select', op: 'in', options: pointOptions },
     { field: 'org', label: '实施机构', type: 'select', op: 'in', options: orgOptions },
     { field: 'status', label: '开发状态', type: 'select', op: 'in', options: statusOptions },
@@ -77,6 +81,9 @@ export default function DevTasks() {
     { field: 'impl_system', label: '实施系统', type: 'select', op: 'in', options: systemOptions },
   ];
 
+  /**
+   * 监听过滤器变更，构造标准的通用 SQL 筛选条件结构
+   */
   const handleFilterChange = (vals) => {
     const arr = Object.entries(vals)
       .map(([field, value]) => {
@@ -87,9 +94,16 @@ export default function DevTasks() {
     setFilterQuery(arr);
   };
 
+  // 表格数据查询器
   const fetcher = (q) => apiPost('/dev-tasks/list', q);
+  
+  // 删除指定开发任务并重载表格数据
   const onDelete = async (row) => { await apiDelete(`/dev-tasks/${row.id}`); message.success('已删除'); tableRef.current?.reload(); };
 
+  /**
+   * 打开“开发承接”弹窗
+   * 拉取所有当前投产点关联的且未开始或未终态的需求，用以按系统进行任务拆分
+   */
   const openIntake = async () => {
     const res = await apiPost('/requirements/list', { releasePointIds, pageSize: 0 });
     const list = (res.list || []).filter(
@@ -103,6 +117,10 @@ export default function DevTasks() {
     setIntakeOpen(true);
   };
 
+  /**
+   * 选中某个需求时，请求后端获取该需求下各个涉及系统对应的开发任务生成预览
+   * 默认勾选尚未建立任务（exists 为 false）的涉及系统
+   */
   const handleSelectReq = async (record) => {
     setSelectedReq(record);
     if (record) {
@@ -110,7 +128,6 @@ export default function DevTasks() {
       try {
         const res = await apiPost('/dev-tasks/intake-preview', { reqCode: record.req_code });
         setPreviewList(res || []);
-        // Default check all "新建任务" (exists is false)
         const checkable = (res || [])
           .filter((t) => !t.exists)
           .map((t) => t.sysCode);
@@ -126,6 +143,10 @@ export default function DevTasks() {
     }
   };
 
+  /**
+   * 执行开发任务承接逻辑
+   * 将选中的系统列表发送给后端，按主责/配合等不同角色为选定需求拆分并新建开发任务
+   */
   const doIntake = async () => {
     if (!selectedReq) {
       message.warning('请先选择需求');
@@ -414,7 +435,7 @@ export default function DevTasks() {
             <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>1. 选择需求</div>
             <div style={{ marginBottom: 8 }}>
               <Input.Search
-                placeholder="搜索投产点、需求编号、需求标题、主责系统..."
+                placeholder="投产点、需求编号、需求标题、主责系统检索..."
                 value={searchText}
                 onChange={(e) => setSearchText(e.target.value)}
                 size="small"

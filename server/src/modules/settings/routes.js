@@ -3,6 +3,7 @@
  * 用途：平台配置接口。读取/保存平台信息与编号规则（app_config 键值表），
  *       并提供无需登录的公开配置（平台名称、主题色等，供登录页与网页标题使用）。
  * 作者：hengguan
+ * 说明：支持公开访问的 public 配置获取，以及需进行鉴权的 app-config 获取与修改。
  */
 
 import { all, get, run, tx } from '../../db/index.js';

@@ -2,6 +2,7 @@
  * 文件：pages/Users.jsx
  * 用途：人员管理页面。用户列表（一人多角色）+ 新增/编辑 + 重置密码 + 导入/导出。
  * 作者：hengguan
+ * 说明：用户管理与角色权限配置页面，提供用户的增删改查、手机号重置和角色权限关联。
  */
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -30,22 +31,29 @@ export default function Users() {
   const [orgs, setOrgs] = useState([]);
   const [activeUsers, setActiveUsers] = useState([]);
 
+  // 初始化拉取：角色列表、所属机构字典分类（用于过滤面板和新增/编辑表单）、活跃用户列表（用于检索提示）
   useEffect(() => { 
     apiGet('/roles/all').then(setRoles).catch(() => {});
     apiGet('/dict/by-category/org').then(setOrgs).catch(() => {});
     apiGet('/users/active').then(setActiveUsers).catch(() => {});
   }, []);
 
+  // 格式化各字段选择项
   const userOptions = activeUsers.map(u => ({ value: u.name, label: `${u.name} (${u.phone})` }));
   const orgOptions = orgs.map(o => ({ value: o.attr_value, label: o.display_value }));
   const roleOptions = roles.map(r => ({ value: r.code, label: r.name }));
 
+  // 过滤器配置：指定字段、标签、展示类型、操作符及数据源
   const filterConfigs = [
-    { field: 'user_info', label: '人员信息', type: 'select', op: 'in', isPrimary: true, placeholder: '输入姓名或手机号搜索', options: userOptions },
+    { field: 'user_info', label: '人员信息', type: 'select', op: 'in', isPrimary: true, placeholder: '姓名或手机号检索', options: userOptions },
     { field: 'org', label: '所属机构', type: 'select', op: 'in', isPrimary: true, options: orgOptions },
     { field: 'role', label: '角色', type: 'select', op: 'in', isPrimary: true, options: roleOptions },
   ];
 
+  /**
+   * 监听过滤器变更事件
+   * 将多维过滤器（FilterPanel）的键值对转为后端通用的 [{field, value, op}] 过滤条件数组结构
+   */
   const handleFilterChange = (vals) => {
     const arr = Object.entries(vals)
       .map(([field, value]) => {
@@ -56,8 +64,13 @@ export default function Users() {
     setFilterQuery(arr);
   };
 
+  // 后端分页列表查询获取器，注入当前的动态过滤器条件
   const fetcher = (q) => apiPost('/users/list', { ...q, filters: filterQuery });
 
+  /**
+   * 打开新增/编辑弹窗
+   * @param {object|null} row - 传入的用户数据对象，若为 null 则代表新增
+   */
   const openEdit = (row) => {
     setCurrent(row);
     form.setFieldsValue(row
@@ -67,6 +80,9 @@ export default function Users() {
     setOpen(true);
   };
 
+  /**
+   * 保存人员修改或新增，根据当前编辑的记录是否存在决定调用 PUT 还是 POST API
+   */
   const onSave = async () => {
     const v = await form.validateFields();
     if (current) await apiPut(`/users/${current.id}`, v);
@@ -76,8 +92,12 @@ export default function Users() {
     tableRef.current?.reload();
   };
 
+  // 删除人员，确认后调用 API 并在成功后刷新表格数据
   const onDelete = async (row) => { await apiDelete(`/users/${row.id}`); message.success('已删除'); tableRef.current?.reload(); };
 
+  /**
+   * 重置密码：弹窗确认输入新密码，默认值为 123456
+   */
   const resetPwd = (row) => {
     let pwd = '123456';
     Modal.confirm({

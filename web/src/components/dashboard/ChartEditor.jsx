@@ -4,6 +4,7 @@
  *       局部过滤（多值/时间区间）、主/次维度分组归并（自定义标签+颜色+一键加载预设）、
  *       半宽全宽与高度。产出 {title,chart_type,col_span,height,config}。
  * 作者：hengguan
+ * 说明：看板图表配置编辑器，支持用户在交互式界面中设定图表的维度、指标和展示过滤条件。
  */
 
 import React, { useEffect } from 'react';

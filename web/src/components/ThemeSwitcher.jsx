@@ -2,6 +2,7 @@
  * 文件：components/ThemeSwitcher.jsx
  * 用途：外观快捷切换器（顶栏）。下拉仅展示 8 个颜色方块供快速切换配色。
  * 作者：hengguan
+ * 说明：主题/配色选择切换组件，允许用户直观地从多个品牌预设中选择系统主色。
  */
 
 import React from 'react';

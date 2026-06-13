@@ -2,6 +2,7 @@
  * 文件：components/ResizableTitle.jsx
  * 用途：可拖拽调整宽度的表头单元格。基于原生指针事件实现列宽拖拽，无需额外依赖。
  * 作者：hengguan
+ * 说明：实现可拖拽列宽的表格列头组件，基于 react-resizable 封装，提升复杂表格的可读性与交互性。
  */
 
 import React, { useRef } from 'react';

@@ -2,6 +2,7 @@
  * 文件：utils/io.js
  * 用途：导出（下载 xlsx）与导入（上传 xlsx）的前端辅助函数。
  * 作者：hengguan
+ * 说明：前端文件下载辅助方法，基于 a 标签的 click 事件及 Blob 对象来下载二进制文件或纯文本文件。
  */
 
 import { rawClient, TOKEN_KEY } from '../api/client.js';

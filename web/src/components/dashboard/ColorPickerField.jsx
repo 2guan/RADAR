@@ -3,6 +3,7 @@
  * 用途：图表分组取色器。基于 AntD ColorPicker，输出十六进制字符串，内置翡翠绿
  *       为首的精选调色盘，支持清除（返回 undefined 走默认轮转色）。
  * 作者：hengguan
+ * 说明：自定义取色器表单项，绑定到调色板库，供图表或指标配色使用。
  */
 
 import React from 'react';

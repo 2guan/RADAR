@@ -3,6 +3,7 @@
  * 用途：所属系统选择器。加载全部系统，按"系统名称(编号)"展示，支持跨机构/系统名称模糊检索，
  *       支持单选/多选。
  * 作者：hengguan
+ * 说明：用于主责系统或关联系统选择的自定义下拉框，支持多选、模糊过滤，并自动绑定系统字典数据。
  */
 
 import React, { useEffect, useState } from 'react';
@@ -34,7 +35,7 @@ export default function SystemSelect({ value, onChange, mode = 'multiple', singl
   return (
     <Select
       mode={realMode} value={value} onChange={onChange} allowClear size={size}
-      placeholder={placeholder || '选择系统（支持模糊搜索）'} style={{ minWidth: 200, ...style }}
+      placeholder={placeholder || '系统检索'} style={{ minWidth: 200, ...style }}
       showSearch
       filterOption={(input, opt) => (opt.label + opt.org).toLowerCase().includes(input.toLowerCase())}
       options={options}

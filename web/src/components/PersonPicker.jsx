@@ -2,6 +2,7 @@
  * 文件：components/PersonPicker.jsx
  * 用途：人员选择器。从人员表模糊搜索（输入即搜），按姓名存值，供负责人/提出人等字段使用。
  * 作者：hengguan
+ * 说明：自定义人员选择器组件，绑定系统用户数据源，支持按姓名检索、拼音筛选和多选，常用作表单项。
  */
 
 import React, { useEffect, useState } from 'react';

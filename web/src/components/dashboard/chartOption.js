@@ -3,6 +3,7 @@
  * 用途：把聚合数据（1D [{name,value}] / 2D [{name_y,name_x,value}]）按图表类型构造为
  *       ECharts option。含翡翠绿调色盘、主色→透明渐变、堆叠总数标签、明暗主题适配。
  * 作者：hengguan
+ * 说明：根据给定的数据源维度、指标与图表类型，动态生成适合 ECharts 或 Chart.js 的渲染配置项。
  */
 
 import { CHART_PRESET_COLORS } from './ColorPickerField.jsx';
