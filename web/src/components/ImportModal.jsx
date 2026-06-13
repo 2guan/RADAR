@@ -29,7 +29,7 @@ export default function ImportModal({
   // 下载导入模板
   const handleDownloadTemplate = async () => {
     try {
-      await downloadGet(templateUrl, {}, templateFilename);
+      await downloadGet(templateUrl, extraFields, templateFilename);
     } catch (err) {
       console.error(err);
     }

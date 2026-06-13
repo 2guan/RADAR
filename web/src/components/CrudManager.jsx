@@ -7,14 +7,16 @@
  */
 
 import React, { useRef, useState } from 'react';
-import { Button, Space, Modal, Form, Popconfirm, message, Dropdown, Upload } from 'antd';
+import { Button, Space, Modal, Form, Popconfirm, message } from 'antd';
 import {
-  PlusOutlined, EditOutlined, DeleteOutlined, ImportOutlined, ExportOutlined, DownloadOutlined, DownOutlined,
+  PlusOutlined, EditOutlined, DeleteOutlined, ImportOutlined, ExportOutlined,
 } from '@ant-design/icons';
 import DataTable from './DataTable.jsx';
 import Can from './Can.jsx';
+import FilterPanel from './FilterPanel.jsx';
+import ImportModal from './ImportModal.jsx';
 import { apiPost, apiPut, apiDelete } from '../api/client.js';
-import { exportXlsx, importXlsx, downloadGet } from '../utils/io.js';
+import { exportXlsx } from '../utils/io.js';
 
 export default function CrudManager({
   apiBase, columns, fields, title, baseQuery = {},
@@ -25,8 +27,28 @@ export default function CrudManager({
   const [form] = Form.useForm();
   const [open, setOpen] = useState(false);
   const [current, setCurrent] = useState(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [filterQuery, setFilterQuery] = useState({});
 
-  const fetcher = (q) => apiPost(`${apiBase}/list`, { ...q, ...baseQuery });
+  const filterConfigs = [
+    { field: 'keyword', label: '搜索', type: 'input', isPrimary: true, placeholder: `输入关键字搜索${title || '配置'}` }
+  ];
+
+  const handleFilterChange = (vals) => {
+    setFilterQuery(vals);
+  };
+
+  const fetcher = (q) => {
+    const mergedFilters = [
+      ...(q.filters || []),
+      ...(baseQuery.filters || [])
+    ];
+    return apiPost(`${apiBase}/list`, {
+      ...q,
+      ...baseQuery,
+      filters: mergedFilters
+    });
+  };
 
   const openEdit = (row) => {
     setCurrent(row);
@@ -65,31 +87,6 @@ export default function CrudManager({
     },
   ];
 
-  // 导入（三种冲突模式）
-  const ioSlug = apiBase.replace(/[^a-z]/gi, '');
-  const doImport = (file, mode) => {
-    importXlsx(`${apiBase}/import`, file, mode, io?.params || {})
-      .then((r) => { message.success(`导入完成：新增${r.inserted} 更新${r.updated} 跳过${r.skipped}`); tableRef.current?.reload(); })
-      .catch(() => {});
-    return false;
-  };
-
-  const ioToolbar = io?.enabled ? [
-    <Can key="tpl" module="settings" action="import">
-      <Button icon={<DownloadOutlined />} onClick={() => downloadGet(`${apiBase}/template`, io.params || {}, `${title}模板.xlsx`)}>模板</Button>
-    </Can>,
-    <Can key="imp" module="settings" action="import">
-      <Dropdown menu={{ items: [
-        { key: 'skip', label: '重复跳过' }, { key: 'overwrite', label: '覆盖更新' }, { key: 'rollback', label: '出错回滚' },
-      ], onClick: ({ key }) => document.getElementById(`${ioSlug}-imp-${key}`)?.click() }}>
-        <Button icon={<ImportOutlined />}>导入 <DownOutlined /></Button>
-      </Dropdown>
-    </Can>,
-    <Can key="exp" module="settings" action="export">
-      <Button icon={<ExportOutlined />} onClick={() => exportXlsx(`${apiBase}/export`, { ...baseQuery, ...(io.params || {}) }, `${title}.xlsx`)}>导出</Button>
-    </Can>,
-  ] : [];
-
   // 移动端卡片：由列定义自动生成"字段名 ： 值"行，末行展示操作按钮，避免表格横向滚动
   const mobileCard = (row) => {
     const opCol = fullColumns.find((c) => c.key === 'op');
@@ -113,21 +110,41 @@ export default function CrudManager({
 
   return (
     <>
-      <DataTable
-        ref={tableRef} columns={fullColumns} fetcher={fetcher} baseQuery={baseQuery} rowKey={rowKey}
-        mobileCard={mobileCard}
-        toolbar={[
-          <Can key="add" module="settings" action="create"><Button type="primary" icon={<PlusOutlined />} onClick={() => openEdit(null)}>新增</Button></Can>,
-          ...ioToolbar,
+      <FilterPanel
+        configs={filterConfigs}
+        onChange={handleFilterChange}
+        actions={[
+          <Can key="add" module="settings" action="create">
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => openEdit(null)} style={{ width: 88 }}>新增</Button>
+          </Can>,
+          ...(io?.enabled ? [
+            <Can key="imp" module="settings" action="import">
+              <Button icon={<ImportOutlined />} onClick={() => setImportOpen(true)} style={{ width: 88 }}>导入</Button>
+            </Can>,
+            <Can key="exp" module="settings" action="export">
+              <Button icon={<ExportOutlined />} onClick={() => exportXlsx(`${apiBase}/export`, { ...baseQuery, ...(io.params || {}), ...filterQuery }, `${title}.xlsx`)} style={{ width: 88 }}>导出</Button>
+            </Can>
+          ] : []),
           extraToolbar,
         ]}
       />
-      {/* 隐藏的导入触发器 */}
-      {io?.enabled && ['skip', 'overwrite', 'rollback'].map((m) => (
-        <Upload key={m} showUploadList={false} beforeUpload={(f) => doImport(f, m)} accept=".xlsx,.csv">
-          <span id={`${ioSlug}-imp-${m}`} />
-        </Upload>
-      ))}
+      <DataTable
+        ref={tableRef} columns={fullColumns} fetcher={fetcher}
+        baseQuery={{ ...baseQuery, ...filterQuery }}
+        rowKey={rowKey}
+        mobileCard={mobileCard}
+      />
+      {io?.enabled && (
+        <ImportModal
+          open={importOpen}
+          onCancel={() => setImportOpen(false)}
+          onSuccess={() => tableRef.current?.reload()}
+          importUrl={`${apiBase}/import`}
+          templateUrl={`${apiBase}/template`}
+          templateFilename={`${title}模板.xlsx`}
+          extraFields={io.params || {}}
+        />
+      )}
       <Modal open={open} title={current ? `编辑${title}` : `新增${title}`} onCancel={() => setOpen(false)} onOk={onSave} okText="保存">
         <Form form={form} layout="vertical">{fields(form, current)}</Form>
       </Modal>

@@ -152,17 +152,32 @@ export default async function roleRoutes(fastify) {
       table: 'role', columns: ['id', 'name', 'code', 'default_home', 'is_signoff_role'],
       searchColumns: ['name', 'code'], query: q,
     }).list.map((r) => ({ ...r, is_signoff_role: r.is_signoff_role ? '是' : '' })),
+
     upsert: (r, mode) => {
       if (!r.name || !r.code) return 'skipped';
       const sign = truthy(r.is_signoff_role) ? 1 : 0;
-      const exists = get('SELECT id, name, is_signoff_role FROM role WHERE code = ?', r.code);
+      const exists = get('SELECT * FROM role WHERE code = ?', r.code);
       if (exists) {
         if (mode === 'skip') return 'skipped';
         if (mode === 'rollback') throw badRequest(`角色标识重复：${r.code}，已回滚`);
-        run('UPDATE role SET name=?, default_home=?, is_signoff_role=?, updated_at=datetime(\'now\',\'localtime\') WHERE id=?',
-          r.name, r.default_home || '仪表盘', sign, exists.id);
-        syncModifySignoffRole(exists.id, r.name, sign, exists.is_signoff_role, exists.name);
-        return 'updated';
+
+        const changes = [];
+        const compareAndPush = (fieldKey, fieldName, oldVal, newVal) => {
+          if (oldVal !== newVal) {
+            changes.push({ field: fieldName, old: oldVal, new: newVal });
+          }
+        };
+
+        compareAndPush('name', '角色名称', exists.name || '', r.name || '');
+        compareAndPush('default_home', '默认首页', exists.default_home || '', r.default_home || '仪表盘');
+        compareAndPush('is_signoff_role', '会签角色', exists.is_signoff_role ? '是' : '否', sign ? '是' : '否');
+
+        if (changes.length > 0) {
+          run('UPDATE role SET name=?, default_home=?, is_signoff_role=?, updated_at=datetime(\'now\',\'localtime\') WHERE id=?',
+            r.name, r.default_home || '仪表盘', sign, exists.id);
+          syncModifySignoffRole(exists.id, r.name, sign, exists.is_signoff_role, exists.name);
+        }
+        return { action: 'updated', changes };
       }
       const res = run('INSERT INTO role (name, code, default_home, is_builtin, is_signoff_role) VALUES (?,?,?,0,?)',
         r.name, r.code, r.default_home || '仪表盘', sign);

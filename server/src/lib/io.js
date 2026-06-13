@@ -50,17 +50,87 @@ export function registerIO(fastify, cfg) {
     const rows = await parseXlsx(buffer, columns);
     if (!rows.length) throw badRequest('文件中无有效数据');
 
-    const stat = { inserted: 0, updated: 0, skipped: 0 };
+    const stat = { inserted: 0, updated: 0, skipped: 0, failed: 0 };
+    const details = [];
     const ctx = { operator: request.currentUser?.name };
+
     const apply = () => {
       for (const row of rows) {
-        const r = upsert(row, mode, ctx);
-        if (r === 'inserted') stat.inserted++;
-        else if (r === 'updated') stat.updated++;
-        else stat.skipped++;
+        const rowNum = row.__rowNum__;
+        try {
+          const res = upsert(row, mode, ctx);
+          let action, changes;
+          if (typeof res === 'object' && res !== null) {
+            action = res.action;
+            changes = res.changes;
+          } else {
+            action = res; // string code
+          }
+
+          const primaryKey = row.sys_code || row.code || row.release_date || row.attr_value || '项';
+          const primaryTitle = row.sys_name || row.name || row.display_value || '配置项';
+
+          if (action === 'inserted' || action === 'insert') {
+            stat.inserted++;
+            details.push({
+              key: primaryKey,
+              title: primaryTitle,
+              action: 'insert',
+              status: 'success',
+              __rowNum__: rowNum,
+            });
+          } else if (action === 'updated' || action === 'update') {
+            stat.updated++;
+            details.push({
+              key: primaryKey,
+              title: primaryTitle,
+              action: 'update',
+              status: 'success',
+              __rowNum__: rowNum,
+              changes: changes || [],
+            });
+          } else {
+            stat.skipped++;
+            details.push({
+              key: primaryKey,
+              title: primaryTitle,
+              action: 'skip',
+              status: 'success',
+              __rowNum__: rowNum,
+            });
+          }
+        } catch (err) {
+          stat.failed++;
+          details.push({
+            key: row.sys_code || row.code || row.release_date || row.attr_value || '未知项',
+            title: row.sys_name || row.name || row.display_value || '空名称',
+            status: 'fail',
+            __rowNum__: rowNum,
+            error: err.message,
+          });
+          if (mode === 'rollback') {
+            throw err;
+          }
+        }
       }
     };
-    if (mode === 'rollback') tx(apply); else apply();
-    return ok(stat, '导入完成');
+
+    if (mode === 'rollback') {
+      try {
+        tx(apply);
+      } catch (err) {
+        for (const item of details) {
+          if (item.status === 'success') {
+            item.action = 'skip';
+          }
+        }
+        stat.inserted = 0;
+        stat.updated = 0;
+      }
+    } else {
+      apply();
+    }
+
+    return ok({ stat, details }, '导入完成');
   });
 }

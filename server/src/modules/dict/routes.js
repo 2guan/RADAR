@@ -87,43 +87,132 @@ export default async function dictRoutes(fastify) {
   fastify.post('/dict/import', { preHandler: fastify.requirePerm('settings', 'import') }, async (request) => {
     const data = await request.file();
     if (!data) throw badRequest('请上传文件');
-    const mode = data.fields?.mode?.value || 'skip';
+    const mode = data.fields?.mode?.value || request.query.mode || 'skip';
     const category = data.fields?.category?.value || request.query.category;
     if (!category) throw badRequest('缺少字典分类');
     const buffer = await data.toBuffer();
     const rows = await parseXlsx(buffer, colsOf(category));
     if (!rows.length) throw badRequest('文件中无有效数据');
 
-    const stat = { inserted: 0, updated: 0, skipped: 0 };
+    const stat = { inserted: 0, updated: 0, skipped: 0, failed: 0 };
+    const details = [];
+
     const apply = () => {
       for (const r of rows) {
-        if (!r.attr_value) { stat.skipped++; continue; }
-        let extra = null;
-        if (category === 'process_status') {
-          const stStr = String(r.state_type || '').trim();
+        const rowNum = r.__rowNum__;
+        try {
+          if (!r.attr_value) throw new Error('属性值不能为空');
+
+          let extra = null;
           let stateType = 'in-progress';
-          if (['初始', '初始态', 'initial', 'start'].some(k => stStr.includes(k))) {
-            stateType = 'initial';
-          } else if (['终态', '完成', 'final', 'success', 'end', '是'].some(k => stStr.includes(k))) {
-            stateType = 'final';
+          if (category === 'process_status') {
+            const stStr = String(r.state_type || '').trim();
+            if (['初始', '初始态', 'initial', 'start'].some(k => stStr.includes(k))) {
+              stateType = 'initial';
+            } else if (['终态', '完成', 'final', 'success', 'end', '是'].some(k => stStr.includes(k))) {
+              stateType = 'final';
+            }
+            extra = JSON.stringify({ stage: r.stage || '', stateType, isTerminal: stateType === 'final' });
           }
-          extra = JSON.stringify({ stage: r.stage || '', stateType, isTerminal: stateType === 'final' });
-        }
-        const exists = get('SELECT id FROM dict_item WHERE category = ? AND attr_value = ?', category, r.attr_value);
-        if (exists) {
-          if (mode === 'skip') { stat.skipped++; continue; }
-          if (mode === 'rollback') throw badRequest(`属性值重复：${r.attr_value}，已回滚`);
-          run('UPDATE dict_item SET display_value=?, sort=?, extra=?, updated_at=datetime(\'now\',\'localtime\') WHERE id=?',
-            r.display_value || r.attr_value, Number(r.sort) || 0, extra, exists.id);
-          stat.updated++;
-        } else {
-          run('INSERT INTO dict_item (category, attr_value, display_value, sort, extra) VALUES (?,?,?,?,?)',
-            category, r.attr_value, r.display_value || r.attr_value, Number(r.sort) || 0, extra);
-          stat.inserted++;
+
+          const exists = get('SELECT id FROM dict_item WHERE category = ? AND attr_value = ?', category, r.attr_value);
+
+          if (exists) {
+            if (mode === 'skip') {
+              stat.skipped++;
+              details.push({
+                key: r.attr_value,
+                title: r.display_value || r.attr_value,
+                action: 'skip',
+                status: 'success',
+                __rowNum__: rowNum,
+              });
+              continue;
+            }
+            if (mode === 'rollback') {
+              throw new Error(`属性值 [${r.attr_value}] 已存在`);
+            }
+
+            // overwrite 模式：比对并更新
+            const changes = [];
+            const compareAndPush = (fieldKey, fieldName, oldVal, newVal) => {
+              if (oldVal !== newVal) {
+                changes.push({ field: fieldName, old: oldVal, new: newVal });
+              }
+            };
+
+            compareAndPush('display_value', '显示值', exists.display_value || '', r.display_value || '');
+            compareAndPush('sort', '排序', String(exists.sort || 0), String(Number(r.sort) || 0));
+
+            if (category === 'process_status') {
+              const oldExtra = exists.extra ? JSON.parse(exists.extra) : {};
+              compareAndPush('stage', '阶段', oldExtra.stage || '', r.stage || '');
+              const stateTypeLabel = (type) => ({ initial: '初始态', 'in-progress': '进行中', final: '终态' }[type] || '进行中');
+              compareAndPush('stateType', '状态类型', stateTypeLabel(oldExtra.stateType), stateTypeLabel(stateType));
+            }
+
+            if (changes.length > 0) {
+              run('UPDATE dict_item SET display_value=?, sort=?, extra=?, updated_at=datetime(\'now\',\'localtime\') WHERE id=?',
+                r.display_value || r.attr_value, Number(r.sort) || 0, extra, exists.id);
+            }
+
+            stat.updated++;
+            details.push({
+              key: r.attr_value,
+              title: r.display_value || r.attr_value,
+              action: 'update',
+              status: 'success',
+              __rowNum__: rowNum,
+              changes,
+            });
+
+          } else {
+            // insert 新建
+            run('INSERT INTO dict_item (category, attr_value, display_value, sort, extra) VALUES (?,?,?,?,?)',
+              category, r.attr_value, r.display_value || r.attr_value, Number(r.sort) || 0, extra);
+            stat.inserted++;
+            details.push({
+              key: r.attr_value,
+              title: r.display_value || r.attr_value,
+              action: 'insert',
+              status: 'success',
+              __rowNum__: rowNum,
+            });
+          }
+        } catch (err) {
+          stat.failed++;
+          details.push({
+            key: r.attr_value || '未知属性值',
+            title: r.display_value || '空显示值',
+            status: 'fail',
+            __rowNum__: rowNum,
+            error: err.message,
+          });
+          if (mode === 'rollback') {
+            throw err;
+          }
         }
       }
     };
-    if (mode === 'rollback') tx(apply); else apply();
-    return ok(stat, '导入完成');
+
+    if (mode === 'rollback') {
+      try {
+        tx(apply);
+      } catch (err) {
+        for (const item of details) {
+          if (item.status === 'success') {
+            item.action = 'skip';
+          }
+        }
+        stat.inserted = 0;
+        stat.updated = 0;
+      }
+    } else {
+      apply();
+    }
+
+    return ok({ stat, details }, '导入完成');
   });
 }
+
+
