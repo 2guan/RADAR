@@ -6,17 +6,18 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Card, Button, Space, Modal, Form, Input, Select, Tag, Popconfirm, message, Upload, Dropdown,
+  Card, Button, Space, Modal, Form, Input, Select, Tag, Popconfirm, message,
 } from 'antd';
 import {
-  PlusOutlined, EditOutlined, DeleteOutlined, KeyOutlined, ImportOutlined, ExportOutlined, DownloadOutlined, DownOutlined,
+  PlusOutlined, EditOutlined, DeleteOutlined, KeyOutlined, ImportOutlined, ExportOutlined,
 } from '@ant-design/icons';
 import DataTable from '../components/DataTable.jsx';
 import DictSelect from '../components/DictSelect.jsx';
 import Can from '../components/Can.jsx';
 import FilterPanel from '../components/FilterPanel.jsx';
+import ImportModal from '../components/ImportModal.jsx';
 import { apiPost, apiPut, apiDelete, apiGet } from '../api/client.js';
-import { exportXlsx, importXlsx, downloadGet } from '../utils/io.js';
+import { exportXlsx, downloadGet } from '../utils/io.js';
 
 export default function Users() {
   const tableRef = useRef();
@@ -86,12 +87,7 @@ export default function Users() {
     });
   };
 
-  const doImport = (file, mode) => {
-    importXlsx('/users/import', file, mode)
-      .then((r) => { message.success(`导入完成：新增${r.inserted} 更新${r.updated} 跳过${r.skipped}`); tableRef.current?.reload(); })
-      .catch(() => {});
-    return false;
-  };
+  const [importOpen, setImportOpen] = useState(false);
 
   const columns = [
     {
@@ -155,7 +151,18 @@ export default function Users() {
       }
       variant="borderless"
     >
-      <FilterPanel configs={filterConfigs} onChange={handleFilterChange} />
+      <FilterPanel
+        configs={filterConfigs}
+        onChange={handleFilterChange}
+        actions={[
+          <Can key="imp" module="user" action="import">
+            <Button icon={<ImportOutlined />} onClick={() => setImportOpen(true)} style={{ width: 88 }}>导入</Button>
+          </Can>,
+          <Can key="exp" module="user" action="export">
+            <Button icon={<ExportOutlined />} onClick={() => exportXlsx('/users/export', { filters: filterQuery }, '人员清单.xlsx')} style={{ width: 88 }}>导出</Button>
+          </Can>,
+        ]}
+      />
       <DataTable
         ref={tableRef} columns={columns} fetcher={fetcher}
         baseQuery={{ filters: filterQuery }}
@@ -170,24 +177,16 @@ export default function Users() {
             </div>
           </Space>
         )}
-        toolbar={[
-          <Can key="tpl" module="user" action="import"><Button icon={<DownloadOutlined />} onClick={() => downloadGet('/users/template', {}, '人员模板.xlsx')}>模板</Button></Can>,
-          <Can key="imp" module="user" action="import">
-            <Dropdown menu={{ items: [
-              { key: 'skip', label: '重复跳过' }, { key: 'overwrite', label: '覆盖更新' }, { key: 'rollback', label: '出错回滚' },
-            ], onClick: ({ key }) => document.getElementById('user-import-' + key)?.click() }}>
-              <Button icon={<ImportOutlined />}>导入 <DownOutlined /></Button>
-            </Dropdown>
-          </Can>,
-          <Can key="exp" module="user" action="export"><Button icon={<ExportOutlined />} onClick={() => exportXlsx('/users/export', {}, '人员清单.xlsx')}>导出</Button></Can>,
-        ]}
       />
 
-      {['skip', 'overwrite', 'rollback'].map((m) => (
-        <Upload key={m} showUploadList={false} beforeUpload={(f) => doImport(f, m)} accept=".xlsx,.csv">
-          <span id={'user-import-' + m} />
-        </Upload>
-      ))}
+      <ImportModal
+        open={importOpen}
+        onCancel={() => setImportOpen(false)}
+        onSuccess={() => tableRef.current?.reload()}
+        importUrl="/users/import"
+        templateUrl="/users/template"
+        templateFilename="人员导入模板.xlsx"
+      />
 
       <Modal open={open} title={current ? '编辑人员' : '新增人员'} onCancel={() => setOpen(false)} onOk={onSave} okText="保存">
         <Form form={form} layout="vertical">
