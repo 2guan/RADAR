@@ -718,7 +718,9 @@ body {
     flex-wrap: nowrap !important;
     gap: 4px !important;
     width: 100% !important;
-    justify-content: flex-start !important;
+  }
+  .filter-space-actions > *:nth-child(2) {
+    margin-left: auto !important;
   }
   .filter-space-actions.ant-space {
     gap: 4px !important;
