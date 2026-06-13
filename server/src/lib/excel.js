@@ -59,7 +59,10 @@ export async function parseXlsx(buffer, columns) {
       obj[key] = typeof val === 'string' ? val.trim() : val;
       if (obj[key] !== '' && obj[key] != null) hasValue = true;
     }
-    if (hasValue) rows.push(obj);
+    if (hasValue) {
+      obj.__rowNum__ = i;
+      rows.push(obj);
+    }
   }
   return rows;
 }

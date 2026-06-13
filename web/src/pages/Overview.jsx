@@ -9,7 +9,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import {
   Card, Row, Col, Tag, Typography, Empty, Modal, Space, Spin, Select, Avatar, Tabs, Button, Table, Radio, message, Timeline, Tooltip, List, Checkbox,
 } from 'antd';
-import { SafetyCertificateOutlined, DeploymentUnitOutlined, DownloadOutlined, DownOutlined, UpOutlined, HistoryOutlined } from '@ant-design/icons';
+import { SafetyCertificateOutlined, DeploymentUnitOutlined, DownloadOutlined, DownOutlined, UpOutlined, HistoryOutlined, ExportOutlined } from '@ant-design/icons';
 import { useResponsive } from '../hooks/useResponsive.js';
 import ChainBar from '../components/ChainBar.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
@@ -18,8 +18,10 @@ import TaskEditor from '../components/editors/TaskEditor.jsx';
 import ReleaseDetail from '../components/editors/ReleaseDetail.jsx';
 import ResizableTitle from '../components/ResizableTitle.jsx';
 import { apiPost, apiGet, rawClient } from '../api/client.js';
-
+import FilterPanel from '../components/FilterPanel.jsx';
 import { useAppStore } from '../stores/app.js';
+import { exportXlsx } from '../utils/io.js';
+import Can from '../components/Can.jsx';
 
 const TEST_ATTACH = ['测试方案', '测试报告'];
 const DEV_ATTACH = ['概要设计', '详细设计', '代码走查', '单元测试报告'];
@@ -974,7 +976,75 @@ export default function Overview() {
 
   // 阶段编辑器：{type:'requirement'|'dev'|'test'|'release', id, reqCode}
   const [editor, setEditor] = useState(null);
-  const [orgFilter, setOrgFilter] = useState('all');
+
+  const [filterQuery, setFilterQuery] = useState([]);
+  
+  // 下拉列表选项数据源
+  const [points, setPoints] = useState([]);
+  const [orgs, setOrgs] = useState([]);
+  const [taskStatuses, setTaskStatuses] = useState([]);
+  const [systems, setSystems] = useState([]);
+
+  useEffect(() => {
+    apiGet('/release-points/all').then(setPoints).catch(() => {});
+    apiGet('/dict/by-category/org').then(setOrgs).catch(() => {});
+    apiGet('/systems/all').then(setSystems).catch(() => {});
+    apiGet('/dict/by-category/process_status').then(res => {
+      const opts = [];
+      const stages = ['需求', '开发', '应用组装', '非功能测试', '安全测试', '用户测试', '投产'];
+      stages.forEach(stg => {
+        opts.push({ value: `${stg}-未开始`, label: `${stg} - 未开始` });
+      });
+
+      (res || []).forEach(item => {
+        const stg = item.extra?.stage;
+        const statusVal = item.attr_value;
+        if (stg === '需求' || stg === '开发' || stg === '投产') {
+          opts.push({ value: `${stg}-${statusVal}`, label: `${stg} - ${statusVal}` });
+        } else if (stg === '测试') {
+          opts.push({ value: `应用组装-${statusVal}`, label: `应用组装 - ${statusVal}` });
+          opts.push({ value: `非功能测试-${statusVal}`, label: `非功能测试 - ${statusVal}` });
+          opts.push({ value: `安全测试-${statusVal}`, label: `安全测试 - ${statusVal}` });
+          opts.push({ value: `用户测试-${statusVal}`, label: `用户测试 - ${statusVal}` });
+        }
+      });
+      setTaskStatuses(opts);
+    }).catch(() => {});
+  }, []);
+
+  const pointOptions = points.map(p => ({ value: p.id, label: p.release_date }));
+  const orgOptions = orgs.map(o => ({ value: o.attr_value, label: o.display_value }));
+  const systemOptions = systems.map(s => ({ value: s.sys_code, label: `${s.sys_code} - ${s.sys_name}` }));
+  const stageOptions = [
+    { value: '需求', label: '需求' },
+    { value: '开发', label: '开发' },
+    { value: '应用组装', label: '应用组装' },
+    { value: '非功能测试', label: '非功能测试' },
+    { value: '安全测试', label: '安全测试' },
+    { value: '用户测试', label: '用户测试' },
+    { value: '投产', label: '投产' },
+  ];
+
+  const filterConfigs = [
+    { field: 'req_code', label: '需求编号', type: 'input', isPrimary: true, op: 'like', placeholder: '输入需求编号模糊搜索' },
+    { field: 'content', label: '需求内容', type: 'input', isPrimary: true, op: 'like', placeholder: '输入需求标题或概述模糊搜索' },
+    { field: 'release_point_id', label: '计划投产点', type: 'select', op: 'in', options: pointOptions },
+    { field: 'org', label: '实施机构', type: 'select', op: 'in', options: orgOptions },
+    { field: 'stage', label: '任务阶段', type: 'select', op: 'in', options: stageOptions },
+    { field: 'taskStatus', label: '任务状态', type: 'select', op: 'in', options: taskStatuses },
+    { field: 'main_systems', label: '主责系统', type: 'select', op: 'in', options: systemOptions },
+    { field: 'collab_systems', label: '协同系统', type: 'select', op: 'in', options: systemOptions },
+  ];
+
+  const handleFilterChange = (vals) => {
+    const arr = Object.entries(vals)
+      .map(([field, value]) => {
+        const conf = filterConfigs.find(c => c.field === field);
+        return { field, value, op: conf?.op || 'eq' };
+      })
+      .filter((item) => item.value !== undefined && item.value !== null && item.value !== '');
+    setFilterQuery(arr);
+  };
 
   const [isTabMode, setIsTabMode] = useState(window.innerWidth < 1200);
   useEffect(() => {
@@ -987,9 +1057,9 @@ export default function Overview() {
 
   const load = () => {
     setLoading(true);
-    apiPost('/overview/list', { releasePointIds }).then((d) => setGroups(d.list || [])).finally(() => setLoading(false));
+    apiPost('/overview/list', { releasePointIds, filters: filterQuery }).then((d) => setGroups(d.list || [])).finally(() => setLoading(false));
   };
-  useEffect(load, [JSON.stringify(releasePointIds)]);
+  useEffect(load, [JSON.stringify(releasePointIds), JSON.stringify(filterQuery)]);
 
   const loadDetail = async (reqCode) => {
     setDetailLoading(true);
@@ -1001,22 +1071,25 @@ export default function Overview() {
   // 编辑保存后：刷新详情 + 概览
   const onEditorSaved = () => { if (detail) loadDetail(detail.requirement.req_code); load(); };
 
-  const shownGroups = orgFilter === 'all' ? groups : groups.filter((g) => g.org === orgFilter);
-
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-        <Select
-          value={orgFilter} style={{ minWidth: 180 }} onChange={setOrgFilter}
-          options={[{ value: 'all', label: '所有机构' }, ...groups.map((g) => ({ value: g.org, label: g.org }))]}
-        />
-      </div>
+    <Card
+      title="版本概览"
+      extra={
+        <Can module="overview" action="view">
+          <Button icon={<ExportOutlined />} onClick={() => exportXlsx('/overview/export', { releasePointIds, filters: filterQuery }, '版本概览宽表.xlsx')}>
+            全部导出
+          </Button>
+        </Can>
+      }
+      variant="borderless"
+    >
+      <FilterPanel configs={filterConfigs} onChange={handleFilterChange} />
 
       {loading ? (
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
           <Spin size="large" />
         </div>
-      ) : shownGroups.length === 0 ? <Empty description="当前投产窗口暂无需求" /> : shownGroups.map((g) => (
+      ) : groups.length === 0 ? <Empty description="当前投产窗口暂无需求" style={{ marginTop: 24 }} /> : groups.map((g) => (
         <Card
           key={g.org} variant="borderless" style={{ marginBottom: 20 }} styles={{ body: { padding: 16 } }}
           title={(
@@ -1171,6 +1244,6 @@ export default function Overview() {
       <DevIntakeModal open={!!devIntakeReq} requirement={devIntakeReq} onClose={() => setDevIntakeReq(null)} onSaved={onEditorSaved} />
       <TestIntakeModal open={!!testIntakeReq} requirement={testIntakeReq?.req} testType={testIntakeReq?.testType} onClose={() => setTestIntakeReq(null)} onSaved={onEditorSaved} />
       <RequirementHistoryModal open={showHistory} reqCode={detail?.requirement?.req_code} onClose={() => setShowHistory(false)} />
-    </div>
+    </Card>
   );
 }

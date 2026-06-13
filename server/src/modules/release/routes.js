@@ -11,6 +11,7 @@ import { isTerminalStatus } from '../../lib/status.js';
 import { auditUpdate } from '../../lib/audit.js';
 import { windowIds, inClause } from '../../lib/window.js';
 import { ok, notFound, badRequest, forbidden } from '../../lib/http.js';
+import { exportXlsx } from '../../lib/excel.js';
 
 const SYS_TERMINAL = '已投产';
 
@@ -47,14 +48,108 @@ export default async function releaseRoutes(fastify) {
   // 列表：当前投产窗口下所有需求 + 投产/会签进度
   fastify.post('/release/list', { preHandler: fastify.requirePerm('release', 'view') }, async (request) => {
     const body = request.body || {};
-    const { keyword } = body;
-    let sql = 'SELECT * FROM requirement';
-    const params = [];
+    
     const wh = [];
-    const win = inClause('release_point_id', windowIds(body));
-    if (win.where) { wh.push(win.where); params.push(...win.params); }
-    if (keyword) { wh.push('(req_code LIKE ? OR title LIKE ?)'); params.push(`%${keyword}%`, `%${keyword}%`); }
-    if (wh.length) sql += ' WHERE ' + wh.join(' AND ');
+    const params = [];
+    let hasReleasePointFilter = false;
+    
+    // 提取并处理自定义/复杂字段
+    const filters = Array.isArray(body.filters) ? body.filters : [];
+    for (const f of filters) {
+      if (!f || f.value === undefined || f.value === null || f.value === '') continue;
+      
+      if (f.field === 'req_code') {
+        wh.push('req_code LIKE ?');
+        params.push(`%${f.value}%`);
+      } else if (f.field === 'content') {
+        wh.push('(title LIKE ? OR summary LIKE ?)');
+        params.push(`%${f.value}%`, `%${f.value}%`);
+      } else if (f.field === 'release_point_id') {
+        hasReleasePointFilter = true;
+        const ids = Array.isArray(f.value) ? f.value : [f.value];
+        if (ids.length) {
+          const placeholders = ids.map(() => '?').join(',');
+          wh.push(`release_point_id IN (${placeholders})`);
+          params.push(...ids);
+        }
+      } else if (f.field === 'org') {
+        const orgs = Array.isArray(f.value) ? f.value : [f.value];
+        if (orgs.length) {
+          const placeholders = orgs.map(() => '?').join(',');
+          const sqlExpr = `
+            COALESCE(
+              (
+                SELECT impl_org FROM dev_task 
+                WHERE dev_task.req_code = requirement.req_code 
+                  AND dev_task.impl_system IN (SELECT value FROM json_each(requirement.main_systems))
+                  AND dev_task.impl_org IS NOT NULL AND dev_task.impl_org != ''
+                ORDER BY id ASC LIMIT 1
+              ),
+              (
+                SELECT org FROM system 
+                WHERE sys_code = (SELECT value FROM json_each(requirement.main_systems) LIMIT 1)
+                  AND org IS NOT NULL AND org != ''
+              ),
+              requirement.propose_dept,
+              '未分配机构'
+            )
+          `;
+          wh.push(`${sqlExpr} IN (${placeholders})`);
+          params.push(...orgs);
+        }
+      } else if (f.field === 'status') {
+        const statusList = Array.isArray(f.value) ? f.value : [f.value];
+        if (statusList.length) {
+          const hasUninitiated = statusList.includes('未发起');
+          const activeStatuses = statusList.filter(s => s !== '未发起');
+          if (hasUninitiated) {
+            if (activeStatuses.length) {
+              const placeholders = activeStatuses.map(() => '?').join(',');
+              wh.push(`(req_code NOT IN (SELECT req_code FROM release_task) OR req_code IN (SELECT req_code FROM release_task WHERE status IN (${placeholders})))`);
+              params.push(...activeStatuses);
+            } else {
+              wh.push(`req_code NOT IN (SELECT req_code FROM release_task)`);
+            }
+          } else {
+            const placeholders = activeStatuses.map(() => '?').join(',');
+            wh.push(`req_code IN (SELECT req_code FROM release_task WHERE status IN (${placeholders}))`);
+            params.push(...activeStatuses);
+          }
+        }
+      } else if (f.field === 'owners') {
+        const owners = Array.isArray(f.value) ? f.value : [f.value];
+        if (owners.length) {
+          const placeholders = owners.map(() => '?').join(',');
+          wh.push(`req_code IN (SELECT req_code FROM release_task WHERE owner IN (${placeholders}))`);
+          params.push(...owners);
+        }
+      } else if (f.field === 'systems') {
+        const sysCodes = Array.isArray(f.value) ? f.value : [f.value];
+        if (sysCodes.length) {
+          const placeholders = sysCodes.map(() => '?').join(',');
+          wh.push(`(
+            EXISTS (SELECT 1 FROM json_each(requirement.main_systems) WHERE value IN (${placeholders})) OR
+            EXISTS (SELECT 1 FROM json_each(requirement.collab_dev_systems) WHERE value IN (${placeholders})) OR
+            EXISTS (SELECT 1 FROM json_each(requirement.collab_test_systems) WHERE value IN (${placeholders}))
+          )`);
+          params.push(...sysCodes, ...sysCodes, ...sysCodes);
+        }
+      }
+    }
+    
+    // 默认的投产窗口过滤
+    if (!hasReleasePointFilter) {
+      const win = inClause('release_point_id', windowIds(body));
+      if (win.where) {
+        wh.push(win.where);
+        params.push(...win.params);
+      }
+    }
+    
+    let sql = 'SELECT * FROM requirement';
+    if (wh.length) {
+      sql += ' WHERE ' + wh.join(' AND ');
+    }
     sql += ' ORDER BY id DESC';
     const reqs = all(sql, ...params);
 
@@ -212,6 +307,160 @@ export default async function releaseRoutes(fastify) {
       { s: rs.status, t: rs.actual_release_time }, { s: status, t: actual_release_time },
       { s: `系统${rs.system_code}投产状态`, t: `系统${rs.system_code}投产时间` });
     recomputeReleaseStatus(rs.release_task_id);
-    return ok({ id });
+    return ok({ id: rs.id });
+  });
+
+  // 导出
+  fastify.post('/release/export', { preHandler: fastify.requirePerm('release', 'export') }, async (request, reply) => {
+    const body = request.body || {};
+    const wh = [];
+    const params = [];
+
+    let hasReleasePointFilter = false;
+    if (body.filters && Array.isArray(body.filters)) {
+      for (const f of body.filters) {
+        if (!f || f.value === undefined || f.value === null || f.value === '') continue;
+        if (f.field === 'release_point_id') {
+          wh.push('release_point_id = ?');
+          params.push(f.value);
+          hasReleasePointFilter = true;
+        } else if (f.field === 'content') {
+          wh.push('(title LIKE ? OR summary LIKE ?)');
+          params.push(`%${f.value}%`, `%${f.value}%`);
+        } else if (f.field === 'org') {
+          const orgs = Array.isArray(f.value) ? f.value : [f.value];
+          if (orgs.length) {
+            const placeholders = orgs.map(() => '?').join(',');
+            const sqlExpr = `
+              COALESCE(
+                (
+                  SELECT impl_org FROM dev_task 
+                  WHERE dev_task.req_code = requirement.req_code 
+                    AND dev_task.impl_system IN (SELECT value FROM json_each(requirement.main_systems))
+                    AND dev_task.impl_org IS NOT NULL AND dev_task.impl_org != ''
+                  ORDER BY id ASC LIMIT 1
+                ),
+                (
+                  SELECT org FROM system 
+                  WHERE sys_code = (SELECT value FROM json_each(requirement.main_systems) LIMIT 1)
+                    AND org IS NOT NULL AND org != ''
+                ),
+                requirement.propose_dept,
+                '未分配机构'
+              )
+            `;
+            wh.push(`${sqlExpr} IN (${placeholders})`);
+            params.push(...orgs);
+          }
+        } else if (f.field === 'status') {
+          const statusList = Array.isArray(f.value) ? f.value : [f.value];
+          if (statusList.length) {
+            const hasUninitiated = statusList.includes('未发起');
+            const activeStatuses = statusList.filter(s => s !== '未发起');
+            if (hasUninitiated) {
+              if (activeStatuses.length) {
+                const placeholders = activeStatuses.map(() => '?').join(',');
+                wh.push(`(req_code NOT IN (SELECT req_code FROM release_task) OR req_code IN (SELECT req_code FROM release_task WHERE status IN (${placeholders})))`);
+                params.push(...activeStatuses);
+              } else {
+                wh.push(`req_code NOT IN (SELECT req_code FROM release_task)`);
+              }
+            } else {
+              const placeholders = activeStatuses.map(() => '?').join(',');
+              wh.push(`req_code IN (SELECT req_code FROM release_task WHERE status IN (${placeholders}))`);
+              params.push(...activeStatuses);
+            }
+          }
+        } else if (f.field === 'owners') {
+          const owners = Array.isArray(f.value) ? f.value : [f.value];
+          if (owners.length) {
+            const placeholders = owners.map(() => '?').join(',');
+            wh.push(`req_code IN (SELECT req_code FROM release_task WHERE owner IN (${placeholders}))`);
+            params.push(...owners);
+          }
+        } else if (f.field === 'systems') {
+          const sysCodes = Array.isArray(f.value) ? f.value : [f.value];
+          if (sysCodes.length) {
+            const placeholders = sysCodes.map(() => '?').join(',');
+            wh.push(`(
+              EXISTS (SELECT 1 FROM json_each(requirement.main_systems) WHERE value IN (${placeholders})) OR
+              EXISTS (SELECT 1 FROM json_each(requirement.collab_dev_systems) WHERE value IN (${placeholders})) OR
+              EXISTS (SELECT 1 FROM json_each(requirement.collab_test_systems) WHERE value IN (${placeholders}))
+            )`);
+            params.push(...sysCodes, ...sysCodes, ...sysCodes);
+          }
+        }
+      }
+    }
+
+    if (!hasReleasePointFilter) {
+      const win = inClause('release_point_id', windowIds(body));
+      if (win.where) {
+        wh.push(win.where);
+        params.push(...win.params);
+      }
+    }
+
+    let sql = 'SELECT * FROM requirement';
+    if (wh.length) {
+      sql += ' WHERE ' + wh.join(' AND ');
+    }
+    sql += ' ORDER BY id DESC';
+    const reqs = all(sql, ...params);
+
+    const rps = all('SELECT id, release_date FROM release_point');
+    const rpMap = {};
+    for (const rp of rps) rpMap[rp.id] = rp.release_date;
+
+    const systems = all('SELECT sys_code, sys_name FROM system');
+    const sysMap = {};
+    for (const s of systems) sysMap[s.sys_code] = s.sys_name;
+
+    const cols = [
+      { key: 'req_code', title: '关联需求编号' },
+      { key: 'title', title: '需求标题' },
+      { key: 'release_date', title: '计划投产点' },
+      { key: 'release_status', title: '投产状态' },
+      { key: 'owner', title: '投产负责人' },
+      { key: 'signoff_progress', title: '会签评审进度' },
+      { key: 'system_status', title: '系统上线情况' },
+      { key: 'registrar', title: '登记人' },
+      { key: 'register_time', title: '登记时间' },
+    ];
+
+    const mappedList = reqs.map((r) => {
+      const rt = get('SELECT * FROM release_task WHERE req_code = ?', r.req_code);
+      let signoffProgress = '未发起';
+      let systemStatus = '未发起';
+      
+      if (rt) {
+        // 会签进度
+        const summary = signoffSummary(rt.id);
+        const signoffs = all('SELECT * FROM release_signoff WHERE release_task_id = ? ORDER BY id', rt.id);
+        const signoffDetail = signoffs.map(s => `${s.role_name}:${s.result}`).join(', ');
+        signoffProgress = `签 ${summary.signed} 驳 ${summary.rejected} / ${summary.total} (${signoffDetail})`;
+
+        // 系统上线情况
+        const relSystems = all('SELECT * FROM release_system WHERE release_task_id = ? ORDER BY id', rt.id);
+        systemStatus = relSystems.map(s => `${sysMap[s.system_code] || s.system_code}:${s.status}`).join(', ') || '无关联系统';
+      }
+
+      return {
+        req_code: r.req_code,
+        title: r.title,
+        release_date: rpMap[r.release_point_id] || null,
+        release_status: rt?.status || '未发起',
+        owner: rt?.owner || '',
+        signoff_progress: signoffProgress,
+        system_status: systemStatus,
+        registrar: rt?.registrar || '',
+        register_time: rt?.register_time || '',
+      };
+    });
+
+    const buf = await exportXlsx(cols, mappedList, '投产管理清单');
+    reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    reply.header('Content-Disposition', 'attachment; filename=release_tasks.xlsx');
+    return reply.send(buf);
   });
 }

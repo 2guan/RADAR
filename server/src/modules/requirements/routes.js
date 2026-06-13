@@ -15,6 +15,13 @@ import { listByEntity, countByFields } from '../../lib/attachment.js';
 import { exportXlsx, parseXlsx } from '../../lib/excel.js';
 import { windowIds, inClause } from '../../lib/window.js';
 import { ok, notFound, badRequest } from '../../lib/http.js';
+import {
+  resolveDictAttr,
+  resolveSystemCode,
+  resolveSystemCodes,
+  resolveReleasePoint,
+  formatAttachments,
+} from '../../lib/resolver.js';
 
 // 导入/导出列定义
 const IO_COLUMNS = [
@@ -23,9 +30,15 @@ const IO_COLUMNS = [
   { key: 'summary', title: '需求概述' },
   { key: 'status', title: '需求状态' },
   { key: 'req_type', title: '需求类型' },
+  { key: 'propose_dept', title: '农信提出部门' },
   { key: 'proposer', title: '农信提出人' },
+  { key: 'yn_owner', title: '云南农信业务负责人' },
+  { key: 'jk_owner', title: '建信金科业务负责人' },
   { key: 'propose_time', title: '提出时间' },
   { key: 'release_date', title: '计划投产点' },
+  { key: 'main_systems', title: '主责系统' },
+  { key: 'collab_dev_systems', title: '协同改造系统' },
+  { key: 'collab_test_systems', title: '协同测试系统' },
 ];
 
 const COLUMNS = [
@@ -91,10 +104,87 @@ export default async function requirementRoutes(fastify) {
   // 列表（按所选投产窗口过滤；多选用 IN，留空=全部）
   fastify.post('/requirements/list', { preHandler: fastify.requirePerm('requirement', 'view') }, async (request) => {
     const body = request.body || {};
-    const { where: baseWhere, params: baseParams } = inClause('release_point_id', windowIds(body));
+    
+    const wh = [];
+    const params = [];
+    
+    // 默认的投产窗口过滤
+    const win = inClause('release_point_id', windowIds(body));
+    if (win.where) {
+      wh.push(win.where);
+      params.push(...win.params);
+    }
+    
+    // 提取并处理自定义/复杂字段
+    const filters = Array.isArray(body.filters) ? body.filters : [];
+    const normalFilters = [];
+    
+    for (const f of filters) {
+      if (!f || f.value === undefined || f.value === null || f.value === '') continue;
+      
+      if (f.field === 'content') {
+        wh.push('(title LIKE ? OR summary LIKE ?)');
+        params.push(`%${f.value}%`, `%${f.value}%`);
+      } else if (f.field === 'org') {
+        const orgs = Array.isArray(f.value) ? f.value : [f.value];
+        if (orgs.length) {
+          const placeholders = orgs.map(() => '?').join(',');
+          const sqlExpr = `
+            COALESCE(
+              (
+                SELECT impl_org FROM dev_task 
+                WHERE dev_task.req_code = requirement.req_code 
+                  AND dev_task.impl_system IN (SELECT value FROM json_each(requirement.main_systems))
+                  AND dev_task.impl_org IS NOT NULL AND dev_task.impl_org != ''
+                ORDER BY id ASC LIMIT 1
+              ),
+              (
+                SELECT org FROM system 
+                WHERE sys_code = (SELECT value FROM json_each(requirement.main_systems) LIMIT 1)
+                  AND org IS NOT NULL AND org != ''
+              ),
+              requirement.propose_dept,
+              '未分配机构'
+            )
+          `;
+          wh.push(`${sqlExpr} IN (${placeholders})`);
+          params.push(...orgs);
+        }
+      } else if (f.field === 'owners') {
+        const owners = Array.isArray(f.value) ? f.value : [f.value];
+        if (owners.length) {
+          const placeholders = owners.map(() => '?').join(',');
+          wh.push(`(yn_owner IN (${placeholders}) OR jk_owner IN (${placeholders}))`);
+          params.push(...owners, ...owners);
+        }
+      } else if (f.field === 'main_systems') {
+        const codes = Array.isArray(f.value) ? f.value : [f.value];
+        if (codes.length) {
+          const placeholders = codes.map(() => '?').join(',');
+          wh.push(`EXISTS (SELECT 1 FROM json_each(requirement.main_systems) WHERE value IN (${placeholders}))`);
+          params.push(...codes);
+        }
+      } else if (f.field === 'collab_systems') {
+        const codes = Array.isArray(f.value) ? f.value : [f.value];
+        if (codes.length) {
+          const placeholders = codes.map(() => '?').join(',');
+          wh.push(`(
+            EXISTS (SELECT 1 FROM json_each(requirement.collab_dev_systems) WHERE value IN (${placeholders})) OR
+            EXISTS (SELECT 1 FROM json_each(requirement.collab_test_systems) WHERE value IN (${placeholders}))
+          )`);
+          params.push(...codes, ...codes);
+        }
+      } else {
+        normalFilters.push(f);
+      }
+    }
+    
+    const newBody = { ...body, filters: normalFilters };
+    const baseWhere = wh.join(' AND ');
+    
     const result = listQuery({
       table: 'requirement', columns: COLUMNS, searchColumns: SEARCH,
-      query: body, baseWhere, baseParams,
+      query: newBody, baseWhere, baseParams: params,
     });
 
     // 投产点与系统为主数据（量小），整表载入做编号→名称映射
@@ -279,12 +369,52 @@ export default async function requirementRoutes(fastify) {
       table: 'requirement', columns: COLUMNS, searchColumns: SEARCH,
       query: { ...body, pageSize: 0 }, baseWhere, baseParams,
     });
+
+    const systems = all('SELECT sys_code, sys_name FROM system');
+    const sysMap = {};
+    for (const s of systems) sysMap[s.sys_code] = s.sys_name;
+
+    const rps = all('SELECT id, release_date FROM release_point');
+    const rpMap = {};
+    for (const rp of rps) rpMap[rp.id] = rp.release_date;
+
     const cols = [
-      { key: 'req_code', title: '需求编号' }, { key: 'title', title: '需求标题' },
-      { key: 'status', title: '需求状态' }, { key: 'req_type', title: '需求类型' },
-      { key: 'proposer', title: '提出人' }, { key: 'propose_time', title: '提出时间' },
+      { key: 'req_code', title: '需求编号' },
+      { key: 'title', title: '需求标题' },
+      { key: 'summary', title: '需求概述' },
+      { key: 'status', title: '需求状态' },
+      { key: 'req_type', title: '需求类型' },
+      { key: 'propose_dept', title: '农信提出部门' },
+      { key: 'proposer', title: '农信提出人' },
+      { key: 'yn_owner', title: '云南农信业务负责人' },
+      { key: 'jk_owner', title: '建信金科业务负责人' },
+      { key: 'propose_time', title: '提出时间' },
+      { key: 'release_date', title: '计划投产点' },
+      { key: 'main_systems', title: '主责系统' },
+      { key: 'collab_dev_systems', title: '协同改造系统' },
+      { key: 'collab_test_systems', title: '协同测试系统' },
+      { key: 'registrar', title: '登记人' },
+      { key: 'register_time', title: '登记时间' },
+      { key: 'attachments', title: '需求说明书' },
     ];
-    const buf = await exportXlsx(cols, result.list, '需求清单');
+
+    const mappedList = result.list.map(row => {
+      const main = row.main_systems ? JSON.parse(row.main_systems) : [];
+      const collabDev = row.collab_dev_systems ? JSON.parse(row.collab_dev_systems) : [];
+      const collabTest = row.collab_test_systems ? JSON.parse(row.collab_test_systems) : [];
+      const attaches = all("SELECT * FROM attachment WHERE entity_type = 'requirement' AND entity_id = ?", row.id);
+
+      return {
+        ...row,
+        release_date: rpMap[row.release_point_id] || '',
+        main_systems: main.map(c => sysMap[c] || c).join(', '),
+        collab_dev_systems: collabDev.map(c => sysMap[c] || c).join(', '),
+        collab_test_systems: collabTest.map(c => sysMap[c] || c).join(', '),
+        attachments: formatAttachments(attaches, '需求说明书'),
+      };
+    });
+
+    const buf = await exportXlsx(cols, mappedList, '需求清单');
     reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     reply.header('Content-Disposition', 'attachment; filename=requirements.xlsx');
     return reply.send(buf);
@@ -298,7 +428,7 @@ export default async function requirementRoutes(fastify) {
     return reply.send(buf);
   });
 
-  // 导入（按 需求编号 去重；计划投产点按日期匹配 release_point；编号留空则自动生成）
+  // 导入（按 需求编号 去重；计划投产点按日期匹配 release_point；编号留空则自动生成；支持兼容性处理与回滚）
   fastify.post('/requirements/import', { preHandler: fastify.requirePerm('requirement', 'import') }, async (request) => {
     const data = await request.file();
     if (!data) throw badRequest('请上传文件');
@@ -307,36 +437,172 @@ export default async function requirementRoutes(fastify) {
     const rows = await parseXlsx(buffer, IO_COLUMNS);
     if (!rows.length) throw badRequest('文件中无有效数据');
 
-    const stat = { inserted: 0, updated: 0, skipped: 0 };
+    const stat = { inserted: 0, updated: 0, skipped: 0, failed: 0 };
+    const details = [];
+
+    // 载入投产点和系统映射用于变化展示及解析
+    const rps = all('SELECT id, release_date FROM release_point');
+    const rpMap = {};
+    for (const rp of rps) rpMap[rp.id] = rp.release_date;
+
+    const systems = all('SELECT sys_code, sys_name FROM system');
+    const sysMap = {};
+    for (const s of systems) sysMap[s.sys_code] = s.sys_name;
+
     const apply = () => {
       for (const r of rows) {
-        if (!r.title) { stat.skipped++; continue; }
-        // 解析计划投产点（YYYYMMDD）
-        const rp = r.release_date ? get('SELECT id FROM release_point WHERE release_date = ?', String(r.release_date).trim()) : null;
-        let code = String(r.req_code || '').trim();
-        const exists = code ? get('SELECT * FROM requirement WHERE req_code = ?', code) : null;
-        if (exists) {
-          if (mode === 'skip') { stat.skipped++; continue; }
-          if (mode === 'rollback') throw badRequest(`需求编号重复：${code}，已回滚`);
-          run(`UPDATE requirement SET title=?, summary=?, status=?, req_type=?, proposer=?, propose_time=?, updated_at=datetime('now','localtime') WHERE id=?`,
-            r.title, r.summary || null, r.status || exists.status, r.req_type || null, r.proposer || null, r.propose_time || null, exists.id);
-          auditUpdate('requirement', exists.id, code, request.currentUser?.name, exists, r, LABELS);
-          stat.updated++;
-        } else {
-          if (!rp) { stat.skipped++; continue; } // 无法确定投产窗口
-          if (!code) code = genRequirementCode(get('SELECT release_date FROM release_point WHERE id = ?', rp.id).release_date);
-          const res = run(
-            `INSERT INTO requirement (req_code, title, summary, status, req_type, proposer, propose_time, release_point_id, registrar, register_time)
-             VALUES (?,?,?,?,?,?,?,?,?,?)`,
-            code, r.title, r.summary || null, r.status || '需求登记', r.req_type || null, r.proposer || null,
-            r.propose_time || null, rp.id, request.currentUser?.name, new Date().toISOString().slice(0, 10),
-          );
-          auditCreate('requirement', res.lastInsertRowid, code, request.currentUser?.name);
-          stat.inserted++;
+        const rowNum = r.__rowNum__;
+        try {
+          if (!r.title) throw new Error('需求标题不能为空');
+          if (!r.release_date) throw new Error('计划投产点不能为空');
+
+          // 解析计划投产点
+          const rpId = resolveReleasePoint(r.release_date);
+          if (!rpId) throw new Error(`计划投产点投产日期 [${r.release_date}] 不存在`);
+
+          // 兼容性字典转换
+          const status = resolveDictAttr('process_status', r.status) || '需求登记';
+          const reqType = resolveDictAttr('req_type', r.req_type);
+          const proposeDept = resolveDictAttr('org', r.propose_dept);
+
+          // 兼容性系统转换
+          const mainSystems = resolveSystemCodes(r.main_systems);
+          const collabDevSystems = resolveSystemCodes(r.collab_dev_systems);
+          const collabTestSystems = resolveSystemCodes(r.collab_test_systems);
+
+          let code = String(r.req_code || '').trim();
+          const exists = code ? get('SELECT * FROM requirement WHERE req_code = ?', code) : null;
+
+          if (exists) {
+            if (mode === 'skip') {
+              stat.skipped++;
+              details.push({
+                key: code,
+                title: r.title,
+                action: 'skip',
+                status: 'success',
+                __rowNum__: rowNum,
+              });
+              continue;
+            }
+            if (mode === 'rollback') {
+              throw new Error(`需求编号 [${code}] 已存在，无法覆盖`);
+            }
+
+            // overwrite 模式：比对并更新
+            const changes = [];
+            const compareAndPush = (fieldKey, fieldName, oldVal, newVal) => {
+              if (oldVal !== newVal) {
+                changes.push({ field: fieldName, old: oldVal, new: newVal });
+              }
+            };
+
+            compareAndPush('title', '需求标题', exists.title || '', r.title || '');
+            compareAndPush('summary', '需求概述', exists.summary || '', r.summary || '');
+            compareAndPush('status', '需求状态', exists.status || '', status || '');
+            compareAndPush('req_type', '需求类型', exists.req_type || '', reqType || '');
+            compareAndPush('propose_dept', '农信提出部门', exists.propose_dept || '', proposeDept || '');
+            compareAndPush('proposer', '农信提出人', exists.proposer || '', r.proposer || '');
+            compareAndPush('yn_owner', '云南农信业务负责人', exists.yn_owner || '', r.yn_owner || '');
+            compareAndPush('jk_owner', '建信金科业务负责人', exists.jk_owner || '', r.jk_owner || '');
+            compareAndPush('propose_time', '提出时间', exists.propose_time || '', r.propose_time || '');
+            
+            // 计划投产点比较
+            const oldRpDate = rpMap[exists.release_point_id] || '';
+            const newRpDate = rpMap[rpId] || '';
+            compareAndPush('release_point_id', '计划投产点', oldRpDate, newRpDate);
+
+            // 系统比较
+            const decodeSystems = (jsonStr) => (jsonStr ? JSON.parse(jsonStr) : []).map(c => sysMap[c] || c).join(', ');
+            compareAndPush('main_systems', '主责系统', decodeSystems(exists.main_systems), decodeSystems(mainSystems));
+            compareAndPush('collab_dev_systems', '协同改造系统', decodeSystems(exists.collab_dev_systems), decodeSystems(collabDevSystems));
+            compareAndPush('collab_test_systems', '协同测试系统', decodeSystems(exists.collab_test_systems), decodeSystems(collabTestSystems));
+
+            if (changes.length > 0) {
+              run(
+                `UPDATE requirement SET 
+                   title=?, summary=?, status=?, req_type=?, propose_dept=?, proposer=?, yn_owner=?, jk_owner=?, 
+                   propose_time=?, release_point_id=?, main_systems=?, collab_dev_systems=?, collab_test_systems=?, 
+                   updated_at=datetime('now','localtime') 
+                 WHERE id=?`,
+                r.title, r.summary || null, status, reqType || null, proposeDept || null, r.proposer || null,
+                r.yn_owner || null, r.jk_owner || null, r.propose_time || null, rpId,
+                mainSystems, collabDevSystems, collabTestSystems, exists.id
+              );
+              auditUpdate('requirement', exists.id, code, request.currentUser?.name, exists, {
+                title: r.title, summary: r.summary || null, status, req_type: reqType || null,
+                propose_dept: proposeDept || null, proposer: r.proposer || null, yn_owner: r.yn_owner || null,
+                jk_owner: r.jk_owner || null, propose_time: r.propose_time || null, release_point_id: rpId,
+                main_systems: mainSystems, collab_dev_systems: collabDevSystems, collab_test_systems: collabTestSystems
+              }, LABELS);
+            }
+
+            stat.updated++;
+            details.push({
+              key: code,
+              title: r.title,
+              action: 'update',
+              status: 'success',
+              __rowNum__: rowNum,
+              changes,
+            });
+
+          } else {
+            // insert 新建
+            if (!code) code = genRequirementCode(rpMap[rpId]);
+            const res = run(
+              `INSERT INTO requirement 
+                 (req_code, title, summary, status, req_type, propose_dept, proposer, yn_owner, jk_owner, 
+                  propose_time, release_point_id, main_systems, collab_dev_systems, collab_test_systems, registrar, register_time)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+              code, r.title, r.summary || null, status, reqType || null, proposeDept || null, r.proposer || null,
+              r.yn_owner || null, r.jk_owner || null, r.propose_time || null, rpId,
+              mainSystems, collabDevSystems, collabTestSystems, request.currentUser?.name, new Date().toISOString().slice(0, 10)
+            );
+            auditCreate('requirement', res.lastInsertRowid, code, request.currentUser?.name);
+            stat.inserted++;
+            details.push({
+              key: code,
+              title: r.title,
+              action: 'insert',
+              status: 'success',
+              __rowNum__: rowNum,
+            });
+          }
+        } catch (err) {
+          stat.failed++;
+          details.push({
+            key: r.req_code || '未知编号',
+            title: r.title || '空标题',
+            status: 'fail',
+            __rowNum__: rowNum,
+            error: err.message,
+          });
+          if (mode === 'rollback') {
+            throw err; // 抛出异常引发事务回滚
+          }
         }
       }
     };
-    if (mode === 'rollback') tx(apply); else apply();
-    return ok(stat, '导入完成');
+
+    if (mode === 'rollback') {
+      try {
+        tx(apply);
+      } catch (err) {
+        // tx 发生回滚后，将成功导入/更新的项修正为 skip 状态
+        for (const item of details) {
+          if (item.status === 'success') {
+            item.action = 'skip';
+          }
+        }
+        // 重置 stat 指标为 0 (回滚了)
+        stat.inserted = 0;
+        stat.updated = 0;
+      }
+    } else {
+      apply();
+    }
+
+    return ok({ stat, details }, '导入完成');
   });
 }

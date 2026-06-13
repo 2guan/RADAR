@@ -50,11 +50,44 @@ function setUserRoles(userId, roleCodes) {
 export default async function userRoutes(fastify) {
   // 列表（附带角色信息）
   fastify.post('/users/list', { preHandler: fastify.requirePerm('user', 'view') }, async (request) => {
+    const body = request.body || {};
+    const wh = [];
+    const params = [];
+    const filters = Array.isArray(body.filters) ? body.filters : [];
+    const normalFilters = [];
+    
+    for (const f of filters) {
+      if (!f || f.value === undefined || f.value === null || f.value === '') continue;
+      
+      if (f.field === 'user_info') {
+        const vals = Array.isArray(f.value) ? f.value : [f.value];
+        if (vals.length) {
+          const placeholders = vals.map(() => '?').join(',');
+          wh.push(`(name IN (${placeholders}) OR phone IN (${placeholders}))`);
+          params.push(...vals, ...vals);
+        }
+      } else if (f.field === 'role') {
+        const roleCodes = Array.isArray(f.value) ? f.value : [f.value];
+        if (roleCodes.length) {
+          const placeholders = roleCodes.map(() => '?').join(',');
+          wh.push(`id IN (SELECT user_id FROM user_role WHERE role_id IN (SELECT id FROM role WHERE code IN (${placeholders})))`);
+          params.push(...roleCodes);
+        }
+      } else {
+        normalFilters.push(f);
+      }
+    }
+    
+    const newBody = { ...body, filters: normalFilters };
+    const baseWhere = wh.join(' AND ');
+    
     const result = listQuery({
       table: 'user',
       columns: ['id', 'phone', 'name', 'org', 'status', 'created_at'],
       searchColumns: ['phone', 'name', 'org'],
-      query: request.body || {},
+      query: newBody,
+      baseWhere,
+      baseParams: params,
       select: 'id, phone, name, org, status, is_super, created_at',
     });
     result.list = result.list.map((u) => ({ ...u, roles: rolesOfUser(u.id) }));
@@ -67,6 +100,12 @@ export default async function userRoutes(fastify) {
     const rows = kw
       ? all('SELECT id, name, phone, org FROM user WHERE status=\'启用\' AND (name LIKE ? OR phone LIKE ?) ORDER BY name LIMIT 30', `%${kw}%`, `%${kw}%`)
       : all('SELECT id, name, phone, org FROM user WHERE status=\'启用\' ORDER BY name LIMIT 30');
+    return ok(rows);
+  });
+
+  // 获取所有启用的人员（不限流，任意登录用户，供下拉列表选择）
+  fastify.get('/users/active', { preHandler: fastify.authenticate }, async () => {
+    const rows = all('SELECT id, name, phone, org FROM user WHERE status=\'启用\' ORDER BY name');
     return ok(rows);
   });
 

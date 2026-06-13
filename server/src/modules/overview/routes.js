@@ -11,6 +11,8 @@ import { isTerminalStatus } from '../../lib/status.js';
 import { listByEntity } from '../../lib/attachment.js';
 import { windowIds, inClause } from '../../lib/window.js';
 import { ok, notFound } from '../../lib/http.js';
+import { exportXlsx } from '../../lib/excel.js';
+import { formatAttachments } from '../../lib/resolver.js';
 
 /** 计算一组任务的节点状态（含单一代表状态 status，供阶段标签展示） */
 function nodeState(tasks) {
@@ -22,13 +24,34 @@ function nodeState(tasks) {
   return { state: allTerminal ? 'done' : 'doing', text, status };
 }
 
-/** 取需求实施机构：主责系统首个所属机构，回退提出部门（sysMap 预载，免逐条查询） */
-function reqOrg(req, sysMap) {
+/**
+ * 取需求实施机构逻辑：
+ * 1. 第一优先级：取需求关联的主责系统的第一个开发任务的开发实施方（impl_org）。
+ * 2. 第二优先级：取系统的第一个主责系统对应的所属机构（org）。
+ * 3. 第三优先级：取需求提出部门（propose_dept）。
+ * 4. 第四优先级：默认兜底值 "未分配机构"。
+ */
+export function reqOrg(req, sysMap, devMap) {
   const main = req.main_systems ? JSON.parse(req.main_systems) : [];
+  
+  // 第一优先级：取需求关联的主责系统的第一个开发任务的开发实施方
+  if (main.length) {
+    const devTasks = devMap[req.req_code] || [];
+    const mainDevTasks = devTasks.filter((t) => main.includes(t.impl_system));
+    if (mainDevTasks.length) {
+      const org = mainDevTasks[0].impl_org;
+      if (org) return org;
+    }
+  }
+
+  // 第二优先级：取系统的第一个主责系统对应的所属机构
   if (main.length) {
     const org = sysMap[main[0]]?.org;
     if (org) return org;
   }
+
+  // 第三优先级：取需求提出部门
+  // 第四优先级：默认兜底值 "未分配机构"
   return req.propose_dept || '未分配机构';
 }
 
@@ -86,21 +109,64 @@ export default async function overviewRoutes(fastify) {
   // 概览列表（按实施机构分组）
   fastify.post('/overview/list', { preHandler: fastify.requirePerm('overview', 'view') }, async (request) => {
     const body = request.body || {};
+    
+    // 解析筛选条件
+    const filters = Array.isArray(body.filters) ? body.filters : [];
+    
+    let targetReleasePointIds = null;
+    let reqCodeFilter = null;
+    let contentFilter = null;
+    let orgsFilter = null;
+    let stageFilter = null;
+    let taskStatusFilter = null;
+    let mainSystemsFilter = null;
+    let collabSystemsFilter = null;
+    
+    for (const f of filters) {
+      if (!f || f.value === undefined || f.value === null || f.value === '') continue;
+      
+      if (f.field === 'release_point_id') {
+        targetReleasePointIds = Array.isArray(f.value) ? f.value : [f.value];
+      } else if (f.field === 'req_code') {
+        reqCodeFilter = String(f.value).toLowerCase().trim();
+      } else if (f.field === 'content') {
+        contentFilter = String(f.value).toLowerCase().trim();
+      } else if (f.field === 'org') {
+        orgsFilter = Array.isArray(f.value) ? f.value : [f.value];
+      } else if (f.field === 'stage') {
+        stageFilter = Array.isArray(f.value) ? f.value : [f.value];
+      } else if (f.field === 'taskStatus') {
+        taskStatusFilter = Array.isArray(f.value) ? f.value : [f.value];
+      } else if (f.field === 'main_systems') {
+        mainSystemsFilter = Array.isArray(f.value) ? f.value : [f.value];
+      } else if (f.field === 'collab_systems') {
+        collabSystemsFilter = Array.isArray(f.value) ? f.value : [f.value];
+      }
+    }
+    
     let sql = 'SELECT * FROM requirement';
     const params = [];
-    const win = inClause('release_point_id', windowIds(body));
-    if (win.where) { sql += ` WHERE ${win.where}`; params.push(...win.params); }
+    
+    if (targetReleasePointIds) {
+      if (targetReleasePointIds.length) {
+        sql += ` WHERE release_point_id IN (${targetReleasePointIds.map(() => '?').join(',')})`;
+        params.push(...targetReleasePointIds);
+      }
+    } else {
+      const win = inClause('release_point_id', windowIds(body));
+      if (win.where) { sql += ` WHERE ${win.where}`; params.push(...win.params); }
+    }
     sql += ' ORDER BY id DESC';
     const reqs = all(sql, ...params);
-
+ 
     // 关联状态与系统主数据一次性载入并分桶，替代逐需求 N+1 查询
     const sysMap = {};
     for (const s of all('SELECT sys_code, sys_name, org FROM system')) {
       sysMap[s.sys_code] = { name: s.sys_name, org: s.org };
     }
     const devMap = {};
-    for (const d of all('SELECT req_code, status FROM dev_task')) {
-      (devMap[d.req_code] ||= []).push({ status: d.status });
+    for (const d of all('SELECT id, req_code, status, impl_system, impl_org FROM dev_task ORDER BY id ASC')) {
+      (devMap[d.req_code] ||= []).push(d);
     }
     const testMap = {};
     for (const t of all('SELECT req_code, test_type, status FROM test_task')) {
@@ -111,12 +177,59 @@ export default async function overviewRoutes(fastify) {
     for (const rt of all('SELECT req_code, status FROM release_task')) {
       rtMap[rt.req_code] = rt.status;
     }
-
+ 
     const groups = {};
     for (const r of reqs) {
-      const org = reqOrg(r, sysMap);
+      const org = reqOrg(r, sysMap, devMap);
       const chain = buildChain(r, devMap, testMap, rtMap);
-      const names = sysNames(r.main_systems ? JSON.parse(r.main_systems) : [], sysMap);
+      const mainSystems = r.main_systems ? JSON.parse(r.main_systems) : [];
+      const collabDevSystems = r.collab_dev_systems ? JSON.parse(r.collab_dev_systems) : [];
+      const collabTestSystems = r.collab_test_systems ? JSON.parse(r.collab_test_systems) : [];
+      const names = sysNames(mainSystems, sysMap);
+      
+      // 1. 实施机构
+      if (orgsFilter && !orgsFilter.includes(org)) continue;
+      
+      // 2. 需求编号
+      if (reqCodeFilter && !r.req_code.toLowerCase().includes(reqCodeFilter)) continue;
+      
+      // 3. 需求内容
+      if (contentFilter) {
+        const titleMatch = r.title && r.title.toLowerCase().includes(contentFilter);
+        const summaryMatch = r.summary && r.summary.toLowerCase().includes(contentFilter);
+        if (!titleMatch && !summaryMatch) continue;
+      }
+      
+      // 4. 任务阶段
+      let current = chain.nodes.find((n) => n.state === 'doing');
+      if (!current) {
+        const dones = chain.nodes.filter((n) => n.state === 'done');
+        current = dones[dones.length - 1] || chain.nodes[0];
+      }
+      if (stageFilter && !stageFilter.includes(current.label)) continue;
+      
+      // 5. 任务状态
+      if (taskStatusFilter) {
+        const matchesStatus = taskStatusFilter.some(ts => {
+          if (ts.includes('-')) {
+            const [stg, stat] = ts.split('-');
+            return current.label === stg && current.status === stat;
+          }
+          return current.status === ts;
+        });
+        if (!matchesStatus) continue;
+      }
+      
+      // 6. 主责系统
+      if (mainSystemsFilter && !mainSystems.some(s => mainSystemsFilter.includes(s))) continue;
+      
+      // 7. 协同系统
+      if (collabSystemsFilter) {
+        const hasCollab = collabDevSystems.some(s => collabSystemsFilter.includes(s)) ||
+                          collabTestSystems.some(s => collabSystemsFilter.includes(s));
+        if (!hasCollab) continue;
+      }
+ 
       const card = {
         req_code: r.req_code,
         title: r.title,
@@ -197,5 +310,375 @@ export default async function overviewRoutes(fastify) {
       req.id, reqCode, reqCode, reqCode
     );
     return ok(rows);
+  });
+
+  // 导出版本概览宽表
+  fastify.post('/overview/export', { preHandler: fastify.requirePerm('overview', 'view') }, async (request, reply) => {
+    const body = request.body || {};
+    
+    // 1. 复用 /overview/list 的筛选逻辑找出匹配的需求
+    const filters = Array.isArray(body.filters) ? body.filters : [];
+    
+    let targetReleasePointIds = null;
+    let reqCodeFilter = null;
+    let contentFilter = null;
+    let orgsFilter = null;
+    let stageFilter = null;
+    let taskStatusFilter = null;
+    let mainSystemsFilter = null;
+    let collabSystemsFilter = null;
+    
+    for (const f of filters) {
+      if (!f || f.value === undefined || f.value === null || f.value === '') continue;
+      
+      if (f.field === 'release_point_id') {
+        targetReleasePointIds = Array.isArray(f.value) ? f.value : [f.value];
+      } else if (f.field === 'req_code') {
+        reqCodeFilter = String(f.value).toLowerCase().trim();
+      } else if (f.field === 'content') {
+        contentFilter = String(f.value).toLowerCase().trim();
+      } else if (f.field === 'org') {
+        orgsFilter = Array.isArray(f.value) ? f.value : [f.value];
+      } else if (f.field === 'stage') {
+        stageFilter = Array.isArray(f.value) ? f.value : [f.value];
+      } else if (f.field === 'taskStatus') {
+        taskStatusFilter = Array.isArray(f.value) ? f.value : [f.value];
+      } else if (f.field === 'main_systems') {
+        mainSystemsFilter = Array.isArray(f.value) ? f.value : [f.value];
+      } else if (f.field === 'collab_systems') {
+        collabSystemsFilter = Array.isArray(f.value) ? f.value : [f.value];
+      }
+    }
+    
+    let sql = 'SELECT * FROM requirement';
+    const params = [];
+    
+    if (targetReleasePointIds) {
+      if (targetReleasePointIds.length) {
+        sql += ` WHERE release_point_id IN (${targetReleasePointIds.map(() => '?').join(',')})`;
+        params.push(...targetReleasePointIds);
+      }
+    } else {
+      const win = inClause('release_point_id', windowIds(body));
+      if (win.where) { sql += ` WHERE ${win.where}`; params.push(...win.params); }
+    }
+    sql += ' ORDER BY id DESC';
+    const reqs = all(sql, ...params);
+ 
+    const sysMap = {};
+    for (const s of all('SELECT sys_code, sys_name, org FROM system')) {
+      sysMap[s.sys_code] = { name: s.sys_name, org: s.org };
+    }
+    const devMap = {};
+    for (const d of all('SELECT * FROM dev_task ORDER BY id ASC')) {
+      (devMap[d.req_code] ||= []).push(d);
+    }
+    const testMap = {};
+    for (const t of all('SELECT * FROM test_task')) {
+      const bucket = (testMap[t.req_code] ||= {});
+      (bucket[t.test_type] ||= []).push(t);
+    }
+    const rtMap = {};
+    for (const rt of all('SELECT * FROM release_task')) {
+      rtMap[rt.req_code] = rt;
+    }
+    const rps = all('SELECT id, release_date FROM release_point');
+    const rpMap = {};
+    for (const rp of rps) rpMap[rp.id] = rp.release_date;
+
+    const filteredReqs = [];
+    for (const r of reqs) {
+      const org = reqOrg(r, sysMap, devMap);
+      
+      const testBucket = testMap[r.req_code] || {};
+      const chain = buildChain(
+        r,
+        devMap,
+        Object.fromEntries(Object.entries(testBucket).map(([k, v]) => [k, v.map(t => ({ status: t.status }))])),
+        Object.fromEntries(Object.entries(rtMap).map(([k, v]) => [k, v.status]))
+      );
+
+      const mainSystems = r.main_systems ? JSON.parse(r.main_systems) : [];
+      const collabDevSystems = r.collab_dev_systems ? JSON.parse(r.collab_dev_systems) : [];
+      const collabTestSystems = r.collab_test_systems ? JSON.parse(r.collab_test_systems) : [];
+      
+      // 1. 实施机构
+      if (orgsFilter && !orgsFilter.includes(org)) continue;
+      // 2. 需求编号
+      if (reqCodeFilter && !r.req_code.toLowerCase().includes(reqCodeFilter)) continue;
+      // 3. 需求内容
+      if (contentFilter) {
+        const titleMatch = r.title && r.title.toLowerCase().includes(contentFilter);
+        const summaryMatch = r.summary && r.summary.toLowerCase().includes(contentFilter);
+        if (!titleMatch && !summaryMatch) continue;
+      }
+      // 4. 任务阶段
+      let current = chain.nodes.find((n) => n.state === 'doing');
+      if (!current) {
+        const dones = chain.nodes.filter((n) => n.state === 'done');
+        current = dones[dones.length - 1] || chain.nodes[0];
+      }
+      if (stageFilter && !stageFilter.includes(current.label)) continue;
+      // 5. 任务状态
+      if (taskStatusFilter) {
+        const matchesStatus = taskStatusFilter.some(ts => {
+          if (ts.includes('-')) {
+            const [stg, stat] = ts.split('-');
+            return current.label === stg && current.status === stat;
+          }
+          return current.status === ts;
+        });
+        if (!matchesStatus) continue;
+      }
+      // 6. 主责系统
+      if (mainSystemsFilter && !mainSystems.some(s => mainSystemsFilter.includes(s))) continue;
+      // 7. 协同系统
+      if (collabSystemsFilter) {
+        const hasCollab = collabDevSystems.some(s => collabSystemsFilter.includes(s)) ||
+                          collabTestSystems.some(s => collabSystemsFilter.includes(s));
+        if (!hasCollab) continue;
+      }
+
+      filteredReqs.push(r);
+    }
+
+    // 2. 将筛选出来的需求按开发任务行展开
+    const wideRows = [];
+    for (const r of filteredReqs) {
+      const devTasks = devMap[r.req_code] || [];
+      const testBucket = testMap[r.req_code] || {};
+      const rtRow = rtMap[r.req_code];
+
+      // 提取需求层级的基础信息
+      const reqMainSys = r.main_systems ? JSON.parse(r.main_systems) : [];
+      const reqCollabDev = r.collab_dev_systems ? JSON.parse(r.collab_dev_systems) : [];
+      const reqCollabTest = r.collab_test_systems ? JSON.parse(r.collab_test_systems) : [];
+
+      const reqAttaches = all("SELECT * FROM attachment WHERE entity_type = 'requirement' AND entity_id = ?", r.id);
+      const reqSpecFormatted = formatAttachments(reqAttaches, '需求说明书');
+
+      const reqInfo = {
+        req_code: r.req_code,
+        req_title: r.title,
+        req_summary: r.summary,
+        req_status: r.status,
+        req_type: r.req_type,
+        propose_dept: r.propose_dept,
+        proposer: r.proposer,
+        yn_owner: r.yn_owner,
+        jk_owner: r.jk_owner,
+        propose_time: r.propose_time,
+        release_date: rpMap[r.release_point_id] || '',
+        main_systems: reqMainSys.map(c => sysMap[c]?.name || c).join(', '),
+        collab_dev_systems: reqCollabDev.map(c => sysMap[c]?.name || c).join(', '),
+        collab_test_systems: reqCollabTest.map(c => sysMap[c]?.name || c).join(', '),
+        req_spec: reqSpecFormatted,
+      };
+
+      // 投产与会签信息（同一需求共享）
+      let releaseInfo = {
+        release_status: rtRow?.status || '未发起',
+        release_owner: rtRow?.owner || '',
+        signoff_details: '无',
+      };
+      if (rtRow) {
+        const signoffs = all('SELECT * FROM release_signoff WHERE release_task_id = ? ORDER BY id', rtRow.id);
+        releaseInfo.signoff_details = signoffs.map(s => `${s.role_name}·${s.signer_name || '未签署'}(${s.result}${s.conclusion ? ':' + s.conclusion : ''})`).join('; ') || '无会签记录';
+      }
+
+      // 如果没有任何开发任务，我们依然保留这一行，只是开发相关的字段和关联系统状态为空
+      const tasksToLoop = devTasks.length ? devTasks : [null];
+
+      for (const d of tasksToLoop) {
+        let devInfo = {
+          dev_code: '', dev_name: '', dev_content: '', dev_status: '', dev_owner: '',
+          dev_system: '', dev_org: '', dev_plan_start: '', dev_plan_end: '',
+          dev_actual_start: '', dev_actual_end: '', dev_deviation_rate: '', dev_attachments: '',
+        };
+        let sysReleaseTime = '无';
+        let sysReleaseStatus = '无';
+
+        let sitInfo = { sit_code: '无', sit_status: '无', sit_owner: '无', sit_actual_end: '无', sit_attaches: '无' };
+        let uatInfo = { uat_code: '无', uat_status: '无', uat_owner: '无', uat_actual_end: '无', uat_attaches: '无' };
+        let nftInfo = { nft_code: '无', nft_status: '无', nft_owner: '无', nft_actual_end: '无', nft_attaches: '无' };
+        let secInfo = { sec_code: '无', sec_status: '无', sec_owner: '无', sec_actual_end: '无', sec_attaches: '无' };
+
+        if (d) {
+          const devAttaches = all("SELECT * FROM attachment WHERE entity_type = 'dev' AND entity_id = ?", d.id);
+          const devAttsFormatted = ['概要设计', '详细设计', '代码走查', '单元测试报告']
+            .map(k => `${k}:${formatAttachments(devAttaches, k)}`)
+            .filter(str => !str.endsWith(':'))
+            .join('; ');
+
+          devInfo = {
+            dev_code: d.task_code,
+            dev_name: d.task_name,
+            dev_content: d.content || '',
+            dev_status: d.status,
+            dev_owner: d.owner || '',
+            dev_system: sysMap[d.impl_system]?.name || d.impl_system,
+            dev_org: d.impl_org || '',
+            dev_plan_start: d.plan_start || '',
+            dev_plan_end: d.plan_end || '',
+            dev_actual_start: d.actual_start || '',
+            dev_actual_end: d.actual_end || '',
+            dev_deviation_rate: d.deviation_rate != null ? `${d.deviation_rate}%` : '0%',
+            dev_attachments: devAttsFormatted,
+          };
+
+          // 关联投产系统状态
+          if (rtRow) {
+            const relSys = get('SELECT * FROM release_system WHERE release_task_id = ? AND system_code = ?', rtRow.id, d.impl_system);
+            if (relSys) {
+              sysReleaseTime = relSys.actual_release_time || '待发布';
+              sysReleaseStatus = relSys.status || '';
+            }
+          }
+
+          // 映射测试任务
+          const mapTestInfo = (testType) => {
+            const list = testBucket[testType] || [];
+            // 匹配 impl_system === d.impl_system；如果没有则取 impl_system 为空/NULL (即合并建立的)
+            let match = list.find(t => t.impl_system === d.impl_system);
+            if (!match) {
+              match = list.find(t => !t.impl_system);
+            }
+            if (match) {
+              const testAttaches = all("SELECT * FROM attachment WHERE entity_type = 'test' AND entity_id = ?", match.id);
+              const testAttsFormatted = ['测试方案', '测试报告']
+                .map(k => `${k}:${formatAttachments(testAttaches, k)}`)
+                .filter(str => !str.endsWith(':'))
+                .join('; ');
+
+              return {
+                code: match.task_code,
+                status: match.status,
+                owner: match.owner || '',
+                actual_end: match.actual_end || '进行中',
+                attaches: testAttsFormatted || '无',
+              };
+            }
+            return null;
+          };
+
+          const sitMatch = mapTestInfo('SIT');
+          if (sitMatch) {
+            sitInfo = { sit_code: sitMatch.code, sit_status: sitMatch.status, sit_owner: sitMatch.owner, sit_actual_end: sitMatch.actual_end, sit_attaches: sitMatch.attaches };
+          }
+          const uatMatch = mapTestInfo('UAT');
+          if (uatMatch) {
+            uatInfo = { uat_code: uatMatch.code, uat_status: uatMatch.status, uat_owner: uatMatch.owner, uat_actual_end: uatMatch.actual_end, uat_attaches: uatMatch.attaches };
+          }
+          const nftMatch = mapTestInfo('NFT');
+          if (nftMatch) {
+            nftInfo = { nft_code: nftMatch.code, nft_status: nftMatch.status, nft_owner: nftMatch.owner, nft_actual_end: nftMatch.actual_end, nft_attaches: nftMatch.attaches };
+          }
+          const secMatch = mapTestInfo('SEC');
+          if (secMatch) {
+            secInfo = { sec_code: secMatch.code, sec_status: secMatch.status, sec_owner: secMatch.owner, sec_actual_end: secMatch.actual_end, sec_attaches: secMatch.attaches };
+          }
+        }
+
+        wideRows.push({
+          ...reqInfo,
+          ...devInfo,
+          sys_release_time: sysReleaseTime,
+          sys_release_status: sysReleaseStatus,
+          ...releaseInfo,
+          
+          sit_code: sitInfo.sit_code,
+          sit_status: sitInfo.sit_status,
+          sit_owner: sitInfo.sit_owner,
+          sit_actual_end: sitInfo.sit_actual_end,
+          sit_attaches: sitInfo.sit_attaches,
+
+          uat_code: uatInfo.uat_code,
+          uat_status: uatInfo.uat_status,
+          uat_owner: uatInfo.uat_owner,
+          uat_actual_end: uatInfo.uat_actual_end,
+          uat_attaches: uatInfo.uat_attaches,
+
+          nft_code: nftInfo.nft_code,
+          nft_status: nftInfo.nft_status,
+          nft_owner: nftInfo.nft_owner,
+          nft_actual_end: nftInfo.nft_actual_end,
+          nft_attaches: nftInfo.nft_attaches,
+
+          sec_code: secInfo.sec_code,
+          sec_status: secInfo.sec_status,
+          sec_owner: secInfo.sec_owner,
+          sec_actual_end: secInfo.sec_actual_end,
+          sec_attaches: secInfo.sec_attaches,
+        });
+      }
+    }
+
+    const cols = [
+      // 需求信息
+      { key: 'req_code', title: '需求编号' },
+      { key: 'req_title', title: '需求标题' },
+      { key: 'req_summary', title: '需求概述' },
+      { key: 'req_status', title: '需求状态' },
+      { key: 'req_type', title: '需求类型' },
+      { key: 'propose_dept', title: '农信提出部门' },
+      { key: 'proposer', title: '农信提出人' },
+      { key: 'yn_owner', title: '云南农信业务负责人' },
+      { key: 'jk_owner', title: '建信金科业务负责人' },
+      { key: 'propose_time', title: '提出时间' },
+      { key: 'release_date', title: '计划投产点' },
+      { key: 'main_systems', title: '主责系统' },
+      { key: 'collab_dev_systems', title: '协同改造系统' },
+      { key: 'collab_test_systems', title: '协同测试系统' },
+      { key: 'req_spec', title: '需求说明书' },
+      // 开发任务
+      { key: 'dev_code', title: '开发任务编号' },
+      { key: 'dev_name', title: '开发任务名称' },
+      { key: 'dev_content', title: '开发内容概述' },
+      { key: 'dev_status', title: '开发状态' },
+      { key: 'dev_owner', title: '开发负责人' },
+      { key: 'dev_system', title: '开发实施系统' },
+      { key: 'dev_org', title: '开发实施方' },
+      { key: 'dev_plan_start', title: '开发计划开始' },
+      { key: 'dev_plan_end', title: '开发计划结束' },
+      { key: 'dev_actual_start', title: '开发实际开始' },
+      { key: 'dev_actual_end', title: '开发实际结束' },
+      { key: 'dev_deviation_rate', title: '开发排期偏差率' },
+      { key: 'dev_attachments', title: '开发附件' },
+      // SIT
+      { key: 'sit_code', title: 'SIT任务编号' },
+      { key: 'sit_status', title: 'SIT状态' },
+      { key: 'sit_owner', title: 'SIT负责人' },
+      { key: 'sit_actual_end', title: 'SIT实际完成时间' },
+      { key: 'sit_attaches', title: 'SIT附件' },
+      // UAT
+      { key: 'uat_code', title: 'UAT任务编号' },
+      { key: 'uat_status', title: 'UAT状态' },
+      { key: 'uat_owner', title: 'UAT负责人' },
+      { key: 'uat_actual_end', title: 'UAT实际完成时间' },
+      { key: 'uat_attaches', title: 'UAT附件' },
+      // NFT
+      { key: 'nft_code', title: 'NFT任务编号' },
+      { key: 'nft_status', title: 'NFT状态' },
+      { key: 'nft_owner', title: 'NFT负责人' },
+      { key: 'nft_actual_end', title: 'NFT实际完成时间' },
+      { key: 'nft_attaches', title: 'NFT附件' },
+      // SEC
+      { key: 'sec_code', title: 'SEC任务编号' },
+      { key: 'sec_status', title: 'SEC状态' },
+      { key: 'sec_owner', title: 'SEC负责人' },
+      { key: 'sec_actual_end', title: 'SEC实际完成时间' },
+      { key: 'sec_attaches', title: 'SEC附件' },
+      // 投产
+      { key: 'release_status', title: '投产状态' },
+      { key: 'release_owner', title: '投产负责人' },
+      { key: 'signoff_details', title: '会签决议详情' },
+      { key: 'sys_release_time', title: '系统上线实际时间' },
+      { key: 'sys_release_status', title: '系统上线状态' },
+    ];
+
+    const buf = await exportXlsx(cols, wideRows, '版本概览宽表');
+    reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    reply.header('Content-Disposition', 'attachment; filename=version_overview_wide_table.xlsx');
+    return reply.send(buf);
   });
 }

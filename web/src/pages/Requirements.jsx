@@ -5,7 +5,7 @@
  * 作者：hengguan
  */
 
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { Card, Button, Space, Tag, Popconfirm, message, Upload, Dropdown, Tooltip } from 'antd';
 import {
   PlusOutlined, EditOutlined, DeleteOutlined, HistoryOutlined, ImportOutlined, ExportOutlined, DownloadOutlined, DownOutlined,
@@ -14,10 +14,12 @@ import DataTable from '../components/DataTable.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
 import HistoryDrawer from '../components/HistoryDrawer.jsx';
 import RequirementEditor from '../components/editors/RequirementEditor.jsx';
+import FilterPanel from '../components/FilterPanel.jsx';
 import Can from '../components/Can.jsx';
-import { apiPost, apiDelete } from '../api/client.js';
-import { exportXlsx, importXlsx, downloadGet } from '../utils/io.js';
+import { apiPost, apiDelete, apiGet } from '../api/client.js';
+import { exportXlsx, downloadGet } from '../utils/io.js';
 import { useAppStore } from '../stores/app.js';
+import ImportModal from '../components/ImportModal.jsx';
 
 export default function Requirements() {
   const tableRef = useRef();
@@ -25,19 +27,68 @@ export default function Requirements() {
   const [editOpen, setEditOpen] = useState(false);
   const [editId, setEditId] = useState(null);
   const [historyId, setHistoryId] = useState(null);
+  const [importOpen, setImportOpen] = useState(false);
 
-  const fetcher = (q) => apiPost('/requirements/list', { ...q, releasePointIds });
+  const [filterQuery, setFilterQuery] = useState([]);
+  
+  // 下拉列表选项数据源
+  const [points, setPoints] = useState([]);
+  const [orgs, setOrgs] = useState([]);
+  const [statuses, setStatuses] = useState([]);
+  const [types, setTypes] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [systems, setSystems] = useState([]);
+
+  useEffect(() => {
+    apiGet('/release-points/all').then(setPoints).catch(() => {});
+    apiGet('/dict/by-category/org').then(setOrgs).catch(() => {});
+    apiGet('/dict/by-category/process_status').then(res => {
+      const filtered = (res || []).filter(item => item.extra?.stage === '需求');
+      setStatuses(filtered);
+    }).catch(() => {});
+    apiGet('/dict/by-category/req_type').then(setTypes).catch(() => {});
+    apiGet('/users/active').then(setUsers).catch(() => {});
+    apiGet('/systems/all').then(setSystems).catch(() => {});
+  }, []);
+
+  const pointOptions = points.map(p => ({ value: p.id, label: p.release_date }));
+  const orgOptions = orgs.map(o => ({ value: o.attr_value, label: o.display_value }));
+  const statusOptions = statuses.map(s => ({ value: s.attr_value, label: s.display_value }));
+  const typeOptions = types.map(t => ({ value: t.attr_value, label: t.display_value }));
+  const userOptions = users.map(u => ({ value: u.name, label: `${u.name} (${u.phone})` }));
+  const systemOptions = systems.map(s => ({ value: s.sys_code, label: `${s.sys_code} - ${s.sys_name}` }));
+
+  const filterConfigs = [
+    { field: 'req_code', label: '需求编号', type: 'input', isPrimary: true, op: 'like', placeholder: '输入需求编号模糊搜索' },
+    { field: 'content', label: '需求内容', type: 'input', isPrimary: true, op: 'like', placeholder: '输入需求标题或概述模糊搜索' },
+    { field: 'release_point_id', label: '计划投产点', type: 'select', op: 'in', options: pointOptions },
+    { field: 'org', label: '实施机构', type: 'select', op: 'in', options: orgOptions },
+    { field: 'status', label: '需求状态', type: 'select', op: 'in', options: statusOptions },
+    { field: 'req_type', label: '需求类型', type: 'select', op: 'in', options: typeOptions },
+    { field: 'propose_dept', label: '提出部门', type: 'select', op: 'in', options: orgOptions },
+    { field: 'proposer', label: '提出人', type: 'select', op: 'in', options: userOptions },
+    { field: 'owners', label: '负责人', type: 'select', op: 'in', options: userOptions },
+    { field: 'main_systems', label: '主责系统', type: 'select', op: 'in', options: systemOptions },
+    { field: 'collab_systems', label: '协同系统', type: 'select', op: 'in', options: systemOptions },
+  ];
+
+  const handleFilterChange = (vals) => {
+    const arr = Object.entries(vals)
+      .map(([field, value]) => {
+        const conf = filterConfigs.find(c => c.field === field);
+        return { field, value, op: conf?.op || 'eq' };
+      })
+      .filter((item) => item.value !== undefined && item.value !== null && item.value !== '');
+    setFilterQuery(arr);
+  };
+
+  const fetcher = (q) => apiPost('/requirements/list', q);
 
   const openEdit = (row) => { setEditId(row?.id || null); setEditOpen(true); };
   const openCreate = () => { setEditId(null); setEditOpen(true); };
   const onDelete = async (row) => { await apiDelete(`/requirements/${row.id}`); message.success('已删除'); tableRef.current?.reload(); };
 
-  const doImport = (file, mode) => {
-    importXlsx('/requirements/import', file, mode)
-      .then((r) => { message.success(`导入完成：新增${r.inserted} 更新${r.updated} 跳过${r.skipped}`); tableRef.current?.reload(); })
-      .catch(() => {});
-    return false;
-  };
+
 
   const columns = [
     { title: '状态', dataIndex: 'status', key: 'status', align: 'center', render: (s) => <StatusBadge status={s} /> },
@@ -121,9 +172,25 @@ export default function Requirements() {
   ];
 
   return (
-    <Card title="需求分析" variant="borderless">
+    <Card 
+      title={
+        <Space size={12}>
+          <span>需求分析</span>
+          <Can module="requirement" action="create">
+            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+              新增需求
+            </Button>
+          </Can>
+        </Space>
+      }
+      variant="borderless"
+    >
+      <FilterPanel configs={filterConfigs} onChange={handleFilterChange} />
       <DataTable
-        ref={tableRef} columns={columns} fetcher={fetcher} baseQuery={{ releasePointIds }} onRowClick={openEdit}
+        ref={tableRef} columns={columns} fetcher={fetcher} 
+        baseQuery={{ releasePointIds, filters: filterQuery }} 
+        showSearch={false}
+        onRowClick={openEdit}
         mobileCard={(item) => (
           <Space direction="vertical" size={4} style={{ width: '100%' }}>
             <Space style={{ justifyContent: 'space-between', width: '100%' }}><strong>{item.req_code}</strong><StatusBadge status={item.status} /></Space>
@@ -144,22 +211,23 @@ export default function Requirements() {
           </Space>
         )}
         toolbar={[
-          <Can key="add" module="requirement" action="create"><Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>新增需求</Button></Can>,
-          <Can key="tpl" module="requirement" action="import"><Button icon={<DownloadOutlined />} onClick={() => downloadGet('/requirements/template', {}, '需求模板.xlsx')}>模板</Button></Can>,
           <Can key="imp" module="requirement" action="import">
-            <Dropdown menu={{ items: [{ key: 'skip', label: '重复跳过' }, { key: 'overwrite', label: '覆盖更新' }, { key: 'rollback', label: '出错回滚' }], onClick: ({ key }) => document.getElementById('req-import-' + key)?.click() }}>
-              <Button icon={<ImportOutlined />}>导入 <DownOutlined /></Button>
-            </Dropdown>
+            <Button icon={<ImportOutlined />} onClick={() => setImportOpen(true)}>导入</Button>
           </Can>,
-          <Can key="exp" module="requirement" action="export"><Button icon={<ExportOutlined />} onClick={() => exportXlsx('/requirements/export', { releasePointIds }, '需求清单.xlsx')}>导出</Button></Can>,
+          <Can key="exp" module="requirement" action="export">
+            <Button icon={<ExportOutlined />} onClick={() => exportXlsx('/requirements/export', { releasePointIds, filters: filterQuery }, '需求清单.xlsx')}>导出</Button>
+          </Can>,
         ]}
       />
 
-      {['skip', 'overwrite', 'rollback'].map((m) => (
-        <Upload key={m} showUploadList={false} beforeUpload={(f) => doImport(f, m)} accept=".xlsx,.csv">
-          <span id={'req-import-' + m} />
-        </Upload>
-      ))}
+      <ImportModal
+        open={importOpen}
+        onCancel={() => setImportOpen(false)}
+        onSuccess={() => tableRef.current?.reload()}
+        importUrl="/requirements/import"
+        templateUrl="/requirements/template"
+        templateFilename="需求导入模板.xlsx"
+      />
 
       <RequirementEditor
         open={editOpen} reqId={editId} defaultReleasePointId={releasePointIds.length === 1 ? releasePointIds[0] : undefined}

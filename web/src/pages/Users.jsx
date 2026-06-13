@@ -14,8 +14,8 @@ import {
 import DataTable from '../components/DataTable.jsx';
 import DictSelect from '../components/DictSelect.jsx';
 import Can from '../components/Can.jsx';
-import { apiPost, apiPut, apiDelete } from '../api/client.js';
-import { apiGet } from '../api/client.js';
+import FilterPanel from '../components/FilterPanel.jsx';
+import { apiPost, apiPut, apiDelete, apiGet } from '../api/client.js';
 import { exportXlsx, importXlsx, downloadGet } from '../utils/io.js';
 
 export default function Users() {
@@ -24,10 +24,38 @@ export default function Users() {
   const [open, setOpen] = useState(false);
   const [current, setCurrent] = useState(null);
   const [roles, setRoles] = useState([]);
+  
+  const [filterQuery, setFilterQuery] = useState([]);
+  const [orgs, setOrgs] = useState([]);
+  const [activeUsers, setActiveUsers] = useState([]);
 
-  useEffect(() => { apiGet('/roles/all').then(setRoles); }, []);
+  useEffect(() => { 
+    apiGet('/roles/all').then(setRoles).catch(() => {});
+    apiGet('/dict/by-category/org').then(setOrgs).catch(() => {});
+    apiGet('/users/active').then(setActiveUsers).catch(() => {});
+  }, []);
 
-  const fetcher = (q) => apiPost('/users/list', q);
+  const userOptions = activeUsers.map(u => ({ value: u.name, label: `${u.name} (${u.phone})` }));
+  const orgOptions = orgs.map(o => ({ value: o.attr_value, label: o.display_value }));
+  const roleOptions = roles.map(r => ({ value: r.code, label: r.name }));
+
+  const filterConfigs = [
+    { field: 'user_info', label: '人员信息', type: 'select', op: 'in', isPrimary: true, placeholder: '输入姓名或手机号搜索', options: userOptions },
+    { field: 'org', label: '所属机构', type: 'select', op: 'in', isPrimary: true, options: orgOptions },
+    { field: 'role', label: '角色', type: 'select', op: 'in', isPrimary: true, options: roleOptions },
+  ];
+
+  const handleFilterChange = (vals) => {
+    const arr = Object.entries(vals)
+      .map(([field, value]) => {
+        const conf = filterConfigs.find(c => c.field === field);
+        return { field, value, op: conf?.op || 'eq' };
+      })
+      .filter((item) => item.value !== undefined && item.value !== null && item.value !== '');
+    setFilterQuery(arr);
+  };
+
+  const fetcher = (q) => apiPost('/users/list', { ...q, filters: filterQuery });
 
   const openEdit = (row) => {
     setCurrent(row);
@@ -114,9 +142,24 @@ export default function Users() {
   ];
 
   return (
-    <Card title="人员管理" variant="borderless">
+    <Card 
+      title={
+        <Space size={12}>
+          <span>人员管理</span>
+          <Can module="user" action="create">
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => openEdit(null)}>
+              新增人员
+            </Button>
+          </Can>
+        </Space>
+      }
+      variant="borderless"
+    >
+      <FilterPanel configs={filterConfigs} onChange={handleFilterChange} />
       <DataTable
         ref={tableRef} columns={columns} fetcher={fetcher}
+        baseQuery={{ filters: filterQuery }}
+        showSearch={false}
         mobileCard={(item) => (
           <Space direction="vertical" size={4} style={{ width: '100%' }}>
             <Space style={{ justifyContent: 'space-between', width: '100%' }}><strong>{item.name}</strong><span>{item.phone}</span></Space>
@@ -128,7 +171,6 @@ export default function Users() {
           </Space>
         )}
         toolbar={[
-          <Can key="add" module="user" action="create"><Button type="primary" icon={<PlusOutlined />} onClick={() => openEdit(null)}>新增人员</Button></Can>,
           <Can key="tpl" module="user" action="import"><Button icon={<DownloadOutlined />} onClick={() => downloadGet('/users/template', {}, '人员模板.xlsx')}>模板</Button></Can>,
           <Can key="imp" module="user" action="import">
             <Dropdown menu={{ items: [

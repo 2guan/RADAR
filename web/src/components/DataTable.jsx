@@ -18,6 +18,7 @@ const DataTable = forwardRef(function DataTable(props, ref) {
   const {
     columns: rawColumns, fetcher, rowKey = 'id', toolbar, extraFilters,
     onRowClick, mobileCard, searchPlaceholder = '关键字搜索（输入即搜）', baseQuery = {},
+    showSearch = true,
   } = props;
   const { isMobile } = useResponsive();
 
@@ -49,6 +50,17 @@ const DataTable = forwardRef(function DataTable(props, ref) {
   };
 
   useEffect(() => { load(); }, [page, pageSize, JSON.stringify(sort), JSON.stringify(baseQuery), nonce]);
+
+  // 当外部筛选条件 (baseQuery) 发生改变时，自动重置页码回到第一页
+  // 从而避免用户当前在第二页及以后时，由于筛选后总条数变少而导致页面空白的 bug
+  const prevBaseQueryRef = useRef();
+  useEffect(() => {
+    const currentBaseQueryStr = JSON.stringify(baseQuery);
+    if (prevBaseQueryRef.current !== undefined && prevBaseQueryRef.current !== currentBaseQueryStr) {
+      setPage(1);
+    }
+    prevBaseQueryRef.current = currentBaseQueryStr;
+  }, [JSON.stringify(baseQuery)]);
 
   // 暴露 reload：回到首页并触发一次（nonce 保证即便已在首页也会刷新）
   useImperativeHandle(ref, () => ({
@@ -86,21 +98,21 @@ const DataTable = forwardRef(function DataTable(props, ref) {
     setSort(arr);
   };
 
-  const searchInput = (
+  const searchInput = showSearch ? (
     <Input
       allowClear prefix={<SearchOutlined />} placeholder={searchPlaceholder}
       value={keyword} onChange={(e) => onKeyword(e.target.value)}
       style={{ width: isMobile ? '100%' : 240 }}
     />
-  );
+  ) : null;
   // 移动端：搜索框独占一行，过滤器/刷新/操作按钮在下一行换行排布，避免横向溢出
   const header = isMobile ? (
     <div style={{ marginBottom: 12 }}>
-      <div style={{ marginBottom: 8 }}>{searchInput}</div>
+      {showSearch && <div style={{ marginBottom: 8 }}>{searchInput}</div>}
       <Space wrap style={{ width: '100%', justifyContent: 'space-between' }}>
         <Space wrap>
           {extraFilters}
-          <Button icon={<ReloadOutlined />} onClick={load}>刷新</Button>
+          {showSearch && <Button icon={<ReloadOutlined />} onClick={load}>刷新</Button>}
         </Space>
         <Space wrap>{toolbar}</Space>
       </Space>
@@ -108,9 +120,9 @@ const DataTable = forwardRef(function DataTable(props, ref) {
   ) : (
     <Space wrap style={{ marginBottom: 12, width: '100%', justifyContent: 'space-between' }}>
       <Space wrap>
-        {searchInput}
+        {showSearch && searchInput}
         {extraFilters}
-        <Button icon={<ReloadOutlined />} onClick={load}>刷新</Button>
+        {showSearch && <Button icon={<ReloadOutlined />} onClick={load}>刷新</Button>}
       </Space>
       <Space wrap>{toolbar}</Space>
     </Space>

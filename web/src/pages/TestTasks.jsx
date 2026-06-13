@@ -5,23 +5,26 @@
  * 作者：hengguan
  */
 
-import React, { useRef, useState, useMemo } from 'react';
+import React, { useRef, useState, useMemo, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { Card, Button, Space, Modal, Form, Tag, Popconfirm, message, Table, Input, Spin, List, Radio, Checkbox } from 'antd';
-import { ExperimentOutlined, EditOutlined, DeleteOutlined, HistoryOutlined } from '@ant-design/icons';
+import { ExperimentOutlined, EditOutlined, DeleteOutlined, HistoryOutlined, ImportOutlined, ExportOutlined } from '@ant-design/icons';
 import DataTable from '../components/DataTable.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
 import SystemSelect from '../components/SystemSelect.jsx';
 import HistoryDrawer from '../components/HistoryDrawer.jsx';
 import TaskEditor from '../components/editors/TaskEditor.jsx';
+import FilterPanel from '../components/FilterPanel.jsx';
 import Can from '../components/Can.jsx';
-import { apiPost, apiDelete } from '../api/client.js';
+import { apiPost, apiDelete, apiGet } from '../api/client.js';
 import { useAppStore } from '../stores/app.js';
 import { useResponsive } from '../hooks/useResponsive.js';
 import ResizableTitle from '../components/ResizableTitle.jsx';
+import { exportXlsx } from '../utils/io.js';
+import ImportModal from '../components/ImportModal.jsx';
 
 const TYPE_LABEL = { SIT: '应用组装测试', UAT: '用户测试', NFT: '非功能测试', SEC: '安全测试' };
 
-function TestPanel({ testType }) {
+const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
   const tableRef = useRef();
   const { isMobile } = useResponsive();
   const releasePointIds = useAppStore((s) => s.releasePointIds);
@@ -39,8 +42,63 @@ function TestPanel({ testType }) {
   const [reqColWidths, setReqColWidths] = useState({});
   const [prevColWidths, setPrevColWidths] = useState({});
 
-  const fetcher = (q) => apiPost('/test-tasks/list', { ...q, releasePointIds, testType });
+  const [filterQuery, setFilterQuery] = useState([]);
+  
+  // 导入数据弹窗的显隐状态，控制 ImportModal 组件的挂载与显示
+  const [importOpen, setImportOpen] = useState(false);
+  
+  // 下拉列表选项数据源
+  const [points, setPoints] = useState([]);
+  const [orgs, setOrgs] = useState([]);
+  const [statuses, setStatuses] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [systems, setSystems] = useState([]);
+
+  useEffect(() => {
+    apiGet('/release-points/all').then(setPoints).catch(() => {});
+    apiGet('/dict/by-category/org').then(setOrgs).catch(() => {});
+    apiGet('/dict/by-category/process_status').then(res => {
+      const filtered = (res || []).filter(item => item.extra?.stage === '测试');
+      setStatuses(filtered);
+    }).catch(() => {});
+    apiGet('/users/active').then(setUsers).catch(() => {});
+    apiGet('/systems/all').then(setSystems).catch(() => {});
+  }, []);
+
+  const pointOptions = points.map(p => ({ value: p.id, label: p.release_date }));
+  const orgOptions = orgs.map(o => ({ value: o.attr_value, label: o.display_value }));
+  const statusOptions = statuses.map(s => ({ value: s.attr_value, label: s.display_value }));
+  const userOptions = users.map(u => ({ value: u.name, label: `${u.name} (${u.phone})` }));
+  const systemOptions = systems.map(s => ({ value: s.sys_code, label: `${s.sys_code} - ${s.sys_name}` }));
+
+  const filterConfigs = [
+    { field: 'task_code', label: '测试任务编号', type: 'input', isPrimary: true, op: 'like', placeholder: '输入测试任务编号模糊搜索' },
+    { field: 'content', label: '测试内容', type: 'input', isPrimary: true, op: 'like', placeholder: '输入测试任务名称模糊搜索' },
+    { field: 'release_point_id', label: '计划投产点', type: 'select', op: 'in', options: pointOptions },
+    { field: 'org', label: '实施机构', type: 'select', op: 'in', options: orgOptions },
+    { field: 'status', label: '测试状态', type: 'select', op: 'in', options: statusOptions },
+    { field: 'owner', label: '测试负责人', type: 'select', op: 'in', options: userOptions },
+    { field: 'impl_org', label: '测试实施方', type: 'select', op: 'in', options: orgOptions },
+    { field: 'owners', label: '负责人', type: 'select', op: 'in', options: userOptions },
+    { field: 'impl_system', label: '实施系统', type: 'select', op: 'in', options: systemOptions },
+  ];
+
+  const handleFilterChange = (vals) => {
+    const arr = Object.entries(vals)
+      .map(([field, value]) => {
+        const conf = filterConfigs.find(c => c.field === field);
+        return { field, value, op: conf?.op || 'eq' };
+      })
+      .filter((item) => item.value !== undefined && item.value !== null && item.value !== '');
+    setFilterQuery(arr);
+  };
+
+  const fetcher = (q) => apiPost('/test-tasks/list', { ...q, filters: filterQuery });
   const onDelete = async (row) => { await apiDelete(`/test-tasks/${row.id}`); message.success('已删除'); tableRef.current?.reload(); };
+
+  useImperativeHandle(ref, () => ({
+    openIntake
+  }));
 
   const openIntake = async () => {
     const res = await apiPost('/requirements/list', { releasePointIds, pageSize: 0 });
@@ -311,8 +369,12 @@ function TestPanel({ testType }) {
 
   return (
     <>
+      <FilterPanel configs={filterConfigs} onChange={handleFilterChange} />
       <DataTable
-        ref={tableRef} columns={columns} fetcher={fetcher} baseQuery={{ releasePointIds, testType }} onRowClick={(r) => setEditId(r.id)}
+        ref={tableRef} columns={columns} fetcher={fetcher} 
+        baseQuery={{ releasePointIds, testType, filters: filterQuery }} 
+        showSearch={false}
+        onRowClick={(r) => setEditId(r.id)}
         mobileCard={(item) => (
           <Space direction="vertical" size={4} style={{ width: '100%' }}>
             <Space style={{ justifyContent: 'space-between', width: '100%' }}><strong>{item.task_code}</strong><StatusBadge status={item.status} /></Space>
@@ -331,7 +393,12 @@ function TestPanel({ testType }) {
           </Space>
         )}
         toolbar={[
-          <Can key="intake" module="test" action="test.intake"><Button type="primary" icon={<ExperimentOutlined />} onClick={openIntake}>测试承接</Button></Can>,
+          <Can key="imp" module="test" action="import">
+            <Button icon={<ImportOutlined />} onClick={() => setImportOpen(true)}>导入</Button>
+          </Can>,
+          <Can key="exp" module="test" action="export">
+            <Button icon={<ExportOutlined />} onClick={() => exportXlsx('/test-tasks/export', { releasePointIds, test_type: testType, filters: filterQuery }, `${TYPE_LABEL[testType]}清单.xlsx`)}>导出</Button>
+          </Can>,
         ]}
       />
 
@@ -536,20 +603,98 @@ function TestPanel({ testType }) {
 
       <TaskEditor open={!!editId} kind="test" taskId={editId} onClose={() => setEditId(null)} onSaved={() => tableRef.current?.reload()} />
       <HistoryDrawer open={!!historyId} entityType="test" entityId={historyId} onClose={() => setHistoryId(null)} />
+
+      {/* 测试任务数据导入弹窗：支持导入模板下载，覆盖、跳过及出错回滚的导入模式 */}
+      <ImportModal
+        open={importOpen}
+        onCancel={() => setImportOpen(false)}
+        onSuccess={() => tableRef.current?.reload()}
+        importUrl="/test-tasks/import"
+        templateUrl="/test-tasks/template"
+        templateFilename="测试任务导入模板.xlsx"
+      />
     </>
   );
-}
+});
 
 /** 4 个独立测试页面（对应侧栏"测试管理"子菜单） */
 export function SitPage() {
-  return <Card title="应用组装测试（SIT）" variant="borderless"><TestPanel testType="SIT" /></Card>;
+  const ref = useRef();
+  return (
+    <Card 
+      title={
+        <Space size={12}>
+          <span>应用组装测试（SIT）</span>
+          <Can module="test" action="test.intake">
+            <Button type="primary" icon={<ExperimentOutlined />} onClick={() => ref.current?.openIntake()}>
+              测试承接
+            </Button>
+          </Can>
+        </Space>
+      }
+      variant="borderless"
+    >
+      <TestPanel ref={ref} testType="SIT" />
+    </Card>
+  );
 }
 export function UatPage() {
-  return <Card title="用户测试（UAT）" variant="borderless"><TestPanel testType="UAT" /></Card>;
+  const ref = useRef();
+  return (
+    <Card 
+      title={
+        <Space size={12}>
+          <span>用户测试（UAT）</span>
+          <Can module="test" action="test.intake">
+            <Button type="primary" icon={<ExperimentOutlined />} onClick={() => ref.current?.openIntake()}>
+              测试承接
+            </Button>
+          </Can>
+        </Space>
+      }
+      variant="borderless"
+    >
+      <TestPanel ref={ref} testType="UAT" />
+    </Card>
+  );
 }
 export function NftPage() {
-  return <Card title="非功能测试（NFT）" variant="borderless"><TestPanel testType="NFT" /></Card>;
+  const ref = useRef();
+  return (
+    <Card 
+      title={
+        <Space size={12}>
+          <span>非功能测试（NFT）</span>
+          <Can module="test" action="test.intake">
+            <Button type="primary" icon={<ExperimentOutlined />} onClick={() => ref.current?.openIntake()}>
+              测试承接
+            </Button>
+          </Can>
+        </Space>
+      }
+      variant="borderless"
+    >
+      <TestPanel ref={ref} testType="NFT" />
+    </Card>
+  );
 }
 export function SecPage() {
-  return <Card title="安全测试（SEC）" variant="borderless"><TestPanel testType="SEC" /></Card>;
+  const ref = useRef();
+  return (
+    <Card 
+      title={
+        <Space size={12}>
+          <span>安全测试（SEC）</span>
+          <Can module="test" action="test.intake">
+            <Button type="primary" icon={<ExperimentOutlined />} onClick={() => ref.current?.openIntake()}>
+              测试承接
+            </Button>
+          </Can>
+        </Space>
+      }
+      variant="borderless"
+    >
+      <TestPanel ref={ref} testType="SEC" />
+    </Card>
+  );
 }

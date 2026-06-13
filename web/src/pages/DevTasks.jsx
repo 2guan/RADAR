@@ -4,19 +4,22 @@
  * 作者：hengguan
  */
 
-import React, { useRef, useState, useMemo } from 'react';
+import React, { useRef, useState, useMemo, useEffect } from 'react';
 import { Card, Button, Space, Modal, Form, Tag, Popconfirm, message, Table, Input, Spin, List, Radio, Checkbox } from 'antd';
-import { ToolOutlined, EditOutlined, DeleteOutlined, HistoryOutlined } from '@ant-design/icons';
+import { ToolOutlined, EditOutlined, DeleteOutlined, HistoryOutlined, ImportOutlined, ExportOutlined } from '@ant-design/icons';
 import DataTable from '../components/DataTable.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
 import SystemSelect from '../components/SystemSelect.jsx';
 import HistoryDrawer from '../components/HistoryDrawer.jsx';
 import TaskEditor from '../components/editors/TaskEditor.jsx';
+import FilterPanel from '../components/FilterPanel.jsx';
 import Can from '../components/Can.jsx';
-import { apiPost, apiDelete } from '../api/client.js';
+import { apiPost, apiDelete, apiGet } from '../api/client.js';
 import { useAppStore } from '../stores/app.js';
 import { useResponsive } from '../hooks/useResponsive.js';
 import ResizableTitle from '../components/ResizableTitle.jsx';
+import { exportXlsx } from '../utils/io.js';
+import ImportModal from '../components/ImportModal.jsx';
 
 export default function DevTasks() {
   const tableRef = useRef();
@@ -25,6 +28,7 @@ export default function DevTasks() {
   const [editId, setEditId] = useState(null);
   const [historyId, setHistoryId] = useState(null);
   const [intakeOpen, setIntakeOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [reqList, setReqList] = useState([]);
   const [searchText, setSearchText] = useState('');
   const [selectedReq, setSelectedReq] = useState(null);
@@ -35,7 +39,55 @@ export default function DevTasks() {
   const [reqColWidths, setReqColWidths] = useState({});
   const [prevColWidths, setPrevColWidths] = useState({});
 
-  const fetcher = (q) => apiPost('/dev-tasks/list', { ...q, releasePointIds });
+  const [filterQuery, setFilterQuery] = useState([]);
+  
+  // 下拉列表选项数据源
+  const [points, setPoints] = useState([]);
+  const [orgs, setOrgs] = useState([]);
+  const [statuses, setStatuses] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [systems, setSystems] = useState([]);
+
+  useEffect(() => {
+    apiGet('/release-points/all').then(setPoints).catch(() => {});
+    apiGet('/dict/by-category/org').then(setOrgs).catch(() => {});
+    apiGet('/dict/by-category/process_status').then(res => {
+      const filtered = (res || []).filter(item => item.extra?.stage === '开发');
+      setStatuses(filtered);
+    }).catch(() => {});
+    apiGet('/users/active').then(setUsers).catch(() => {});
+    apiGet('/systems/all').then(setSystems).catch(() => {});
+  }, []);
+
+  const pointOptions = points.map(p => ({ value: p.id, label: p.release_date }));
+  const orgOptions = orgs.map(o => ({ value: o.attr_value, label: o.display_value }));
+  const statusOptions = statuses.map(s => ({ value: s.attr_value, label: s.display_value }));
+  const userOptions = users.map(u => ({ value: u.name, label: `${u.name} (${u.phone})` }));
+  const systemOptions = systems.map(s => ({ value: s.sys_code, label: `${s.sys_code} - ${s.sys_name}` }));
+
+  const filterConfigs = [
+    { field: 'task_code', label: '开发任务编号', type: 'input', isPrimary: true, op: 'like', placeholder: '输入开发任务编号模糊搜索' },
+    { field: 'content', label: '开发内容', type: 'input', isPrimary: true, op: 'like', placeholder: '输入开发任务名称或内容模糊搜索' },
+    { field: 'release_point_id', label: '计划投产点', type: 'select', op: 'in', options: pointOptions },
+    { field: 'org', label: '实施机构', type: 'select', op: 'in', options: orgOptions },
+    { field: 'status', label: '开发状态', type: 'select', op: 'in', options: statusOptions },
+    { field: 'owner', label: '开发负责人', type: 'select', op: 'in', options: userOptions },
+    { field: 'impl_org', label: '开发实施方', type: 'select', op: 'in', options: orgOptions },
+    { field: 'owners', label: '负责人', type: 'select', op: 'in', options: userOptions },
+    { field: 'impl_system', label: '实施系统', type: 'select', op: 'in', options: systemOptions },
+  ];
+
+  const handleFilterChange = (vals) => {
+    const arr = Object.entries(vals)
+      .map(([field, value]) => {
+        const conf = filterConfigs.find(c => c.field === field);
+        return { field, value, op: conf?.op || 'eq' };
+      })
+      .filter((item) => item.value !== undefined && item.value !== null && item.value !== '');
+    setFilterQuery(arr);
+  };
+
+  const fetcher = (q) => apiPost('/dev-tasks/list', q);
   const onDelete = async (row) => { await apiDelete(`/dev-tasks/${row.id}`); message.success('已删除'); tableRef.current?.reload(); };
 
   const openIntake = async () => {
@@ -296,9 +348,33 @@ export default function DevTasks() {
   });
 
   return (
-    <Card title="开发管理" variant="borderless">
+    <Card 
+      title={
+        <Space size={12}>
+          <span>开发管理</span>
+          <Can module="dev" action="dev.intake">
+            <Button type="primary" icon={<ToolOutlined />} onClick={openIntake}>
+              开发承接
+            </Button>
+          </Can>
+        </Space>
+      }
+      variant="borderless"
+    >
+      <FilterPanel configs={filterConfigs} onChange={handleFilterChange} />
       <DataTable
-        ref={tableRef} columns={columns} fetcher={fetcher} baseQuery={{ releasePointIds }} onRowClick={(r) => setEditId(r.id)}
+        ref={tableRef} columns={columns} fetcher={fetcher} 
+        baseQuery={{ releasePointIds, filters: filterQuery }} 
+        showSearch={false}
+        onRowClick={(r) => setEditId(r.id)}
+        toolbar={[
+          <Can key="imp" module="dev" action="import">
+            <Button icon={<ImportOutlined />} onClick={() => setImportOpen(true)}>导入</Button>
+          </Can>,
+          <Can key="exp" module="dev" action="export">
+            <Button icon={<ExportOutlined />} onClick={() => exportXlsx('/dev-tasks/export', { filters: filterQuery }, '开发任务清单.xlsx')}>导出</Button>
+          </Can>,
+        ]}
         mobileCard={(item) => (
           <Space direction="vertical" size={4} style={{ width: '100%' }}>
             <Space style={{ justifyContent: 'space-between', width: '100%' }}><strong>{item.task_code}</strong><StatusBadge status={item.status} /></Space>
@@ -316,9 +392,6 @@ export default function DevTasks() {
             </Space>
           </Space>
         )}
-        toolbar={[
-          <Can key="intake" module="dev" action="dev.intake"><Button type="primary" icon={<ToolOutlined />} onClick={openIntake}>开发承接</Button></Can>,
-        ]}
       />
 
       <Modal
@@ -507,6 +580,14 @@ export default function DevTasks() {
       </Modal>
 
       <TaskEditor open={!!editId} kind="dev" taskId={editId} onClose={() => setEditId(null)} onSaved={() => tableRef.current?.reload()} />
+      <ImportModal
+        open={importOpen}
+        onCancel={() => setImportOpen(false)}
+        onSuccess={() => tableRef.current?.reload()}
+        importUrl="/dev-tasks/import"
+        templateUrl="/dev-tasks/template"
+        templateFilename="开发任务导入模板.xlsx"
+      />
       <HistoryDrawer open={!!historyId} entityType="dev" entityId={historyId} onClose={() => setHistoryId(null)} />
     </Card>
   );
