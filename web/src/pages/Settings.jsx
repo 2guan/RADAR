@@ -7,7 +7,7 @@
  *       角色配置含"会签角色"打标；流程状态含阶段/终态（extra JSON）。
  */
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, Tabs, Button, Tag, message, Form, Input, InputNumber, Switch, DatePicker, Select } from 'antd';
 import { StarOutlined, StarFilled } from '@ant-design/icons';
 import dayjs from 'dayjs';
@@ -18,7 +18,7 @@ import AppConfigForm from '../components/AppConfigForm.jsx';
 import AppearanceSettings from '../components/AppearanceSettings.jsx';
 import PermissionMatrix from '../components/PermissionMatrix.jsx';
 import DictSelect from '../components/DictSelect.jsx';
-import { apiPost } from '../api/client.js';
+import { apiPost, apiGet } from '../api/client.js';
 
 dayjs.extend(customParseFormat);
 
@@ -31,10 +31,15 @@ function parseExtra(e) {
 
 /** 通用字典管理器（属性值/显示值/排序） */
 function DictManager({ category, title }) {
+  const filterConfigs = [
+    { field: 'dict_query', label: title, type: 'input', isPrimary: true, placeholder: `模糊输入属性值或显示值` },
+  ];
+
   return (
     <CrudManager
       apiBase="/dict" title={title} baseQuery={{ filters: [{ field: 'category', op: 'eq', value: category }] }}
       io={{ enabled: true, params: { category } }}
+      filterConfigs={filterConfigs}
       columns={[
         { title: '属性值', dataIndex: 'attr_value', width: 200 },
         { title: '显示值', dataIndex: 'display_value', width: 200 },
@@ -54,10 +59,29 @@ function DictManager({ category, title }) {
 
 /** 流程状态管理器（含阶段与状态类别打标） */
 function ProcessStatusManager() {
+  const stageOptions = [
+    { value: '需求', label: '需求' },
+    { value: '开发', label: '开发' },
+    { value: '测试', label: '测试' },
+    { value: '投产', label: '投产' },
+    { value: '评审', label: '评审' },
+  ];
+
+  const filterConfigs = [
+    { field: 'stage', label: '阶段', type: 'select', op: 'eq', isPrimary: true, options: stageOptions },
+    { field: 'dict_query', label: '流程状态', type: 'input', isPrimary: true, placeholder: '输入属性值或显示值搜索' },
+    { field: 'state_type', label: '状态类型', type: 'select', op: 'eq', isPrimary: true, options: [
+      { value: 'initial', label: '初始态' },
+      { value: 'in-progress', label: '进行中' },
+      { value: 'final', label: '终态' },
+    ]},
+  ];
+
   return (
     <CrudManager
       apiBase="/dict" title="流程状态" baseQuery={{ filters: [{ field: 'category', op: 'eq', value: 'process_status' }] }}
       io={{ enabled: true, params: { category: 'process_status' } }}
+      filterConfigs={filterConfigs}
       columns={[
         { title: '阶段', dataIndex: 'extra', key: 'stage', width: 100, render: (e) => parseExtra(e).stage || '—' },
         { title: '属性值', dataIndex: 'attr_value', width: 160 },
@@ -124,10 +148,23 @@ function ProcessStatusManager() {
 
 /** 投产点管理器（日期选择，存 YYYYMMDD；含设为/取消默认） */
 function ReleasePointManager() {
+  const [points, setPoints] = useState([]);
+  useEffect(() => {
+    apiGet('/release-points/all').then(res => setPoints(res || [])).catch(() => {});
+  }, []);
+
+  const pointOptions = points.map(p => ({ value: p.release_date, label: p.release_date }));
+
+  const filterConfigs = [
+    { field: 'release_date', label: '投产日期', type: 'select', op: 'eq', isPrimary: true, options: pointOptions, placeholder: '选择或输入投产日期模糊搜索' },
+    { field: 'version_type_query', label: '版本类型', type: 'input', isPrimary: true, placeholder: '输入版本类型或备注搜索' },
+  ];
+
   return (
     <CrudManager
       apiBase="/release-points" title="投产点"
       io={{ enabled: true }}
+      filterConfigs={filterConfigs}
       columns={[
         { title: '投产日期', dataIndex: 'release_date', width: 140, sorter: true },
         { title: '版本类型', dataIndex: 'version_type', width: 120 },
@@ -160,10 +197,31 @@ function ReleasePointManager() {
 
 /** 系统管理器 */
 function SystemManager() {
+  const [systems, setSystems] = useState([]);
+  const [orgs, setOrgs] = useState([]);
+  const [sectors, setSectors] = useState([]);
+
+  useEffect(() => {
+    apiGet('/systems/all').then(setSystems).catch(() => {});
+    apiGet('/dict/by-category/org').then(setOrgs).catch(() => {});
+    apiGet('/dict/by-category/sector').then(setSectors).catch(() => {});
+  }, []);
+
+  const systemOptions = systems.map(s => ({ value: s.sys_code, label: `${s.sys_code}-${s.sys_name}` }));
+  const orgOptions = orgs.map(o => ({ value: o.attr_value, label: o.display_value }));
+  const sectorOptions = sectors.map(s => ({ value: s.attr_value, label: s.display_value }));
+
+  const filterConfigs = [
+    { field: 'sys_code', label: '系统名称', type: 'select', op: 'in', isPrimary: true, options: systemOptions, placeholder: '选择或输入系统编号/名称模糊搜索' },
+    { field: 'org', label: '所属机构', type: 'select', op: 'in', isPrimary: true, options: orgOptions },
+    { field: 'sector', label: '所属板块', type: 'select', op: 'in', isPrimary: true, options: sectorOptions },
+  ];
+
   return (
     <CrudManager
       apiBase="/systems" title="系统"
       io={{ enabled: true }}
+      filterConfigs={filterConfigs}
       columns={[
         { title: '系统编号', dataIndex: 'sys_code', width: 140 },
         { title: '系统名称', dataIndex: 'sys_name', width: 220 },
@@ -186,10 +244,19 @@ function SystemManager() {
 
 /** 角色管理器（含会签角色打标） */
 function RoleManager() {
+  const filterConfigs = [
+    { field: 'name_query', label: '角色名称', type: 'input', isPrimary: true, placeholder: '输入角色名称或标识搜索' },
+    { field: 'is_signoff_role', label: '会签角色', type: 'select', op: 'eq', isPrimary: true, options: [
+      { value: 1, label: '是' },
+      { value: 0, label: '否' },
+    ]},
+  ];
+
   return (
     <CrudManager
       apiBase="/roles" title="角色"
       io={{ enabled: true }}
+      filterConfigs={filterConfigs}
       columns={[
         { title: '角色名称', dataIndex: 'name', width: 150 },
         { title: '角色标识', dataIndex: 'code', width: 150 },

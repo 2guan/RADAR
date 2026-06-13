@@ -25,6 +25,56 @@ export default async function systemRoutes(fastify) {
       sys_code: '系统编号', sys_name: '系统名称', org: '所属机构', sector: '所属板块', sort: '排序',
     },
     codeField: 'sys_code',
+    skipList: true,
+  });
+
+  // 列表（支持高级筛选：系统名称/编号、所属机构、所属板块）
+  fastify.post('/systems/list', { preHandler: fastify.requirePerm('settings', 'view') }, async (request) => {
+    const body = request.body || {};
+    const wh = [];
+    const params = [];
+    const filters = Array.isArray(body.filters) ? body.filters : [];
+    const normalFilters = [];
+
+    for (const f of filters) {
+      if (!f || f.value === undefined || f.value === null || f.value === '') continue;
+      
+      if (f.field === 'sys_code') {
+        const codes = Array.isArray(f.value) ? f.value : [f.value];
+        if (codes.length) {
+          const placeholders = codes.map(() => '?').join(',');
+          wh.push(`sys_code IN (${placeholders})`);
+          params.push(...codes);
+        }
+      } else if (f.field === 'org') {
+        const orgs = Array.isArray(f.value) ? f.value : [f.value];
+        if (orgs.length) {
+          const placeholders = orgs.map(() => '?').join(',');
+          wh.push(`org IN (${placeholders})`);
+          params.push(...orgs);
+        }
+      } else if (f.field === 'sector') {
+        const sectors = Array.isArray(f.value) ? f.value : [f.value];
+        if (sectors.length) {
+          const placeholders = sectors.map(() => '?').join(',');
+          wh.push(`sector IN (${placeholders})`);
+          params.push(...sectors);
+        }
+      } else {
+        normalFilters.push(f);
+      }
+    }
+
+    const newBody = { ...body, filters: normalFilters };
+    const baseWhere = wh.join(' AND ');
+
+    return ok(listQuery({
+      table: 'system', columns: COLUMNS,
+      searchColumns: ['sys_code', 'sys_name', 'org', 'sector'],
+      query: newBody,
+      baseWhere,
+      baseParams: params,
+    }));
   });
 
   // 全量读取（供需求等表单的系统多选下拉，输入即搜由前端完成）
@@ -41,32 +91,15 @@ export default async function systemRoutes(fastify) {
       { key: 'org', title: '所属机构' }, { key: 'sector', title: '所属板块' }, { key: 'sort', title: '排序' },
     ],
     list: (q) => listQuery({ table: 'system', columns: COLUMNS, searchColumns: ['sys_code', 'sys_name', 'org', 'sector'], query: q }).list,
-
     upsert: (r, mode) => {
       if (!r.sys_code || !r.sys_name) return 'skipped';
       const exists = get('SELECT id FROM system WHERE sys_code = ?', r.sys_code);
       if (exists) {
         if (mode === 'skip') return 'skipped';
         if (mode === 'rollback') throw badRequest(`系统编号重复：${r.sys_code}，已回滚`);
-
-        const oldRow = get('SELECT * FROM system WHERE id = ?', exists.id);
-        const changes = [];
-        const compareAndPush = (fieldKey, fieldName, oldVal, newVal) => {
-          if (oldVal !== newVal) {
-            changes.push({ field: fieldName, old: oldVal, new: newVal });
-          }
-        };
-
-        compareAndPush('sys_name', '系统名称', oldRow.sys_name || '', r.sys_name || '');
-        compareAndPush('org', '所属机构', oldRow.org || '', r.org || '');
-        compareAndPush('sector', '所属板块', oldRow.sector || '', r.sector || '');
-        compareAndPush('sort', '排序', String(oldRow.sort || 0), String(Number(r.sort) || 0));
-
-        if (changes.length > 0) {
-          run('UPDATE system SET sys_name=?, org=?, sector=?, sort=?, updated_at=datetime(\'now\',\'localtime\') WHERE id=?',
-            r.sys_name, r.org || null, r.sector || null, Number(r.sort) || 0, exists.id);
-        }
-        return { action: 'updated', changes };
+        run('UPDATE system SET sys_name=?, org=?, sector=?, sort=?, updated_at=datetime(\'now\',\'localtime\') WHERE id=?',
+          r.sys_name, r.org || null, r.sector || null, Number(r.sort) || 0, exists.id);
+        return 'updated';
       }
       run('INSERT INTO system (sys_code, sys_name, org, sector, sort) VALUES (?,?,?,?,?)',
         r.sys_code, r.sys_name, r.org || null, r.sector || null, Number(r.sort) || 0);

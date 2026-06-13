@@ -33,13 +33,16 @@ export function registerCrud(fastify, cfg) {
     prefix, table, module, entityType,
     columns, searchColumns = [], writable, fieldLabels,
     codeField = 'id', beforeWrite, afterWrite, beforeDelete,
+    skipList = false,
   } = cfg;
 
   // 列表（POST 以承载复杂筛选体）
-  fastify.post(`${prefix}/list`, { preHandler: fastify.requirePerm(module, 'view') }, async (request) => {
-    const result = listQuery({ table, columns, searchColumns, query: request.body || {} });
-    return ok(result);
-  });
+  if (!skipList) {
+    fastify.post(`${prefix}/list`, { preHandler: fastify.requirePerm(module, 'view') }, async (request) => {
+      const result = listQuery({ table, columns, searchColumns, query: request.body || {} });
+      return ok(result);
+    });
+  }
 
   // 详情
   fastify.get(`${prefix}/:id`, { preHandler: fastify.requirePerm(module, 'view') }, async (request) => {

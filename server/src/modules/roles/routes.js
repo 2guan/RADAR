@@ -47,11 +47,39 @@ export default async function roleRoutes(fastify) {
 
   // 角色列表
   fastify.post('/roles/list', { preHandler: fastify.requirePerm('settings', 'view') }, async (request) => {
+    const body = request.body || {};
+    const wh = [];
+    const params = [];
+    const filters = Array.isArray(body.filters) ? body.filters : [];
+    const normalFilters = [];
+
+    for (const f of filters) {
+      if (!f || f.value === undefined || f.value === null || f.value === '') continue;
+      
+      if (f.field === 'name_query') {
+        wh.push('(name LIKE ? OR code LIKE ?)');
+        params.push(`%${f.value}%`, `%${f.value}%`);
+      } else if (f.field === 'is_signoff_role') {
+        const vals = Array.isArray(f.value) ? f.value.map(Number) : [Number(f.value)];
+        if (vals.length) {
+          wh.push(`is_signoff_role IN (${vals.map(() => '?').join(',')})`);
+          params.push(...vals);
+        }
+      } else {
+        normalFilters.push(f);
+      }
+    }
+
+    const newBody = { ...body, filters: normalFilters };
+    const baseWhere = wh.join(' AND ');
+
     return ok(listQuery({
       table: 'role',
       columns: ['id', 'name', 'code', 'default_home', 'is_builtin', 'is_signoff_role', 'created_at'],
       searchColumns: ['name', 'code'],
-      query: request.body || {},
+      query: newBody,
+      baseWhere,
+      baseParams: params,
     }));
   });
 
@@ -152,32 +180,17 @@ export default async function roleRoutes(fastify) {
       table: 'role', columns: ['id', 'name', 'code', 'default_home', 'is_signoff_role'],
       searchColumns: ['name', 'code'], query: q,
     }).list.map((r) => ({ ...r, is_signoff_role: r.is_signoff_role ? '是' : '' })),
-
     upsert: (r, mode) => {
       if (!r.name || !r.code) return 'skipped';
       const sign = truthy(r.is_signoff_role) ? 1 : 0;
-      const exists = get('SELECT * FROM role WHERE code = ?', r.code);
+      const exists = get('SELECT id, name, is_signoff_role FROM role WHERE code = ?', r.code);
       if (exists) {
         if (mode === 'skip') return 'skipped';
         if (mode === 'rollback') throw badRequest(`角色标识重复：${r.code}，已回滚`);
-
-        const changes = [];
-        const compareAndPush = (fieldKey, fieldName, oldVal, newVal) => {
-          if (oldVal !== newVal) {
-            changes.push({ field: fieldName, old: oldVal, new: newVal });
-          }
-        };
-
-        compareAndPush('name', '角色名称', exists.name || '', r.name || '');
-        compareAndPush('default_home', '默认首页', exists.default_home || '', r.default_home || '仪表盘');
-        compareAndPush('is_signoff_role', '会签角色', exists.is_signoff_role ? '是' : '否', sign ? '是' : '否');
-
-        if (changes.length > 0) {
-          run('UPDATE role SET name=?, default_home=?, is_signoff_role=?, updated_at=datetime(\'now\',\'localtime\') WHERE id=?',
-            r.name, r.default_home || '仪表盘', sign, exists.id);
-          syncModifySignoffRole(exists.id, r.name, sign, exists.is_signoff_role, exists.name);
-        }
-        return { action: 'updated', changes };
+        run('UPDATE role SET name=?, default_home=?, is_signoff_role=?, updated_at=datetime(\'now\',\'localtime\') WHERE id=?',
+          r.name, r.default_home || '仪表盘', sign, exists.id);
+        syncModifySignoffRole(exists.id, r.name, sign, exists.is_signoff_role, exists.name);
+        return 'updated';
       }
       const res = run('INSERT INTO role (name, code, default_home, is_builtin, is_signoff_role) VALUES (?,?,?,0,?)',
         r.name, r.code, r.default_home || '仪表盘', sign);

@@ -21,7 +21,7 @@ export default function ImportModal({
   templateFilename = 'template.xlsx',
   extraFields = {},
 }) {
-  const [mode, setMode] = useState('skip'); // skip, overwrite, rollback
+  const [mode, setMode] = useState('overwrite'); // skip, overwrite, rollback
   const [fileList, setFileList] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState(null); // { stat, details }
@@ -54,7 +54,7 @@ export default function ImportModal({
   const handleOk = () => {
     setResult(null);
     setFileList([]);
-    setMode('skip');
+    setMode('overwrite');
     if (onSuccess) {
       onSuccess();
     }
@@ -256,9 +256,9 @@ export default function ImportModal({
           <div>
             <div style={{ marginBottom: 8, fontWeight: 500 }}>选择数据冲突处理模式:</div>
             <Radio.Group value={mode} onChange={(e) => setMode(e.target.value)}>
-              <Radio value="skip">重复跳过 (若编号已存在，则跳过不导入)</Radio>
-              <Radio value="overwrite">覆盖更新 (若编号已存在，则用新字段覆盖旧字段)</Radio>
-              <Radio value="rollback">出错回滚 (一旦整批数据中有一条解析或保存出错，全批次取消导入)</Radio>
+              <Radio value="overwrite">覆盖更新</Radio>
+              <Radio value="skip">重复跳过</Radio>
+              <Radio value="rollback">出错回滚</Radio>
             </Radio.Group>
           </div>
 

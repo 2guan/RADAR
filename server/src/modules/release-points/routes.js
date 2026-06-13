@@ -38,10 +38,38 @@ function resolveCurrent() {
 export default async function releasePointRoutes(fastify) {
   // 列表
   fastify.post('/release-points/list', { preHandler: fastify.requirePerm('settings', 'view') }, async (request) => {
+    const body = request.body || {};
+    const wh = [];
+    const params = [];
+    const filters = Array.isArray(body.filters) ? body.filters : [];
+    const normalFilters = [];
+
+    for (const f of filters) {
+      if (!f || f.value === undefined || f.value === null || f.value === '') continue;
+      
+      if (f.field === 'release_date') {
+        const dates = Array.isArray(f.value) ? f.value : [f.value];
+        if (dates.length) {
+          wh.push(`release_date IN (${dates.map(() => '?').join(',')})`);
+          params.push(...dates);
+        }
+      } else if (f.field === 'version_type_query') {
+        wh.push('(version_type LIKE ? OR remark LIKE ?)');
+        params.push(`%${f.value}%`, `%${f.value}%`);
+      } else {
+        normalFilters.push(f);
+      }
+    }
+
+    const newBody = { ...body, filters: normalFilters };
+    const baseWhere = wh.join(' AND ');
+
     return ok(listQuery({
       table: 'release_point', columns: COLUMNS,
       searchColumns: ['release_date', 'version_type', 'remark'],
-      query: request.body || {},
+      query: newBody,
+      baseWhere,
+      baseParams: params,
     }));
   });
 
@@ -129,30 +157,15 @@ export default async function releasePointRoutes(fastify) {
     ],
     list: (q) => listQuery({ table: 'release_point', columns: COLUMNS, searchColumns: ['release_date', 'version_type', 'remark'], query: q })
       .list.map((r) => ({ ...r, is_default: r.is_default ? '是' : '' })),
-
     upsert: (r, mode) => {
       if (!r.release_date) return 'skipped';
       const exists = get('SELECT id FROM release_point WHERE release_date = ?', String(r.release_date));
       if (exists) {
         if (mode === 'skip') return 'skipped';
         if (mode === 'rollback') throw badRequest(`投产日期重复：${r.release_date}，已回滚`);
-
-        const oldRow = get('SELECT * FROM release_point WHERE id = ?', exists.id);
-        const changes = [];
-        const compareAndPush = (fieldKey, fieldName, oldVal, newVal) => {
-          if (oldVal !== newVal) {
-            changes.push({ field: fieldName, old: oldVal, new: newVal });
-          }
-        };
-
-        compareAndPush('version_type', '版本类型', oldRow.version_type || '', r.version_type || '');
-        compareAndPush('remark', '备注', oldRow.remark || '', r.remark || '');
-
-        if (changes.length > 0) {
-          run('UPDATE release_point SET version_type=?, remark=?, updated_at=datetime(\'now\',\'localtime\') WHERE id=?',
-            r.version_type || null, r.remark || null, exists.id);
-        }
-        return { action: 'updated', changes };
+        run('UPDATE release_point SET version_type=?, remark=?, updated_at=datetime(\'now\',\'localtime\') WHERE id=?',
+          r.version_type || null, r.remark || null, exists.id);
+        return 'updated';
       }
       run('INSERT INTO release_point (release_date, version_type, remark) VALUES (?,?,?)',
         String(r.release_date), r.version_type || null, r.remark || null);

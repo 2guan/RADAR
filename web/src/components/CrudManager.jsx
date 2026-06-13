@@ -12,9 +12,9 @@ import {
   PlusOutlined, EditOutlined, DeleteOutlined, ImportOutlined, ExportOutlined,
 } from '@ant-design/icons';
 import DataTable from './DataTable.jsx';
-import Can from './Can.jsx';
 import FilterPanel from './FilterPanel.jsx';
 import ImportModal from './ImportModal.jsx';
+import Can from './Can.jsx';
 import { apiPost, apiPut, apiDelete } from '../api/client.js';
 import { exportXlsx } from '../utils/io.js';
 
@@ -22,33 +22,16 @@ export default function CrudManager({
   apiBase, columns, fields, title, baseQuery = {},
   transformIn = (x) => x, transformOut = (x) => x, rowKey = 'id', extraToolbar, rowActions,
   io, // { enabled, params } 开启导入/导出/模板；params 透传给三个接口（如 {category}）
+  filterConfigs, // 新增：高级筛选配置项
 }) {
   const tableRef = useRef();
   const [form] = Form.useForm();
   const [open, setOpen] = useState(false);
   const [current, setCurrent] = useState(null);
   const [importOpen, setImportOpen] = useState(false);
-  const [filterQuery, setFilterQuery] = useState({});
+  const [filterQuery, setFilterQuery] = useState([]);
 
-  const filterConfigs = [
-    { field: 'keyword', label: '搜索', type: 'input', isPrimary: true, placeholder: `输入关键字搜索${title || '配置'}` }
-  ];
-
-  const handleFilterChange = (vals) => {
-    setFilterQuery(vals);
-  };
-
-  const fetcher = (q) => {
-    const mergedFilters = [
-      ...(q.filters || []),
-      ...(baseQuery.filters || [])
-    ];
-    return apiPost(`${apiBase}/list`, {
-      ...q,
-      ...baseQuery,
-      filters: mergedFilters
-    });
-  };
+  const fetcher = (q) => apiPost(`${apiBase}/list`, q);
 
   const openEdit = (row) => {
     setCurrent(row);
@@ -71,6 +54,16 @@ export default function CrudManager({
     await apiDelete(`${apiBase}/${row[rowKey]}`);
     message.success('已删除');
     tableRef.current?.reload();
+  };
+
+  const handleFilterChange = (vals) => {
+    const arr = Object.entries(vals)
+      .map(([field, value]) => {
+        const conf = filterConfigs.find(c => c.field === field);
+        return { field, value, op: conf?.op || 'eq' };
+      })
+      .filter((item) => item.value !== undefined && item.value !== null && item.value !== '');
+    setFilterQuery(arr);
   };
 
   const fullColumns = [
@@ -108,32 +101,50 @@ export default function CrudManager({
     );
   };
 
+  const hasFilter = !!filterConfigs;
+  const addButton = (
+    <Can key="add" module="settings" action="create">
+      <Button type="primary" icon={<PlusOutlined />} onClick={() => openEdit(null)}>新增</Button>
+    </Can>
+  );
+
+  const filterPanelActions = [
+    addButton,
+    ...(io?.enabled ? [
+      <Can key="imp" module="settings" action="import">
+        <Button icon={<ImportOutlined />} onClick={() => setImportOpen(true)} style={{ width: 88 }}>导入</Button>
+      </Can>,
+      <Can key="exp" module="settings" action="export">
+        <Button icon={<ExportOutlined />} onClick={() => exportXlsx(`${apiBase}/export`, { ...baseQuery, ...(io.params || {}), filters: [...(baseQuery.filters || []), ...filterQuery] }, `${title}.xlsx`)} style={{ width: 88 }}>导出</Button>
+      </Can>
+    ] : [])
+  ];
+
+  const tableToolbar = [
+    ...(!hasFilter ? [addButton] : []),
+    ...(extraToolbar ? [extraToolbar] : [])
+  ];
+
   return (
     <>
-      <FilterPanel
-        configs={filterConfigs}
-        onChange={handleFilterChange}
-        actions={[
-          <Can key="add" module="settings" action="create">
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => openEdit(null)} style={{ width: 88 }}>新增</Button>
-          </Can>,
-          ...(io?.enabled ? [
-            <Can key="imp" module="settings" action="import">
-              <Button icon={<ImportOutlined />} onClick={() => setImportOpen(true)} style={{ width: 88 }}>导入</Button>
-            </Can>,
-            <Can key="exp" module="settings" action="export">
-              <Button icon={<ExportOutlined />} onClick={() => exportXlsx(`${apiBase}/export`, { ...baseQuery, ...(io.params || {}), ...filterQuery }, `${title}.xlsx`)} style={{ width: 88 }}>导出</Button>
-            </Can>
-          ] : []),
-          extraToolbar,
-        ]}
-      />
+      {filterConfigs && (
+        <FilterPanel
+          configs={filterConfigs}
+          onChange={handleFilterChange}
+          actions={filterPanelActions}
+        />
+      )}
       <DataTable
-        ref={tableRef} columns={fullColumns} fetcher={fetcher}
-        baseQuery={{ ...baseQuery, ...filterQuery }}
+        ref={tableRef}
+        columns={fullColumns}
+        fetcher={fetcher}
+        baseQuery={{ ...baseQuery, filters: [...(baseQuery.filters || []), ...filterQuery] }}
         rowKey={rowKey}
+        showSearch={false}
         mobileCard={mobileCard}
+        toolbar={tableToolbar}
       />
+
       {io?.enabled && (
         <ImportModal
           open={importOpen}
@@ -141,13 +152,15 @@ export default function CrudManager({
           onSuccess={() => tableRef.current?.reload()}
           importUrl={`${apiBase}/import`}
           templateUrl={`${apiBase}/template`}
-          templateFilename={`${title}模板.xlsx`}
-          extraFields={io.params || {}}
+          templateFilename={`${title}导入模板.xlsx`}
+          extraFields={io.params}
         />
       )}
+
       <Modal open={open} title={current ? `编辑${title}` : `新增${title}`} onCancel={() => setOpen(false)} onOk={onSave} okText="保存">
         <Form form={form} layout="vertical">{fields(form, current)}</Form>
       </Modal>
     </>
   );
 }
+
