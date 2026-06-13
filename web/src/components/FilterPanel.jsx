@@ -121,7 +121,7 @@ export default function FilterPanel({ configs, onChange, actions }) {
           ))}
         </div>
         
-        <Space wrap>
+        <Space wrap className="filter-space-actions">
           <Tooltip title="重置">
             <Button 
               icon={<UndoOutlined />} 
