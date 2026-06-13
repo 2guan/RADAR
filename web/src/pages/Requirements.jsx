@@ -185,7 +185,18 @@ export default function Requirements() {
       }
       variant="borderless"
     >
-      <FilterPanel configs={filterConfigs} onChange={handleFilterChange} />
+      <FilterPanel
+        configs={filterConfigs}
+        onChange={handleFilterChange}
+        actions={[
+          <Can key="imp" module="requirement" action="import">
+            <Button icon={<ImportOutlined />} onClick={() => setImportOpen(true)} style={{ width: 88 }}>导入</Button>
+          </Can>,
+          <Can key="exp" module="requirement" action="export">
+            <Button icon={<ExportOutlined />} onClick={() => exportXlsx('/requirements/export', { releasePointIds, filters: filterQuery }, '需求清单.xlsx')} style={{ width: 88 }}>导出</Button>
+          </Can>,
+        ]}
+      />
       <DataTable
         ref={tableRef} columns={columns} fetcher={fetcher} 
         baseQuery={{ releasePointIds, filters: filterQuery }} 
@@ -210,14 +221,6 @@ export default function Requirements() {
             </div>
           </Space>
         )}
-        toolbar={[
-          <Can key="imp" module="requirement" action="import">
-            <Button icon={<ImportOutlined />} onClick={() => setImportOpen(true)}>导入</Button>
-          </Can>,
-          <Can key="exp" module="requirement" action="export">
-            <Button icon={<ExportOutlined />} onClick={() => exportXlsx('/requirements/export', { releasePointIds, filters: filterQuery }, '需求清单.xlsx')}>导出</Button>
-          </Can>,
-        ]}
       />
 
       <ImportModal

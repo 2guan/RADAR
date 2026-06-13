@@ -130,7 +130,15 @@ export default function Release() {
 
   return (
     <Card title="投产管理" variant="borderless">
-      <FilterPanel configs={filterConfigs} onChange={handleFilterChange} />
+      <FilterPanel
+        configs={filterConfigs}
+        onChange={handleFilterChange}
+        actions={[
+          <Can key="exp" module="release" action="export">
+            <Button icon={<ExportOutlined />} onClick={() => exportXlsx('/release/export', { releasePointIds, filters: filterQuery }, '投产管理清单.xlsx')} style={{ width: 88 }}>导出</Button>
+          </Can>
+        ]}
+      />
       <DataTable
         ref={tableRef} columns={columns} fetcher={fetcher} baseQuery={{ releasePointIds, filters: filterQuery }} rowKey="req_code"
         showSearch={false}
@@ -148,11 +156,6 @@ export default function Release() {
               : <Can module="release" action="release.register"><Button size="small" type="primary" disabled={!r.uat_ready} onClick={() => init(r.req_code)}>发起投产</Button></Can>}
           </Space>
         )}
-        toolbar={[
-          <Can key="exp" module="release" action="export">
-            <Button icon={<ExportOutlined />} onClick={() => exportXlsx('/release/export', { releasePointIds, filters: filterQuery }, '投产管理清单.xlsx')}>导出</Button>
-          </Can>
-        ]}
       />
 
       <ReleaseDetail open={!!detailReq} reqCode={detailReq} onClose={() => setDetailReq(null)} onChanged={() => tableRef.current?.reload()} />

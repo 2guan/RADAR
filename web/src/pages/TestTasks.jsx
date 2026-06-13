@@ -369,7 +369,18 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
 
   return (
     <>
-      <FilterPanel configs={filterConfigs} onChange={handleFilterChange} />
+      <FilterPanel
+        configs={filterConfigs}
+        onChange={handleFilterChange}
+        actions={[
+          <Can key="imp" module="test" action="import">
+            <Button icon={<ImportOutlined />} onClick={() => setImportOpen(true)} style={{ width: 88 }}>导入</Button>
+          </Can>,
+          <Can key="exp" module="test" action="export">
+            <Button icon={<ExportOutlined />} onClick={() => exportXlsx('/test-tasks/export', { releasePointIds, test_type: testType, filters: filterQuery }, `${TYPE_LABEL[testType]}清单.xlsx`)} style={{ width: 88 }}>导出</Button>
+          </Can>,
+        ]}
+      />
       <DataTable
         ref={tableRef} columns={columns} fetcher={fetcher} 
         baseQuery={{ releasePointIds, testType, filters: filterQuery }} 
@@ -392,14 +403,6 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
             </Space>
           </Space>
         )}
-        toolbar={[
-          <Can key="imp" module="test" action="import">
-            <Button icon={<ImportOutlined />} onClick={() => setImportOpen(true)}>导入</Button>
-          </Can>,
-          <Can key="exp" module="test" action="export">
-            <Button icon={<ExportOutlined />} onClick={() => exportXlsx('/test-tasks/export', { releasePointIds, test_type: testType, filters: filterQuery }, `${TYPE_LABEL[testType]}清单.xlsx`)}>导出</Button>
-          </Can>,
-        ]}
       />
 
       <Modal

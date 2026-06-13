@@ -5,11 +5,11 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Input, Select, DatePicker, Button, Badge, Space } from 'antd';
+import { Input, Select, DatePicker, Button, Badge, Space, Tooltip } from 'antd';
 import { SearchOutlined, DownOutlined, UpOutlined, UndoOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 
-export default function FilterPanel({ configs, onChange }) {
+export default function FilterPanel({ configs, onChange, actions }) {
   const [expanded, setExpanded] = useState(false);
   const [localValues, setLocalValues] = useState({});
   const debounceRef = useRef({});
@@ -122,6 +122,13 @@ export default function FilterPanel({ configs, onChange }) {
         </div>
         
         <Space wrap>
+          <Tooltip title="重置">
+            <Button 
+              icon={<UndoOutlined />} 
+              onClick={handleReset}
+            />
+          </Tooltip>
+          
           {secondaryConfigs.length > 0 && (
             <Button 
               type="text" 
@@ -144,12 +151,7 @@ export default function FilterPanel({ configs, onChange }) {
             </Button>
           )}
           
-          <Button 
-            icon={<UndoOutlined />} 
-            onClick={handleReset}
-          >
-            重置
-          </Button>
+          {actions}
         </Space>
       </div>
 

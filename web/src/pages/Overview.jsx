@@ -1074,16 +1074,19 @@ export default function Overview() {
   return (
     <Card
       title="版本概览"
-      extra={
-        <Can module="overview" action="view">
-          <Button icon={<ExportOutlined />} onClick={() => exportXlsx('/overview/export', { releasePointIds, filters: filterQuery }, '版本概览宽表.xlsx')}>
-            全部导出
-          </Button>
-        </Can>
-      }
       variant="borderless"
     >
-      <FilterPanel configs={filterConfigs} onChange={handleFilterChange} />
+      <FilterPanel
+        configs={filterConfigs}
+        onChange={handleFilterChange}
+        actions={[
+          <Can key="exp" module="overview" action="view">
+            <Button icon={<ExportOutlined />} onClick={() => exportXlsx('/overview/export', { releasePointIds, filters: filterQuery }, '版本概览宽表.xlsx')} style={{ width: 100 }}>
+              全部导出
+            </Button>
+          </Can>
+        ]}
+      />
 
       {loading ? (
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>

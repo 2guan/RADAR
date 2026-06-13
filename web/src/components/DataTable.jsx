@@ -128,11 +128,13 @@ const DataTable = forwardRef(function DataTable(props, ref) {
     </Space>
   );
 
+  const hasHeader = showSearch || extraFilters || (toolbar && (Array.isArray(toolbar) ? toolbar.length > 0 : true));
+
   // 移动端卡片
   if (isMobile && mobileCard) {
     return (
       <div>
-        {header}
+        {hasHeader && header}
         <List
           loading={loading}
           locale={{ emptyText: <Empty description="暂无数据" /> }}
@@ -156,7 +158,7 @@ const DataTable = forwardRef(function DataTable(props, ref) {
 
   return (
     <div className="compact-table">
-      {header}
+      {hasHeader && header}
       <Table
         rowKey={rowKey}
         loading={loading}

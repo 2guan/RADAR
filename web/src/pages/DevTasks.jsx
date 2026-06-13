@@ -361,20 +361,23 @@ export default function DevTasks() {
       }
       variant="borderless"
     >
-      <FilterPanel configs={filterConfigs} onChange={handleFilterChange} />
+      <FilterPanel
+        configs={filterConfigs}
+        onChange={handleFilterChange}
+        actions={[
+          <Can key="imp" module="dev" action="import">
+            <Button icon={<ImportOutlined />} onClick={() => setImportOpen(true)} style={{ width: 88 }}>导入</Button>
+          </Can>,
+          <Can key="exp" module="dev" action="export">
+            <Button icon={<ExportOutlined />} onClick={() => exportXlsx('/dev-tasks/export', { filters: filterQuery }, '开发任务清单.xlsx')} style={{ width: 88 }}>导出</Button>
+          </Can>,
+        ]}
+      />
       <DataTable
         ref={tableRef} columns={columns} fetcher={fetcher} 
         baseQuery={{ releasePointIds, filters: filterQuery }} 
         showSearch={false}
         onRowClick={(r) => setEditId(r.id)}
-        toolbar={[
-          <Can key="imp" module="dev" action="import">
-            <Button icon={<ImportOutlined />} onClick={() => setImportOpen(true)}>导入</Button>
-          </Can>,
-          <Can key="exp" module="dev" action="export">
-            <Button icon={<ExportOutlined />} onClick={() => exportXlsx('/dev-tasks/export', { filters: filterQuery }, '开发任务清单.xlsx')}>导出</Button>
-          </Can>,
-        ]}
         mobileCard={(item) => (
           <Space direction="vertical" size={4} style={{ width: '100%' }}>
             <Space style={{ justifyContent: 'space-between', width: '100%' }}><strong>{item.task_code}</strong><StatusBadge status={item.status} /></Space>
