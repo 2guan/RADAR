@@ -218,7 +218,7 @@ export default function RequirementEditor({ open, reqId, defaultReleasePointId, 
       okText="保存"
       onOk={save}
       onCancel={onClose}
-      destroyOnClose
+      destroyOnHidden
       okButtonProps={readonly ? { style: { display: 'none' } } : undefined}
       cancelText={readonly ? '关闭' : '取消'}
       styles={{ body: { fontSize: 12 } }}

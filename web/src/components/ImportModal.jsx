@@ -242,7 +242,7 @@ export default function ImportModal({
       footer={modalFooter}
       width={720}
       maskClosable={false}
-      destroyOnClose
+      destroyOnHidden
     >
       {!result ? (
         <Space direction="vertical" size="middle" style={{ width: '100%', marginTop: 8 }}>

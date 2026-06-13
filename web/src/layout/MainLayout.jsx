@@ -173,7 +173,7 @@ export default function MainLayout() {
       filterOption={(input, option) => option.label.toLowerCase().includes(input.toLowerCase())}
       style={isMobile ? { width: 120, minWidth: 0, maxWidth: '34vw', fontSize: 12 } : { minWidth: 260, fontSize: 12 }}
       className="radar-rp-select"
-      popupClassName="radar-rp-select-dropdown"
+      classNames={{ popup: { root: 'radar-rp-select-dropdown' } }}
       suffixIcon={<DownOutlined style={{ color: token.colorPrimary }} />}
       onChange={(ids) => setReleasePointIds(ids)}
       options={points.map((p) => ({
@@ -235,7 +235,7 @@ export default function MainLayout() {
           setChangePwdOpen(false);
           pwdForm.resetFields();
         }}
-        destroyOnClose
+        destroyOnHidden
         okText="保存"
         cancelText="取消"
         width={400}

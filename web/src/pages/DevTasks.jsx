@@ -403,7 +403,7 @@ export default function DevTasks() {
         confirmLoading={saving}
         okText="承接"
         styles={{ body: { padding: '12px 0 0 0' } }}
-        destroyOnClose
+        destroyOnHidden
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* 1. 选择需求 */}

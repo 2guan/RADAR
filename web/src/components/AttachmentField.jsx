@@ -177,7 +177,7 @@ export default function AttachmentField({ entityType, entityId, fieldKey, readOn
           }
         }}
         width={500}
-        destroyOnClose
+        destroyOnHidden
         okText="确认"
         cancelText="取消"
       >

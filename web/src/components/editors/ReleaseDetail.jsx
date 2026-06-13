@@ -206,7 +206,7 @@ export default function ReleaseDetail({ open, reqCode, onClose, onChanged }) {
       width={980}
       footer={null}
       onCancel={onClose}
-      destroyOnClose
+      destroyOnHidden
       styles={{ body: { fontSize: 12 } }}
       title={(
         <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 10, rowGap: 6, minWidth: 0, width: '100%', paddingRight: 76 }}>
@@ -452,7 +452,7 @@ export default function ReleaseDetail({ open, reqCode, onClose, onChanged }) {
           }
         }}
         width={400}
-        destroyOnClose
+        destroyOnHidden
         okText="确认"
         cancelText="取消"
       >
@@ -498,7 +498,7 @@ export default function ReleaseDetail({ open, reqCode, onClose, onChanged }) {
           }
         }}
         width={400}
-        destroyOnClose
+        destroyOnHidden
         okText="确认"
         cancelText="取消"
       >

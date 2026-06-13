@@ -548,7 +548,7 @@ function DevIntakeModal({ open, requirement, onClose, onSaved }) {
       confirmLoading={saving}
       okText="承接"
       styles={{ body: { padding: '12px 0 0 0' } }}
-      destroyOnClose
+      destroyOnHidden
     >
       {requirement && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -802,7 +802,7 @@ function TestIntakeModal({ open, requirement, testType, onClose, onSaved }) {
       confirmLoading={saving}
       okText="承接"
       styles={{ body: { padding: '12px 0 0 0' } }}
-      destroyOnClose
+      destroyOnHidden
     >
       {requirement && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -904,7 +904,7 @@ function RequirementHistoryModal({ open, onClose, reqCode }) {
       onCancel={onClose}
       footer={null}
       width={640}
-      destroyOnClose
+      destroyOnHidden
       styles={{ body: { maxHeight: '60vh', overflowY: 'auto', paddingTop: 12 } }}
     >
       {loading ? <Spin /> : (

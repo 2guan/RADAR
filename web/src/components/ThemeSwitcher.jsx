@@ -14,7 +14,7 @@ export default function ThemeSwitcher() {
   const { preset, setPreset, theme } = useAppStore();
   const isDark = theme === 'dark';
 
-  const dropdownRender = () => (
+  const popupRender = () => (
     <div style={{
       padding: 12,
       borderRadius: 0,
@@ -60,7 +60,7 @@ export default function ThemeSwitcher() {
   );
 
   return (
-    <Dropdown trigger={['click']} dropdownRender={dropdownRender} placement="bottomRight">
+    <Dropdown trigger={['click']} popupRender={popupRender} placement="bottomRight">
       <Tooltip title="外观主题">
         <Button type="text" shape="circle" icon={<BgColorsOutlined />} />
       </Tooltip>
