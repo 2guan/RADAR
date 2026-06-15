@@ -19,6 +19,7 @@ import Issues from './pages/Issues.jsx';
 import DevTasks from './pages/DevTasks.jsx';
 import { SitPage, UatPage, NftPage, SecPage } from './pages/TestTasks.jsx';
 import Release from './pages/Release.jsx';
+import ReleaseApply from './pages/ReleaseApply.jsx';
 import Users from './pages/Users.jsx';
 import Settings from './pages/Settings.jsx';
 
@@ -35,7 +36,9 @@ export function getHomePath(defaultHome) {
     '用户测试': '/test/uat',
     '非功能测试': '/test/nft',
     '安全测试': '/test/sec',
-    '投产管理': '/release',
+    '投产管理': '/release/apply',
+    '投产申请': '/release/apply',
+    '投产审批': '/release',
     '人员管理': '/users',
     '系统设置': '/settings',
   };
@@ -82,6 +85,7 @@ function Protected({ children }) {
   const moduleByPath = {
     '/dashboard': 'dashboard', '/overview': 'overview', '/requirements': 'requirement',
     '/issues': 'issue', '/dev': 'dev', '/test': 'test', '/release': 'release',
+    '/release/apply': 'release_apply',
     '/users': 'user', '/settings': 'settings',
   };
   const mod = moduleByPath[path] || (path.startsWith('/test/') ? 'test' : undefined);
@@ -123,6 +127,7 @@ export default function AppRouter() {
           <Route path="test/nft" element={<NftPage />} />
           <Route path="test/sec" element={<SecPage />} />
           <Route path="release" element={<Release />} />
+          <Route path="release/apply" element={<ReleaseApply />} />
           <Route path="users" element={<Users />} />
           <Route path="settings" element={<Settings />} />
         </Route>

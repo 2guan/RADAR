@@ -62,3 +62,14 @@ export function genTestCode(testType, reqCode) {
   const seq = nextSeq('test_task', 'task_code', prefix);
   return tpl.replace('{需求编号}', reqCode).replace('{序号}', seq);
 }
+
+/**
+ * 生成投产申请变更编号。{版本年月}-10bg{序号}
+ * @param {string} yearMonth 版本年月（YYYYMM）
+ */
+export function genReleaseApplyCode(yearMonth) {
+  const tpl = template('code.release_apply', '{版本年月}-10bg{序号}');
+  const prefix = tpl.replace('{版本年月}', yearMonth).replace('{序号}', '');
+  const seq = nextSeq('release_apply', 'change_code', prefix);
+  return tpl.replace('{版本年月}', yearMonth).replace('{序号}', seq);
+}

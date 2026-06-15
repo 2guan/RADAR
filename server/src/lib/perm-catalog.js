@@ -38,7 +38,14 @@ export const PERM_CATALOG = [
     ],
   },
   {
-    key: 'release', label: '投产管理',
+    key: 'release_apply', label: '投产申请',
+    actions: [
+      { key: 'view', label: '查看' }, { key: 'create', label: '新增' }, { key: 'edit', label: '编辑' },
+      { key: 'delete', label: '删除' }, { key: 'import', label: '导入' }, { key: 'export', label: '导出' },
+    ],
+  },
+  {
+    key: 'release', label: '投产审批',
     actions: [
       { key: 'view', label: '查看' }, { key: 'edit', label: '编辑' },
       { key: 'release.signoff', label: '评审会签' }, { key: 'release.register', label: '投产登记' },

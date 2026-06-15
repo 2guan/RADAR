@@ -110,7 +110,17 @@ export default function Issues() {
     { title: '状态', dataIndex: 'status', key: 'status', align: 'center', render: (s) => <StatusBadge status={s} /> },
     { title: '详细分类', dataIndex: 'detailed_classification', key: 'detailed_classification' },
     { title: '所属系统', dataIndex: 'system', key: 'system' },
-    { title: '问题概述', dataIndex: 'summary', key: 'summary', ellipsis: true },
+    {
+      title: '问题概述', dataIndex: 'summary', key: 'summary',
+      render: (v) => (
+        <div
+          title={v || ''}
+          style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: '18px', maxHeight: 36 }}
+        >
+          {v || '—'}
+        </div>
+      ),
+    },
   ];
 
   return (

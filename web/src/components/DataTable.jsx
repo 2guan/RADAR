@@ -18,7 +18,7 @@ const DataTable = forwardRef(function DataTable(props, ref) {
   const {
     columns: rawColumns, fetcher, rowKey = 'id', toolbar, extraFilters,
     onRowClick, mobileCard, searchPlaceholder = '关键字检索', baseQuery = {},
-    showSearch = true,
+    showSearch = true, tableScroll = { x: 'max-content' },
   } = props;
   const { isMobile } = useResponsive();
 
@@ -165,7 +165,7 @@ const DataTable = forwardRef(function DataTable(props, ref) {
         columns={columns}
         dataSource={data.list}
         size="small"
-        scroll={{ x: 'max-content' }}
+        scroll={tableScroll}
         components={{ header: { cell: ResizableTitle } }}
         onChange={onTableChange}
         onRow={(record) => ({

@@ -27,7 +27,13 @@ export const MENU = [
     ],
   },
   { key: '/issues', label: '问题管理', module: 'issue', icon: React.createElement(BugOutlined) },
-  { key: '/release', label: '投产管理', module: 'release', icon: React.createElement(RocketOutlined) },
+  {
+    key: '/release-mgmt', label: '投产管理', module: 'release_apply', icon: React.createElement(RocketOutlined),
+    children: [
+      { key: '/release/apply', label: '投产申请', module: 'release_apply' },
+      { key: '/release', label: '投产审批', module: 'release' },
+    ],
+  },
   { key: '/users', label: '人员管理', module: 'user', icon: React.createElement(TeamOutlined) },
   { key: '/settings', label: '系统设置', module: 'settings', icon: React.createElement(SettingOutlined) },
 ];

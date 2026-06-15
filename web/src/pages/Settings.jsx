@@ -350,6 +350,7 @@ export default function Settings() {
           { key: 'code.test.UAT', label: '用户测试编号规则' },
           { key: 'code.test.NFT', label: '非功能测试编号规则' },
           { key: 'code.test.SEC', label: '安全测试编号规则' },
+          { key: 'code.release_apply', label: '投产申请变更编号规则', extra: '占位符：{版本年月} {序号}' },
         ]} />,
       },
       {
@@ -372,6 +373,8 @@ export default function Settings() {
       { key: 'release', label: '投产状态', children: <DictManager category="release_status" title="投产状态" /> },
       { key: 'review', label: '评审状态', children: <DictManager category="review_status" title="评审状态" /> },
       { key: 'reqtype', label: '需求类型', children: <DictManager category="req_type" title="需求类型" /> },
+      { key: 'artifact', label: '制品类型', children: <DictManager category="artifact_type" title="制品类型" /> },
+      { key: 'ferry', label: '摆渡状态', children: <DictManager category="ferry_status" title="摆渡状态" /> },
     ]} />
   );
 

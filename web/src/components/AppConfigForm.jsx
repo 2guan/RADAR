@@ -41,6 +41,7 @@ export default function AppConfigForm({ mode, items }) {
   const watchUAT = Form.useWatch('code.test.UAT', form);
   const watchNFT = Form.useWatch('code.test.NFT', form);
   const watchSEC = Form.useWatch('code.test.SEC', form);
+  const watchRelApply = Form.useWatch('code.release_apply', form);
 
   useEffect(() => {
     apiGet('/settings/app-config').then((rows) => {
@@ -125,6 +126,7 @@ export default function AppConfigForm({ mode, items }) {
     if (!activePattern) return '—';
     return activePattern
       .replace('{投产窗口}', '20260630')
+      .replace('{版本年月}', '202606')
       .replace('{需求编号}', 'REQ-20260630-003')
       .replace('{序号}', '001');
   };
@@ -261,6 +263,13 @@ export default function AppConfigForm({ mode, items }) {
               </Row>
             </div>
 
+            <div className="form-section-card" style={{ marginTop: 16 }}>
+              <div className="form-section-title">3. 投产阶段单据规则</div>
+              <Row gutter={16}>
+                <Col span={12}>{renderFormItem('code.release_apply')}</Col>
+              </Row>
+            </div>
+
             <div style={{ marginTop: 20 }}>
               <Button type="primary" onClick={onSave} loading={loading} style={{ width: 120 }}>
                 保存配置
@@ -315,6 +324,12 @@ export default function AppConfigForm({ mode, items }) {
                     {mockGenerate(watchSEC, '{需求编号}-SEC-{序号}')}
                   </div>
                 </Col>
+                <Col span={12}>
+                  <div style={{ fontSize: 10, color: 'var(--radar-text-secondary)', marginBottom: 2 }}>投产变更单号：</div>
+                  <div className="code-pill" style={{ display: 'block', textAlign: 'center', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', fontSize: 11, padding: '2px 4px' }}>
+                    {mockGenerate(watchRelApply, '{版本年月}-10bg{序号}')}
+                  </div>
+                </Col>
               </Row>
             </Card>
 
@@ -327,6 +342,7 @@ export default function AppConfigForm({ mode, items }) {
                   规则输入框中可使用以下花括号占位符：
                   <ul style={{ paddingLeft: 16, margin: '4px 0 0' }}>
                     <li><strong>{"{投产窗口}"}</strong>：如 `20260630`</li>
+                    <li><strong>{"{版本年月}"}</strong>：如 `202606`</li>
                     <li><strong>{"{需求编号}"}</strong>：如 `REQ-20260630-003`</li>
                     <li><strong>{"{序号}"}</strong>：流水序号，如 `001`</li>
                   </ul>

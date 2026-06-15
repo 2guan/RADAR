@@ -10,7 +10,8 @@ import { db, get, run, tx, all } from './index.js';
 import { hashPassword } from '../lib/password.js';
 import { config } from '../config.js';
 
-// 角色定义（角色标识、名称、是否内置）
+// 角色定义（角色标识、名称、是否内置、是否会签角色）
+// 会签角色（signoff:1）：安全/架构/机构/项目/测试/配置负责人——投产评审会签由这 6 个角色完成。
 const ROLES = [
   { code: '金科业务', name: '金科业务' },
   { code: '农信业务', name: '农信业务' },
@@ -20,9 +21,18 @@ const ROLES = [
   { code: '农信测试', name: '农信测试' },
   { code: '金科运维', name: '金科运维' },
   { code: '农信运维', name: '农信运维' },
+  { code: '安全负责人', name: '安全负责人', signoff: 1 },
+  { code: '架构负责人', name: '架构负责人', signoff: 1 },
+  { code: '机构负责人', name: '机构负责人', signoff: 1 },
+  { code: '项目负责人', name: '项目负责人', signoff: 1 },
+  { code: '测试负责人', name: '测试负责人', signoff: 1 },
+  { code: '配置负责人', name: '配置负责人', signoff: 1 },
   { code: '管理员', name: '管理员' },
   { code: '超级管理员', name: '超级管理员', builtin: 1 },
 ];
+
+// 会签角色标识集合（投产评审会签）
+const SIGNOFF_ROLE_CODES = ROLES.filter((r) => r.signoff).map((r) => r.code);
 
 // 模块 -> 该模块支持的全部操作键
 const MODULE_ACTIONS = {
@@ -33,12 +43,13 @@ const MODULE_ACTIONS = {
   dev: ['view', 'create', 'edit', 'delete', 'import', 'export', 'dev.intake'],
   test: ['view', 'create', 'edit', 'delete', 'import', 'export', 'test.intake'],
   release: ['view', 'edit', 'export', 'release.signoff', 'release.register'],
+  release_apply: ['view', 'create', 'edit', 'delete', 'import', 'export'],
   user: ['view', 'create', 'edit', 'delete', 'import', 'export'],
   settings: ['view', 'create', 'edit', 'delete', 'import', 'export', 'settings.permission.edit'],
 };
 
 // 业务主链路模块（非管理类角色默认可见）
-const CHAIN_MODULES = ['dashboard', 'overview', 'requirement', 'issue', 'dev', 'test', 'release'];
+const CHAIN_MODULES = ['dashboard', 'overview', 'requirement', 'issue', 'dev', 'test', 'release', 'release_apply'];
 
 // 流程状态字典：[阶段, 属性值, 显示值, 排序, 是否终态]
 const PROCESS_STATUS = [
@@ -71,6 +82,10 @@ const RELEASE_STATUS = [['待投产', 1], ['已投产', 2], ['已取消', 3]];
 const REQ_TYPE = [['新增需求', 1], ['已有功能的需求变更', 2], ['缺陷修复', 3], ['紧急变更', 4]];
 // 评审状态（投产评审会签）：待评审为默认，评审同意/拒绝自动推导，评审撤销/应急审批手动设置
 const REVIEW_STATUS = [['待评审', 1], ['评审同意', 2], ['评审拒绝', 3], ['评审撤销', 4], ['应急审批', 5]];
+// 制品类型（投产申请）：镜像制品 / 二进制制品 / 介质库文件 / 无制品
+const ARTIFACT_TYPE = [['镜像制品', 1], ['二进制制品', 2], ['介质库文件', 3], ['无制品', 4]];
+// 摆渡状态（投产申请）：未摆渡（默认）/ 待发送 / 已摆渡 / 摆渡失败
+const FERRY_STATUS = [['未摆渡', 1], ['待发送', 2], ['已摆渡', 3], ['摆渡失败', 4]];
 
 // 机构（实施机构 / 组织机构共用）：[属性值, 显示值, 排序]
 const ORGS = [
@@ -165,7 +180,8 @@ const APP_CONFIG = [
   ['code.test.UAT', 'UAT_{需求编号}_{序号}', '用户测试任务编号规则'],
   ['code.test.NFT', 'NFT_{需求编号}_{序号}', '非功能测试任务编号规则'],
   ['code.test.SEC', 'SEC_{需求编号}_{序号}', '安全测试任务编号规则'],
-  ['release.signoffRoles', '["业务负责人","开发负责人","测试负责人","运维负责人"]', '投产评审会签角色（JSON 数组）'],
+  ['code.release_apply', '{版本年月}-10bg{序号}', '投产申请变更编号规则'],
+  ['release.signoffRoles', '["安全负责人","架构负责人","机构负责人","项目负责人","测试负责人","配置负责人"]', '投产评审会签角色（JSON 数组）'],
   ['appearance.preset', 'sky', '外观主题预设（默认清新蓝）'],
   ['security.password.complexity', 'true', '启用密码复杂度校验'],
   ['security.password.minLength', '8', '密码最小长度'],
@@ -224,6 +240,8 @@ export function runSeed() {
     for (const [attr, sort] of RELEASE_STATUS) seedDict('release_status', attr, attr, sort);
     for (const [attr, sort] of REQ_TYPE) seedDict('req_type', attr, attr, sort);
     for (const [attr, sort] of REVIEW_STATUS) seedDict('review_status', attr, attr, sort);
+    for (const [attr, sort] of ARTIFACT_TYPE) seedDict('artifact_type', attr, attr, sort);
+    for (const [attr, sort] of FERRY_STATUS) seedDict('ferry_status', attr, attr, sort);
     for (const [attr, disp, sort] of ORGS) seedDict('org', attr, disp, sort);
     for (const [attr, disp, sort] of SECTORS) seedDict('sector', attr, disp, sort);
 
@@ -243,12 +261,17 @@ export function runSeed() {
       let row = get('SELECT id FROM role WHERE code = ?', r.code);
       if (!row) {
         const res = run(
-          'INSERT INTO role (name, code, default_home, is_builtin) VALUES (?,?,?,?)',
-          r.name, r.code, '仪表盘', r.builtin ? 1 : 0,
+          'INSERT INTO role (name, code, default_home, is_builtin, is_signoff_role) VALUES (?,?,?,?,?)',
+          r.name, r.code, '仪表盘', r.builtin ? 1 : 0, r.signoff ? 1 : 0,
         );
         row = { id: res.lastInsertRowid };
       }
       roleIdByCode[r.code] = row.id;
+    }
+    // 4b) 同步会签角色标识：以 ROLES 定义为准（仅影响内置角色，自定义角色不受影响）。
+    //     早期迁移 0002 将金科侧业务/开发/测试/运维标记为会签角色，此处统一归位到 6 个负责人角色。
+    for (const r of ROLES) {
+      run('UPDATE role SET is_signoff_role = ? WHERE code = ?', r.signoff ? 1 : 0, r.code);
     }
 
     // 5) 权限矩阵默认值
@@ -264,6 +287,7 @@ export function runSeed() {
       dev: ['金科开发', '农信开发'],
       test: ['金科测试', '农信测试', '金科业务', '农信业务'], // UAT 涉及业务
       release: ['金科运维', '农信运维'],
+      release_apply: ['金科运维', '农信运维'],
     };
     const nonAdminRoles = ROLES.filter((r) => !['管理员', '超级管理员'].includes(r.code));
     for (const r of nonAdminRoles) {
@@ -274,6 +298,8 @@ export function runSeed() {
       for (const [mod, roleCodes] of Object.entries(dutyMap)) {
         if (roleCodes.includes(r.code)) grant(rid, mod, MODULE_ACTIONS[mod]);
       }
+      // 会签角色：授予投产审批的签署权限（仅本角色可签署对应会签项）
+      if (r.signoff) grant(rid, 'release', ['view', 'release.signoff']);
     }
 
     // 6) 超级管理员用户
