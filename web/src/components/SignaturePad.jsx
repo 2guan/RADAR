@@ -25,17 +25,20 @@ const SignaturePad = forwardRef(function SignaturePad({ height = 150, invert = f
   const lastMid = useRef(null);  // 上一段中点
   const lastW = useRef(BASE_W);  // 上一段宽度（画布像素）
 
-  // 依据显示尺寸与 dpr 重建画布分辨率，并保留已有笔迹
+  // 依据「实际显示尺寸 × dpr」重建画布分辨率，保证内部分辨率与显示比例一致，并保留已有笔迹
   const setupCanvas = () => {
     const c = canvasRef.current;
     if (!c) return;
     const rect = c.getBoundingClientRect();
-    if (!rect.width) return;
+    if (!rect.width || !rect.height) return;
     const dpr = window.devicePixelRatio || 1;
+    const w = Math.round(rect.width * dpr);
+    const h = Math.round(rect.height * dpr);
+    if (c.width === w && c.height === h) return; // 尺寸未变，避免重复重建
     ratio.current = dpr;
     const prev = dirty.current ? c.toDataURL() : null;
-    c.width = Math.round(rect.width * dpr);
-    c.height = Math.round(height * dpr);
+    c.width = w;
+    c.height = h;
     const ctx = c.getContext('2d');
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
@@ -50,9 +53,17 @@ const SignaturePad = forwardRef(function SignaturePad({ height = 150, invert = f
 
   useEffect(() => {
     setupCanvas();
-    const onResize = () => setupCanvas();
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
+    // ResizeObserver：弹窗动画/布局稳定、容器宽度变化时重新同步分辨率（修复比例不一致）
+    let ro;
+    if (typeof ResizeObserver !== 'undefined' && canvasRef.current) {
+      ro = new ResizeObserver(() => setupCanvas());
+      ro.observe(canvasRef.current);
+    }
+    window.addEventListener('resize', setupCanvas);
+    return () => {
+      if (ro) ro.disconnect();
+      window.removeEventListener('resize', setupCanvas);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [height]);
 
