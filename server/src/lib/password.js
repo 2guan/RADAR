@@ -7,8 +7,89 @@
  */
 
 import { scryptSync, randomBytes, timingSafeEqual } from 'node:crypto';
+import { get } from '../db/index.js';
 
 const KEYLEN = 64;
+
+/**
+ * 从数据库读取最新的安全参数配置
+ */
+export function getSecurityConfig() {
+  const defaults = {
+    'security.password.complexity': true,
+    'security.password.minLength': 8,
+    'security.password.expireDays': 90,
+    'security.lockout.enabled': true,
+    'security.lockout.maxAttempts': 5,
+    'security.lockout.durationMinutes': 15,
+  };
+
+  try {
+    const keys = Object.keys(defaults);
+    const config = {};
+    for (const key of keys) {
+      const row = get('SELECT value FROM app_config WHERE key = ?', key);
+      if (row && row.value !== null && row.value !== undefined) {
+        if (typeof defaults[key] === 'boolean') {
+          config[key] = row.value === 'true' || row.value === '1';
+        } else if (typeof defaults[key] === 'number') {
+          config[key] = parseInt(row.value, 10) || defaults[key];
+        } else {
+          config[key] = row.value;
+        }
+      } else {
+        config[key] = defaults[key];
+      }
+    }
+    return config;
+  } catch (err) {
+    return defaults;
+  }
+}
+
+/**
+ * 验证密码复杂度是否符合系统配置规则
+ * @param {string} password 明文密码
+ * @returns {boolean}
+ */
+export function validatePasswordComplexity(password) {
+  const config = getSecurityConfig();
+  const minLength = config['security.password.minLength'];
+  const enableComplexity = config['security.password.complexity'];
+
+  if (typeof password !== 'string') return false;
+  if (password.length < minLength) return false;
+
+  if (enableComplexity) {
+    if (!/[A-Z]/.test(password)) return false;
+    if (!/[a-z]/.test(password)) return false;
+    if (!/[0-9]/.test(password)) return false;
+    if (!/[!@#$%^&*()_+\-=\[\]{};':",./<>?\\|~`]/.test(password)) return false;
+  }
+  return true;
+}
+
+/**
+ * 检查用户密码是否已过期
+ * @param {object} user 包含 password_changed_at 与 created_at 的用户对象
+ * @returns {boolean}
+ */
+export function isPasswordExpired(user) {
+  if (!user) return false;
+  const config = getSecurityConfig();
+  const expireDays = config['security.password.expireDays'];
+
+  if (!expireDays || expireDays <= 0) return false;
+
+  const changedAtStr = user.password_changed_at || user.created_at;
+  if (!changedAtStr) return false;
+
+  const changedAt = new Date(changedAtStr.replace(' ', 'T'));
+  const now = new Date();
+  const diffTime = now - changedAt;
+  const diffDays = diffTime / (1000 * 60 * 60 * 24);
+  return diffDays > expireDays;
+}
 
 /**
  * 生成密码哈希。

@@ -6,8 +6,11 @@
  */
 
 import { get, all, run } from '../../db/index.js';
-import { verifyPassword, hashPassword } from '../../lib/password.js';
+import { verifyPassword, hashPassword, validatePasswordComplexity, isPasswordExpired, getSecurityConfig } from '../../lib/password.js';
 import { ok, badRequest, unauthorized } from '../../lib/http.js';
+
+// Non-existent users lockout tracking
+const failedAttempts = new Map();
 
 export default async function authRoutes(fastify) {
   // 登录
@@ -24,14 +27,90 @@ export default async function authRoutes(fastify) {
     },
   }, async (request) => {
     const { phone, password } = request.body;
-    const user = get('SELECT * FROM user WHERE phone = ?', phone);
-    if (!user || !verifyPassword(password, user.password_hash)) {
-      throw unauthorized('登录名或密码错误');
+
+    const configSettings = getSecurityConfig();
+    const lockoutEnabled = configSettings['security.lockout.enabled'];
+    const maxAttempts = configSettings['security.lockout.maxAttempts'];
+    const durationMinutes = configSettings['security.lockout.durationMinutes'];
+
+    // 1. 非存在用户的锁定检查
+    if (lockoutEnabled) {
+      const attempt = failedAttempts.get(phone);
+      if (attempt && attempt.lockoutUntil) {
+        const lockoutTime = new Date(attempt.lockoutUntil);
+        const now = new Date();
+        if (lockoutTime > now) {
+          const minutesLeft = Math.ceil((lockoutTime - now) / 60000);
+          throw badRequest(`账号已被锁定，请于 ${minutesLeft} 分钟后重试`);
+        } else {
+          // 锁定已过期，清空重试计数
+          failedAttempts.delete(phone);
+        }
+      }
     }
+
+    const user = get('SELECT * FROM user WHERE phone = ?', phone);
+
+    // 2. 如果用户不存在，记录失败次数并抛错
+    if (!user) {
+      if (!lockoutEnabled) {
+        throw unauthorized('登录名或密码错误');
+      }
+      const attempt = failedAttempts.get(phone) || { count: 0, lockoutUntil: null };
+      const newCount = attempt.count + 1;
+      if (newCount >= maxAttempts) {
+        const lockoutUntil = new Date(Date.now() + durationMinutes * 60 * 1000).toISOString();
+        failedAttempts.set(phone, { count: newCount, lockoutUntil });
+        throw badRequest(`密码错误次数过多，账号已锁定 ${durationMinutes} 分钟`);
+      } else {
+        failedAttempts.set(phone, { count: newCount, lockoutUntil: null });
+        const attemptsLeft = maxAttempts - newCount;
+        throw unauthorized(`登录名或密码错误，还可尝试 ${attemptsLeft} 次`);
+      }
+    }
+
     if (user.status !== '启用') throw badRequest('账号已停用，请联系管理员');
 
+    // 3. 已有用户的锁定检查
+    if (lockoutEnabled && user.lockout_until) {
+      const lockoutTime = new Date(user.lockout_until);
+      const now = new Date();
+      if (lockoutTime > now) {
+        const minutesLeft = Math.ceil((lockoutTime - now) / 60000);
+        throw badRequest(`账号已被锁定，请于 ${minutesLeft} 分钟后重试`);
+      } else {
+        // 锁定已过期，清空重试计数并重置内存中的副本
+        run('UPDATE user SET login_fail_count = 0, lockout_until = NULL WHERE id = ?', user.id);
+        user.login_fail_count = 0;
+        user.lockout_until = null;
+      }
+    }
+
+    if (!verifyPassword(password, user.password_hash)) {
+      if (!lockoutEnabled) {
+        throw unauthorized('登录名或密码错误');
+      }
+      const newFailCount = (user.login_fail_count || 0) + 1;
+      if (newFailCount >= maxAttempts) {
+        const lockoutUntil = new Date(Date.now() + durationMinutes * 60 * 1000).toISOString();
+        run('UPDATE user SET login_fail_count = ?, lockout_until = ? WHERE id = ?', newFailCount, lockoutUntil, user.id);
+        throw badRequest(`密码错误次数过多，账号已锁定 ${durationMinutes} 分钟`);
+      } else {
+        run('UPDATE user SET login_fail_count = ? WHERE id = ?', newFailCount, user.id);
+        const attemptsLeft = maxAttempts - newFailCount;
+        throw unauthorized(`登录名或密码错误，还可尝试 ${attemptsLeft} 次`);
+      }
+    }
+
+    // 登录成功，重置所有计数并清除临时缓存记录
+    run('UPDATE user SET login_fail_count = 0, lockout_until = NULL WHERE id = ?', user.id);
+    if (lockoutEnabled) {
+      failedAttempts.delete(phone);
+    }
+
     const token = await fastify.jwt.sign({ id: user.id, phone: user.phone });
-    return ok({ token, name: user.name });
+    const expired = isPasswordExpired(user);
+    return ok({ token, name: user.name, mustChangePassword: expired });
   });
 
   // 当前用户信息 + 权限
@@ -47,6 +126,10 @@ export default async function authRoutes(fastify) {
     const permissions = u.is_super
       ? ['*']
       : [...fastify.loadUserPermissions(u.id)];
+
+    const userDetail = get('SELECT created_at, password_changed_at FROM user WHERE id = ?', u.id);
+    const expired = isPasswordExpired(userDetail);
+
     return ok({
       id: u.id,
       phone: u.phone,
@@ -56,6 +139,7 @@ export default async function authRoutes(fastify) {
       roles,
       defaultHome: roles[0]?.default_home || '仪表盘',
       permissions,
+      mustChangePassword: expired,
     });
   });
 
@@ -74,8 +158,24 @@ export default async function authRoutes(fastify) {
       throw badRequest('旧密码错误');
     }
 
-    // 更新密码
-    run(`UPDATE user SET password_hash=?, updated_at=datetime('now','localtime') WHERE id=?`, hashPassword(newPassword), u.id);
+    // 验证新旧密码一致性
+    if (oldPassword === newPassword) {
+      throw badRequest('新密码不能与旧密码相同');
+    }
+
+    // 验证复杂度
+    if (!validatePasswordComplexity(newPassword)) {
+      const configSettings = getSecurityConfig();
+      const minLength = configSettings['security.password.minLength'];
+      throw badRequest(`新密码不符合复杂度要求（长度不能小于 ${minLength} 位，且必须包含大小写字母、数字和特殊字符）`);
+    }
+
+    // 更新密码，更新 password_changed_at 并重置错误计数
+    run(
+      `UPDATE user SET password_hash=?, updated_at=datetime('now','localtime'), password_changed_at=datetime('now','localtime'), login_fail_count=0, lockout_until=NULL WHERE id=?`,
+      hashPassword(newPassword),
+      u.id
+    );
     return ok(null, '密码修改成功');
   });
 }

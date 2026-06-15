@@ -15,7 +15,7 @@ import {
 } from '@ant-design/icons';
 import { apiGet, apiPost, apiPut, apiDelete } from '../api/client.js';
 import { useAppStore } from '../stores/app.js';
-import { METRIC_COLORS } from '../theme/presets.js';
+import { getPreset } from '../theme/presets.js';
 import { useDimensionMeta } from '../components/dashboard/useDimensionMeta.js';
 import { useResponsive } from '../hooks/useResponsive.js';
 import ChartEditor from '../components/dashboard/ChartEditor.jsx';
@@ -40,7 +40,9 @@ function rowHeights(charts) {
 }
 
 export default function Dashboard() {
-  const { releasePointIds, theme, can } = useAppStore();
+  const { releasePointIds, theme, preset, can } = useAppStore();
+  const currentPreset = getPreset(preset);
+  const activeColors = theme === 'dark' ? currentPreset.dark : currentPreset.light;
   const meta = useDimensionMeta();
   const screens = useBreakpoint();
   const { isMobile } = useResponsive();
@@ -109,11 +111,11 @@ export default function Dashboard() {
   };
 
   const cards = [
-    { key: 'requirement', title: '业务需求', icon: <FileTextOutlined />, color: METRIC_COLORS.requirement },
-    { key: 'dev', title: '开发任务', icon: <CodeOutlined />, color: METRIC_COLORS.dev },
-    { key: 'sit', title: 'SIT测试任务', icon: <ExperimentOutlined />, color: METRIC_COLORS.sit },
-    { key: 'uat', title: 'UAT测试任务', icon: <UserOutlined />, color: METRIC_COLORS.uat },
-    { key: 'releaseSystem', title: '投产系统', icon: <RocketOutlined />, color: METRIC_COLORS.releaseSystem },
+    { key: 'requirement', title: '业务需求', icon: <FileTextOutlined />, color: activeColors.statusInitial },
+    { key: 'dev', title: '开发任务', icon: <CodeOutlined />, color: activeColors.statusInProgress },
+    { key: 'sit', title: 'SIT测试任务', icon: <ExperimentOutlined />, color: activeColors.highlight },
+    { key: 'uat', title: 'UAT测试任务', icon: <UserOutlined />, color: activeColors.accent },
+    { key: 'releaseSystem', title: '投产系统', icon: <RocketOutlined />, color: activeColors.statusFinal },
   ];
 
   const renderSection = (title, list, scope, editable) => {
@@ -139,6 +141,7 @@ export default function Dashboard() {
               <Col key={ch.id} xs={24} lg={ch.col_span || 12}>
                 <DashboardChart
                   chart={ch} data={chartData[ch.id] || []} loading={chartLoading} theme={theme}
+                  activeColors={activeColors}
                   editable={editable} isFirst={i === 0} isLast={i === list.length - 1}
                   forcedHeight={screens.lg ? heights[ch.id] : undefined}
                   onEdit={() => setEditor({ open: true, chart: ch, scope })}
@@ -172,7 +175,7 @@ export default function Dashboard() {
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 3 }}>
                   <span className="value" style={{ color: 'var(--radar-ink)' }}>{m.total}</span>
                 </div>
-                <Progress percent={pct} showInfo={false} strokeColor={c.color} trailColor="var(--radar-border)" size={6} style={{ marginTop: 12, marginBottom: 2 }} />
+                <Progress percent={pct} showInfo={false} strokeColor={c.color} trailColor="var(--radar-border)" strokeWidth={6} style={{ marginTop: 12, marginBottom: 2 }} />
                 <div className="done-text"><b style={{ color: c.color }}>{m.terminal}/{m.total}</b> 已完成</div>
               </div>
             </Col>

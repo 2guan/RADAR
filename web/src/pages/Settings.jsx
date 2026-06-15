@@ -286,7 +286,7 @@ export default function Settings() {
     <Tabs items={[
       {
         key: 'platform', label: '平台信息',
-        children: <AppConfigForm items={[
+        children: <AppConfigForm mode="platform" items={[
           { key: 'platform.name', label: '平台名称', placeholder: '如 常规投产版本全生命周期流程管控平台' },
           { key: 'platform.shortName', label: '平台英文简称', placeholder: '如 RADAR' },
           { key: 'platform.fullName', label: '平台英文全称' },
@@ -295,7 +295,7 @@ export default function Settings() {
       },
       {
         key: 'code', label: '编号规则',
-        children: <AppConfigForm items={[
+        children: <AppConfigForm mode="code" items={[
           { key: 'code.requirement', label: '需求编号规则', extra: '占位符：{投产窗口} {序号}' },
           { key: 'code.dev', label: '开发任务编号规则', extra: '占位符：{需求编号} {序号}' },
           { key: 'code.test.SIT', label: '应用组装测试编号规则' },
@@ -304,15 +304,32 @@ export default function Settings() {
           { key: 'code.test.SEC', label: '安全测试编号规则' },
         ]} />,
       },
+      {
+        key: 'security', label: '安全规则',
+        children: <AppConfigForm mode="security" items={[
+          { key: 'security.password.complexity', label: '启用密码复杂度校验', type: 'switch', extra: '校验新密码是否同时包含大小写字母、数字及特殊字符' },
+          { key: 'security.password.minLength', label: '密码最小长度', type: 'number', min: 4, max: 32, placeholder: '默认 8' },
+          { key: 'security.password.expireDays', label: '密码有效期（天）', type: 'number', min: 0, max: 365, placeholder: '默认 90，设为 0 表示永不过期' },
+          { key: 'security.lockout.enabled', label: '启用登录失败锁定', type: 'switch', extra: '密码连续输入错误达到上限后锁定账号一段时间' },
+          { key: 'security.lockout.maxAttempts', label: '最大密码错误尝试次数', type: 'number', min: 1, max: 10, placeholder: '默认 5' },
+          { key: 'security.lockout.durationMinutes', label: '账号锁定时长（分钟）', type: 'number', min: 1, max: 1440, placeholder: '默认 15' },
+        ]} />,
+      },
     ]} />
   );
 
   const paramConfig = (
     <Tabs items={[
       { key: 'status', label: '流程状态', children: <ProcessStatusManager /> },
-      { key: 'version', label: '版本类型', children: <DictManager category="version_type" title="版本类型" /> },
       { key: 'release', label: '投产状态', children: <DictManager category="release_status" title="投产状态" /> },
       { key: 'reqtype', label: '需求类型', children: <DictManager category="req_type" title="需求类型" /> },
+    ]} />
+  );
+
+  const rpConfig = (
+    <Tabs items={[
+      { key: 'point', label: '投产点设置', children: <ReleasePointManager /> },
+      { key: 'version', label: '版本类型设置', children: <DictManager category="version_type" title="版本类型" /> },
     ]} />
   );
 
@@ -340,7 +357,7 @@ export default function Settings() {
           { key: 'base', label: '基础配置', children: baseConfig },
           { key: 'appearance', label: '外观主题', children: <AppearanceSettings /> },
           { key: 'param', label: '参数配置', children: paramConfig },
-          { key: 'rp', label: '投产点设置', children: <ReleasePointManager /> },
+          { key: 'rp', label: '投产点设置', children: rpConfig },
           { key: 'orgsys', label: '机构系统配置', children: orgSysConfig },
           { key: 'person', label: '人员配置', children: personConfig },
         ]}

@@ -19,10 +19,12 @@ import FilterPanel from '../components/FilterPanel.jsx';
 import ImportModal from '../components/ImportModal.jsx';
 import { apiPost, apiPut, apiDelete, apiGet } from '../api/client.js';
 import { exportXlsx, downloadGet } from '../utils/io.js';
+import { useAppStore } from '../stores/app.js';
 
 export default function Users() {
   const tableRef = useRef();
   const [form] = Form.useForm();
+  const { platform } = useAppStore();
   const [open, setOpen] = useState(false);
   const [current, setCurrent] = useState(null);
   const [roles, setRoles] = useState([]);
@@ -96,14 +98,41 @@ export default function Users() {
   const onDelete = async (row) => { await apiDelete(`/users/${row.id}`); message.success('已删除'); tableRef.current?.reload(); };
 
   /**
-   * 重置密码：弹窗确认输入新密码，默认值为 123456
+   * 重置密码：弹窗确认输入新密码，默认值为 Radar@2026!
    */
   const resetPwd = (row) => {
-    let pwd = '123456';
+    let pwd = 'Radar@2026!';
+    const minLen = platform['security.password.minLength'] ? Number(platform['security.password.minLength']) : 8;
+    const complexityEnabled = platform['security.password.complexity'] !== 'false';
     Modal.confirm({
       title: `重置 ${row.name} 的密码`,
-      content: <Input defaultValue="123456" onChange={(e) => { pwd = e.target.value; }} placeholder="新密码" />,
-      onOk: async () => { await apiPost(`/users/${row.id}/reset-password`, { password: pwd }); message.success('密码已重置'); },
+      content: (
+        <div>
+          <div style={{ marginBottom: 8 }}>初始密码：</div>
+          <Input defaultValue="Radar@2026!" onChange={(e) => { pwd = e.target.value; }} placeholder="新密码" />
+          <div style={{ fontSize: 12, color: 'var(--radar-text-secondary)', marginTop: 4 }}>
+            长度需不少于 {minLen} 位{complexityEnabled ? '，且需包含大小写字母、数字及特殊字符' : ''}。
+          </div>
+        </div>
+      ),
+      onOk: async () => {
+        if (!pwd) {
+          message.error('密码不能为空');
+          throw new Error('密码不能为空');
+        }
+        if (pwd.length < minLen) {
+          message.error(`密码长度不能小于 ${minLen} 位`);
+          throw new Error(`密码长度不能小于 ${minLen} 位`);
+        }
+        if (complexityEnabled) {
+          if (!/[A-Z]/.test(pwd) || !/[a-z]/.test(pwd) || !/[0-9]/.test(pwd) || !/[!@#$%^&*()_+\-=\[\]{};':",./<>?\\|~`]/.test(pwd)) {
+            message.error('密码必须包含大小写字母、数字及特殊字符');
+            throw new Error('密码校验失败');
+          }
+        }
+        await apiPost(`/users/${row.id}/reset-password`, { password: pwd });
+        message.success('密码已重置');
+      },
     });
   };
 
@@ -130,7 +159,7 @@ export default function Users() {
       render: (rs) => (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, max-content)', gap: '4px 8px' }}>
           {(rs || []).map((r) => (
-            <Tag key={r.id} color="green" className="status-tag" style={{ margin: 0 }}>{r.name}</Tag>
+            <Tag key={r.id} className="status-tag tag-system" style={{ margin: 0 }}>{r.name}</Tag>
           ))}
         </div>
       ),
@@ -140,7 +169,7 @@ export default function Users() {
       dataIndex: 'status',
       key: 'status',
       render: (s) => (
-        <Tag color={s === '启用' ? 'green' : 'default'} className="status-tag" style={{ borderRadius: 2, margin: 0 }}>
+        <Tag className={s === '启用' ? 'status-tag status-tag-final' : 'status-tag status-tag-not-started'} style={{ margin: 0 }}>
           {s}
         </Tag>
       ),
@@ -192,7 +221,7 @@ export default function Users() {
             <Space style={{ justifyContent: 'space-between', width: '100%' }}><strong>{item.name}</strong><span>{item.phone}</span></Space>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
               {(item.roles || []).map((r) => (
-                <Tag key={r.id} color="green" className="status-tag" style={{ margin: 0 }}>{r.name}</Tag>
+                <Tag key={r.id} className="status-tag tag-system" style={{ margin: 0 }}>{r.name}</Tag>
               ))}
             </div>
           </Space>
@@ -219,7 +248,31 @@ export default function Users() {
             <Select mode="multiple" placeholder="选择角色" options={roles.map((r) => ({ value: r.code, label: r.name }))} />
           </Form.Item>
           {!current && (
-            <Form.Item name="password" label="初始密码" extra="留空默认 123456"><Input.Password placeholder="默认 123456" /></Form.Item>
+            <Form.Item
+              name="password"
+              label="初始密码"
+              extra={`留空默认 Radar@2026!`}
+              rules={[
+                {
+                  validator: (_, value) => {
+                    if (!value) return Promise.resolve();
+                    const minLen = platform['security.password.minLength'] ? Number(platform['security.password.minLength']) : 8;
+                    if (value.length < minLen) {
+                      return Promise.reject(new Error(`密码长度不能小于 ${minLen} 位`));
+                    }
+                    const complexityEnabled = platform['security.password.complexity'] !== 'false';
+                    if (complexityEnabled) {
+                      if (!/[A-Z]/.test(value) || !/[a-z]/.test(value) || !/[0-9]/.test(value) || !/[!@#$%^&*()_+\-=\[\]{};':",./<>?\\|~`]/.test(value)) {
+                        return Promise.reject(new Error('密码必须包含大小写字母、数字及特殊字符'));
+                      }
+                    }
+                    return Promise.resolve();
+                  }
+                }
+              ]}
+            >
+              <Input.Password placeholder="默认 Radar@2026!" />
+            </Form.Item>
           )}
           <Form.Item name="status" label="状态">
             <Select options={[{ value: '启用', label: '启用' }, { value: '停用', label: '停用' }]} />

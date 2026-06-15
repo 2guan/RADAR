@@ -15,7 +15,7 @@
 export const PRESETS = {
   sky: {
     key: 'sky',
-    name: '霁青',
+    name: '蔚蓝',
     primary: '#2F7BE8',
     primaryDeep: '#1A5FC8',
     light: {
@@ -51,7 +51,7 @@ export const PRESETS = {
   },
   teal: {
     key: 'teal',
-    name: '丹霞',
+    name: '滇红',
     primary: '#D44552',
     primaryDeep: '#B12C39',
     light: {
@@ -195,7 +195,7 @@ export const PRESETS = {
   },
   violet: {
     key: 'violet',
-    name: '黛紫',
+    name: '楹紫',
     primary: '#7B57D4',
     primaryDeep: '#5E3BB5',
     light: {
@@ -231,7 +231,7 @@ export const PRESETS = {
   },
   rose: {
     key: 'rose',
-    name: '桃夭',
+    name: '山茶',
     primary: '#D85B8C',
     primaryDeep: '#B83A6E',
     light: {
@@ -267,7 +267,7 @@ export const PRESETS = {
   },
   graphite: {
     key: 'graphite',
-    name: '玄石',
+    name: '苍青',
     primary: '#566273',
     primaryDeep: '#3B4655',
     light: {

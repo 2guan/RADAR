@@ -8,7 +8,7 @@
 
 import { get, all, run, tx } from '../../db/index.js';
 import { listQuery } from '../../lib/query.js';
-import { hashPassword } from '../../lib/password.js';
+import { hashPassword, validatePasswordComplexity, getSecurityConfig } from '../../lib/password.js';
 import { exportXlsx, parseXlsx } from '../../lib/excel.js';
 import { ok, notFound, badRequest } from '../../lib/http.js';
 import { resolveDictAttr } from '../../lib/resolver.js';
@@ -144,10 +144,17 @@ export default async function userRoutes(fastify) {
     const { phone, name, org, password, roles } = request.body || {};
     if (!phone || !name) throw badRequest('手机号与姓名必填');
     if (get('SELECT id FROM user WHERE phone = ?', phone)) throw badRequest('手机号已存在');
+
+    const finalPwd = password || 'Radar@2026!';
+    if (!validatePasswordComplexity(finalPwd)) {
+      const minLength = getSecurityConfig()['security.password.minLength'];
+      throw badRequest(`密码不符合复杂度要求（长度不能小于 ${minLength} 位，且必须包含大小写字母、数字和特殊字符）`);
+    }
+
     const id = tx(() => {
       const res = run(
-        'INSERT INTO user (phone, name, org, password_hash, status) VALUES (?,?,?,?,?)',
-        phone, name, org || null, hashPassword(password || '123456'), '启用',
+        'INSERT INTO user (phone, name, org, password_hash, status, password_changed_at) VALUES (?,?,?,?,?,datetime(\'now\',\'localtime\'))',
+        phone, name, org || null, hashPassword(finalPwd), '启用',
       );
       setUserRoles(res.lastInsertRowid, roles);
       return res.lastInsertRowid;
@@ -176,8 +183,12 @@ export default async function userRoutes(fastify) {
   fastify.post('/users/:id/reset-password', { preHandler: fastify.requirePerm('user', 'edit') }, async (request) => {
     const id = request.params.id;
     if (!get('SELECT id FROM user WHERE id = ?', id)) throw notFound();
-    const pwd = request.body?.password || '123456';
-    run(`UPDATE user SET password_hash=?, updated_at=datetime('now','localtime') WHERE id=?`, hashPassword(pwd), id);
+    const pwd = request.body?.password || 'Radar@2026!';
+    if (!validatePasswordComplexity(pwd)) {
+      const minLength = getSecurityConfig()['security.password.minLength'];
+      throw badRequest(`密码不符合复杂度要求（长度不能小于 ${minLength} 位，且必须包含大小写字母、数字和特殊字符）`);
+    }
+    run(`UPDATE user SET password_hash=?, updated_at=datetime('now','localtime'), password_changed_at=datetime('now','localtime') WHERE id=?`, hashPassword(pwd), id);
     return ok(null, '密码已重置');
   });
 
@@ -329,9 +340,13 @@ export default async function userRoutes(fastify) {
 
           } else {
             // insert 新建
-            const initPwd = String(r.password || '').trim() || '123456';
+            const initPwd = String(r.password || '').trim() || 'Radar@2026!';
+            if (!validatePasswordComplexity(initPwd)) {
+              const minLength = getSecurityConfig()['security.password.minLength'];
+              throw new Error(`密码不符合复杂度要求（长度不能小于 ${minLength} 位，且必须包含大小写字母、数字和特殊字符）`);
+            }
             const res = run(
-              'INSERT INTO user (phone, name, org, password_hash, status) VALUES (?,?,?,?,?)',
+              'INSERT INTO user (phone, name, org, password_hash, status, password_changed_at) VALUES (?,?,?,?,?,datetime(\'now\',\'localtime\'))',
               phone, r.name, resolvedOrg || null, hashPassword(initPwd), resolvedStatus
             );
             const resolvedRoleCodes = resolveRoleCodes(r.roles);

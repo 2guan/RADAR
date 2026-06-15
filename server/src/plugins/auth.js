@@ -11,6 +11,7 @@ import fastifyJwt from '@fastify/jwt';
 import { config } from '../config.js';
 import { all, get } from '../db/index.js';
 import { unauthorized, forbidden } from '../lib/http.js';
+import { isPasswordExpired } from '../lib/password.js';
 
 /**
  * 查询用户的全部已授予权限集合（"module:action" 字符串集）。
@@ -43,9 +44,17 @@ async function authPlugin(fastify) {
       throw unauthorized();
     }
     const userId = request.user?.id;
-    const u = get('SELECT id, phone, name, org, status, is_super FROM user WHERE id = ?', userId);
+    const u = get('SELECT id, phone, name, org, status, is_super, password_changed_at, created_at FROM user WHERE id = ?', userId);
     if (!u || u.status !== '启用') throw unauthorized('账号不存在或已停用');
     request.currentUser = u;
+
+    // 检查密码是否过期（排除 /auth/me, /auth/change-password, /auth/logout）
+    const path = (request.routerPath || request.url).split('?')[0];
+    if (!['/auth/me', '/auth/change-password', '/auth/logout'].includes(path)) {
+      if (isPasswordExpired(u)) {
+        throw forbidden('密码已过期，请先修改密码');
+      }
+    }
   });
 
   /**

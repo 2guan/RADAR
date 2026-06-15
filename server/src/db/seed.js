@@ -164,6 +164,12 @@ const APP_CONFIG = [
   ['code.test.SEC', 'SEC_{需求编号}_{序号}', '安全测试任务编号规则'],
   ['release.signoffRoles', '["业务负责人","开发负责人","测试负责人","运维负责人"]', '投产评审会签角色（JSON 数组）'],
   ['appearance.preset', 'sky', '外观主题预设（默认清新蓝）'],
+  ['security.password.complexity', 'true', '启用密码复杂度校验'],
+  ['security.password.minLength', '8', '密码最小长度'],
+  ['security.password.expireDays', '90', '密码有效期（天）'],
+  ['security.lockout.enabled', 'true', '启用登录失败锁定'],
+  ['security.lockout.maxAttempts', '5', '最大密码错误尝试次数'],
+  ['security.lockout.durationMinutes', '15', '账号锁定时长（分钟）'],
 ];
 
 /**
@@ -269,7 +275,7 @@ export function runSeed() {
     // 6) 超级管理员用户
     if (!get('SELECT id FROM user WHERE phone = ?', config.superAdmin.phone)) {
       const res = run(
-        'INSERT INTO user (phone, name, org, password_hash, status, is_super) VALUES (?,?,?,?,?,1)',
+        'INSERT INTO user (phone, name, org, password_hash, status, is_super, password_changed_at) VALUES (?,?,?,?,?,1,datetime(\'now\',\'localtime\'))',
         config.superAdmin.phone,
         config.superAdmin.name,
         '建信金科',

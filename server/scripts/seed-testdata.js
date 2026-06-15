@@ -52,8 +52,8 @@ function addReleasePoint(date, type, remark, isDefault) {
 /** 新增人员（带角色） */
 function addUser(phone, name, org, roleCodes) {
   const res = run(
-    'INSERT INTO user (phone, name, org, password_hash, status) VALUES (?,?,?,?,?)',
-    phone, name, org, hashPassword('123456'), '启用',
+    'INSERT INTO user (phone, name, org, password_hash, status, password_changed_at) VALUES (?,?,?,?,?,datetime(\'now\',\'localtime\'))',
+    phone, name, org, hashPassword('Radar@2026!'), '启用',
   );
   for (const code of roleCodes) {
     const role = get('SELECT id FROM role WHERE code = ?', code);

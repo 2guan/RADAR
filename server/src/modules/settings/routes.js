@@ -14,6 +14,8 @@ const WRITABLE_KEYS = new Set([
   'platform.name', 'platform.shortName', 'platform.fullName', 'platform.copyright', 'platform.themeColor',
   'code.requirement', 'code.dev', 'code.test.SIT', 'code.test.UAT', 'code.test.NFT', 'code.test.SEC',
   'release.signoffRoles', 'appearance.preset',
+  'security.password.complexity', 'security.password.minLength', 'security.password.expireDays',
+  'security.lockout.enabled', 'security.lockout.maxAttempts', 'security.lockout.durationMinutes',
 ]);
 
 // 公开可读的键（无需登录）

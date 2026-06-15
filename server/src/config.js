@@ -58,7 +58,7 @@ export const config = {
   superAdmin: {
     phone: process.env.ADMIN_PHONE || 'admin',
     name: '超级管理员',
-    password: process.env.ADMIN_PASSWORD || 'admin2026',
+    password: process.env.ADMIN_PASSWORD || 'Admin@2026',
   },
 
   REPO_ROOT,

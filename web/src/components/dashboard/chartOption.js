@@ -35,8 +35,19 @@ const colorAt = (label, idx, gmap, base) => gmap[label] || base || CHART_PALETTE
  * 构造非表格图表的 ECharts option。
  * @param {object} p { chartType, cfg, data, labelOf, isDark }
  */
-export function buildOption({ chartType, cfg, data, labelOf, isDark }) {
+export function buildOption({ chartType, cfg, data, labelOf, isDark, activeColors }) {
   const axisText = isDark ? '#c9d1d9' : '#5b6472';
+  const palette = activeColors ? [
+    activeColors.primary,
+    activeColors.highlight,
+    activeColors.accent,
+    activeColors.statusInProgress,
+    activeColors.statusFinal,
+    activeColors.statusInitial,
+  ] : CHART_PALETTE;
+
+  const colorAt = (label, idx, gmap, base) => gmap[label] || base || palette[idx % palette.length];
+
   const base = {
     backgroundColor: 'transparent',
     textStyle: { fontFamily: 'inherit' },
@@ -130,7 +141,7 @@ export function buildOption({ chartType, cfg, data, labelOf, isDark }) {
   });
   if (horizontal) rows = rows.reverse();
   const labels = rows.map((r) => r.name);
-  const lineColor = rows[0]?.color || CHART_PALETTE[0];
+  const lineColor = rows[0]?.color || palette[0];
   const catAxis = { type: 'category', data: labels, axisLabel: { color: axisText, fontSize: 10, interval: 0, rotate: !horizontal && labels.length > 5 ? 30 : 0 } };
   const valAxis = { type: 'value', axisLabel: { color: axisText, fontSize: 10 }, splitLine: { lineStyle: { color: isDark ? '#2a3142' : '#eef1f6' } } };
 

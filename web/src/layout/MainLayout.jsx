@@ -26,7 +26,7 @@ export default function MainLayout() {
   const location = useLocation();
   const { isMobile } = useResponsive();
   const { token } = antdTheme.useToken();
-  const { user, platform, theme, toggleTheme, can, releasePointIds, setReleasePointIds } = useAppStore();
+  const { user, platform, theme, toggleTheme, can, releasePointIds, setReleasePointIds, loadMe } = useAppStore();
 
   const [siderCollapsed, setSiderCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -52,6 +52,7 @@ export default function MainLayout() {
       message.success('密码修改成功');
       setChangePwdOpen(false);
       pwdForm.resetFields();
+      await loadMe();
     } catch (err) {
       message.error(err.message || '修改失败');
     } finally {
@@ -228,20 +229,32 @@ export default function MainLayout() {
       </Drawer>
 
       <Modal
-        title="修改密码"
-        open={changePwdOpen}
+        title={user?.mustChangePassword ? "密码过期 - 请修改密码" : "修改密码"}
+        open={changePwdOpen || !!user?.mustChangePassword}
+        closable={!user?.mustChangePassword}
+        maskClosable={false}
+        keyboard={false}
         onOk={handleSavePwd}
         confirmLoading={pwdSaving}
-        onCancel={() => {
+        onCancel={user?.mustChangePassword ? undefined : () => {
           setChangePwdOpen(false);
           pwdForm.resetFields();
         }}
         destroyOnHidden
+        footer={user?.mustChangePassword ? [
+          <Button key="logout" icon={<LogoutOutlined />} onClick={() => useAppStore.getState().logout()}>退出登录</Button>,
+          <Button key="submit" type="primary" loading={pwdSaving} onClick={handleSavePwd}>保存并启用</Button>
+        ] : undefined}
         okText="保存"
-        cancelText="取消"
+        cancelText={user?.mustChangePassword ? null : "取消"}
         width={400}
       >
         <Form form={pwdForm} layout="vertical" style={{ marginTop: 16 }}>
+          {user?.mustChangePassword && (
+            <div style={{ marginBottom: 16, color: 'var(--radar-primary)', fontWeight: 'bold' }}>
+              您的密码已超过有效期，为了您的账号安全，请立即修改密码。
+            </div>
+          )}
           <Form.Item
             name="oldPassword"
             label="旧密码"
@@ -254,7 +267,22 @@ export default function MainLayout() {
             label="新密码"
             rules={[
               { required: true, message: '请输入新密码' },
-              { min: 6, message: '密码长度不能小于 6 位' }
+              {
+                validator: (_, value) => {
+                  if (!value) return Promise.resolve();
+                  const minLen = platform['security.password.minLength'] ? Number(platform['security.password.minLength']) : 8;
+                  if (value.length < minLen) {
+                    return Promise.reject(new Error(`密码长度不能小于 ${minLen} 位`));
+                  }
+                  const complexityEnabled = platform['security.password.complexity'] !== 'false';
+                  if (complexityEnabled) {
+                    if (!/[A-Z]/.test(value) || !/[a-z]/.test(value) || !/[0-9]/.test(value) || !/[!@#$%^&*()_+\-=\[\]{};':",./<>?\\|~`]/.test(value)) {
+                      return Promise.reject(new Error('密码必须包含大小写字母、数字及特殊字符'));
+                    }
+                  }
+                  return Promise.resolve();
+                }
+              }
             ]}
           >
             <Input.Password placeholder="请输入新密码" />

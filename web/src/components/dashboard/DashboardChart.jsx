@@ -28,7 +28,7 @@ function reverse(groups, label, dim, raws, labelOf) {
 }
 
 export default function DashboardChart({
-  chart, data = [], loading = false, theme, editable, isFirst, isLast, onEdit, onDelete, onMove, onDrill, labelOf, dimName, forcedHeight,
+  chart, data = [], loading = false, theme, activeColors, editable, isFirst, isLast, onEdit, onDelete, onMove, onDrill, labelOf, dimName, forcedHeight,
 }) {
   const cfg = typeof chart.config === 'string' ? JSON.parse(chart.config) : (chart.config || {});
   const isDark = theme === 'dark';
@@ -69,7 +69,7 @@ export default function DashboardChart({
         </div>
       );
     }
-    const option = buildOption({ chartType: chart.chart_type, cfg, data, labelOf, isDark });
+    const option = buildOption({ chartType: chart.chart_type, cfg, data, labelOf, isDark, activeColors });
     return (
       <ReactECharts option={option} style={{ height: height || 300 }} opts={{ renderer: 'svg' }} notMerge
         onEvents={{ click: handleEchartClick }} />
