@@ -18,7 +18,7 @@ import { apiGet, apiPost, apiPut } from '../../api/client.js';
 import { useAppStore } from '../../stores/app.js';
 import { useResponsive } from '../../hooks/useResponsive.js';
 
-export default function ReleaseApplyEditor({ open, applyId, defaultReleasePointId, onClose, onSaved }) {
+export default function ReleaseApplyEditor({ open, applyId, defaultReleasePointId, defaultReqCodes, onClose, onSaved }) {
   const [form] = Form.useForm();
   // 监听计划投产点，用于与所选需求的投产点做一致性校验提示
   const releasePointIdValue = Form.useWatch('release_point_id', form);
@@ -57,7 +57,7 @@ export default function ReleaseApplyEditor({ open, applyId, defaultReleasePointI
       });
     } else {
       setCurrent(null);
-      setSelReqs([]);
+      setSelReqs(Array.isArray(defaultReqCodes) ? [...defaultReqCodes] : []);
       setSelIssues([]);
       form.resetFields();
       form.setFieldsValue({

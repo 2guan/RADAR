@@ -13,6 +13,7 @@ import { auditUpdate } from '../../lib/audit.js';
 import { windowIds } from '../../lib/window.js';
 import { ok, notFound, badRequest, forbidden } from '../../lib/http.js';
 import { exportXlsx } from '../../lib/excel.js';
+import { signatureDataUrl } from '../../lib/signature.js';
 
 /** 读取被打标为"会签角色"的角色列表 */
 function signoffRoles() {
@@ -209,7 +210,8 @@ export default async function releaseRoutes(fastify) {
     const code = request.params.code;
     const entityType = classifyEntity(code);
     const rt = ensureReleaseTask(code, entityType, request.currentUser?.name);
-    const signoffs = all('SELECT * FROM release_signoff WHERE release_task_id = ? ORDER BY id', rt.id);
+    const signoffs = all('SELECT * FROM release_signoff WHERE release_task_id = ? ORDER BY id', rt.id)
+      .map((s) => ({ ...s, signature_image: signatureDataUrl(s.signature_path) }));
 
     const systems = all('SELECT sys_code, sys_name FROM system');
     const sysMap = {};
@@ -292,15 +294,22 @@ export default async function releaseRoutes(fastify) {
     const id = request.params.id;
     const so = get('SELECT * FROM release_signoff WHERE id = ?', id);
     if (!so) throw notFound('会签项不存在');
-    const { result, conclusion } = request.body || {};
+    const { result, conclusion, signatureId } = request.body || {};
     if (!['已签署', '已驳回', '未签署'].includes(result)) throw badRequest('签署状态非法');
     if (!request.currentUser.is_super && so.role_id) {
       const hasRole = get('SELECT 1 FROM user_role WHERE user_id = ? AND role_id = ?', request.currentUser.id, so.role_id);
       if (!hasRole) throw forbidden(`仅【${so.role_name}】角色可签署该项`);
     }
+    // 签名：传入 signatureId 时校验归属当前用户并记录其路径；未传则沿用原签名
+    let signaturePath = so.signature_path || null;
+    if (signatureId) {
+      const sig = get('SELECT * FROM user_signature WHERE id = ?', signatureId);
+      if (!sig || sig.user_id !== request.currentUser.id) throw badRequest('签名无效');
+      signaturePath = sig.stored_path;
+    }
     run(
-      `UPDATE release_signoff SET result=?, conclusion=?, signer_user_id=?, signer_name=?, sign_time=datetime('now','localtime'), updated_at=datetime('now','localtime') WHERE id=?`,
-      result, conclusion || null, request.currentUser?.id, request.currentUser?.name, id,
+      `UPDATE release_signoff SET result=?, conclusion=?, signature_path=?, signer_user_id=?, signer_name=?, sign_time=datetime('now','localtime'), updated_at=datetime('now','localtime') WHERE id=?`,
+      result, conclusion || null, signaturePath, request.currentUser?.id, request.currentUser?.name, id,
     );
     auditUpdate('release', so.release_task_id, so.role_name, request.currentUser?.name,
       { r: so.result }, { r: result }, { r: `会签-${so.role_name}` });

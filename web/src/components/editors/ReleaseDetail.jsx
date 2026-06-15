@@ -7,15 +7,23 @@
  *       「各系统投产登记」已改为「关联制品情况」，按卡片只读展示投产申请的制品信息。
  */
 
-import React, { useEffect, useState } from 'react';
-import { Modal, Card, Space, Button, Input, message, Empty, Row, Col, Radio, Tooltip, Tag } from 'antd';
-import { HistoryOutlined } from '@ant-design/icons';
+import React, { useEffect, useRef, useState } from 'react';
+import { Modal, Card, Space, Button, Input, message, Empty, Row, Col, Radio, Tooltip, Tag, Upload, Popconfirm } from 'antd';
+import { HistoryOutlined, UploadOutlined, DeleteOutlined, PlusOutlined, HighlightOutlined } from '@ant-design/icons';
 import HistoryDrawer from '../HistoryDrawer.jsx';
+import SignaturePad from '../SignaturePad.jsx';
 import StatusBadge, { getStatusType, statusSelectWidth } from '../StatusBadge.jsx';
 import DictSelect from '../DictSelect.jsx';
 import PersonPicker from '../PersonPicker.jsx';
-import { apiGet, apiPost, apiPut } from '../../api/client.js';
+import { apiGet, apiPost, apiPut, apiDelete } from '../../api/client.js';
 import { useAppStore } from '../../stores/app.js';
+
+/** 签署时间缩略：YYYY-MM-DD HH:MM:SS -> MM.DD HH:MM */
+function fmtSignTime(s) {
+  if (!s) return '—';
+  const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/.exec(String(s));
+  return m ? `${m[2]}.${m[3]} ${m[4]}:${m[5]}` : s;
+}
 
 const getWeakestDevStatus = (statuses) => {
   if (!statuses || statuses.length === 0) return '未开始';
@@ -41,7 +49,8 @@ function StageChip({ label, children }) {
 
 export default function ReleaseDetail({ open, code, reqCode, onClose, onChanged }) {
   const entityCode = code ?? reqCode;
-  const { user, can } = useAppStore();
+  const { user, can, theme } = useAppStore();
+  const isDark = theme === 'dark';
   const [detail, setDetail] = useState(null);
   const [owner, setOwner] = useState(null);
 
@@ -51,7 +60,26 @@ export default function ReleaseDetail({ open, code, reqCode, onClose, onChanged 
   const [signResult, setSignResult] = useState('已签署');
   const [signConclusion, setSignConclusion] = useState('');
 
+  // 评审签名状态
+  const [signatures, setSignatures] = useState([]);     // 我的签名库
+  const [selectedSigId, setSelectedSigId] = useState(null);
+  const [creatingSig, setCreatingSig] = useState(false); // 是否处于新建签名
+  const [savingSig, setSavingSig] = useState(false);
+  const [signing, setSigning] = useState(false);
+  const padRef = useRef(null);
+
   const [historyOpen, setHistoryOpen] = useState(false);
+
+  /** 加载我的签名库，默认选中默认签名 */
+  const loadSignatures = async (preferId) => {
+    try {
+      const list = await apiGet('/signatures');
+      setSignatures(list || []);
+      const def = (list || []).find((s) => s.is_default) || (list || [])[0];
+      setSelectedSigId(preferId || def?.id || null);
+      setCreatingSig(!(list || []).length); // 无签名时直接进入新建
+    } catch { /* 忽略 */ }
+  };
 
   const reload = async () => {
     if (!entityCode) return;
@@ -77,6 +105,61 @@ export default function ReleaseDetail({ open, code, reqCode, onClose, onChanged 
     setSignResult(so.result === '已驳回' ? '已驳回' : '已签署');
     setSignConclusion(so.conclusion || '');
     setSignOpen(true);
+    loadSignatures();
+  };
+
+  /** 保存当前手绘/上传的签名到签名库，并选中 */
+  const saveSignature = async () => {
+    const dataUrl = padRef.current?.getDataURL?.();
+    if (!dataUrl) { message.warning('请先手写或上传签名'); return; }
+    setSavingSig(true);
+    try {
+      const sig = await apiPost('/signatures', { dataUrl });
+      message.success('签名已保存');
+      await loadSignatures(sig.id);
+      setCreatingSig(false);
+      padRef.current?.clear?.();
+    } catch (e) {
+      message.error(e.message || '保存失败');
+    } finally {
+      setSavingSig(false);
+    }
+  };
+
+  /** 删除一枚签名 */
+  const deleteSignature = async (id) => {
+    try {
+      await apiDelete(`/signatures/${id}`);
+      const next = signatures.filter((s) => s.id !== id);
+      await loadSignatures(selectedSigId === id ? undefined : selectedSigId);
+      if (!next.length) setCreatingSig(true);
+    } catch (e) { message.error(e.message || '删除失败'); }
+  };
+
+  /** 上传图片作为签名（读为 DataURL 载入画布，再走保存流程） */
+  const onUploadSignature = (file) => {
+    const reader = new FileReader();
+    reader.onload = () => { setCreatingSig(true); setTimeout(() => padRef.current?.loadImage?.(reader.result), 0); };
+    reader.readAsDataURL(file);
+    return false; // 阻止 antd 默认上传
+  };
+
+  /** 确认签署 */
+  const confirmSign = async () => {
+    if (!currentSignoff) return;
+    if (!selectedSigId) { message.warning('请选择或新建并保存一枚评审签名'); return; }
+    setSigning(true);
+    try {
+      await apiPost(`/release/signoff/${currentSignoff.id}`, { result: signResult, conclusion: signConclusion, signatureId: selectedSigId });
+      message.success('签署完成');
+      setSignOpen(false);
+      reload();
+      onChanged?.();
+    } catch (e) {
+      message.error(e.message || '操作失败');
+    } finally {
+      setSigning(false);
+    }
   };
 
   const handleOwnerChange = async (val) => {
@@ -101,10 +184,21 @@ export default function ReleaseDetail({ open, code, reqCode, onClose, onChanged 
           <strong style={{ fontSize: 12, color: 'var(--radar-ink)' }}>{so.role_name}</strong>
           <StatusBadge status={so.result} />
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 11, color: 'var(--radar-text-secondary)' }}>
-          <div><span style={{ display: 'inline-block', width: 55 }}>签署人：</span><span style={{ color: 'var(--radar-ink)' }}>{so.signer_name || '—'}</span></div>
-          <div><span style={{ display: 'inline-block', width: 55 }}>签署时间：</span><span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace' }}>{so.sign_time || '—'}</span></div>
-          <div style={{ display: 'flex', alignItems: 'flex-start' }}><span style={{ display: 'inline-block', width: 55, flexShrink: 0 }}>签署意见：</span><span style={{ color: 'var(--radar-ink)', wordBreak: 'break-all' }}>{so.conclusion || '—'}</span></div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
+          {/* 左：签署信息 */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 11, color: 'var(--radar-text-secondary)', flex: 1, minWidth: 0 }}>
+            <div><span style={{ display: 'inline-block', width: 55 }}>签署人：</span><span style={{ color: 'var(--radar-ink)' }}>{so.signer_name || '—'}</span></div>
+            <div><span style={{ display: 'inline-block', width: 55 }}>签署时间：</span><span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace' }}>{fmtSignTime(so.sign_time)}</span></div>
+            <div style={{ display: 'flex', alignItems: 'flex-start' }}><span style={{ display: 'inline-block', width: 55, flexShrink: 0 }}>签署意见：</span><span style={{ color: 'var(--radar-ink)', wordBreak: 'break-all' }}>{so.conclusion || '—'}</span></div>
+          </div>
+          {/* 右：评审人签名（夜间模式反色，使深色笔迹可见） */}
+          <div style={{ width: 84, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+            {so.signature_image ? (
+              <img src={so.signature_image} alt="签名" style={{ maxWidth: '100%', maxHeight: 32, objectFit: 'contain', filter: isDark ? 'invert(1)' : 'none' }} />
+            ) : (
+              <span style={{ fontSize: 10, color: '#bbb' }}>未签名</span>
+            )}
+          </div>
         </div>
       </Card>
     );
@@ -329,23 +423,13 @@ export default function ReleaseDetail({ open, code, reqCode, onClose, onChanged 
         open={signOpen}
         title={`签署会签 · ${currentSignoff?.role_name}`}
         onCancel={() => setSignOpen(false)}
-        onOk={async () => {
-          if (!currentSignoff) return;
-          try {
-            await apiPost(`/release/signoff/${currentSignoff.id}`, { result: signResult, conclusion: signConclusion });
-            message.success('签署完成');
-            setSignOpen(false);
-            reload();
-            onChanged?.();
-          } catch (e) {
-            message.error(e.message || '操作失败');
-          }
-        }}
-        width={400} destroyOnHidden okText="确认" cancelText="取消"
+        onOk={confirmSign}
+        confirmLoading={signing}
+        width={460} destroyOnHidden okText="确认签署" cancelText="取消"
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 12, fontSize: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 600, width: 80 }}>签署结论：</span>
+            <span style={{ fontSize: 12, fontWeight: 600, width: 70 }}>签署结论：</span>
             <Radio.Group value={signResult} onChange={(e) => setSignResult(e.target.value)} size="small">
               <Radio value="已签署">同意</Radio>
               <Radio value="已驳回">拒绝</Radio>
@@ -353,7 +437,50 @@ export default function ReleaseDetail({ open, code, reqCode, onClose, onChanged 
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <span style={{ fontSize: 12, fontWeight: 600 }}>签署意见：</span>
-            <Input.TextArea placeholder="请输入签署意见 / 结论" value={signConclusion} onChange={(e) => setSignConclusion(e.target.value)} rows={3} style={{ fontSize: 12 }} />
+            <Input.TextArea placeholder="请输入签署意见 / 结论" value={signConclusion} onChange={(e) => setSignConclusion(e.target.value)} rows={2} style={{ fontSize: 12 }} />
+          </div>
+
+          {/* 评审签名：选择已存签名，或新建（手写/上传）并保存 */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 12, fontWeight: 600 }}>评审签名：</span>
+              {!creatingSig && (
+                <Button type="link" size="small" icon={<PlusOutlined />} onClick={() => { setCreatingSig(true); setTimeout(() => padRef.current?.clear?.(), 0); }} style={{ padding: 0, height: 'auto' }}>新建签名</Button>
+              )}
+            </div>
+
+            {!creatingSig ? (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {signatures.length === 0 ? (
+                  <span style={{ fontSize: 11, color: '#bbb' }}>暂无签名，请点击「新建签名」</span>
+                ) : signatures.map((s) => {
+                  const active = s.id === selectedSigId;
+                  return (
+                    <div key={s.id} onClick={() => setSelectedSigId(s.id)}
+                      style={{ position: 'relative', width: 120, height: 56, border: `1px solid ${active ? 'var(--radar-primary)' : 'var(--radar-border)'}`, borderRadius: 4, background: active ? 'var(--radar-primary-soft)' : 'var(--radar-surface)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <img src={s.dataUrl} alt="签名" style={{ maxWidth: '92%', maxHeight: '88%', objectFit: 'contain', filter: isDark ? 'invert(1)' : 'none' }} />
+                      {s.is_default && <span style={{ position: 'absolute', top: 2, left: 4, fontSize: 9, color: 'var(--radar-primary)' }}>默认</span>}
+                      <Popconfirm title="删除该签名？" onConfirm={(e) => { e?.stopPropagation?.(); deleteSignature(s.id); }} onCancel={(e) => e?.stopPropagation?.()}>
+                        <DeleteOutlined onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', top: 2, right: 4, fontSize: 11, color: 'var(--radar-text-secondary)' }} />
+                      </Popconfirm>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ fontSize: 11, color: 'var(--radar-text-secondary)' }}><HighlightOutlined /> 在下方手写，或上传签名图片</div>
+                <SignaturePad ref={padRef} height={150} invert={isDark} />
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <Button size="small" onClick={() => padRef.current?.clear?.()}>清除</Button>
+                  <Upload accept="image/png,image/jpeg" showUploadList={false} beforeUpload={onUploadSignature}>
+                    <Button size="small" icon={<UploadOutlined />}>上传图片</Button>
+                  </Upload>
+                  <Button type="primary" size="small" loading={savingSig} onClick={saveSignature}>保存签名</Button>
+                  {signatures.length > 0 && <Button size="small" type="text" onClick={() => setCreatingSig(false)}>返回选择</Button>}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </Modal>

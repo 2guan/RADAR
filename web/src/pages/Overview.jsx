@@ -17,6 +17,7 @@ import StatusBadge from '../components/StatusBadge.jsx';
 import RequirementEditor from '../components/editors/RequirementEditor.jsx';
 import TaskEditor from '../components/editors/TaskEditor.jsx';
 import ReleaseDetail from '../components/editors/ReleaseDetail.jsx';
+import ReleaseApplyEditor from '../components/editors/ReleaseApplyEditor.jsx';
 import ResizableTitle from '../components/ResizableTitle.jsx';
 import { apiPost, apiGet, rawClient } from '../api/client.js';
 import FilterPanel from '../components/FilterPanel.jsx';
@@ -977,6 +978,8 @@ export default function Overview() {
 
   // 阶段编辑器：{type:'requirement'|'dev'|'test'|'release', id, reqCode}
   const [editor, setEditor] = useState(null);
+  // 投产申请·新增（未发起投产的需求点击投产卡片时弹出，并默认选中该需求）
+  const [applyEditor, setApplyEditor] = useState(null);
 
   const [filterQuery, setFilterQuery] = useState([]);
   
@@ -1072,6 +1075,16 @@ export default function Overview() {
   // 编辑保存后：刷新详情 + 概览
   const onEditorSaved = () => { if (detail) loadDetail(detail.requirement.req_code); load(); };
 
+  // 投产卡片点击：已发起投产 -> 查看投产审批详情；未发起 -> 弹出投产申请新增并默认选中该需求
+  const openReleaseCard = () => {
+    if (!detail) return;
+    if (detail.release) {
+      setEditor({ type: 'release', reqCode: detail.requirement.req_code });
+    } else {
+      setApplyEditor({ reqCode: detail.requirement.req_code, releasePointId: detail.requirement.release_point_id });
+    }
+  };
+
   return (
     <Card
       title="版本概览"
@@ -1166,7 +1179,7 @@ export default function Overview() {
                 ...(detail.nft.length ? [{ key: 'nft', label: '非功能测试', children: <TaskGrid items={detail.nft} attachFields={TEST_ATTACH} onEdit={(t) => setEditor({ type: 'test', id: t.id })} /> }] : []),
                 ...(detail.sec.length ? [{ key: 'sec', label: '安全测试', children: <TaskGrid items={detail.sec} attachFields={TEST_ATTACH} onEdit={(t) => setEditor({ type: 'test', id: t.id })} /> }] : []),
                 { key: 'uat', label: '用户测试', children: <TaskGrid items={detail.uat} attachFields={TEST_ATTACH} onEdit={(t) => setEditor({ type: 'test', id: t.id })} emptyText="点击承接测试" onIntake={() => setTestIntakeReq({ req: detail.requirement, testType: 'UAT' })} hasIntakePermission={can('test', 'test.intake')} /> },
-                { key: 'rel', label: '投产', children: <ReleaseDetailCard release={detail.release} onEdit={() => setEditor({ type: 'release', reqCode: detail.requirement.req_code })} /> },
+                { key: 'rel', label: '投产', children: <ReleaseDetailCard release={detail.release} onEdit={openReleaseCard} /> },
               ]}
             />
           ) : (
@@ -1227,7 +1240,7 @@ export default function Overview() {
                 <div className="lc-column-header">
                   <span>投产</span>
                 </div>
-                <ReleaseDetailCard release={detail.release} onEdit={() => setEditor({ type: 'release', reqCode: detail.requirement.req_code })} />
+                <ReleaseDetailCard release={detail.release} onEdit={openReleaseCard} />
               </div>
             </div>
           )
@@ -1244,6 +1257,14 @@ export default function Overview() {
         onClose={() => setEditor(null)} onSaved={onEditorSaved} />
       <ReleaseDetail open={editor?.type === 'release'} reqCode={editor?.type === 'release' ? editor?.reqCode : null}
         onClose={() => setEditor(null)} onChanged={onEditorSaved} />
+      {/* 未发起投产的需求：弹出投产申请新增并默认选中该需求 */}
+      <ReleaseApplyEditor
+        open={!!applyEditor}
+        defaultReqCodes={applyEditor ? [applyEditor.reqCode] : undefined}
+        defaultReleasePointId={applyEditor?.releasePointId}
+        onClose={() => setApplyEditor(null)}
+        onSaved={() => { setApplyEditor(null); onEditorSaved(); }}
+      />
 
       <DevIntakeModal open={!!devIntakeReq} requirement={devIntakeReq} onClose={() => setDevIntakeReq(null)} onSaved={onEditorSaved} />
       <TestIntakeModal open={!!testIntakeReq} requirement={testIntakeReq?.req} testType={testIntakeReq?.testType} onClose={() => setTestIntakeReq(null)} onSaved={onEditorSaved} />
