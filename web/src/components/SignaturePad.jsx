@@ -1,56 +1,120 @@
 /**
  * 文件：components/SignaturePad.jsx
- * 用途：网页端手写签名板。基于原生 canvas + 指针/触摸事件实现，无第三方依赖
+ * 用途：网页端手写签名板。基于原生 canvas + Pointer Events（统一鼠标/触摸/手写笔）实现，无第三方依赖
  *       （等价于业界 signature_pad 的核心做法）。支持清除、判空、导出 PNG DataURL、载入图片。
  * 作者：hengguan
- * 说明：通过 ref 暴露 clear()/isEmpty()/getDataURL()/loadImage(dataUrl)；画布按容器宽度自适应。
+ * 说明：坐标按「画布像素/显示尺寸」实时换算，修复移动端落笔与显示错位；监听 resize 重建画布并保留笔迹。
+ *       笔触随书写速度变粗细（慢粗快细）并以二次贝塞尔平滑，形成笔锋与韵脚。
+ *       通过 ref 暴露 clear()/isEmpty()/getDataURL()/loadImage(dataUrl)。
  */
 
 import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 
+// 笔触宽度区间（CSS 像素，绘制时再乘以设备像素比）
+const BASE_W = 2.2;
+const MIN_W = 1.0;
+const MAX_W = 3.8;
+const INK = '#1f2937';
+
 const SignaturePad = forwardRef(function SignaturePad({ height = 150, invert = false }, ref) {
   const canvasRef = useRef(null);
   const drawing = useRef(false);
-  const last = useRef({ x: 0, y: 0 });
   const dirty = useRef(false);
+  const ratio = useRef(1);
+  const lastPt = useRef(null);   // 上一个采样点 {x,y,t}（画布像素）
+  const lastMid = useRef(null);  // 上一段中点
+  const lastW = useRef(BASE_W);  // 上一段宽度（画布像素）
 
-  // 初始化画笔；按设备像素比设置画布分辨率，避免模糊
-  useEffect(() => {
+  // 依据显示尺寸与 dpr 重建画布分辨率，并保留已有笔迹
+  const setupCanvas = () => {
     const c = canvasRef.current;
-    const ratio = window.devicePixelRatio || 1;
+    if (!c) return;
     const rect = c.getBoundingClientRect();
-    c.width = Math.round(rect.width * ratio);
-    c.height = Math.round(height * ratio);
+    if (!rect.width) return;
+    const dpr = window.devicePixelRatio || 1;
+    ratio.current = dpr;
+    const prev = dirty.current ? c.toDataURL() : null;
+    c.width = Math.round(rect.width * dpr);
+    c.height = Math.round(height * dpr);
     const ctx = c.getContext('2d');
-    ctx.scale(ratio, ratio);
-    ctx.lineWidth = 2.2;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    ctx.strokeStyle = '#1f2937';
+    ctx.strokeStyle = INK;
+    ctx.fillStyle = INK;
+    if (prev) {
+      const img = new Image();
+      img.onload = () => ctx.drawImage(img, 0, 0, c.width, c.height);
+      img.src = prev;
+    }
+  };
+
+  useEffect(() => {
+    setupCanvas();
+    const onResize = () => setupCanvas();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [height]);
 
+  // 将指针位置实时换算为画布像素坐标（用实时 width 比例，避免容器尺寸变化导致错位）
   const pos = (e) => {
     const c = canvasRef.current;
     const r = c.getBoundingClientRect();
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    return { x: clientX - r.left, y: clientY - r.top };
+    return {
+      x: (e.clientX - r.left) * (c.width / r.width),
+      y: (e.clientY - r.top) * (c.height / r.height),
+      t: e.timeStamp || Date.now(),
+    };
   };
 
-  const start = (e) => { e.preventDefault(); drawing.current = true; last.current = pos(e); };
+  const down = (e) => {
+    e.preventDefault();
+    try { canvasRef.current.setPointerCapture?.(e.pointerId); } catch { /* 忽略 */ }
+    drawing.current = true;
+    const p = pos(e);
+    lastPt.current = p;
+    lastMid.current = { x: p.x, y: p.y };
+    lastW.current = BASE_W * ratio.current;
+    // 起笔圆点，形成圆润起锋
+    const ctx = canvasRef.current.getContext('2d');
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, lastW.current / 2, 0, Math.PI * 2);
+    ctx.fill();
+    dirty.current = true;
+  };
+
   const move = (e) => {
     if (!drawing.current) return;
     e.preventDefault();
-    const ctx = canvasRef.current.getContext('2d');
+    const c = canvasRef.current;
+    const ctx = c.getContext('2d');
+    const dpr = ratio.current;
     const p = pos(e);
+    const prev = lastPt.current;
+    const dist = Math.hypot(p.x - prev.x, p.y - prev.y);
+    const dt = Math.max(1, p.t - prev.t);
+    const speed = (dist / dpr) / dt; // CSS 像素/毫秒
+    // 速度越快越细：形成笔锋；再向上一段宽度平滑过渡，避免突变
+    let target = MAX_W - speed * 2.4;
+    target = Math.max(MIN_W, Math.min(MAX_W, target)) * dpr;
+    const w = lastW.current * 0.5 + target * 0.5;
+    const mid = { x: (prev.x + p.x) / 2, y: (prev.y + p.y) / 2 };
+    ctx.lineWidth = w;
     ctx.beginPath();
-    ctx.moveTo(last.current.x, last.current.y);
-    ctx.lineTo(p.x, p.y);
+    ctx.moveTo(lastMid.current.x, lastMid.current.y);
+    ctx.quadraticCurveTo(prev.x, prev.y, mid.x, mid.y);
     ctx.stroke();
-    last.current = p;
+    lastMid.current = mid;
+    lastPt.current = p;
+    lastW.current = w;
     dirty.current = true;
   };
-  const end = () => { drawing.current = false; };
+
+  const up = (e) => {
+    if (!drawing.current) return;
+    drawing.current = false;
+    try { canvasRef.current.releasePointerCapture?.(e.pointerId); } catch { /* 忽略 */ }
+  };
 
   useImperativeHandle(ref, () => ({
     clear: () => {
@@ -66,14 +130,11 @@ const SignaturePad = forwardRef(function SignaturePad({ height = 150, invert = f
       img.onload = () => {
         const c = canvasRef.current;
         const ctx = c.getContext('2d');
-        const ratio = window.devicePixelRatio || 1;
-        const cw = c.width / ratio;
-        const ch = c.height / ratio;
         ctx.clearRect(0, 0, c.width, c.height);
-        const scale = Math.min(cw / img.width, ch / img.height, 1);
+        const scale = Math.min(c.width / img.width, c.height / img.height, 1);
         const w = img.width * scale;
         const h = img.height * scale;
-        ctx.drawImage(img, (cw - w) / 2, (ch - h) / 2, w, h);
+        ctx.drawImage(img, (c.width - w) / 2, (c.height - h) / 2, w, h);
         dirty.current = true;
         resolve();
       };
@@ -92,8 +153,11 @@ const SignaturePad = forwardRef(function SignaturePad({ height = 150, invert = f
         filter: invert ? 'invert(1)' : 'none',
         touchAction: 'none', cursor: 'crosshair',
       }}
-      onMouseDown={start} onMouseMove={move} onMouseUp={end} onMouseLeave={end}
-      onTouchStart={start} onTouchMove={move} onTouchEnd={end}
+      onPointerDown={down}
+      onPointerMove={move}
+      onPointerUp={up}
+      onPointerLeave={up}
+      onPointerCancel={up}
     />
   );
 });
