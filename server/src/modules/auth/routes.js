@@ -117,7 +117,7 @@ export default async function authRoutes(fastify) {
   fastify.get('/auth/me', { preHandler: fastify.authenticate }, async (request) => {
     const u = request.currentUser;
     const roles = all(
-      `SELECT r.code, r.name, r.default_home
+      `SELECT r.code, r.name, r.default_home, r.default_theme
          FROM role r JOIN user_role ur ON ur.role_id = r.id
         WHERE ur.user_id = ?`,
       u.id,
@@ -137,7 +137,8 @@ export default async function authRoutes(fastify) {
       org: u.org,
       isSuper: !!u.is_super,
       roles,
-      defaultHome: roles[0]?.default_home || '仪表盘',
+      defaultHome: roles[0]?.default_home || '/dashboard',
+      defaultTheme: roles[0]?.default_theme || 'sky',
       permissions,
       mustChangePassword: expired,
     });

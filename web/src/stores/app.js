@@ -76,6 +76,14 @@ export const useAppStore = create((set, get) => ({
   loadMe: async () => {
     const me = await apiGet('/auth/me');
     set({ user: me, permissions: me?.permissions || [] });
+    if (me) {
+      if (localStorage.getItem(PRESET_KEY) === null && me.defaultTheme) {
+        set({ preset: me.defaultTheme });
+      }
+      if (localStorage.getItem(THEME_KEY) === null) {
+        set({ theme: 'light' });
+      }
+    }
     return me;
   },
 

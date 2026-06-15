@@ -1105,7 +1105,7 @@ export default function Overview() {
         >
           <Row gutter={[16, 16]}>
             {g.cards.map((c) => (
-              <Col key={c.req_code} xs={24} md={c.nodes.length >= 7 ? 24 : 12}>
+              <Col key={c.req_code} xs={24} xl={c.nodes.length >= 7 ? 24 : 12}>
                 <div className="ov-req-card clickable" onClick={() => openDetail(c)}>
                   {/* 顶部：左=编号，右=当前状态标签 */}
                   <div className="ov-req-head">

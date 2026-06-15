@@ -18,6 +18,8 @@ import AppConfigForm from '../components/AppConfigForm.jsx';
 import AppearanceSettings from '../components/AppearanceSettings.jsx';
 import PermissionMatrix from '../components/PermissionMatrix.jsx';
 import DictSelect from '../components/DictSelect.jsx';
+import { MENU } from '../router/menu.js';
+import { PRESETS } from '../theme/presets.js';
 import { apiPost, apiGet } from '../api/client.js';
 
 dayjs.extend(customParseFormat);
@@ -242,7 +244,7 @@ function SystemManager() {
   );
 }
 
-/** 角色管理器（含会签角色打标） */
+/** 角色管理器（含会签角色打标与默认主题、默认首页配置） */
 function RoleManager() {
   const filterConfigs = [
     { field: 'name_query', label: '角色名称', type: 'input', isPrimary: true, placeholder: '角色名称或标识检索' },
@@ -252,6 +254,31 @@ function RoleManager() {
     ]},
   ];
 
+  // 从 MENU 解析支持的首页路由选项
+  const homeOptions = [];
+  MENU.forEach((item) => {
+    if (item.children) {
+      item.children.forEach((child) => {
+        homeOptions.push({ label: `${item.label} - ${child.label}`, value: child.key });
+      });
+    } else {
+      homeOptions.push({ label: item.label, value: item.key });
+    }
+  });
+
+  // 主题预设选项列表
+  const themeOptions = Object.values(PRESETS).map((p) => ({
+    label: p.name,
+    value: p.key,
+  }));
+
+  const homeLabelMap = homeOptions.reduce((acc, cur) => {
+    acc[cur.value] = cur.label;
+    return acc;
+  }, {
+    '仪表盘': '效能仪表盘', // 兼容旧的值
+  });
+
   return (
     <CrudManager
       apiBase="/roles" title="角色"
@@ -260,8 +287,24 @@ function RoleManager() {
       columns={[
         { title: '角色名称', dataIndex: 'name', width: 150 },
         { title: '角色标识', dataIndex: 'code', width: 150 },
-        { title: '默认首页', dataIndex: 'default_home', width: 120 },
-        { title: '会签角色', dataIndex: 'is_signoff_role', width: 100, render: (v) => (v ? <Tag color="green">会签</Tag> : '—') },
+        { 
+          title: '默认首页', 
+          dataIndex: 'default_home', 
+          width: 150,
+          render: (v) => homeLabelMap[v] || v || '—',
+        },
+        { 
+          title: '默认主题', 
+          dataIndex: 'default_theme', 
+          width: 120,
+          render: (v) => PRESETS[v]?.name || v || '蔚蓝',
+        },
+        { 
+          title: '会签角色', 
+          dataIndex: 'is_signoff_role', 
+          width: 100, 
+          render: (v) => (v ? <Tag className="status-tag tag-system" style={{ margin: 0 }}>会签</Tag> : '—') 
+        },
         { title: '内置', dataIndex: 'is_builtin', width: 80, render: (v) => (v ? <Tag>内置</Tag> : '—') },
       ]}
       transformIn={(row) => ({ ...row, is_signoff_role: !!row.is_signoff_role })}
@@ -269,7 +312,12 @@ function RoleManager() {
         <>
           <Form.Item name="name" label="角色名称" rules={[{ required: true }]}><Input /></Form.Item>
           <Form.Item name="code" label="角色标识" rules={[{ required: true }]}><Input disabled={!!current} /></Form.Item>
-          <Form.Item name="default_home" label="默认首页" initialValue="仪表盘"><Input /></Form.Item>
+          <Form.Item name="default_home" label="默认首页" initialValue="/dashboard" rules={[{ required: true, message: '请选择默认首页' }]}>
+            <Select options={homeOptions} placeholder="选择默认首页" />
+          </Form.Item>
+          <Form.Item name="default_theme" label="默认主题" initialValue="sky" rules={[{ required: true, message: '请选择默认主题' }]}>
+            <Select options={themeOptions} placeholder="选择默认主题" />
+          </Form.Item>
           <Form.Item name="is_signoff_role" label="会签角色" valuePropName="checked" extra="打标后该角色将出现在投产管理的评审会签中，且仅该角色人员可签署/驳回">
             <Switch checkedChildren="是" unCheckedChildren="否" />
           </Form.Item>

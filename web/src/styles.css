@@ -671,6 +671,7 @@ body {
 }
 .radar-filter-main {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 12px;
   width: 100%;
@@ -680,6 +681,16 @@ body {
   align-items: center;
   gap: 12px;
   flex: 1;
+}
+.radar-filter-actions-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.radar-filter-other-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 .radar-filter-collapsible {
   display: grid;
@@ -698,6 +709,18 @@ body {
 .dark .radar-filter-bar {
   background: #1f2937; /* Gray 800 */
 }
+@media (min-width: 768px) and (max-width: 1150px) {
+  .radar-filter-actions-wrapper {
+    display: contents;
+  }
+  .radar-filter-other-actions {
+    width: 100%;
+    margin-top: 4px;
+    display: flex;
+    justify-content: flex-start;
+    gap: 12px;
+  }
+}
 @media (max-width: 767px) {
   .radar-filter-bar {
     padding: 8px 12px;
@@ -713,19 +736,21 @@ body {
   .radar-filter-collapsible {
     grid-template-columns: 1fr;
   }
-  .filter-space-actions {
+  .radar-filter-actions-wrapper {
     display: flex !important;
-    flex-wrap: nowrap !important;
-    gap: 4px !important;
+    flex-direction: row !important;
+    align-items: center !important;
     width: 100% !important;
+    margin-top: 8px;
+    gap: 8px !important;
   }
-  .filter-space-actions > *:nth-child(2) {
+  .radar-filter-other-actions {
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
     margin-left: auto !important;
   }
-  .filter-space-actions.ant-space {
-    gap: 4px !important;
-  }
-  .filter-space-actions .ant-btn {
+  .radar-filter-actions-wrapper .ant-btn {
     width: auto !important;
     padding: 4px 8px !important;
     font-size: 12px !important;

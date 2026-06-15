@@ -73,15 +73,6 @@ export function formatAttachments(attachments, fieldKey) {
   if (!Array.isArray(attachments)) return '';
   const list = attachments.filter(a => a.field_key === fieldKey);
   if (!list.length) return '';
-  return list.map(a => {
-    if (a.kind === 'file') {
-      return `${a.filename}(${a.stored_path})`;
-    } else {
-      // kind === 'path'
-      // 提取文件名：支持 Windows 反斜杠和 Unix 斜杠
-      const name = a.filename || a.path_text.replace(/\\/g, '/').split('/').pop() || '链接';
-      return `${name}(${a.path_text})`;
-    }
-  }).join('; ');
+  return list.map(a => (a.kind === 'file' ? a.filename : a.path_text)).join('\n');
 }
 

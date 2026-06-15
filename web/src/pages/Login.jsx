@@ -11,6 +11,7 @@ import { UserOutlined, LockOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { apiPost, TOKEN_KEY } from '../api/client.js';
 import { useAppStore } from '../stores/app.js';
+import { getHomePath } from '../app.jsx';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -24,10 +25,11 @@ export default function Login() {
     try {
       const data = await apiPost('/auth/login', values);
       localStorage.setItem(TOKEN_KEY, data.token);
-      await loadMe();
+      const me = await loadMe();
       await loadReleasePoint();
       message.success(`欢迎回来，${data.name}`);
-      navigate('/dashboard');
+      const homePath = getHomePath(me?.defaultHome);
+      navigate(homePath);
     } catch {
       // 错误已由拦截器提示
     } finally {

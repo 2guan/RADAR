@@ -493,22 +493,19 @@ export default async function overviewRoutes(fastify) {
         let devInfo = {
           dev_code: '', dev_name: '', dev_content: '', dev_status: '', dev_owner: '',
           dev_system: '', dev_org: '', dev_plan_start: '', dev_plan_end: '',
-          dev_actual_start: '', dev_actual_end: '', dev_deviation_rate: '', dev_attachments: '',
+          dev_actual_start: '', dev_actual_end: '', dev_deviation_rate: '',
+          dev_design_brief: '', dev_design_detail: '', dev_code_review: '', dev_unit_test: '',
         };
         let sysReleaseTime = '无';
         let sysReleaseStatus = '无';
 
-        let sitInfo = { sit_code: '无', sit_status: '无', sit_owner: '无', sit_actual_end: '无', sit_attaches: '无' };
-        let uatInfo = { uat_code: '无', uat_status: '无', uat_owner: '无', uat_actual_end: '无', uat_attaches: '无' };
-        let nftInfo = { nft_code: '无', nft_status: '无', nft_owner: '无', nft_actual_end: '无', nft_attaches: '无' };
-        let secInfo = { sec_code: '无', sec_status: '无', sec_owner: '无', sec_actual_end: '无', sec_attaches: '无' };
+        let sitInfo = { sit_code: '无', sit_status: '无', sit_owner: '无', sit_actual_end: '无', sit_test_plan: '无', sit_test_report: '无' };
+        let uatInfo = { uat_code: '无', uat_status: '无', uat_owner: '无', uat_actual_end: '无', uat_test_plan: '无', uat_test_report: '无' };
+        let nftInfo = { nft_code: '无', nft_status: '无', nft_owner: '无', nft_actual_end: '无', nft_test_plan: '无', nft_test_report: '无' };
+        let secInfo = { sec_code: '无', sec_status: '无', sec_owner: '无', sec_actual_end: '无', sec_test_plan: '无', sec_test_report: '无' };
 
         if (d) {
           const devAttaches = all("SELECT * FROM attachment WHERE entity_type = 'dev' AND entity_id = ?", d.id);
-          const devAttsFormatted = ['概要设计', '详细设计', '代码走查', '单元测试报告']
-            .map(k => `${k}:${formatAttachments(devAttaches, k)}`)
-            .filter(str => !str.endsWith(':'))
-            .join('; ');
 
           devInfo = {
             dev_code: d.task_code,
@@ -523,7 +520,10 @@ export default async function overviewRoutes(fastify) {
             dev_actual_start: d.actual_start || '',
             dev_actual_end: d.actual_end || '',
             dev_deviation_rate: d.deviation_rate != null ? `${d.deviation_rate}%` : '0%',
-            dev_attachments: devAttsFormatted,
+            dev_design_brief: formatAttachments(devAttaches, '概要设计'),
+            dev_design_detail: formatAttachments(devAttaches, '详细设计'),
+            dev_code_review: formatAttachments(devAttaches, '代码走查'),
+            dev_unit_test: formatAttachments(devAttaches, '单元测试报告'),
           };
 
           // 关联投产系统状态
@@ -545,17 +545,13 @@ export default async function overviewRoutes(fastify) {
             }
             if (match) {
               const testAttaches = all("SELECT * FROM attachment WHERE entity_type = 'test' AND entity_id = ?", match.id);
-              const testAttsFormatted = ['测试方案', '测试报告']
-                .map(k => `${k}:${formatAttachments(testAttaches, k)}`)
-                .filter(str => !str.endsWith(':'))
-                .join('; ');
-
               return {
                 code: match.task_code,
                 status: match.status,
                 owner: match.owner || '',
                 actual_end: match.actual_end || '进行中',
-                attaches: testAttsFormatted || '无',
+                test_plan: formatAttachments(testAttaches, '测试方案') || '无',
+                test_report: formatAttachments(testAttaches, '测试报告') || '无',
               };
             }
             return null;
@@ -563,19 +559,47 @@ export default async function overviewRoutes(fastify) {
 
           const sitMatch = mapTestInfo('SIT');
           if (sitMatch) {
-            sitInfo = { sit_code: sitMatch.code, sit_status: sitMatch.status, sit_owner: sitMatch.owner, sit_actual_end: sitMatch.actual_end, sit_attaches: sitMatch.attaches };
+            sitInfo = {
+              sit_code: sitMatch.code,
+              sit_status: sitMatch.status,
+              sit_owner: sitMatch.owner,
+              sit_actual_end: sitMatch.actual_end,
+              sit_test_plan: sitMatch.test_plan,
+              sit_test_report: sitMatch.test_report
+            };
           }
           const uatMatch = mapTestInfo('UAT');
           if (uatMatch) {
-            uatInfo = { uat_code: uatMatch.code, uat_status: uatMatch.status, uat_owner: uatMatch.owner, uat_actual_end: uatMatch.actual_end, uat_attaches: uatMatch.attaches };
+            uatInfo = {
+              uat_code: uatMatch.code,
+              uat_status: uatMatch.status,
+              uat_owner: uatMatch.owner,
+              uat_actual_end: uatMatch.actual_end,
+              uat_test_plan: uatMatch.test_plan,
+              uat_test_report: uatMatch.test_report
+            };
           }
           const nftMatch = mapTestInfo('NFT');
           if (nftMatch) {
-            nftInfo = { nft_code: nftMatch.code, nft_status: nftMatch.status, nft_owner: nftMatch.owner, nft_actual_end: nftMatch.actual_end, nft_attaches: nftMatch.attaches };
+            nftInfo = {
+              nft_code: nftMatch.code,
+              nft_status: nftMatch.status,
+              nft_owner: nftMatch.owner,
+              nft_actual_end: nftMatch.actual_end,
+              nft_test_plan: nftMatch.test_plan,
+              nft_test_report: nftMatch.test_report
+            };
           }
           const secMatch = mapTestInfo('SEC');
           if (secMatch) {
-            secInfo = { sec_code: secMatch.code, sec_status: secMatch.status, sec_owner: secMatch.owner, sec_actual_end: secMatch.actual_end, sec_attaches: secMatch.attaches };
+            secInfo = {
+              sec_code: secMatch.code,
+              sec_status: secMatch.status,
+              sec_owner: secMatch.owner,
+              sec_actual_end: secMatch.actual_end,
+              sec_test_plan: secMatch.test_plan,
+              sec_test_report: secMatch.test_report
+            };
           }
         }
 
@@ -590,25 +614,29 @@ export default async function overviewRoutes(fastify) {
           sit_status: sitInfo.sit_status,
           sit_owner: sitInfo.sit_owner,
           sit_actual_end: sitInfo.sit_actual_end,
-          sit_attaches: sitInfo.sit_attaches,
+          sit_test_plan: sitInfo.sit_test_plan,
+          sit_test_report: sitInfo.sit_test_report,
 
           uat_code: uatInfo.uat_code,
           uat_status: uatInfo.uat_status,
           uat_owner: uatInfo.uat_owner,
           uat_actual_end: uatInfo.uat_actual_end,
-          uat_attaches: uatInfo.uat_attaches,
+          uat_test_plan: uatInfo.uat_test_plan,
+          uat_test_report: uatInfo.uat_test_report,
 
           nft_code: nftInfo.nft_code,
           nft_status: nftInfo.nft_status,
           nft_owner: nftInfo.nft_owner,
           nft_actual_end: nftInfo.nft_actual_end,
-          nft_attaches: nftInfo.nft_attaches,
+          nft_test_plan: nftInfo.nft_test_plan,
+          nft_test_report: nftInfo.nft_test_report,
 
           sec_code: secInfo.sec_code,
           sec_status: secInfo.sec_status,
           sec_owner: secInfo.sec_owner,
           sec_actual_end: secInfo.sec_actual_end,
-          sec_attaches: secInfo.sec_attaches,
+          sec_test_plan: secInfo.sec_test_plan,
+          sec_test_report: secInfo.sec_test_report,
         });
       }
     }
@@ -643,31 +671,38 @@ export default async function overviewRoutes(fastify) {
       { key: 'dev_actual_start', title: '开发实际开始' },
       { key: 'dev_actual_end', title: '开发实际结束' },
       { key: 'dev_deviation_rate', title: '开发排期偏差率' },
-      { key: 'dev_attachments', title: '开发附件' },
-      // SIT
-      { key: 'sit_code', title: 'SIT任务编号' },
-      { key: 'sit_status', title: 'SIT状态' },
-      { key: 'sit_owner', title: 'SIT负责人' },
-      { key: 'sit_actual_end', title: 'SIT实际完成时间' },
-      { key: 'sit_attaches', title: 'SIT附件' },
-      // UAT
-      { key: 'uat_code', title: 'UAT任务编号' },
-      { key: 'uat_status', title: 'UAT状态' },
-      { key: 'uat_owner', title: 'UAT负责人' },
-      { key: 'uat_actual_end', title: 'UAT实际完成时间' },
-      { key: 'uat_attaches', title: 'UAT附件' },
-      // NFT
-      { key: 'nft_code', title: 'NFT任务编号' },
-      { key: 'nft_status', title: 'NFT状态' },
-      { key: 'nft_owner', title: 'NFT负责人' },
-      { key: 'nft_actual_end', title: 'NFT实际完成时间' },
-      { key: 'nft_attaches', title: 'NFT附件' },
-      // SEC
-      { key: 'sec_code', title: 'SEC任务编号' },
-      { key: 'sec_status', title: 'SEC状态' },
-      { key: 'sec_owner', title: 'SEC负责人' },
-      { key: 'sec_actual_end', title: 'SEC实际完成时间' },
-      { key: 'sec_attaches', title: 'SEC附件' },
+      { key: 'dev_design_brief', title: '概要设计' },
+      { key: 'dev_design_detail', title: '详细设计' },
+      { key: 'dev_code_review', title: '代码走查' },
+      { key: 'dev_unit_test', title: '单元测试报告' },
+      // 应用组装测试 (SIT)
+      { key: 'sit_code', title: '应用组装测试任务编号' },
+      { key: 'sit_status', title: '应用组装测试状态' },
+      { key: 'sit_owner', title: '应用组装测试负责人' },
+      { key: 'sit_actual_end', title: '应用组装测试实际完成时间' },
+      { key: 'sit_test_plan', title: '应用组装测试方案' },
+      { key: 'sit_test_report', title: '应用组装测试报告' },
+      // 用户测试 (UAT)
+      { key: 'uat_code', title: '用户测试任务编号' },
+      { key: 'uat_status', title: '用户测试状态' },
+      { key: 'uat_owner', title: '用户测试负责人' },
+      { key: 'uat_actual_end', title: '用户测试实际完成时间' },
+      { key: 'uat_test_plan', title: '用户测试方案' },
+      { key: 'uat_test_report', title: '用户测试报告' },
+      // 非功能测试 (NFT)
+      { key: 'nft_code', title: '非功能测试任务编号' },
+      { key: 'nft_status', title: '非功能测试状态' },
+      { key: 'nft_owner', title: '非功能测试负责人' },
+      { key: 'nft_actual_end', title: '非功能测试实际完成时间' },
+      { key: 'nft_test_plan', title: '非功能测试方案' },
+      { key: 'nft_test_report', title: '非功能测试报告' },
+      // 安全测试 (SEC)
+      { key: 'sec_code', title: '安全测试任务编号' },
+      { key: 'sec_status', title: '安全测试状态' },
+      { key: 'sec_owner', title: '安全测试负责人' },
+      { key: 'sec_actual_end', title: '安全测试实际完成时间' },
+      { key: 'sec_test_plan', title: '安全测试方案' },
+      { key: 'sec_test_report', title: '安全测试报告' },
       // 投产
       { key: 'release_status', title: '投产状态' },
       { key: 'release_owner', title: '投产负责人' },

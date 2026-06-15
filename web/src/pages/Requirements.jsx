@@ -9,7 +9,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Card, Button, Space, Tag, Popconfirm, message, Upload, Dropdown, Tooltip } from 'antd';
 import {
-  PlusOutlined, EditOutlined, DeleteOutlined, HistoryOutlined, ImportOutlined, ExportOutlined, DownloadOutlined, DownOutlined,
+  PlusOutlined, EditOutlined, DeleteOutlined, ImportOutlined, ExportOutlined, DownloadOutlined, DownOutlined,
 } from '@ant-design/icons';
 import DataTable from '../components/DataTable.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
@@ -153,11 +153,10 @@ export default function Requirements() {
       ),
     },
     {
-      title: '操作', key: 'op', width: 100, fixed: 'right',
+      title: '操作', key: 'op', width: 80, fixed: 'right',
       render: (_, row) => (
         <Space size={0} onClick={(e) => e.stopPropagation()}>
           <Can module="requirement" action="edit"><Button type="link" size="small" icon={<EditOutlined />} onClick={() => openEdit(row)} /></Can>
-          <Button type="link" size="small" icon={<HistoryOutlined />} onClick={() => setHistoryId(row.id)} />
           <Can module="requirement" action="delete">
             {row.has_tasks ? (
               <Tooltip title="该需求已关联开发/测试任务，无法删除">

@@ -8,7 +8,7 @@
 
 import React, { useRef, useState, useMemo, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { Card, Button, Space, Modal, Form, Tag, Popconfirm, message, Table, Input, Spin, List, Radio, Checkbox } from 'antd';
-import { ExperimentOutlined, EditOutlined, DeleteOutlined, HistoryOutlined, ImportOutlined, ExportOutlined } from '@ant-design/icons';
+import { ExperimentOutlined, EditOutlined, DeleteOutlined, ImportOutlined, ExportOutlined } from '@ant-design/icons';
 import DataTable from '../components/DataTable.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
 import SystemSelect from '../components/SystemSelect.jsx';
@@ -215,11 +215,10 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
     },
     { title: '偏差率', dataIndex: 'deviation_rate', key: 'deviation_rate', render: (v) => (v == null ? '—' : `${v}%`) },
     {
-      title: '操作', key: 'op', width: 100, fixed: 'right',
+      title: '操作', key: 'op', width: 80, fixed: 'right',
       render: (_, row) => (
         <Space size={0} onClick={(e) => e.stopPropagation()}>
           <Can module="test" action="edit"><Button type="link" size="small" icon={<EditOutlined />} onClick={() => setEditId(row.id)} /></Can>
-          <Button type="link" size="small" icon={<HistoryOutlined />} onClick={() => setHistoryId(row.id)} />
           <Can module="test" action="delete"><Popconfirm title="确认删除？" onConfirm={() => onDelete(row)}><Button type="link" size="small" danger icon={<DeleteOutlined />} /></Popconfirm></Can>
         </Space>
       ),

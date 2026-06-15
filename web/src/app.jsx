@@ -21,6 +21,27 @@ import Release from './pages/Release.jsx';
 import Users from './pages/Users.jsx';
 import Settings from './pages/Settings.jsx';
 
+export function getHomePath(defaultHome) {
+  const routeMap = {
+    '仪表盘': '/dashboard',
+    '效能仪表盘': '/dashboard',
+    '版本概览': '/overview',
+    '需求分析': '/requirements',
+    '开发管理': '/dev',
+    '测试管理': '/test/sit',
+    '应用组装测试': '/test/sit',
+    '用户测试': '/test/uat',
+    '非功能测试': '/test/nft',
+    '安全测试': '/test/sec',
+    '投产管理': '/release',
+    '人员管理': '/users',
+    '系统设置': '/settings',
+  };
+  if (!defaultHome) return '/dashboard';
+  if (defaultHome.startsWith('/')) return defaultHome;
+  return routeMap[defaultHome] || '/dashboard';
+}
+
 /**
  * 受保护区域容器：首次加载拉取用户/平台/投产窗口；未登录跳转登录页。
  */
@@ -54,7 +75,7 @@ function Protected({ children }) {
   }
   if (!user) return <Navigate to="/login" replace />;
 
-  // 路由守卫：无该模块查看权限则重定向到首个有权限模块
+  // 路由守卫：无该模块查看权限则重定向到默认首页
   const path = location.pathname;
   const moduleByPath = {
     '/dashboard': 'dashboard', '/overview': 'overview', '/requirements': 'requirement',
@@ -62,9 +83,16 @@ function Protected({ children }) {
   };
   const mod = moduleByPath[path] || (path.startsWith('/test/') ? 'test' : undefined);
   if (mod && !can(mod, 'view')) {
-    return <Navigate to="/dashboard" replace />;
+    const homePath = getHomePath(user?.defaultHome);
+    return <Navigate to={homePath} replace />;
   }
   return children;
+}
+
+function IndexRedirect() {
+  const user = useAppStore((s) => s.user);
+  const homePath = getHomePath(user?.defaultHome);
+  return <Navigate to={homePath} replace />;
 }
 
 export default function AppRouter() {
@@ -80,7 +108,7 @@ export default function AppRouter() {
           path="/"
           element={<Protected><MainLayout /></Protected>}
         >
-          <Route index element={<Navigate to="/dashboard" replace />} />
+          <Route index element={<IndexRedirect />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="overview" element={<Overview />} />
           <Route path="requirements" element={<Requirements />} />

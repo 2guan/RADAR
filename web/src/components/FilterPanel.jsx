@@ -122,38 +122,42 @@ export default function FilterPanel({ configs, onChange, actions }) {
           ))}
         </div>
         
-        <Space wrap className="filter-space-actions">
+        <div className="radar-filter-actions-wrapper">
           <Tooltip title="重置">
             <Button 
               icon={<UndoOutlined />} 
               onClick={handleReset}
+              className="radar-filter-reset-btn"
             />
           </Tooltip>
           
-          {secondaryConfigs.length > 0 && (
-            <Button 
-              type="text" 
-              onClick={() => setExpanded(!expanded)}
-              icon={expanded ? <UpOutlined /> : <DownOutlined />}
-              style={{ color: 'var(--radar-primary)', fontWeight: 500 }}
-            >
-              更多筛选 
-              {activeCount > 0 && (
-                <Badge 
-                  count={activeCount} 
-                  style={{ 
-                    backgroundColor: 'var(--radar-primary)', 
-                    marginLeft: 6,
-                    borderRadius: 10,
-                    boxShadow: 'none'
-                  }} 
-                />
-              )}
-            </Button>
-          )}
-          
-          {actions}
-        </Space>
+          <div className="radar-filter-other-actions">
+            {secondaryConfigs.length > 0 && (
+              <Button 
+                type="text" 
+                onClick={() => setExpanded(!expanded)}
+                icon={expanded ? <UpOutlined /> : <DownOutlined />}
+                style={{ color: 'var(--radar-primary)', fontWeight: 500 }}
+                className="radar-filter-more-btn"
+              >
+                更多筛选 
+                {activeCount > 0 && (
+                  <Badge 
+                    count={activeCount} 
+                    style={{ 
+                      backgroundColor: 'var(--radar-primary)', 
+                      marginLeft: 6,
+                      borderRadius: 10,
+                      boxShadow: 'none'
+                    }} 
+                  />
+                )}
+              </Button>
+            )}
+            
+            {actions}
+          </div>
+        </div>
       </div>
 
       {expanded && secondaryConfigs.length > 0 && (
