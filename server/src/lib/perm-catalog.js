@@ -16,6 +16,12 @@ export const PERM_CATALOG = [
     ],
   },
   {
+    key: 'issue', label: '问题管理',
+    actions: [
+      { key: 'view', label: '查看' }, { key: 'sync', label: '同步' },
+    ],
+  },
+  {
     key: 'dev', label: '开发管理',
     actions: [
       { key: 'view', label: '查看' }, { key: 'create', label: '新增' }, { key: 'edit', label: '编辑' },

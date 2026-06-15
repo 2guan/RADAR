@@ -27,6 +27,7 @@ const STATIC_MAP = {
   '测试报告': 'in-progress',
   '待评审': 'in-progress',
   '待投产': 'in-progress',
+  '应急审批': 'in-progress',
 
   // 终态
   '需求完成': 'final',
@@ -37,10 +38,13 @@ const STATIC_MAP = {
   '已投产': 'final',
   '评审通过': 'final',
   '已就绪': 'final',
+  '评审同意': 'final',
 
   // 异常
   '已驳回': 'error',
   '已取消': 'error',
+  '评审拒绝': 'error',
+  '评审撤销': 'error',
 
   // 未开始
   '未发起': 'not-started',
@@ -64,6 +68,24 @@ export function getStatusType(status) {
   if (val.includes('完成') || val.includes('上线') || val.includes('签署') || val.includes('投产') || val.includes('就绪') || val.includes('通过') || val.includes('签')) return 'final';
 
   return 'in-progress';
+}
+
+// 内联状态下拉（status-select）的宽度估算：按当前文字实际像素宽度自适应，
+// 避免「字符数 × 固定值」估算造成的前后空白或文字被截断为省略号；额外预留左右内边距与下拉箭头位置。
+let _measureCanvas;
+export function statusSelectWidth(text, placeholder = '状态') {
+  const label = String(text || placeholder || '');
+  let textWidth;
+  try {
+    if (!_measureCanvas) _measureCanvas = document.createElement('canvas');
+    const ctx = _measureCanvas.getContext('2d');
+    ctx.font = '600 14px -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif';
+    textWidth = ctx.measureText(label).width;
+  } catch {
+    textWidth = label.length * 14; // 退化方案：按字符数估算
+  }
+  // 文字宽度 + 左右内边距(16) + 下拉箭头占位(18)
+  return Math.ceil(textWidth) + 34;
 }
 
 export default function StatusBadge({ status }) {

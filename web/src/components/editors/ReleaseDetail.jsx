@@ -14,7 +14,7 @@ import {
 import { HistoryOutlined } from '@ant-design/icons';
 import HistoryDrawer from '../HistoryDrawer.jsx';
 import dayjs from 'dayjs';
-import StatusBadge, { getStatusType } from '../StatusBadge.jsx';
+import StatusBadge, { getStatusType, statusSelectWidth } from '../StatusBadge.jsx';
 import DictSelect from '../DictSelect.jsx';
 import PersonPicker from '../PersonPicker.jsx';
 import { apiGet, apiPost, apiPut } from '../../api/client.js';
@@ -199,6 +199,7 @@ export default function ReleaseDetail({ open, reqCode, onClose, onChanged }) {
   };
 
   const statusValue = detail?.releaseTask?.status;
+  const reviewStatus = detail?.releaseTask?.review_status;
 
   return (
     <Modal
@@ -219,6 +220,7 @@ export default function ReleaseDetail({ open, reqCode, onClose, onChanged }) {
                 allowClear={false}
                 showSearch={false}
                 popupClassName="status-select-dropdown"
+                popupMatchSelectWidth={false}
                 value={statusValue}
                 onChange={async (v) => {
                   try {
@@ -231,7 +233,7 @@ export default function ReleaseDetail({ open, reqCode, onClose, onChanged }) {
                   }
                 }}
                 placeholder="投产状态"
-                style={{ width: (statusValue ? Array.from(String(statusValue)).length : 4) * 13 + 15, ...(!can('release', 'edit') ? { pointerEvents: 'none' } : {}) }}
+                style={{ width: statusSelectWidth(statusValue, '投产状态'), ...(!can('release', 'edit') ? { pointerEvents: 'none' } : {}) }}
               />
             </span>
           )}
@@ -377,7 +379,33 @@ export default function ReleaseDetail({ open, reqCode, onClose, onChanged }) {
 
               {/* 评审会签 */}
               <div className="form-section-card">
-                <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>评审会签</div>
+                <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span>评审会签</span>
+                  {/* 评审状态：全部签署->评审同意，任一驳回->评审拒绝，自动推导；评审撤销/应急审批可手动修改。样式与投产状态一致 */}
+                  <span className={`status-select status-select-${getStatusType(reviewStatus)}`}>
+                    <DictSelect
+                      category="review_status"
+                      size="small"
+                      allowClear={false}
+                      showSearch={false}
+                      popupClassName="status-select-dropdown"
+                      popupMatchSelectWidth={false}
+                      value={reviewStatus}
+                      onChange={async (v) => {
+                        try {
+                          await apiPut(`/release/${reqCode}`, { review_status: v });
+                          message.success('已更新评审状态');
+                          reload();
+                          onChanged?.();
+                        } catch (e) {
+                          message.error(e.message || '更新失败');
+                        }
+                      }}
+                      placeholder="评审状态"
+                      style={{ width: statusSelectWidth(reviewStatus, '评审状态'), ...(!can('release', 'edit') ? { pointerEvents: 'none' } : {}) }}
+                    />
+                  </span>
+                </div>
                 <Row gutter={[8, 8]}>
                   {detail.signoffs.map((so) => (
                     <Col key={so.id} xs={24} sm={12}>

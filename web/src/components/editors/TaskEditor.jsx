@@ -16,7 +16,7 @@ import SystemSelect from '../SystemSelect.jsx';
 import PersonPicker from '../PersonPicker.jsx';
 import AttachmentField from '../AttachmentField.jsx';
 import HistoryDrawer from '../HistoryDrawer.jsx';
-import { getStatusType } from '../StatusBadge.jsx';
+import { getStatusType, statusSelectWidth } from '../StatusBadge.jsx';
 import { apiGet, apiPut } from '../../api/client.js';
 import { useAppStore } from '../../stores/app.js';
 import { useResponsive } from '../../hooks/useResponsive.js';
@@ -94,10 +94,11 @@ export default function TaskEditor({ open, kind = 'dev', taskId, onClose, onSave
               allowClear={false}
               showSearch={false}
               popupClassName="status-select-dropdown"
+              popupMatchSelectWidth={false}
               value={statusValue}
               onChange={(val) => form.setFieldValue('status', val)}
               placeholder={cfg.statusLabel}
-              style={{ width: (statusValue ? Array.from(String(statusValue)).length : 4) * 13 + 15, ...(readonly ? { pointerEvents: 'none' } : {}) }}
+              style={{ width: statusSelectWidth(statusValue, cfg.statusLabel), ...(readonly ? { pointerEvents: 'none' } : {}) }}
             />
           </span>
           {current && (

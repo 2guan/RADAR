@@ -8,6 +8,7 @@
  */
 
 import { all } from '../db/index.js';
+import { isTerminalStatus } from './status.js';
 
 // ---------------------------------------------------------------------------
 // 维度元数据（label 与选项来源；optionSource 供前端决定下拉/预设取数方式）
@@ -26,6 +27,8 @@ export const DIMENSIONS = {
   plan_end_day: { label: '计划完成(日)', optionSource: 'date', isDate: true },
   actual_end_day: { label: '实际完成(日)', optionSource: 'date', isDate: true },
   actual_release_day: { label: '实际投产(日)', optionSource: 'date', isDate: true },
+  stage: { label: '任务阶段', optionSource: 'stage', isDate: false },
+  task_status: { label: '任务状态', optionSource: 'task_status', isDate: false },
 };
 
 // 时间维度 → 记录字段
@@ -42,7 +45,7 @@ const DATE_FIELD = {
 export const SOURCES = {
   requirement: {
     label: '业务需求',
-    dims: ['status', 'req_type', 'propose_dept', 'org', 'sector', 'system', 'release_point', 'propose_time_day'],
+    dims: ['status', 'req_type', 'propose_dept', 'org', 'sector', 'system', 'release_point', 'propose_time_day', 'stage', 'task_status'],
   },
   dev: {
     label: '开发任务',
@@ -53,6 +56,10 @@ export const SOURCES = {
   nft: { label: '非功能测试', dims: ['status', 'org', 'sector', 'system', 'owner', 'plan_end_day', 'actual_end_day'] },
   sec: { label: '安全测试', dims: ['status', 'org', 'sector', 'system', 'owner', 'plan_end_day', 'actual_end_day'] },
   releaseSystem: { label: '投产系统', dims: ['status', 'org', 'sector', 'system', 'actual_release_day'] },
+  all: {
+    label: '全部',
+    dims: ['status', 'org', 'sector', 'system'],
+  },
 };
 
 export const CHART_TYPES = [
@@ -63,10 +70,45 @@ export const CHART_TYPES = [
   { value: 'stacked_bar_horizontal', label: '堆叠柱状图(横向)' },
   { value: 'line', label: '折线图' },
   { value: 'area', label: '面积图' },
-  { value: 'table', label: '透视表' },
+  { value: 'table', label: '表格' },
 ];
 
 const TEST_TYPE_OF = { sit: 'SIT', uat: 'UAT', nft: 'NFT', sec: 'SEC' };
+
+/** 计算一组任务的节点状态（含单一代表状态 status，供阶段标签展示） */
+function nodeState(tasks) {
+  if (!tasks.length) return { state: 'pending', text: null, status: null };
+  const allTerminal = tasks.every((t) => isTerminalStatus(t.status));
+  const nonTerminal = tasks.find((t) => !isTerminalStatus(t.status));
+  const status = nonTerminal ? nonTerminal.status : tasks[tasks.length - 1].status;
+  const text = tasks.map((t) => t.status).join('、');
+  return { state: allTerminal ? 'done' : 'doing', text, status };
+}
+
+/** 构建单需求链路概要 */
+function buildChain(req, devMap = {}, testMap = {}, rtMap = {}) {
+  const dev = devMap[req.req_code] || [];
+  const t = testMap[req.req_code] || {};
+  const sit = t.SIT || [];
+  const nft = t.NFT || [];
+  const sec = t.SEC || [];
+  const uat = t.UAT || [];
+  const rtStatus = rtMap[req.req_code];
+  const rt = rtStatus ? { status: rtStatus } : null;
+
+  // 阶段顺序：需求 / 开发 / 应用组装 / 非功能测试(按需) / 安全测试(按需) / 用户测试 / 投产
+  const nodes = [
+    { key: '需求', label: '需求', ...nodeState([{ status: req.status }]) },
+    { key: '开发', label: '开发', ...nodeState(dev) },
+    { key: 'SIT', label: '应用组装', ...nodeState(sit) },
+  ];
+  if (nft.length) nodes.push({ key: 'NFT', label: '非功能测试', ...nodeState(nft) });
+  if (sec.length) nodes.push({ key: 'SEC', label: '安全测试', ...nodeState(sec) });
+  nodes.push({ key: 'UAT', label: '用户测试', ...nodeState(uat) });
+  nodes.push({ key: '投产', label: '投产', ...nodeState(rt ? [{ status: rt.status === '已投产' ? '已上线' : '待评审' }] : []) });
+
+  return { nodes };
+}
 
 // ---------------------------------------------------------------------------
 // 上下文：系统映射（编号→名称/机构/板块），构造一次复用
@@ -76,7 +118,24 @@ export function buildContext() {
   for (const s of all('SELECT sys_code, sys_name, org, sector FROM system')) {
     sysMap[s.sys_code] = { name: s.sys_name, org: s.org, sector: s.sector };
   }
-  return { sysMap };
+
+  const devMap = {};
+  for (const d of all('SELECT id, req_code, status, impl_system, impl_org FROM dev_task ORDER BY id ASC')) {
+    (devMap[d.req_code] ||= []).push(d);
+  }
+
+  const testMap = {};
+  for (const t of all('SELECT req_code, test_type, status FROM test_task')) {
+    const bucket = (testMap[t.req_code] ||= {});
+    (bucket[t.test_type] ||= []).push({ status: t.status });
+  }
+
+  const rtMap = {};
+  for (const rt of all('SELECT req_code, status FROM release_task')) {
+    rtMap[rt.req_code] = rt.status;
+  }
+
+  return { sysMap, devMap, testMap, rtMap };
 }
 
 /** 取一条记录涉及的系统编号数组（随源不同字段） */
@@ -96,6 +155,7 @@ function uniq(arr) { return Array.from(new Set(arr)); }
  * @returns {string[]}
  */
 export function extract(source, dim, row, ctx) {
+  const realSource = source === 'all' ? row._source : source;
   const { sysMap } = ctx;
   switch (dim) {
     case 'status': return [row.status || '未知'];
@@ -104,22 +164,44 @@ export function extract(source, dim, row, ctx) {
     case 'owner': return [row.owner || '未分配'];
     case 'release_point': return [row.release_point_id != null ? String(row.release_point_id) : '未分配'];
     case 'system': {
-      const codes = systemCodes(source, row);
+      const codes = systemCodes(realSource, row);
       return codes.length ? uniq(codes) : ['未指定'];
     }
     case 'org': {
-      if (source === 'requirement') {
-        const orgs = uniq(systemCodes(source, row).map((c) => sysMap[c]?.org).filter(Boolean));
+      if (realSource === 'requirement') {
+        const orgs = uniq(systemCodes(realSource, row).map((c) => sysMap[c]?.org).filter(Boolean));
         if (orgs.length) return orgs;
         return [row.propose_dept || '未分配'];
       }
       if (row.impl_org) return [row.impl_org];
-      const orgs = uniq(systemCodes(source, row).map((c) => sysMap[c]?.org).filter(Boolean));
+      const orgs = uniq(systemCodes(realSource, row).map((c) => sysMap[c]?.org).filter(Boolean));
       return orgs.length ? orgs : ['未分配'];
     }
     case 'sector': {
-      const sectors = uniq(systemCodes(source, row).map((c) => sysMap[c]?.sector).filter(Boolean));
+      const sectors = uniq(systemCodes(realSource, row).map((c) => sysMap[c]?.sector).filter(Boolean));
       return sectors.length ? sectors : ['未分类'];
+    }
+    case 'stage': {
+      if (realSource !== 'requirement') return ['未知'];
+      const chain = buildChain(row, ctx.devMap, ctx.testMap, ctx.rtMap);
+      let current = chain.nodes.find((n) => n.state === 'doing');
+      if (!current) {
+        const dones = chain.nodes.filter((n) => n.state === 'done');
+        current = dones[dones.length - 1] || chain.nodes[0];
+      }
+      return [current.label || '需求'];
+    }
+    case 'task_status': {
+      if (realSource !== 'requirement') return ['未知'];
+      const chain = buildChain(row, ctx.devMap, ctx.testMap, ctx.rtMap);
+      let current = chain.nodes.find((n) => n.state === 'doing');
+      if (!current) {
+        const dones = chain.nodes.filter((n) => n.state === 'done');
+        current = dones[dones.length - 1] || chain.nodes[0];
+      }
+      const stg = current.label;
+      const status = current.status || '未开始';
+      return [`${stg}-${status}`];
     }
     default: {
       if (DATE_FIELD[dim]) {
@@ -133,12 +215,13 @@ export function extract(source, dim, row, ctx) {
 
 /** 局部过滤：filters = { dim: 值[] | [起,止] }（时间维度支持区间） */
 export function matchFilters(source, row, filters, ctx) {
+  const realSource = source === 'all' ? row._source : source;
   if (!filters) return true;
   for (const [dim, raw] of Object.entries(filters)) {
     if (raw == null) continue;
     const val = Array.isArray(raw) ? raw : [raw];
     if (!val.length) continue;
-    const vals = extract(source, dim, row, ctx);
+    const vals = extract(realSource, dim, row, ctx);
     if (DIMENSIONS[dim]?.isDate && val.length === 2) {
       const [start, end] = val;
       const hit = vals.some((v) => v !== '未分配' && v >= start && v <= end);

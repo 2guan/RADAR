@@ -92,6 +92,7 @@ export default function Release() {
 
   const columns = [
     { title: '投产状态', dataIndex: 'release_status', key: 'release_status', align: 'center', render: (s) => <StatusBadge status={s} /> },
+    { title: '评审状态', dataIndex: 'review_status', key: 'review_status', align: 'center', render: (s) => (s ? <StatusBadge status={s} /> : '—') },
     {
       title: '计划投产点',
       dataIndex: 'release_date',
@@ -157,7 +158,10 @@ export default function Release() {
         onRowClick={(r) => r.initiated && setDetailReq(r.req_code)}
         mobileCard={(r) => (
           <Space direction="vertical" size={4} style={{ width: '100%' }}>
-            <Space style={{ justifyContent: 'space-between', width: '100%' }}><strong>{r.req_code}</strong><StatusBadge status={r.release_status} /></Space>
+            <Space style={{ justifyContent: 'space-between', width: '100%' }}>
+              <strong>{r.req_code}</strong>
+              <Space size={4}><StatusBadge status={r.release_status} />{r.review_status && <StatusBadge status={r.review_status} />}</Space>
+            </Space>
             <div>{r.title}</div>
             {r.release_date && (
               <div style={{ fontSize: '11px', color: 'var(--radar-text-secondary)' }}>

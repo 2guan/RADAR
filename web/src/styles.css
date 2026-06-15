@@ -417,12 +417,18 @@ body {
 .editor-form .ant-picker-small { min-height: 24px !important; height: 24px !important; }
 .editor-form .ant-input-affix-wrapper-sm > .ant-input { height: auto !important; }
 
-/* 标题栏状态选择器：宽度随内容自适应、文字居中、按主题状态色着色（与 StatusBadge 同套语义变量） */
+/* 标题栏状态选择器：宽度随内容自适应、保留下拉箭头、按主题状态色着色（与 StatusBadge 同套语义变量） */
 .status-select { display: inline-flex; }
-.status-select .ant-select-sm .ant-select-selector { padding-inline: 4px !important; }
-.status-select .ant-select-selection-item { font-weight: 600; text-align: center; inset-inline-start: 0 !important; inset-inline-end: 0 !important; padding-inline: 2px !important; }
-.status-select .ant-select-selection-placeholder { text-align: center; }
-.status-select-dropdown .ant-select-item-option-content { text-align: center; }
+/* 覆盖 DictSelect 默认 min-width:140，使色块紧贴文字（宽度由调用方按文字像素宽度精确计算，避免前后空白或省略号） */
+.status-select .ant-select { min-width: 0 !important; }
+/* 紧凑内边距 + 右侧下拉箭头（小尺寸、贴近文字） */
+.status-select .ant-select-sm .ant-select-selector { padding-inline: 8px !important; }
+.status-select .ant-select-arrow { inset-inline-end: 6px !important; font-size: 10px; }
+/* 选中项随内容排布，右侧为箭头留位，不居中拉伸（消除前后空白） */
+.status-select .ant-select-selection-item { font-weight: 600; padding-inline-end: 16px !important; }
+.status-select .ant-select-selection-placeholder { padding-inline-end: 16px !important; }
+/* 下拉项完整显示（配合 popupMatchSelectWidth={false}），不出现省略号 */
+.status-select-dropdown .ant-select-item-option-content { white-space: nowrap; overflow: visible; text-overflow: clip; }
 .status-select-initial .ant-select-selector { border-color: var(--radar-status-initial) !important; background: var(--radar-status-initial-soft) !important; }
 .status-select-initial .ant-select-selection-item { color: var(--radar-status-initial) !important; }
 .status-select-in-progress .ant-select-selector { border-color: var(--radar-status-in-progress) !important; background: var(--radar-status-in-progress-soft) !important; }
@@ -593,7 +599,7 @@ body {
   color: var(--radar-ink); font-weight: 600;
 }
 .dash-pivot .pivot-total-row > td { font-weight: 700; background: var(--radar-primary-soft); }
-/* 透视表手机端紧凑：缩小字号与单元格内边距，使列自适应容器、不出横向滚动条 */
+/* 表格手机端紧凑：缩小字号与单元格内边距，使列自适应容器、不出横向滚动条 */
 .dash-pivot-compact .ant-table-cell,
 .dash-pivot-compact .ant-table-thead > tr > th,
 .dash-pivot-compact .ant-table-tbody > tr > td {

@@ -12,7 +12,7 @@ import { apiGet } from '../api/client.js';
 // 简单的进程内缓存，避免重复请求
 const cache = {};
 
-export default function DictSelect({ category, stage, value, onChange, placeholder, style, mode, allowClear = true, size, showSearch = true, popupClassName }) {
+export default function DictSelect({ category, stage, value, onChange, placeholder, style, mode, allowClear = true, size, showSearch = true, popupClassName, popupMatchSelectWidth }) {
   const [options, setOptions] = useState([]);
 
   useEffect(() => {
@@ -31,6 +31,7 @@ export default function DictSelect({ category, stage, value, onChange, placehold
     <Select
       value={value} onChange={onChange} mode={mode} allowClear={allowClear} size={size}
       placeholder={placeholder || '请选择'} style={{ minWidth: 140, ...style }}
+      popupMatchSelectWidth={popupMatchSelectWidth}
       classNames={popupClassName ? { popup: { root: popupClassName } } : undefined}
       showSearch={showSearch} optionFilterProp="label" options={options}
     />

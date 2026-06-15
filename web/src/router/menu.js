@@ -9,7 +9,7 @@
 import React from 'react';
 import {
   DashboardOutlined, AppstoreOutlined, FileTextOutlined, CodeOutlined,
-  ExperimentOutlined, RocketOutlined, TeamOutlined, SettingOutlined,
+  ExperimentOutlined, RocketOutlined, TeamOutlined, SettingOutlined, BugOutlined,
 } from '@ant-design/icons';
 
 export const MENU = [
@@ -26,6 +26,7 @@ export const MENU = [
       { key: '/test/sec', label: '安全测试', module: 'test' },
     ],
   },
+  { key: '/issues', label: '问题管理', module: 'issue', icon: React.createElement(BugOutlined) },
   { key: '/release', label: '投产管理', module: 'release', icon: React.createElement(RocketOutlined) },
   { key: '/users', label: '人员管理', module: 'user', icon: React.createElement(TeamOutlined) },
   { key: '/settings', label: '系统设置', module: 'settings', icon: React.createElement(SettingOutlined) },

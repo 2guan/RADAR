@@ -44,6 +44,27 @@ function recomputeReleaseStatus(releaseTaskId) {
   }
 }
 
+// 手动设置后不被自动逻辑覆盖的评审状态
+const REVIEW_MANUAL = ['评审撤销', '应急审批'];
+
+/**
+ * 重算评审状态：任一会签驳回 -> 评审拒绝；全部已签署 -> 评审同意；否则 待评审。
+ * 手动状态（评审撤销/应急审批）不被覆盖。返回最终评审状态。
+ */
+function recomputeReviewStatus(releaseTaskId) {
+  const rt = get('SELECT review_status FROM release_task WHERE id = ?', releaseTaskId);
+  if (!rt) return null;
+  if (REVIEW_MANUAL.includes(rt.review_status)) return rt.review_status;
+  const { total, signed, rejected } = signoffSummary(releaseTaskId);
+  let next = '待评审';
+  if (rejected > 0) next = '评审拒绝';
+  else if (total > 0 && signed === total) next = '评审同意';
+  if (next !== rt.review_status) {
+    run(`UPDATE release_task SET review_status=?, updated_at=datetime('now','localtime') WHERE id=?`, next, releaseTaskId);
+  }
+  return next;
+}
+
 export default async function releaseRoutes(fastify) {
   // 列表：当前投产窗口下所有需求 + 投产/会签进度
   fastify.post('/release/list', { preHandler: fastify.requirePerm('release', 'view') }, async (request) => {
@@ -168,6 +189,7 @@ export default async function releaseRoutes(fastify) {
         title: r.title,
         release_date: rpMap[r.release_point_id] || null,
         release_status: rt?.status || '未发起',
+        review_status: rt?.review_status || null,
         owner: rt?.owner || null,
         uat_ready: uatAllTerminal(r.req_code),
         signoff: summary,
@@ -252,11 +274,18 @@ export default async function releaseRoutes(fastify) {
   fastify.put('/release/:reqCode', { preHandler: fastify.requirePerm('release', 'edit') }, async (request) => {
     const rt = get('SELECT * FROM release_task WHERE req_code = ?', request.params.reqCode);
     if (!rt) throw notFound('投产任务未发起');
-    const { owner, status } = request.body || {};
+    const { owner, status, review_status } = request.body || {};
+
+    // 评审状态手动修改：仅允许字典内取值（待评审/评审同意/评审拒绝/评审撤销/应急审批）
+    if (review_status !== undefined) {
+      const valid = get('SELECT 1 FROM dict_item WHERE category = ? AND attr_value = ?', 'review_status', review_status);
+      if (!valid) throw badRequest('评审状态取值非法');
+    }
 
     const updateData = {};
     if (owner !== undefined) updateData.owner = owner;
     if (status !== undefined) updateData.status = status;
+    if (review_status !== undefined) updateData.review_status = review_status;
 
     const keys = Object.keys(updateData);
     if (keys.length > 0) {
@@ -265,7 +294,7 @@ export default async function releaseRoutes(fastify) {
         ...keys.map(k => updateData[k]), rt.id
       );
 
-      const labels = { owner: '投产负责人', status: '投产状态' };
+      const labels = { owner: '投产负责人', status: '投产状态', review_status: '评审状态' };
       auditUpdate('release', rt.id, rt.req_code, request.currentUser?.name, rt, updateData, labels);
     }
 
@@ -290,6 +319,15 @@ export default async function releaseRoutes(fastify) {
     );
     auditUpdate('release', so.release_task_id, so.role_name, request.currentUser?.name,
       { r: so.result }, { r: result }, { r: `会签-${so.role_name}` });
+
+    // 会签结果变化后自动重算评审状态（全部签署->评审同意，任一驳回->评审拒绝），并留痕
+    const beforeReview = get('SELECT review_status FROM release_task WHERE id = ?', so.release_task_id)?.review_status;
+    const afterReview = recomputeReviewStatus(so.release_task_id);
+    if (beforeReview !== afterReview) {
+      const rt = get('SELECT req_code FROM release_task WHERE id = ?', so.release_task_id);
+      auditUpdate('release', so.release_task_id, rt?.req_code, request.currentUser?.name,
+        { v: beforeReview }, { v: afterReview }, { v: '评审状态' });
+    }
     return ok(null, '签署完成');
   });
 

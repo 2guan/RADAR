@@ -54,6 +54,13 @@ export const config = {
     ],
   },
 
+  // 外部 PAMS 问题管理系统（问题清单/明细同步源）
+  pams: {
+    baseUrl: process.env.PAMS_BASE_URL || 'https://aiguan.xyz',
+    apiKey: process.env.PAMS_API_KEY || 'pams-openclaw-a9b4f7e2d1c5',
+    timeout: intEnv('PAMS_TIMEOUT', 20000),
+  },
+
   // 初始超级管理员账号
   superAdmin: {
     phone: process.env.ADMIN_PHONE || 'admin',

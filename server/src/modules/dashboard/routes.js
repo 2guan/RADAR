@@ -38,6 +38,17 @@ function loadRows(source, codes) {
     case 'releaseSystem':
       rows = all(`SELECT rs.*, rt.req_code AS req_code FROM release_system rs
                   JOIN release_task rt ON rt.id = rs.release_task_id`); break;
+    case 'all': {
+      const requirement = loadRows('requirement', null).map((r) => ({ ...r, _source: 'requirement' }));
+      const dev = loadRows('dev', null).map((r) => ({ ...r, _source: 'dev' }));
+      const sit = loadRows('sit', null).map((r) => ({ ...r, _source: 'sit' }));
+      const uat = loadRows('uat', null).map((r) => ({ ...r, _source: 'uat' }));
+      const nft = loadRows('nft', null).map((r) => ({ ...r, _source: 'nft' }));
+      const sec = loadRows('sec', null).map((r) => ({ ...r, _source: 'sec' }));
+      const releaseSystem = loadRows('releaseSystem', null).map((r) => ({ ...r, _source: 'releaseSystem' }));
+      rows = [...requirement, ...dev, ...sit, ...uat, ...nft, ...sec, ...releaseSystem];
+      break;
+    }
     default: throw badRequest('未知数据源');
   }
   if (!codes) return rows;
@@ -48,12 +59,13 @@ function loadRows(source, codes) {
 
 /** 钻取：把一条记录投影成列表展示行 */
 function projectRecord(source, row, ctx) {
+  const realSource = source === 'all' ? row._source : source;
   const sysName = (code) => ctx.sysMap[code]?.name || code;
-  const systems = extract(source, 'system', row, ctx).map(sysName).join('、');
-  if (source === 'requirement') {
-    return { req_code: row.req_code, code: row.req_code, name: row.title, status: row.status, system: systems, org: extract(source, 'org', row, ctx).join('、'), owner: row.proposer || '' };
+  const systems = extract(realSource, 'system', row, ctx).map(sysName).join('、');
+  if (realSource === 'requirement') {
+    return { req_code: row.req_code, code: row.req_code, name: row.title, status: row.status, system: systems, org: extract(realSource, 'org', row, ctx).join('、'), owner: row.proposer || '' };
   }
-  if (source === 'releaseSystem') {
+  if (realSource === 'releaseSystem') {
     return { req_code: row.req_code, code: row.system_code, name: sysName(row.system_code), status: row.status, system: systems, org: row.impl_org || '', owner: '' };
   }
   return { req_code: row.req_code, code: row.task_code, name: row.task_name || row.task_code, status: row.status, system: systems, org: row.impl_org || '', owner: row.owner || '' };

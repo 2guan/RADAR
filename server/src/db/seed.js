@@ -29,6 +29,7 @@ const MODULE_ACTIONS = {
   dashboard: ['view', 'manage'],
   overview: ['view'],
   requirement: ['view', 'create', 'edit', 'delete', 'import', 'export'],
+  issue: ['view', 'sync'],
   dev: ['view', 'create', 'edit', 'delete', 'import', 'export', 'dev.intake'],
   test: ['view', 'create', 'edit', 'delete', 'import', 'export', 'test.intake'],
   release: ['view', 'edit', 'export', 'release.signoff', 'release.register'],
@@ -37,7 +38,7 @@ const MODULE_ACTIONS = {
 };
 
 // 业务主链路模块（非管理类角色默认可见）
-const CHAIN_MODULES = ['dashboard', 'overview', 'requirement', 'dev', 'test', 'release'];
+const CHAIN_MODULES = ['dashboard', 'overview', 'requirement', 'issue', 'dev', 'test', 'release'];
 
 // 流程状态字典：[阶段, 属性值, 显示值, 排序, 是否终态]
 const PROCESS_STATUS = [
@@ -68,6 +69,8 @@ const VERSION_TYPE = [['常规版本', 1], ['应急版本', 2], ['重大版本',
 const RELEASE_STATUS = [['待投产', 1], ['已投产', 2], ['已取消', 3]];
 // 需求类型（默认值，可在系统设置中增删）
 const REQ_TYPE = [['新增需求', 1], ['已有功能的需求变更', 2], ['缺陷修复', 3], ['紧急变更', 4]];
+// 评审状态（投产评审会签）：待评审为默认，评审同意/拒绝自动推导，评审撤销/应急审批手动设置
+const REVIEW_STATUS = [['待评审', 1], ['评审同意', 2], ['评审拒绝', 3], ['评审撤销', 4], ['应急审批', 5]];
 
 // 机构（实施机构 / 组织机构共用）：[属性值, 显示值, 排序]
 const ORGS = [
@@ -220,6 +223,7 @@ export function runSeed() {
     for (const [attr, sort] of VERSION_TYPE) seedDict('version_type', attr, attr, sort);
     for (const [attr, sort] of RELEASE_STATUS) seedDict('release_status', attr, attr, sort);
     for (const [attr, sort] of REQ_TYPE) seedDict('req_type', attr, attr, sort);
+    for (const [attr, sort] of REVIEW_STATUS) seedDict('review_status', attr, attr, sort);
     for (const [attr, disp, sort] of ORGS) seedDict('org', attr, disp, sort);
     for (const [attr, disp, sort] of SECTORS) seedDict('sector', attr, disp, sort);
 

@@ -49,12 +49,48 @@ async function fetchMeta() {
     return { value: String(p.id), label };
   });
 
-  return { sources, chartTypes: base.chartTypes || [], dimsBySource, dimByKey, dictOptions, dictLabel, systemList, sysLabel, rpList, rpLabel };
+  const stageList = [
+    { value: '需求', label: '需求' },
+    { value: '开发', label: '开发' },
+    { value: '应用组装', label: '应用组装' },
+    { value: '非功能测试', label: '非功能测试' },
+    { value: '安全测试', label: '安全测试' },
+    { value: '用户测试', label: '用户测试' },
+    { value: '投产', label: '投产' },
+  ];
+  const stageLabel = Object.fromEntries(stageList.map((s) => [s.value, s.label]));
+
+  const processStatusRows = dictArr.find(([c]) => c === 'process_status')?.[1] || [];
+  const taskStatusList = [];
+  const stages = ['需求', '开发', '应用组装', '非功能测试', '安全测试', '用户测试', '投产'];
+  stages.forEach((stg) => {
+    taskStatusList.push({ value: `${stg}-未开始`, label: `${stg} - 未开始` });
+  });
+  processStatusRows.forEach((item) => {
+    const stg = item.extra?.stage;
+    const statusVal = item.attr_value;
+    if (stg === '需求' || stg === '开发' || stg === '投产') {
+      taskStatusList.push({ value: `${stg}-${statusVal}`, label: `${stg} - ${statusVal}` });
+    } else if (stg === '测试') {
+      taskStatusList.push({ value: `应用组装-${statusVal}`, label: `应用组装 - ${statusVal}` });
+      taskStatusList.push({ value: `非功能测试-${statusVal}`, label: `非功能测试 - ${statusVal}` });
+      taskStatusList.push({ value: `安全测试-${statusVal}`, label: `安全测试 - ${statusVal}` });
+      taskStatusList.push({ value: `用户测试-${statusVal}`, label: `用户测试 - ${statusVal}` });
+    }
+  });
+  const taskStatusLabel = Object.fromEntries(taskStatusList.map((t) => [t.value, t.label]));
+
+  return {
+    sources, chartTypes: base.chartTypes || [], dimsBySource, dimByKey,
+    dictOptions, dictLabel, systemList, sysLabel, rpList, rpLabel,
+    stageList, stageLabel, taskStatusList, taskStatusLabel,
+  };
 }
 
 const EMPTY_META = {
   sources: [], chartTypes: [], dimsBySource: {}, dimByKey: {},
   dictOptions: {}, dictLabel: {}, systemList: [], sysLabel: {}, rpList: [], rpLabel: {},
+  stageList: [], stageLabel: {}, taskStatusList: [], taskStatusLabel: {},
 };
 
 export function useDimensionMeta() {
@@ -86,6 +122,8 @@ export function useDimensionMeta() {
     if (os.startsWith('dict:')) return meta.dictOptions[os.slice(5)] || [];
     if (os === 'system') return meta.systemList;
     if (os === 'release_point') return meta.rpList;
+    if (os === 'stage') return meta.stageList;
+    if (os === 'task_status') return meta.taskStatusList;
     return [];
   };
 
@@ -97,6 +135,8 @@ export function useDimensionMeta() {
     if (os.startsWith('dict:')) return meta.dictLabel[os.slice(5)]?.[raw] || raw;
     if (os === 'system') return meta.sysLabel[raw] || raw;
     if (os === 'release_point') return meta.rpLabel[raw] || raw;
+    if (os === 'stage') return meta.stageLabel[raw] || raw;
+    if (os === 'task_status') return meta.taskStatusLabel[raw] || raw;
     return raw;
   };
 

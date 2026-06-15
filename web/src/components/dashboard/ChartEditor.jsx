@@ -44,7 +44,7 @@ export default function ChartEditor({ open, onClose, onSave, initialData, scope,
         title: initialData.title,
         chart_type: initialData.chart_type,
         col_span: initialData.col_span || 12,
-        height: initialData.height || 320,
+        height: initialData.height !== undefined && initialData.height !== null ? initialData.height : 320,
         source: cfg.source || 'requirement',
         dimension: cfg.dimension,
         xAxisDimension: cfg.xAxisDimension,
@@ -147,7 +147,7 @@ export default function ChartEditor({ open, onClose, onSave, initialData, scope,
         </div>
 
         {supportsX && (
-          <Form.Item name="xAxisDimension" label="次维度（堆叠/透视/横轴）" tooltip="用于堆叠柱、折线多系列或透视表的列">
+          <Form.Item name="xAxisDimension" label="次维度（堆叠/表格列/横轴）" tooltip="用于堆叠柱、折线多系列或表格的列">
             <Select options={dimOptions} placeholder="无（单一维度）" allowClear />
           </Form.Item>
         )}
@@ -210,7 +210,7 @@ export default function ChartEditor({ open, onClose, onSave, initialData, scope,
               <Radio.Button value={24}>全宽</Radio.Button>
             </Radio.Group>
           </Form.Item>
-          <Form.Item name="height" label="高度(px)" rules={[{ required: true }]} tooltip="透视表可设 0 自适应">
+          <Form.Item name="height" label="高度(px)" rules={[{ required: true }]} tooltip="表格可设 0 自适应">
             <InputNumber min={0} max={900} step={20} style={{ width: 120 }} />
           </Form.Item>
         </Space>
