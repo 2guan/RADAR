@@ -35,9 +35,8 @@ export const useAppStore = create((set, get) => ({
   permissions: [],          // ['module:action', ...] 或 ['*']
   // 平台公开信息
   platform: {},
-  // 主题：light / dark（首次跟随系统）
-  theme: localStorage.getItem(THEME_KEY)
-    || (window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
+  // 主题：light / dark（默认蔚蓝白天；用户本地选择优先，登出后仍保留上次选择）
+  theme: localStorage.getItem(THEME_KEY) || 'light',
   // 主题配色预设（用户本地优先，其次平台默认）
   preset: localStorage.getItem(PRESET_KEY) || DEFAULT_PRESET,
   // 当前所选投产窗口 id 数组（空数组 = 全部投产点）
