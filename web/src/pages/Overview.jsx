@@ -1095,7 +1095,7 @@ export default function Overview() {
         const conf = filterConfigs.find(c => c.field === field);
         return { field, value, op: conf?.op || 'eq' };
       })
-      .filter((item) => item.value !== undefined && item.value !== null && item.value !== '');
+      .filter((item) => item.value !== undefined && item.value !== null && item.value !== '' && !(Array.isArray(item.value) && item.value.length === 0));
     setFilterQuery(arr);
   };
 
