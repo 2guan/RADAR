@@ -50,6 +50,22 @@ export default function CrudManager({
     tableRef.current?.reload();
   };
 
+  const handleCancel = () => {
+    if (form.isFieldsTouched()) {
+      Modal.confirm({
+        title: '确认取消',
+        content: '检测到您已修改了内容，确认要取消并退出吗？未保存的内容将丢失。',
+        okText: '确认取消',
+        cancelText: '保留修改',
+        onOk: () => {
+          setOpen(false);
+        }
+      });
+    } else {
+      setOpen(false);
+    }
+  };
+
   const onDelete = async (row) => {
     await apiDelete(`${apiBase}/${row[rowKey]}`);
     message.success('已删除');
@@ -157,7 +173,7 @@ export default function CrudManager({
         />
       )}
 
-      <Modal open={open} title={current ? `编辑${title}` : `新增${title}`} onCancel={() => setOpen(false)} onOk={onSave} okText="保存">
+      <Modal open={open} title={current ? `编辑${title}` : `新增${title}`} onCancel={handleCancel} onOk={onSave} okText="保存">
         <Form form={form} layout="vertical">{fields(form, current)}</Form>
       </Modal>
     </>

@@ -21,8 +21,25 @@ export default function EditorShell({
   onCancel,
   okButtonProps,
   cancelText = '取消',
+  isDirty = false,
   children,
 }) {
+  const handleCancel = (e) => {
+    if (mode !== 'page' && isDirty) {
+      Modal.confirm({
+        title: '确认取消',
+        content: '检测到您已修改了内容，确认要取消并退出吗？未保存的内容将丢失。',
+        okText: '确认取消',
+        cancelText: '保留修改',
+        onOk: () => {
+          onCancel?.(e);
+        }
+      });
+    } else {
+      onCancel?.(e);
+    }
+  };
+
   if (mode !== 'page') {
     return (
       <Modal
@@ -32,7 +49,7 @@ export default function EditorShell({
         footer={footer}
         okText={okText}
         onOk={onOk}
-        onCancel={onCancel}
+        onCancel={handleCancel}
         okButtonProps={okButtonProps}
         cancelText={cancelText}
         destroyOnHidden

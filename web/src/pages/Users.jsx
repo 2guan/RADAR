@@ -94,6 +94,22 @@ export default function Users() {
     tableRef.current?.reload();
   };
 
+  const handleCancel = () => {
+    if (form.isFieldsTouched()) {
+      Modal.confirm({
+        title: '确认取消',
+        content: '检测到您已修改了内容，确认要取消并退出吗？未保存的内容将丢失。',
+        okText: '确认取消',
+        cancelText: '保留修改',
+        onOk: () => {
+          setOpen(false);
+        }
+      });
+    } else {
+      setOpen(false);
+    }
+  };
+
   // 删除人员，确认后调用 API 并在成功后刷新表格数据
   const onDelete = async (row) => { await apiDelete(`/users/${row.id}`); message.success('已删除'); tableRef.current?.reload(); };
 
@@ -237,7 +253,7 @@ export default function Users() {
         templateFilename="人员导入模板.xlsx"
       />
 
-      <Modal open={open} title={current ? '编辑人员' : '新增人员'} onCancel={() => setOpen(false)} onOk={onSave} okText="保存">
+      <Modal open={open} title={current ? '编辑人员' : '新增人员'} onCancel={handleCancel} onOk={onSave} okText="保存">
         <Form form={form} layout="vertical">
           <Form.Item name="phone" label="手机号（登录名）" rules={[{ required: true, message: '请输入手机号' }]}>
             <Input disabled={!!current} placeholder="如 13800010000" />

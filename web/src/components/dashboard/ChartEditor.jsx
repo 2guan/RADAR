@@ -98,6 +98,22 @@ export default function ChartEditor({ open, onClose, onSave, initialData, scope,
     onSave({ title: v.title, chart_type: v.chart_type, col_span: v.col_span, height: v.height, scope, config });
   };
 
+  const handleCancel = () => {
+    if (form.isFieldsTouched()) {
+      Modal.confirm({
+        title: '确认取消',
+        content: '检测到您已修改了内容，确认要取消并退出吗？未保存的内容将丢失。',
+        okText: '确认取消',
+        cancelText: '保留修改',
+        onOk: () => {
+          onClose();
+        }
+      });
+    } else {
+      onClose();
+    }
+  };
+
   // 分组列表（主/次维度共用渲染）
   const renderGroups = (name, dim) => (
     <Form.List name={name}>
@@ -127,7 +143,7 @@ export default function ChartEditor({ open, onClose, onSave, initialData, scope,
   );
 
   return (
-    <Modal title={initialData ? '编辑图表' : '新增图表'} open={open} onOk={handleOk} onCancel={onClose}
+    <Modal title={initialData ? '编辑图表' : '新增图表'} open={open} onOk={handleOk} onCancel={handleCancel}
       width={620} okText="保存" cancelText="取消" destroyOnHidden>
       <Form form={form} layout="vertical">
         <Form.Item name="title" label="图表标题" rules={[{ required: true, message: '请输入标题' }]}>

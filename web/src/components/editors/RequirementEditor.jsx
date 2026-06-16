@@ -229,6 +229,7 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
       onCancel={onClose}
       okButtonProps={readonly ? { style: { display: 'none' } } : undefined}
       cancelText={readonly ? '关闭' : '取消'}
+      isDirty={form.isFieldsTouched()}
       title={(
         <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 10, rowGap: 6, minWidth: 0, width: '100%', paddingRight: 76 }}>
           {isEdit || current ? (

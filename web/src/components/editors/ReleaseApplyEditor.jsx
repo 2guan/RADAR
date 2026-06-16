@@ -55,6 +55,8 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
   const [refTab, setRefTab] = useState('req');
 
   const debounceRef = useRef(null);
+  const initialSelReqsRef = useRef([]);
+  const initialSelIssuesRef = useRef([]);
 
   useEffect(() => {
     if (mode !== 'page' && !open) return;
@@ -73,8 +75,12 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
       apiGet(`/release-apply/by-code/${encodeURIComponent(code)}`).then((d) => { setCurrent(d); form.setFieldsValue(d); });
     } else {
       setCurrent(null);
-      setSelReqs(Array.isArray(defaultReqCodes) ? [...defaultReqCodes] : []);
-      setSelIssues(Array.isArray(defaultIssueCodes) ? [...defaultIssueCodes] : []);
+      const sr = Array.isArray(defaultReqCodes) ? [...defaultReqCodes] : [];
+      const si = Array.isArray(defaultIssueCodes) ? [...defaultIssueCodes] : [];
+      setSelReqs(sr);
+      setSelIssues(si);
+      initialSelReqsRef.current = sr;
+      initialSelIssuesRef.current = si;
       setRefTab(defaultType);
       form.resetFields();
       form.setFieldsValue({
@@ -99,6 +105,8 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
     }
     setSelReqs(sr);
     setSelIssues(si);
+    initialSelReqsRef.current = sr;
+    initialSelIssuesRef.current = si;
   }, [current, issues]);
 
   const sysMap = {};
@@ -240,6 +248,13 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
     );
   };
 
+  const isDirty = () => {
+    if (form.isFieldsTouched()) return true;
+    if (JSON.stringify(selReqs) !== JSON.stringify(initialSelReqsRef.current)) return true;
+    if (JSON.stringify(selIssues) !== JSON.stringify(initialSelIssuesRef.current)) return true;
+    return false;
+  };
+
   return (
     <EditorShell
       mode={mode}
@@ -250,6 +265,7 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
       onCancel={onClose}
       okButtonProps={readonly ? { style: { display: 'none' } } : undefined}
       cancelText={readonly ? '关闭' : '取消'}
+      isDirty={isDirty()}
       title={(
         <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 10, rowGap: 6, minWidth: 0, width: '100%', paddingRight: 76 }}>
           {isEdit || current ? (

@@ -95,6 +95,7 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
       onCancel={onClose}
       okButtonProps={readonly ? { style: { display: 'none' } } : undefined}
       cancelText={readonly ? '关闭' : '取消'}
+      isDirty={form.isFieldsTouched()}
       title={(
         <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 10, rowGap: 6, minWidth: 0, width: '100%', paddingRight: 76 }}>
           <CodeLink module={cfg.entity} code={current?.task_code} fallback={cfg.title} />
