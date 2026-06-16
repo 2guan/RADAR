@@ -94,8 +94,16 @@ export default function ReleaseApply() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {units.map((u, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                {u.artifact_type && <Tag className="status-tag tag-system" style={{ margin: 0, borderRadius: 2 }}>{u.artifact_type}</Tag>}
-                {u.ferry_status && <StatusBadge status={u.ferry_status} />}
+                {u.artifact_type && (
+                  <Tag className="status-tag tag-system" style={{ margin: 0, borderRadius: 2, width: 80, display: 'inline-flex', justifyContent: 'center' }}>
+                    {u.artifact_type}
+                  </Tag>
+                )}
+                {u.ferry_status && (
+                  <span style={{ display: 'inline-flex', width: 68, justifyContent: 'center' }}>
+                    <StatusBadge status={u.ferry_status} />
+                  </span>
+                )}
               </div>
             ))}
           </div>
