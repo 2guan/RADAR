@@ -35,6 +35,7 @@ export default function Requirements() {
   // 下拉列表选项数据源
   const [points, setPoints] = useState([]);
   const [orgs, setOrgs] = useState([]);
+  const [reqDepts, setReqDepts] = useState([]);
   const [statuses, setStatuses] = useState([]);
   const [types, setTypes] = useState([]);
   const [users, setUsers] = useState([]);
@@ -43,6 +44,7 @@ export default function Requirements() {
   useEffect(() => {
     apiGet('/release-points/all').then(setPoints).catch(() => {});
     apiGet('/dict/by-category/org').then(setOrgs).catch(() => {});
+    apiGet('/dict/by-category/req_dept').then(setReqDepts).catch(() => {});
     apiGet('/dict/by-category/process_status').then(res => {
       const filtered = (res || []).filter(item => item.extra?.stage === '需求');
       setStatuses(filtered);
@@ -54,6 +56,7 @@ export default function Requirements() {
 
   const pointOptions = points.map(p => ({ value: p.id, label: p.release_date }));
   const orgOptions = orgs.map(o => ({ value: o.attr_value, label: o.display_value }));
+  const reqDeptOptions = reqDepts.map(d => ({ value: d.attr_value, label: d.display_value }));
   const statusOptions = statuses.map(s => ({ value: s.attr_value, label: s.display_value }));
   const typeOptions = types.map(t => ({ value: t.attr_value, label: t.display_value }));
   const userOptions = users.map(u => ({ value: u.name, label: `${u.name} (${u.phone})` }));
@@ -66,7 +69,7 @@ export default function Requirements() {
     { field: 'org', label: '实施机构', type: 'select', op: 'in', options: orgOptions },
     { field: 'status', label: '需求状态', type: 'select', op: 'in', options: statusOptions },
     { field: 'req_type', label: '需求类型', type: 'select', op: 'in', options: typeOptions },
-    { field: 'propose_dept', label: '提出部门', type: 'select', op: 'in', options: orgOptions },
+    { field: 'propose_dept', label: '提出部门', type: 'select', op: 'in', options: reqDeptOptions },
     { field: 'proposer', label: '提出人', type: 'select', op: 'in', options: userOptions },
     { field: 'owners', label: '负责人', type: 'select', op: 'in', options: userOptions },
     { field: 'main_systems', label: '主责系统', type: 'select', op: 'in', options: systemOptions },

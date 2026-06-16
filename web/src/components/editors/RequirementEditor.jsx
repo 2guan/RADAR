@@ -362,32 +362,8 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
               <Form.Item name="title" label="需求标题" rules={[{ required: !readonly, message: '请输入需求标题' }]} style={{ marginBottom: 8 }}>
                 <Input placeholder="请输入需求标题" size="small" readOnly={readonly} />
               </Form.Item>
-              <Form.Item name="summary" label="需求概述" rules={[{ max: 500, message: '不超过 500 字' }]} style={{ marginBottom: 18 }}>
-                <Input.TextArea rows={3} placeholder="描述该需求的核心背景与业务诉求（500字以内）" showCount={!readonly} maxLength={500} style={{ fontSize: 12 }} readOnly={readonly} />
-              </Form.Item>
-            </div>
-
-            {/* 相关负责人 */}
-            <div className="form-section-card">
-              <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>相关负责人</div>
-              <Row gutter={8}>
-                {/* 农信提出部门 + 农信提出人：手机端各占一行（充满），PC 端双栏 */}
-                <Col span={isMobile ? 24 : 12}>
-                  <Form.Item name="propose_dept" label="农信提出部门" style={{ marginBottom: 8 }}>
-                    <DictSelect category="org" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} size="small" />
-                  </Form.Item>
-                </Col>
-                <Col span={isMobile ? 24 : 12}>
-                  <Form.Item name="proposer" label="农信提出人" style={{ marginBottom: 8 }}>
-                    <PersonPicker style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择提出人" size="small" />
-                  </Form.Item>
-                </Col>
-              </Row>
-              <Form.Item name="yn_owner" label="云南农信业务负责人" style={{ marginBottom: 8 }}>
-                <PersonPicker style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择云南农信业务负责人" size="small" />
-              </Form.Item>
-              <Form.Item name="jk_owner" label="建信金科业务负责人" style={{ marginBottom: 0 }}>
-                <PersonPicker style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择建信金科业务负责人" size="small" />
+              <Form.Item name="summary" label="需求概述" rules={[{ max: 2000, message: '不超过 2000 字' }]} style={{ marginBottom: 18 }}>
+                <Input.TextArea rows={15} placeholder="描述该需求的核心背景与业务诉求（2000字以内）" showCount={!readonly} maxLength={2000} style={{ fontSize: 12 }} readOnly={readonly} />
               </Form.Item>
             </div>
           </Col>
@@ -412,6 +388,30 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
               {/* 协同测试系统：标题右侧选择框，可多选，已选展示在下方 */}
               <Form.Item name="collab_test_systems" noStyle>
                 <SystemPickerField title="协同测试系统" placeholder="协同测试系统检索" readonly={readonly} />
+              </Form.Item>
+            </div>
+
+            {/* 相关负责人 */}
+            <div className="form-section-card">
+              <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>相关负责人</div>
+              <Row gutter={8}>
+                {/* 农信提出部门 + 农信提出人：手机端各占一行（充满），PC 端双栏 */}
+                <Col span={isMobile ? 24 : 12}>
+                  <Form.Item name="propose_dept" label="农信提出部门" style={{ marginBottom: 8 }}>
+                    <DictSelect category="req_dept" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} size="small" />
+                  </Form.Item>
+                </Col>
+                <Col span={isMobile ? 24 : 12}>
+                  <Form.Item name="proposer" label="农信提出人" style={{ marginBottom: 8 }}>
+                    <PersonPicker style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择提出人" size="small" />
+                  </Form.Item>
+                </Col>
+              </Row>
+              <Form.Item name="yn_owner" label="云南农信业务负责人" style={{ marginBottom: 8 }}>
+                <PersonPicker style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择云南农信业务负责人" size="small" />
+              </Form.Item>
+              <Form.Item name="jk_owner" label="建信金科业务负责人" style={{ marginBottom: 0 }}>
+                <PersonPicker style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择建信金科业务负责人" size="small" />
               </Form.Item>
             </div>
 

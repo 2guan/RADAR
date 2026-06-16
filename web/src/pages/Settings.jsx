@@ -373,6 +373,7 @@ export default function Settings() {
       { key: 'release', label: '投产状态', children: <DictManager category="release_status" title="投产状态" /> },
       { key: 'review', label: '评审状态', children: <DictManager category="review_status" title="评审状态" /> },
       { key: 'reqtype', label: '需求类型', children: <DictManager category="req_type" title="需求类型" /> },
+      { key: 'reqdept', label: '需求部门', children: <DictManager category="req_dept" title="需求部门" /> },
       { key: 'artifact', label: '制品类型', children: <DictManager category="artifact_type" title="制品类型" /> },
       { key: 'ferry', label: '摆渡状态', children: <DictManager category="ferry_status" title="摆渡状态" /> },
     ]} />

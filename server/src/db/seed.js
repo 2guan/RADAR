@@ -79,7 +79,12 @@ const VERSION_TYPE = [['常规版本', 1], ['应急版本', 2], ['重大版本',
 // 投产状态
 const RELEASE_STATUS = [['待投产', 1], ['已投产', 2], ['已取消', 3]];
 // 需求类型（默认值，可在系统设置中增删）
-const REQ_TYPE = [['新增需求', 1], ['已有功能的需求变更', 2], ['缺陷修复', 3], ['紧急变更', 4]];
+const REQ_TYPE = [
+  ['新增监管需求', 1],
+  ['新增优化需求', 2],
+  ['延期需求', 3],
+  ['急迫需求', 4]
+];
 // 评审状态（投产评审会签）：待评审为默认，评审同意/拒绝自动推导，评审撤销/应急审批手动设置
 const REVIEW_STATUS = [['待评审', 1], ['评审同意', 2], ['评审拒绝', 3], ['评审撤销', 4], ['应急审批', 5]];
 // 制品类型（投产申请）：镜像制品 / 二进制制品 / 介质库文件 / 无制品
@@ -101,6 +106,16 @@ const SECTORS = [
   ['对公金融板块', '对公', 1], ['对私金融板块', '对私', 2], ['信贷管理板块', '信贷', 3],
   ['渠道运营板块', '渠运', 4], ['计划财务板块', '计财', 5], ['风险管理板块', '风险', 6],
   ['技术系统', '技术', 7],
+];
+
+// 需求部门：[属性值, 排序]
+const REQ_DEPTS = [
+  ['风险管理板块', 1],
+  ['计划财务板块', 2],
+  ['渠道运营板块', 3],
+  ['信贷管理板块', 4],
+  ['对私金融板块', 5],
+  ['对公金融板块', 6],
 ];
 
 // 所属系统清单：[系统编号, 系统名称, 所属机构, 所属板块, 排序]
@@ -244,6 +259,7 @@ export function runSeed() {
     for (const [attr, sort] of FERRY_STATUS) seedDict('ferry_status', attr, attr, sort);
     for (const [attr, disp, sort] of ORGS) seedDict('org', attr, disp, sort);
     for (const [attr, disp, sort] of SECTORS) seedDict('sector', attr, disp, sort);
+    for (const [attr, sort] of REQ_DEPTS) seedDict('req_dept', attr, attr, sort);
 
     // 3) 所属系统
     for (const [code, name, org, sector, sort] of SYSTEMS) {
