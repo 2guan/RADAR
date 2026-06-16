@@ -14,6 +14,7 @@ import { windowIds } from '../../lib/window.js';
 import { ok, notFound, badRequest, forbidden } from '../../lib/http.js';
 import { exportXlsx } from '../../lib/excel.js';
 import { signatureDataUrl } from '../../lib/signature.js';
+import { buildReleaseWordDoc } from '../../lib/release-word.js';
 
 /** 读取被打标为"会签角色"的角色列表 */
 function signoffRoles() {
@@ -336,6 +337,71 @@ export default async function releaseRoutes(fastify) {
         { v: beforeReview }, { v: afterReview }, { v: '评审状态' });
     }
     return ok(null, '签署完成');
+  });
+
+  // 导出 Word 详情（单条审批对象的完整信息）
+  fastify.get('/release/export-word/:code', { preHandler: fastify.requirePerm('release', 'view') }, async (request, reply) => {
+    const code = request.params.code;
+    const entityType = classifyEntity(code);
+    const rt = ensureReleaseTask(code, entityType, request.currentUser?.name);
+    const signoffs = all('SELECT * FROM release_signoff WHERE release_task_id = ? ORDER BY id', rt.id)
+      .map((s) => ({ ...s, signature_image: signatureDataUrl(s.signature_path) }));
+
+    const systems = all('SELECT sys_code, sys_name FROM system');
+    const sysMap = {};
+    for (const s of systems) sysMap[s.sys_code] = s.sys_name;
+    const artifacts = entityArtifacts(code, sysMap);
+
+    const rps = all('SELECT id, release_date FROM release_point');
+    const rpMap = {};
+    for (const rp of rps) rpMap[rp.id] = rp.release_date;
+
+    let entity = { type: entityType, code };
+    let devTasksFull = [];
+    let testTasksFull = [];
+
+    if (entityType === 'requirement') {
+      const req = get('SELECT * FROM requirement WHERE req_code = ?', code);
+      entity = {
+        type: 'requirement', code,
+        title: req?.title || code,
+        summary: req?.summary || '',
+        status: req?.status || null,
+        yn_owner: req?.yn_owner || null,
+        jk_owner: req?.jk_owner || null,
+        release_date: rpMap[req?.release_point_id] || null,
+      };
+      devTasksFull = all(
+        'SELECT id, task_code, task_name, content, owner, status, impl_system FROM dev_task WHERE req_code = ? ORDER BY id',
+        code,
+      );
+      testTasksFull = all(
+        'SELECT id, task_code, task_name, test_type, owner, status, impl_system FROM test_task WHERE req_code = ? ORDER BY id',
+        code,
+      );
+    } else if (entityType === 'issue') {
+      const issue = get('SELECT * FROM issue WHERE issue_code = ?', code);
+      const ap = get(
+        `SELECT release_point_id FROM release_apply ra
+           WHERE EXISTS (SELECT 1 FROM json_each(ra.ref_codes) WHERE value = ?) ORDER BY ra.id LIMIT 1`,
+        code,
+      );
+      entity = {
+        type: 'issue', code,
+        summary: issue?.summary || '',
+        details: issue?.details || '',
+        status: issue?.status || null,
+        release_date: rpMap[ap?.release_point_id] || null,
+      };
+    }
+
+    const detail = { entityType, entity, releaseTask: rt, signoffs, artifacts };
+    const buf = await buildReleaseWordDoc(detail, devTasksFull, testTasksFull);
+
+    const filename = `版本发布评审单_${code}.docx`;
+    reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    reply.header('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+    return reply.send(buf);
   });
 
   // 导出

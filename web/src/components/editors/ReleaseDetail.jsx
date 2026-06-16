@@ -9,7 +9,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { Modal, Card, Space, Button, Input, message, Empty, Row, Col, Radio, Tooltip, Tag, Upload, Popconfirm } from 'antd';
-import { HistoryOutlined, UploadOutlined, DeleteOutlined, PlusOutlined, HighlightOutlined } from '@ant-design/icons';
+import { HistoryOutlined, UploadOutlined, DeleteOutlined, PlusOutlined, HighlightOutlined, DownloadOutlined } from '@ant-design/icons';
 import HistoryDrawer from '../HistoryDrawer.jsx';
 import SignaturePad from '../SignaturePad.jsx';
 import CodeLink from '../CodeLink.jsx';
@@ -20,7 +20,7 @@ import ReleaseApplyEditor from './ReleaseApplyEditor.jsx';
 import StatusBadge, { getStatusType, statusSelectWidth } from '../StatusBadge.jsx';
 import DictSelect from '../DictSelect.jsx';
 import PersonPicker from '../PersonPicker.jsx';
-import { apiGet, apiPost, apiPut, apiDelete } from '../../api/client.js';
+import { apiGet, apiPost, apiPut, apiDelete, rawClient } from '../../api/client.js';
 import { useAppStore } from '../../stores/app.js';
 
 /** 签署时间缩略：YYYY-MM-DD HH:MM:SS -> MM.DD HH:MM */
@@ -79,6 +79,26 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, onC
   const padRef = useRef(null);
 
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  /** 导出 Word 文档 */
+  const handleExportWord = async () => {
+    if (!entityCode) return;
+    setExporting(true);
+    try {
+      const resp = await rawClient.get(`/release/export-word/${entityCode}`, { responseType: 'blob' });
+      const url = URL.createObjectURL(resp.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `版本发布评审单_${entityCode}.docx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      message.error(e.message || '导出失败');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   // 联动弹窗：阶段状态标签 → 对应阶段详情；制品卡片 → 投产申请详情
   const [reqOpen, setReqOpen] = useState(false);
@@ -314,10 +334,16 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, onC
             </span>
           )}
           {detail?.releaseTask && (
-            <Tooltip title="变更历史">
-              <Button type="text" icon={<HistoryOutlined style={{ fontSize: 16 }} />} onClick={() => setHistoryOpen(true)} aria-label="变更历史"
-                style={{ position: 'absolute', top: 12, right: 48, width: 32, height: 32, borderRadius: 2, color: 'var(--radar-text-secondary)' }} />
-            </Tooltip>
+            <>
+              <Tooltip title="导出 Word">
+                <Button type="text" icon={<DownloadOutlined style={{ fontSize: 16 }} />} onClick={handleExportWord} loading={exporting} aria-label="导出 Word"
+                  style={{ position: 'absolute', top: 12, right: 84, width: 32, height: 32, borderRadius: 2, color: 'var(--radar-text-secondary)' }} />
+              </Tooltip>
+              <Tooltip title="变更历史">
+                <Button type="text" icon={<HistoryOutlined style={{ fontSize: 16 }} />} onClick={() => setHistoryOpen(true)} aria-label="变更历史"
+                  style={{ position: 'absolute', top: 12, right: 48, width: 32, height: 32, borderRadius: 2, color: 'var(--radar-text-secondary)' }} />
+              </Tooltip>
+            </>
           )}
         </div>
       )}
