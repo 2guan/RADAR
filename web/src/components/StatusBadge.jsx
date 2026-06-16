@@ -41,6 +41,7 @@ const STATIC_MAP = {
   '评审同意': 'final',
   '已解决': 'final',
   '待验证': 'final',
+  '已摆渡': 'final',
 
   // 异常
   '已驳回': 'error',
