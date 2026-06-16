@@ -72,7 +72,17 @@ export default function ReleaseApply() {
   const monoStyle = { fontFamily: 'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace' };
 
   const columns = [
-    { title: '评审状态', dataIndex: 'review_status', key: 'review_status', width: 88, align: 'center', render: (v) => (v ? <StatusBadge status={v} /> : '—') },
+    {
+      title: '评审状态', dataIndex: 'review_status', key: 'review_status', width: 88, align: 'center',
+      render: (v) => (
+        v ? (
+          <StatusBadge
+            status={v}
+            style={{ width: 68, display: 'inline-flex', justifyContent: 'center' }}
+          />
+        ) : '—'
+      ),
+    },
     { title: '变更编号', dataIndex: 'change_code', key: 'change_code', width: 120, sorter: true, render: (v) => <span style={{ ...monoStyle, fontWeight: 500 }}>{v}</span> },
     { title: '变更系统', dataIndex: 'change_system_name', key: 'change_system_name', width: 110, ellipsis: true, render: (v) => v || '—' },
     {
