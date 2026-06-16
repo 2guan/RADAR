@@ -27,6 +27,7 @@ export default function Release() {
   const [points, setPoints] = useState([]);
   const [statuses, setStatuses] = useState([]);
   const [reviews, setReviews] = useState([]);
+  const [orgs, setOrgs] = useState([]);
 
   useEffect(() => {
     apiGet('/release-points/all').then(setPoints).catch(() => {});
@@ -34,13 +35,16 @@ export default function Release() {
       setStatuses([{ attr_value: '未发起', display_value: '未发起' }, ...(res || [])]);
     }).catch(() => {});
     apiGet('/dict/by-category/review_status').then(setReviews).catch(() => {});
+    apiGet('/dict/by-category/org').then(setOrgs).catch(() => {});
   }, []);
 
   const pointOptions = points.map((p) => ({ value: p.id, label: p.release_date }));
   const statusOptions = statuses.map((s) => ({ value: s.attr_value, label: s.display_value }));
   const reviewOptions = reviews.map((s) => ({ value: s.attr_value, label: s.display_value }));
+  const orgOptions = orgs.map((o) => ({ value: o.attr_value, label: o.display_value }));
 
   const filterConfigs = [
+    { field: 'impl_org', label: '实施机构', type: 'select', isPrimary: true, op: 'in', options: orgOptions },
     { field: 'code', label: '需求/问题编号', type: 'input', isPrimary: true, op: 'like', placeholder: '需求/问题编号检索' },
     { field: 'content', label: '标题/概述', type: 'input', isPrimary: true, op: 'like', placeholder: '需求标题或问题概述检索' },
     { field: 'release_point_id', label: '计划投产点', type: 'select', op: 'in', options: pointOptions },
@@ -78,6 +82,10 @@ export default function Release() {
     {
       title: '计划投产点', dataIndex: 'release_date', key: 'release_date', width: 120,
       render: (val) => <span style={monoStyle}>{val || '—'}</span>,
+    },
+    {
+      title: '实施机构', dataIndex: 'impl_org', key: 'impl_org', width: 110, ellipsis: true,
+      render: (v) => v || '—',
     },
     {
       title: '需求/问题编号', dataIndex: 'code', key: 'code', width: 220,
@@ -124,6 +132,9 @@ export default function Release() {
               <Space size={4}><StatusBadge status={r.release_status} />{r.review_status && <StatusBadge status={r.review_status} />}</Space>
             </Space>
             <div>{r.title}</div>
+            {r.impl_org && (
+              <div style={{ fontSize: '11px', color: 'var(--radar-text-secondary)' }}>实施机构：{r.impl_org}</div>
+            )}
             {r.release_date && (
               <div style={{ fontSize: '11px', color: 'var(--radar-text-secondary)' }}>计划投产点：{r.release_date}</div>
             )}

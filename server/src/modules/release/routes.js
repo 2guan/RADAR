@@ -108,18 +108,26 @@ function computeEntities(windowIdList) {
   let applies;
   if (windowIdList.length) {
     const ph = windowIdList.map(() => '?').join(',');
-    applies = all(`SELECT id, ref_codes, release_point_id FROM release_apply WHERE release_point_id IN (${ph})`, ...windowIdList);
+    applies = all(`SELECT id, ref_codes, release_point_id, change_code, impl_org FROM release_apply WHERE release_point_id IN (${ph})`, ...windowIdList);
   } else {
-    applies = all('SELECT id, ref_codes, release_point_id FROM release_apply');
+    applies = all('SELECT id, ref_codes, release_point_id, change_code, impl_org FROM release_apply');
   }
 
-  const codeMap = new Map(); // code -> { applyPointId }
+  const codeMap = new Map(); // code -> { applyPointId, implOrg, changeCode }
   for (const ap of applies) {
     let refs = [];
     try { refs = ap.ref_codes ? JSON.parse(ap.ref_codes) : []; } catch { refs = []; }
     for (const code of refs) {
       if (!code) continue;
-      if (!codeMap.has(code)) codeMap.set(code, { applyPointId: ap.release_point_id });
+      const cur = codeMap.get(code);
+      if (!cur) {
+        // 首次记录：投产点取首个申请；实施机构暂以该申请填充（后续遇更小申请编号再覆盖）
+        codeMap.set(code, { applyPointId: ap.release_point_id, implOrg: ap.impl_org || null, changeCode: ap.change_code || '' });
+      } else if (ap.change_code && (!cur.changeCode || String(ap.change_code) < String(cur.changeCode))) {
+        // 实施机构取「申请编号最小」的投产申请
+        cur.implOrg = ap.impl_org || null;
+        cur.changeCode = ap.change_code;
+      }
     }
   }
 
@@ -147,6 +155,7 @@ function computeEntities(windowIdList) {
       entity_type: type,
       code,
       title,
+      impl_org: info.implOrg || null,
       release_point_id: pointId || null,
       release_date: releaseDate,
       release_status: rt?.status || '待投产',
@@ -166,7 +175,7 @@ function computeEntities(windowIdList) {
   return list;
 }
 
-/** 内存筛选：编号(like) / 标题概述(like) / 计划投产点(in) / 投产状态(in) / 评审状态(in) */
+/** 内存筛选：编号(like) / 标题概述(like) / 计划投产点(in) / 投产状态(in) / 评审状态(in) / 实施机构(in) */
 function applyFilters(rows, filters) {
   let out = rows;
   for (const f of (filters || [])) {
@@ -186,6 +195,9 @@ function applyFilters(rows, filters) {
     } else if (f.field === 'review_status') {
       const vals = Array.isArray(f.value) ? f.value : [f.value];
       out = out.filter((r) => vals.includes(r.review_status));
+    } else if (f.field === 'impl_org') {
+      const vals = Array.isArray(f.value) ? f.value : [f.value];
+      out = out.filter((r) => vals.includes(r.impl_org));
     }
   }
   return out;
@@ -332,6 +344,7 @@ export default async function releaseRoutes(fastify) {
     const rows = applyFilters(computeEntities(windowIds(body)), body.filters);
 
     const cols = [
+      { key: 'impl_org', title: '实施机构' },
       { key: 'code', title: '需求/问题编号' },
       { key: 'entity_label', title: '类型' },
       { key: 'title', title: '需求标题/问题概述' },
@@ -342,6 +355,7 @@ export default async function releaseRoutes(fastify) {
     ];
 
     const mapped = rows.map((r) => ({
+      impl_org: r.impl_org || '',
       code: r.code,
       entity_label: r.entity_type === 'requirement' ? '需求' : (r.entity_type === 'issue' ? '问题' : '其他'),
       title: r.title,
