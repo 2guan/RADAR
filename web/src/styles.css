@@ -157,6 +157,22 @@ body {
 }
 .radar-rp-pill .ant-select-selection-placeholder { font-size: 12px; }
 
+@media (max-width: 576px) {
+  .radar-header {
+    padding: 0 10px !important;
+    gap: 6px !important;
+  }
+  .radar-rp-pill {
+    padding: 0 4px 0 8px !important;
+  }
+  .radar-rp-pill .ant-select-selection-item {
+    font-size: 11px !important;
+  }
+  .radar-rp-pill .ant-select-selection-placeholder {
+    font-size: 11px !important;
+  }
+}
+
 /* ============ 页头 ============ */
 .page-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 12px; }
 .page-head h2 { margin: 0; font-size: 20px; font-weight: 700; color: var(--radar-ink); }

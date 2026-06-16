@@ -173,7 +173,7 @@ export default function MainLayout() {
       maxTagCount="responsive"
       showSearch
       filterOption={(input, option) => option.label.toLowerCase().includes(input.toLowerCase())}
-      style={isMobile ? { width: 120, minWidth: 0, maxWidth: '34vw', fontSize: 12 } : { minWidth: 260, fontSize: 12 }}
+      style={isMobile ? { width: 170, minWidth: 0, maxWidth: '50vw', fontSize: 11 } : { minWidth: 260, fontSize: 12 }}
       className="radar-rp-select"
       classNames={{ popup: { root: 'radar-rp-select-dropdown' } }}
       suffixIcon={<DownOutlined style={{ color: token.colorPrimary }} />}
@@ -210,11 +210,13 @@ export default function MainLayout() {
           <div className="radar-page-title">{isMobile ? brand : currentLabel}</div>
           <div style={{ flex: 1 }} />
           <div className="radar-rp-pill" style={{ paddingRight: 2 }}>
-            <RocketOutlined />
+            {!isMobile && <RocketOutlined />}
             {rpSelector}
           </div>
-          <ThemeSwitcher />
-          <Button type="text" shape="circle" icon={theme === 'dark' ? <BulbFilled /> : <BulbOutlined />} onClick={toggleTheme} title="切换白天/夜间" />
+          {!isMobile && <ThemeSwitcher />}
+          {!isMobile && (
+            <Button type="text" shape="circle" icon={theme === 'dark' ? <BulbFilled /> : <BulbOutlined />} onClick={toggleTheme} title="切换白天/夜间" />
+          )}
           {/* Global top-right profile removed */}
         </Header>
 
