@@ -100,16 +100,17 @@ export default function Issues() {
 
   const columns = [
     {
-      title: '问题编号', dataIndex: 'issue_code', key: 'issue_code', sorter: true, defaultSortOrder: 'descend', width: 150,
+      title: '问题编号', dataIndex: 'issue_code', key: 'issue_code', sorter: true, defaultSortOrder: 'descend',
+      width: 150,
       render: (val) => (
         <span style={{ fontFamily: 'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace', fontWeight: 500 }}>
           {val}
         </span>
       ),
     },
-    { title: '状态', dataIndex: 'status', key: 'status', align: 'center', width: 90, render: (s) => <StatusBadge status={s} /> },
-    { title: '详细分类', dataIndex: 'detailed_classification', key: 'detailed_classification', width: 120 },
-    { title: '所属系统', dataIndex: 'system', key: 'system', width: 180 },
+    { title: '状态', dataIndex: 'status', key: 'status', align: 'center', width: 100, render: (s) => <StatusBadge status={s} /> },
+    { title: '详细分类', dataIndex: 'detailed_classification', key: 'detailed_classification', width: 140, ellipsis: true },
+    { title: '所属系统', dataIndex: 'system', key: 'system', width: 200, ellipsis: true },
     {
       title: '问题概述', dataIndex: 'summary', key: 'summary',
       render: (v) => (
@@ -146,8 +147,9 @@ export default function Issues() {
         baseQuery={{ filters: filterQuery }}
         defaultSort={[{ field: 'issue_code', order: 'desc' }]}
         showSearch={false}
-        tableScroll={undefined}
         onRowClick={openDetail}
+        tableScroll={null}
+        tableLayout="fixed"
         mobileCard={(item) => (
           <Space direction="vertical" size={4} style={{ width: '100%' }}>
             <Space style={{ justifyContent: 'space-between', width: '100%' }}>
