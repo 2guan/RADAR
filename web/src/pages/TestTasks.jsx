@@ -73,10 +73,10 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
   const systemOptions = systems.map(s => ({ value: s.sys_code, label: `${s.sys_code} - ${s.sys_name}` }));
 
   const filterConfigs = [
+    { field: 'org', label: '实施机构', type: 'select', op: 'in', options: orgOptions, isPrimary: true },
     { field: 'task_code', label: '测试任务编号', type: 'input', isPrimary: true, op: 'like', placeholder: '测试任务编号检索' },
     { field: 'content', label: '测试内容', type: 'input', isPrimary: true, op: 'like', placeholder: '测试任务名称检索' },
     { field: 'release_point_id', label: '计划投产点', type: 'select', op: 'in', options: pointOptions },
-    { field: 'org', label: '实施机构', type: 'select', op: 'in', options: orgOptions },
     { field: 'status', label: '测试状态', type: 'select', op: 'in', options: statusOptions },
     { field: 'owner', label: '测试负责人', type: 'select', op: 'in', options: userOptions },
     { field: 'impl_org', label: '测试实施方', type: 'select', op: 'in', options: orgOptions },

@@ -68,12 +68,11 @@ export default function DevTasks() {
   const userOptions = users.map(u => ({ value: u.name, label: `${u.name} (${u.phone})` }));
   const systemOptions = systems.map(s => ({ value: s.sys_code, label: `${s.sys_code} - ${s.sys_name}` }));
 
-  // 过滤器项配置，支持按任务编号、内容模糊搜索，以及按投产点、状态、负责人、实施系统多选
   const filterConfigs = [
+    { field: 'org', label: '实施机构', type: 'select', op: 'in', options: orgOptions, isPrimary: true },
     { field: 'task_code', label: '开发任务编号', type: 'input', isPrimary: true, op: 'like', placeholder: '开发任务编号检索' },
     { field: 'content', label: '开发内容', type: 'input', isPrimary: true, op: 'like', placeholder: '开发任务名称或内容检索' },
     { field: 'release_point_id', label: '计划投产点', type: 'select', op: 'in', options: pointOptions },
-    { field: 'org', label: '实施机构', type: 'select', op: 'in', options: orgOptions },
     { field: 'status', label: '开发状态', type: 'select', op: 'in', options: statusOptions },
     { field: 'owner', label: '开发负责人', type: 'select', op: 'in', options: userOptions },
     { field: 'impl_org', label: '开发实施方', type: 'select', op: 'in', options: orgOptions },
