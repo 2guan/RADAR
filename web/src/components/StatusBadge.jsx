@@ -30,7 +30,7 @@ const STATIC_MAP = {
   '应急审批': 'in-progress',
 
   // 终态
-  '需求完成': 'final',
+  '分析完成': 'final',
   '开发完成': 'final',
   '测试完成': 'final',
   '已上线': 'final',

@@ -55,7 +55,7 @@ const CHAIN_MODULES = ['dashboard', 'overview', 'requirement', 'issue', 'dev', '
 const PROCESS_STATUS = [
   ['需求', '需求登记', '需求登记', 1, 'initial'],
   ['需求', '需求分析', '需求分析', 2, 'in-progress'],
-  ['需求', '需求完成', '需求完成', 3, 'final'],
+  ['需求', '分析完成', '分析完成', 3, 'final'],
   ['开发', '开发承接', '开发承接', 4, 'initial'],
   ['开发', '开发设计', '开发设计', 5, 'in-progress'],
   ['开发', '开发实施', '开发实施', 6, 'in-progress'],
@@ -342,7 +342,7 @@ export function runSeed() {
       if (!extra.stateType) {
         if (['需求登记', '开发承接', '测试承接'].includes(r.attr_value)) {
           extra.stateType = 'initial';
-        } else if (['需求完成', '开发完成', '测试完成', '已上线', '已签署'].includes(r.attr_value)) {
+        } else if (['需求完成', '分析完成', '开发完成', '测试完成', '已上线', '已签署'].includes(r.attr_value)) {
           extra.stateType = 'final';
         } else {
           extra.stateType = 'in-progress';

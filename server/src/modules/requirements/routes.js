@@ -94,10 +94,10 @@ function linkedTaskCount(reqCode) {
 function validateTerminal(reqId, statusAttr, mainSystems) {
   if (!isTerminalStatus(statusAttr)) return;
   if (!Array.isArray(mainSystems) || mainSystems.length === 0) {
-    throw badRequest('需求完成（终态）时，主责系统至少填写 1 个');
+    throw badRequest('分析完成（终态）时，主责系统至少填写 1 个');
   }
   const cnt = countByFields('requirement', reqId, ['需求说明书']);
-  if (cnt === 0) throw badRequest('需求完成（终态）时，需求说明书附件或路径至少填写 1 个');
+  if (cnt === 0) throw badRequest('分析完成（终态）时，需求说明书附件或路径至少填写 1 个');
 }
 
 export default async function requirementRoutes(fastify) {

@@ -205,7 +205,7 @@ export function runMock() {
     addSpec('analysis', 8, [9, 10, 11]);             // 需求分析
     addSpec('register', 10, [10, 11]);               // 需求登记
 
-    // 终态需求（需求完成）：released/approving/advanced/nftsec/sit/dev 均为需求完成
+    // 终态需求（分析完成）：released/approving/advanced/nftsec/sit/dev 均为分析完成
     const REQ_DONE = new Set(['released', 'approving', 'advanced', 'nftsec', 'sit', 'dev']);
 
     const reqs = []; // { code, spec, main_systems, rp, ... }
@@ -218,7 +218,7 @@ export function runMock() {
       const collabTest = rng() < 0.25 ? pickN(sysCodes.filter((c) => !main.includes(c)), 1) : [];
       const code = genRequirementCode(spec.rp.date);
       const topic = pick(REQ_TOPICS);
-      const reqStatus = REQ_DONE.has(spec.profile) ? '需求完成'
+      const reqStatus = REQ_DONE.has(spec.profile) ? '分析完成'
         : (spec.profile === 'analysis' ? '需求分析' : '需求登记');
       const proposeTime = shift(ymd(spec.rp.date), -60 - Math.floor(rng() * 60));
       const res = run(
@@ -239,7 +239,7 @@ export function runMock() {
       const reqId = res.lastInsertRowid;
       auditCreate('requirement', reqId, code, '系统初始化');
       // 终态需求：需求说明书附件（路径）
-      if (reqStatus === '需求完成') {
+      if (reqStatus === '分析完成') {
         run(`INSERT INTO attachment (entity_type, entity_id, field_key, kind, path_text, uploader)
              VALUES ('requirement', ?, '需求说明书', 'path', ?, ?)`,
           reqId, `\\\\nas\\需求\\${code}\\需求说明书.docx`, pickUser('农信业务'));
@@ -532,7 +532,7 @@ export function runMock() {
       会签角色: signRoles.map((r) => r.name).join('、'),
       投产点: get('SELECT COUNT(*) c FROM release_point').c,
       需求: get('SELECT COUNT(*) c FROM requirement').c,
-      需求完成: get("SELECT COUNT(*) c FROM requirement WHERE status='需求完成'").c,
+      分析完成: get("SELECT COUNT(*) c FROM requirement WHERE status='分析完成'").c,
       开发任务: get('SELECT COUNT(*) c FROM dev_task').c,
       测试任务: get('SELECT COUNT(*) c FROM test_task').c,
       'SIT(应用组装)完成': get("SELECT COUNT(*) c FROM test_task WHERE test_type='SIT' AND status='测试完成'").c,

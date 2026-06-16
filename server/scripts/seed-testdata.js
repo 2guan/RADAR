@@ -296,7 +296,7 @@ function main() {
       // 18-33 (16个): 开发阶段 (开发设计/实施中，无测试)
       // 34-39 (6个): 需求阶段 (需求分析/登记中，部分有待评估的开发任务)
       
-      let reqStatus = '需求完成';
+      let reqStatus = '分析完成';
       if (i >= 34) {
         reqStatus = (i % 2 === 0) ? '需求分析' : '需求登记';
       }
@@ -307,7 +307,7 @@ function main() {
         title: tpl.title,
         summary: tpl.summary,
         status: reqStatus,
-        req_type: ['新增需求', '已有功能的需求变更', '缺陷修复', '紧急变更'][i % 4],
+        req_type: ['新增监管需求', '新增优化需求', '延期需求', '急迫需求'][i % 4],
         propose_dept: proposeDept,
         proposer: proposer,
         yn_owner: ynOwner,
