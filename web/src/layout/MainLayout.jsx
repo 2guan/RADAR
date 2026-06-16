@@ -180,7 +180,7 @@ export default function MainLayout() {
       onChange={(ids) => setReleasePointIds(ids)}
       options={points.map((p) => ({
         value: p.id,
-        label: `${p.release_date}${p.version_type ? ' · ' + p.version_type : ''}`,
+        label: isMobile ? p.release_date : `${p.release_date}${p.version_type ? ' · ' + p.version_type : ''}`,
       }))}
     />
   );
