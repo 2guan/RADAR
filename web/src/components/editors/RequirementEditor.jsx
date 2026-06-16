@@ -306,6 +306,7 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
                     )}
                     style={{ marginBottom: 8 }}
                     rules={[
+                      { required: !readonly, message: '请填写需求编号' },
                       { pattern: /^\S+$/, message: '编号不能包含空格' },
                       { validator: (_, val) => checkCodeUnique(val) },
                     ]}
@@ -334,7 +335,7 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item name="req_type" label="需求类型" style={{ marginBottom: 8 }}>
+                  <Form.Item name="req_type" label="需求类型" rules={[{ required: !readonly, message: '请选择需求类型' }]} style={{ marginBottom: 8 }}>
                     <DictSelect category="req_type" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} size="small" />
                   </Form.Item>
                 </Col>
@@ -357,7 +358,7 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item name="propose_time" label="提出时间" style={{ marginBottom: 8 }}>
+                  <Form.Item name="propose_time" label="提出时间" rules={[{ required: !readonly, message: '请选择提出时间' }]} style={{ marginBottom: 8 }}>
                     <DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" />
                   </Form.Item>
                 </Col>
@@ -367,7 +368,7 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
               <Form.Item name="title" label="需求标题" rules={[{ required: !readonly, message: '请输入需求标题' }]} style={{ marginBottom: 8 }}>
                 <Input placeholder="请输入需求标题" size="small" readOnly={readonly} />
               </Form.Item>
-              <Form.Item name="summary" label="需求概述" rules={[{ max: 2000, message: '不超过 2000 字' }]} style={{ marginBottom: 18 }}>
+              <Form.Item name="summary" label="需求概述" rules={[{ required: !readonly, message: '请填写需求概述' }, { max: 2000, message: '不超过 2000 字' }]} style={{ marginBottom: 18 }}>
                 <Input.TextArea rows={7} placeholder="描述该需求的核心背景与业务诉求（2000字以内）" showCount={!readonly} maxLength={2000} style={{ fontSize: 12 }} readOnly={readonly} />
               </Form.Item>
             </div>
@@ -387,7 +388,7 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
               <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>涉及系统</div>
 
               {/* 主责系统：标题右侧选择框，单选（再选自动替换），已选展示在下方 */}
-              <Form.Item name="main_systems" noStyle>
+              <Form.Item name="main_systems" rules={[{ required: !readonly, type: 'array', min: 1, message: '请选择主责系统' }]}>
                 <SystemPickerField title="主责系统" single placeholder="主责系统检索" readonly={readonly} />
               </Form.Item>
 
@@ -408,12 +409,12 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
               <Row gutter={8}>
                 {/* 农信提出部门 + 农信提出人：手机端各占一行（充满），PC 端双栏 */}
                 <Col span={isMobile ? 24 : 12}>
-                  <Form.Item name="propose_dept" label="农信提出部门" style={{ marginBottom: 8 }}>
+                  <Form.Item name="propose_dept" label="农信提出部门" rules={[{ required: !readonly, message: '请选择农信提出部门' }]} style={{ marginBottom: 8 }}>
                     <DictSelect category="req_dept" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} size="small" />
                   </Form.Item>
                 </Col>
                 <Col span={isMobile ? 24 : 12}>
-                  <Form.Item name="proposer" label="农信提出人" style={{ marginBottom: 8 }}>
+                  <Form.Item name="proposer" label="农信提出人" rules={[{ required: !readonly, message: '请选择农信提出人' }]} style={{ marginBottom: 8 }}>
                     <PersonPicker style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择提出人" size="small" />
                   </Form.Item>
                 </Col>
