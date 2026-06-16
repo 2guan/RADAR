@@ -121,8 +121,8 @@ async function runBgSyncDetail(codes) {
     } catch {
       bgState.failed++;
     }
-    // 每条间隔 1 秒，避免对 PAMS 造成压力
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    // 每条间隔 200ms，约 1 秒 5 条
+    await new Promise((resolve) => setTimeout(resolve, 200));
   }
 
   bgState.running = false;
