@@ -37,7 +37,7 @@ export default function Login() {
     }
   };
 
-  const name = platform['platform.name'] || '日常需求研发流程管理平台';
+  const name = platform['platform.name'] || '日常需求研发流程管理';
   const shortName = platform['platform.shortName'] || 'RADAR';
   const fullName = platform['platform.fullName'] || '';
   const copyright = platform['platform.copyright'] || '';

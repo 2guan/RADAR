@@ -169,10 +169,10 @@ const SYSTEMS = [
 
 // 平台配置默认值（key, value, 说明）
 const APP_CONFIG = [
-  ['platform.name', '常规投产版本全生命周期流程管控平台', '平台名称'],
+  ['platform.name', '日常需求研发流程管理', '平台名称'],
   ['platform.shortName', 'RADAR', '平台英文简称'],
-  ['platform.fullName', 'Requirement & Agile Development Administration Resource', '平台英文全称'],
-  ['platform.copyright', '© 2026 RADAR · 日常需求研发流程管理平台', '版权信息'],
+  ['platform.fullName', 'Requirement Agile Delivery & Acceleration Resource', '平台英文全称'],
+  ['platform.copyright', '© 2026 RADAR · 日常需求研发流程管理', '版权信息'],
   ['platform.themeColor', '#2F54EB', '主题色（靛蓝）'],
   ['code.requirement', 'RC_{投产窗口}_{序号}', '需求编号规则'],
   ['code.dev', 'RW_{需求编号}_{序号}', '开发任务编号规则'],

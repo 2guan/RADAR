@@ -1,7 +1,7 @@
 {
   "name": "radar-web",
   "version": "1.0.0",
-  "description": "RADAR 日常需求研发流程管理平台 - 前端",
+  "description": "RADAR 日常需求研发流程管理 - 前端",
   "author": "hengguan",
   "private": true,
   "type": "module",

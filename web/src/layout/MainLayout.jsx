@@ -91,7 +91,7 @@ export default function MainLayout() {
   const visibleMenu = MENU.filter((m) => can(m.module, 'view'));
   const brand = platform['platform.shortName'] || 'RADAR';
   // 平台名称（系统设置-基础设置中维护，联动显示于品牌区与登录页）
-  const platformName = platform['platform.name'] || '日常需求研发流程管理平台';
+  const platformName = platform['platform.name'] || '日常需求研发流程管理';
 
   const go = (key) => { navigate(key); setDrawerOpen(false); };
   const toggleMenu = (key) => setOpenMenus((p) => ({ ...p, [key]: !p[key] }));

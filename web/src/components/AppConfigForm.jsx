@@ -182,7 +182,7 @@ export default function AppConfigForm({ mode, items }) {
                   </div>
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div className="radar-brand-name" style={{ fontSize: 15 }}>{watchShortName || 'RADAR'}</div>
-                    <div className="radar-brand-sub" style={{ fontSize: 10, marginTop: 1 }} title={watchName}>{watchName || '日常需求研发流程管理平台'}</div>
+                    <div className="radar-brand-sub" style={{ fontSize: 10, marginTop: 1 }} title={watchName}>{watchName || '日常需求研发流程管理'}</div>
                   </div>
                 </div>
               </div>
@@ -212,7 +212,7 @@ export default function AppConfigForm({ mode, items }) {
                     <span style={{ fontWeight: 800, fontSize: 18, color: 'var(--radar-ink)' }}>{watchShortName || 'RADAR'}</span>
                   </div>
                   <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--radar-ink)', marginBottom: 4 }}>
-                    {watchName || '日常需求研发流程管理平台'}
+                    {watchName || '日常需求研发流程管理'}
                   </div>
                   {watchFullName && (
                     <div style={{ fontSize: 10, color: 'var(--radar-text-secondary)', marginBottom: 16, textTransform: 'uppercase' }}>

@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-RADAR · 日常需求研发流程管理平台（常规投产版本全生命周期流程管控平台）。以"投产版本（投产点）"为主线，把"需求分析 → 开发管理 → 测试管理(SIT/UAT/NFT/SEC) → 投产管理"全链路数字化。
+RADAR · 日常需求研发流程管理（Requirement Agile Delivery & Acceleration Resource）。以"投产版本（投产点）"为主线，把"需求分析 → 开发管理 → 测试管理(SIT/UAT/NFT/SEC) → 投产管理"全链路数字化。
 
 ## 技术栈
 

@@ -1,7 +1,7 @@
 {
   "name": "radar-server",
   "version": "1.0.0",
-  "description": "RADAR 日常需求研发流程管理平台 - 后端服务",
+  "description": "RADAR 日常需求研发流程管理 - 后端服务",
   "author": "hengguan",
   "type": "module",
   "main": "src/server.js",

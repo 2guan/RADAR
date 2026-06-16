@@ -1,7 +1,7 @@
 {
   "name": "radar",
   "version": "1.0.0",
-  "description": "RADAR 日常需求研发流程管理平台",
+  "description": "RADAR 日常需求研发流程管理",
   "private": true,
   "scripts": {
     "dev": "npx --yes concurrently --kill-others --prefix-colors \"green,cyan\" --names \"server,web\" \"npm run dev --prefix server\" \"npm run dev --prefix web\""

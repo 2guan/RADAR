@@ -1,5 +1,5 @@
 ---
-name: RADAR · 日常需求研发流程管理平台
+name: RADAR · 日常需求研发流程管理
 description: 精密、沉稳、数据导向的现代企业研发控制台
 colors:
   primary: "#0E9F6E"

@@ -335,7 +335,7 @@ export default function Settings() {
       {
         key: 'platform', label: '平台信息',
         children: <AppConfigForm mode="platform" items={[
-          { key: 'platform.name', label: '平台名称', placeholder: '如 常规投产版本全生命周期流程管控平台' },
+          { key: 'platform.name', label: '平台名称', placeholder: '如 日常需求研发流程管理' },
           { key: 'platform.shortName', label: '平台英文简称', placeholder: '如 RADAR' },
           { key: 'platform.fullName', label: '平台英文全称' },
           { key: 'platform.copyright', label: '版权信息' },
