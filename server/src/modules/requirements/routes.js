@@ -273,19 +273,17 @@ export default async function requirementRoutes(fastify) {
     const rp = get('SELECT * FROM release_point WHERE id = ?', body.release_point_id);
     if (!rp) throw badRequest('投产点不存在');
 
-    // 编号：手填校验唯一，否则按规则生成
-    let reqCode = (body.req_code || '').trim();
-    if (reqCode) {
-      if (get('SELECT id FROM requirement WHERE req_code = ?', reqCode)) throw badRequest('需求编号已存在');
-    } else {
-      reqCode = genRequirementCode(rp.release_date);
-    }
-
     const data = encodeField(pick(body));
-    const id = tx(() => {
+    // 编号生成与 INSERT 在同一 BEGIN IMMEDIATE 事务内，防止并发提交时编号冲突；
+    // 若前端传来的编号已被抢占，自动重新生成而非报错。
+    const { id, reqCode } = tx(() => {
+      let code = (body.req_code || '').trim();
+      if (!code || get('SELECT id FROM requirement WHERE req_code = ?', code)) {
+        code = genRequirementCode(rp.release_date);
+      }
       const fields = ['req_code', 'status', 'registrar', 'register_time', ...Object.keys(data)];
       const values = [
-        reqCode,
+        code,
         body.status || '需求登记',
         request.currentUser?.name,
         new Date().toISOString().slice(0, 10),
@@ -295,7 +293,7 @@ export default async function requirementRoutes(fastify) {
         `INSERT INTO requirement (${fields.join(',')}) VALUES (${fields.map(() => '?').join(',')})`,
         ...values,
       );
-      return res.lastInsertRowid;
+      return { id: res.lastInsertRowid, reqCode: code };
     });
     auditCreate('requirement', id, reqCode, request.currentUser?.name);
     return ok({ id, req_code: reqCode });
