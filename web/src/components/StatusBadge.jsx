@@ -90,11 +90,11 @@ export function statusSelectWidth(text, placeholder = '状态') {
   return Math.ceil(textWidth) + 34;
 }
 
-export default function StatusBadge({ status }) {
-  if (!status) return <Tag className="status-tag status-tag-not-started">—</Tag>;
+export default function StatusBadge({ status, style }) {
+  if (!status) return <Tag className="status-tag status-tag-not-started" style={{ ...style, marginInlineEnd: 0 }}>—</Tag>;
   const type = getStatusType(status);
   return (
-    <Tag className={`status-tag status-tag-${type}`} style={{ marginInlineEnd: 0 }}>
+    <Tag className={`status-tag status-tag-${type}`} style={{ marginInlineEnd: 0, ...style }}>
       {status}
     </Tag>
   );

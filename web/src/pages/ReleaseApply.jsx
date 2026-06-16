@@ -100,9 +100,10 @@ export default function ReleaseApply() {
                   </Tag>
                 )}
                 {u.ferry_status && (
-                  <span style={{ display: 'inline-flex', width: 68, justifyContent: 'center' }}>
-                    <StatusBadge status={u.ferry_status} />
-                  </span>
+                  <StatusBadge
+                    status={u.ferry_status}
+                    style={{ width: 68, display: 'inline-flex', justifyContent: 'center' }}
+                  />
                 )}
               </div>
             ))}
