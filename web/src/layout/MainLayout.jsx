@@ -214,9 +214,7 @@ export default function MainLayout() {
             {rpSelector}
           </div>
           {!isMobile && <ThemeSwitcher />}
-          {!isMobile && (
-            <Button type="text" shape="circle" icon={theme === 'dark' ? <BulbFilled /> : <BulbOutlined />} onClick={toggleTheme} title="切换白天/夜间" />
-          )}
+          <Button type="text" shape="circle" icon={theme === 'dark' ? <BulbFilled /> : <BulbOutlined />} onClick={toggleTheme} title="切换白天/夜间" />
           {/* Global top-right profile removed */}
         </Header>
 
