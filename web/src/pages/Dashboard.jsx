@@ -11,7 +11,7 @@ import {
   Card, Row, Col, Progress, Button, Empty, message, Modal, Table, Grid, Spin, List,
 } from 'antd';
 import {
-  FileTextOutlined, CodeOutlined, ExperimentOutlined, UserOutlined, RocketOutlined, PlusOutlined,
+  FileTextOutlined, CodeOutlined, ExperimentOutlined, UserOutlined, RocketOutlined, PlusOutlined, BugOutlined,
 } from '@ant-design/icons';
 import { apiGet, apiPost, apiPut, apiDelete } from '../api/client.js';
 import { useAppStore } from '../stores/app.js';
@@ -112,7 +112,8 @@ export default function Dashboard() {
 
   const cards = [
     { key: 'requirement', title: '业务需求', icon: <FileTextOutlined />, color: activeColors.statusInitial },
-    { key: 'dev', title: '开发任务', icon: <CodeOutlined />, color: activeColors.statusInProgress },
+    { key: 'issue', title: '投产问题', icon: <BugOutlined />, color: activeColors.statusInProgress },
+    { key: 'dev', title: '开发任务', icon: <CodeOutlined />, color: activeColors.primaryDeep },
     { key: 'sit', title: 'SIT测试任务', icon: <ExperimentOutlined />, color: activeColors.highlight },
     { key: 'uat', title: 'UAT测试任务', icon: <UserOutlined />, color: activeColors.accent },
     { key: 'releaseSystem', title: '投产系统', icon: <RocketOutlined />, color: activeColors.statusFinal },
@@ -160,7 +161,7 @@ export default function Dashboard() {
     // overflowX:hidden 吸收各 Row 栅格槽（gutter 16 → 负 -8 外边距）造成的 8px 横向溢出，
     // 消除仪表盘底部的横向滚动条；根容器高度自适应，不会引入纵向滚动条。
     <div style={{ overflowX: 'hidden' }}>
-      {/* 5 原子指标卡 */}
+      {/* 6 原子指标卡 */}
       <Row gutter={[16, 16]} wrap>
         {cards.map((c) => {
           const m = metrics[c.key] || { total: 0, terminal: 0 };

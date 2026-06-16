@@ -80,7 +80,8 @@ function canManageSystem(fastify, request) {
 export default async function dashboardRoutes(fastify) {
   // 5 原子指标卡（每项返回 总数 total 与 终态完成数 terminal）
   fastify.get('/dashboard/metrics', { preHandler: fastify.requirePerm('dashboard', 'view') }, async (request) => {
-    const codes = reqCodesInWindow(windowIds(request.query));
+    const winIds = windowIds(request.query);
+    const codes = reqCodesInWindow(winIds);
     const inWindow = (table, extraWhere = '') => {
       if (!codes) return all(`SELECT status FROM ${table} ${extraWhere ? 'WHERE ' + extraWhere : ''}`);
       if (!codes.length) return [];
@@ -93,16 +94,39 @@ export default async function dashboardRoutes(fastify) {
       ? (codes.length ? all(`SELECT status FROM requirement WHERE req_code IN (${codes.map(() => '?').join(',')})`, ...codes) : [])
       : all('SELECT status FROM requirement');
 
-    let relSys = [];
-    if (!codes) relSys = all('SELECT status FROM release_system');
-    else if (codes.length) {
-      const ph = codes.map(() => '?').join(',');
-      relSys = all(
-        `SELECT rs.status FROM release_system rs
-           JOIN release_task rt ON rt.id = rs.release_task_id
-          WHERE rt.req_code IN (${ph})`, ...codes,
-      );
+    // 投产申请（变更单）：按所选投产点过滤（窗口为空=全部）
+    let applyRows;
+    if (!winIds?.length) {
+      applyRows = all('SELECT ref_codes, delivery_units FROM release_apply');
+    } else {
+      const sub = inClause('release_point_id', winIds);
+      applyRows = all(`SELECT ref_codes, delivery_units FROM release_apply WHERE ${sub.where}`, ...sub.params);
     }
+
+    // 投产系统：对应投产点提交了投产申请的变更单数；完成=全部交付单元已摆渡
+    const releaseSystem = {
+      total: applyRows.length,
+      terminal: applyRows.filter((r) => {
+        let units = [];
+        try { units = r.delivery_units ? JSON.parse(r.delivery_units) : []; } catch { units = []; }
+        return units.length > 0 && units.every((u) => (u.ferry_status || '未摆渡') === '已摆渡');
+      }).length,
+    };
+
+    // 投产问题：上述变更单关联的「问题」数（去重）；完成=问题状态终态（已解决/待验证）
+    const refSet = new Set();
+    for (const r of applyRows) {
+      let refs = [];
+      try { refs = r.ref_codes ? JSON.parse(r.ref_codes) : []; } catch { refs = []; }
+      for (const c of refs) if (c) refSet.add(c);
+    }
+    let issueRows = [];
+    if (refSet.size) {
+      const arr = [...refSet];
+      issueRows = all(`SELECT status FROM issue WHERE issue_code IN (${arr.map(() => '?').join(',')})`, ...arr);
+    }
+    const ISSUE_TERMINAL = new Set(['已解决', '待验证']);
+    const issue = { total: issueRows.length, terminal: issueRows.filter((r) => ISSUE_TERMINAL.has(r.status)).length };
 
     const dev = inWindow('dev_task');
     const sit = inWindow('test_task', "test_type='SIT'");
@@ -110,10 +134,11 @@ export default async function dashboardRoutes(fastify) {
 
     return ok({
       requirement: { total: reqRows.length, terminal: countTerminal(reqRows) },
+      issue,
       dev: { total: dev.length, terminal: countTerminal(dev) },
       sit: { total: sit.length, terminal: countTerminal(sit) },
       uat: { total: uat.length, terminal: countTerminal(uat) },
-      releaseSystem: { total: relSys.length, terminal: relSys.filter((r) => r.status === '已投产').length },
+      releaseSystem,
     });
   });
 

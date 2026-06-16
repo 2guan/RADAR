@@ -12,6 +12,11 @@ import { Modal, Card, Space, Button, Input, message, Empty, Row, Col, Radio, Too
 import { HistoryOutlined, UploadOutlined, DeleteOutlined, PlusOutlined, HighlightOutlined } from '@ant-design/icons';
 import HistoryDrawer from '../HistoryDrawer.jsx';
 import SignaturePad from '../SignaturePad.jsx';
+import CodeLink from '../CodeLink.jsx';
+import EditorShell from './EditorShell.jsx';
+import RequirementEditor from './RequirementEditor.jsx';
+import TaskEditor from './TaskEditor.jsx';
+import ReleaseApplyEditor from './ReleaseApplyEditor.jsx';
 import StatusBadge, { getStatusType, statusSelectWidth } from '../StatusBadge.jsx';
 import DictSelect from '../DictSelect.jsx';
 import PersonPicker from '../PersonPicker.jsx';
@@ -25,14 +30,19 @@ function fmtSignTime(s) {
   return m ? `${m[2]}.${m[3]} ${m[4]}:${m[5]}` : s;
 }
 
-const getWeakestDevStatus = (statuses) => {
-  if (!statuses || statuses.length === 0) return '未开始';
-  const order = { '开发承接': 1, '开发设计': 2, '开发实施': 3, '单元测试': 4, '开发完成': 5 };
+// 各阶段状态推进顺序（用于取「最弱状态」聚合展示）
+const DEV_ORDER = { '开发承接': 1, '开发设计': 2, '开发实施': 3, '单元测试': 4, '开发完成': 5 };
+const TEST_ORDER = { '测试承接': 1, '测试登记': 1, '测试方案': 2, '测试实施': 3, '测试报告': 4, '测试完成': 5 };
+
+/** 取一组任务的最弱（最不靠后）状态；任务项可为字符串或 {status} 对象 */
+const weakestStatus = (list, order) => {
+  if (!list || list.length === 0) return '未开始';
   let weakest = null;
   let minRank = Infinity;
-  for (const s of statuses) {
-    const rank = order[s] ?? 999;
-    if (rank < minRank) { minRank = rank; weakest = s; }
+  for (const t of list) {
+    const st = typeof t === 'string' ? t : t.status;
+    const rank = order[st] ?? 999;
+    if (rank < minRank) { minRank = rank; weakest = st; }
   }
   return weakest || '未开始';
 };
@@ -47,7 +57,7 @@ function StageChip({ label, children }) {
   );
 }
 
-export default function ReleaseDetail({ open, code, reqCode, onClose, onChanged }) {
+export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, onClose, onChanged }) {
   const entityCode = code ?? reqCode;
   const { user, can, theme } = useAppStore();
   const isDark = theme === 'dark';
@@ -69,6 +79,14 @@ export default function ReleaseDetail({ open, code, reqCode, onClose, onChanged 
   const padRef = useRef(null);
 
   const [historyOpen, setHistoryOpen] = useState(false);
+
+  // 联动弹窗：阶段状态标签 → 对应阶段详情；制品卡片 → 投产申请详情
+  const [reqOpen, setReqOpen] = useState(false);
+  const [devTaskId, setDevTaskId] = useState(null);
+  const [testTaskId, setTestTaskId] = useState(null);
+  const [applyCode, setApplyCode] = useState(null);
+  const [taskPicker, setTaskPicker] = useState(null); // { kind, label, items } 多条任务时先弹列表
+  const stageLinkStyle = { cursor: 'pointer' };
 
   /** 加载我的签名库，默认选中默认签名 */
   const loadSignatures = async (preferId) => {
@@ -93,9 +111,9 @@ export default function ReleaseDetail({ open, code, reqCode, onClose, onChanged 
   };
 
   useEffect(() => {
-    if (open && entityCode) reload();
-    if (!open) setDetail(null);
-  }, [open, entityCode]);
+    if ((mode === 'page' || open) && entityCode) reload();
+    if (mode !== 'page' && !open) setDetail(null);
+  }, [open, entityCode, mode]);
 
   const canSign = (so) => can('release', 'release.signoff')
     && (user?.isSuper || (user?.roles || []).some((r) => r.name === so.role_name));
@@ -208,10 +226,11 @@ export default function ReleaseDetail({ open, code, reqCode, onClose, onChanged 
   const ArtifactCard = ({ a }) => {
     const units = Array.isArray(a.units) ? a.units : [];
     return (
-      <Card size="small" styles={{ body: { padding: '8px 10px' } }}
-        style={{ borderColor: 'var(--radar-border)', boxShadow: 'none', marginBottom: 6 }}>
+      <Card size="small" hoverable styles={{ body: { padding: '8px 10px' } }}
+        style={{ borderColor: 'var(--radar-border)', boxShadow: 'none', marginBottom: 6, cursor: 'pointer' }}
+        onClick={() => a.change_code && setApplyCode(a.change_code)}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--radar-ink)', fontFamily: 'SFMono-Regular, Consolas, monospace' }}>{a.change_code}</span>
+          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--radar-primary)', fontFamily: 'SFMono-Regular, Consolas, monospace' }}>{a.change_code}</span>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 11, color: 'var(--radar-text-secondary)' }}>
           <div>系统：<span style={{ color: 'var(--radar-ink)' }}>{a.change_system_name || '—'}</span></div>
@@ -242,17 +261,33 @@ export default function ReleaseDetail({ open, code, reqCode, onClose, onChanged 
   const reviewStatus = detail?.releaseTask?.review_status;
   const editable = can('release', 'edit');
 
+  // 打开某条任务详情（按阶段类型分发到开发/测试详情弹窗）
+  const openTask = (kind, id) => { if (kind === 'dev') setDevTaskId(id); else setTestTaskId(id); };
+
+  // 阶段聚合标签：始终显示一个最弱状态；点击时——单条直接打开详情，多条先弹任务列表再选
+  const stageBadge = (list, order, kind, label) => {
+    if (!list || list.length === 0) return <StatusBadge status="未开始" />;
+    const onClick = () => {
+      if (list.length === 1) openTask(kind, list[0].id);
+      else setTaskPicker({ kind, label, items: list });
+    };
+    return (
+      <span style={stageLinkStyle} onClick={onClick}>
+        <StatusBadge status={weakestStatus(list, order)} />
+      </span>
+    );
+  };
+
   return (
-    <Modal
+    <EditorShell
+      mode={mode}
       open={open}
       width={980}
       footer={null}
       onCancel={onClose}
-      destroyOnHidden
-      styles={{ body: { fontSize: 12 } }}
       title={(
         <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 10, rowGap: 6, minWidth: 0, width: '100%', paddingRight: 76 }}>
-          <span className="lc-id big" style={{ margin: 0 }}>{entityCode || '—'}</span>
+          <CodeLink module="release" code={entityCode} />
           {detail?.releaseTask && (
             <span className={`status-select status-select-${getStatusType(statusValue)}`}>
               <DictSelect
@@ -303,23 +338,17 @@ export default function ReleaseDetail({ open, code, reqCode, onClose, onChanged 
                       {entity.summary || '无概述内容'}
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
-                      <StageChip label="需求"><StatusBadge status={entity.status} /></StageChip>
-                      <StageChip label="开发"><StatusBadge status={getWeakestDevStatus(ts?.dev)} /></StageChip>
-                      <StageChip label="应用组装">
-                        <div style={{ display: 'flex', gap: 4 }}>
-                          {(!ts?.sit || ts.sit.length === 0) ? <StatusBadge status="未开始" /> : ts.sit.map((s, i) => <StatusBadge key={i} status={s} />)}
-                        </div>
+                      <StageChip label="需求">
+                        <span style={stageLinkStyle} onClick={() => setReqOpen(true)}><StatusBadge status={entity.status} /></span>
                       </StageChip>
-                      <StageChip label="用户测试">
-                        <div style={{ display: 'flex', gap: 4 }}>
-                          {(!ts?.uat || ts.uat.length === 0) ? <StatusBadge status="未开始" /> : ts.uat.map((s, i) => <StatusBadge key={i} status={s} />)}
-                        </div>
-                      </StageChip>
+                      <StageChip label="开发">{stageBadge(ts?.dev, DEV_ORDER, 'dev', '开发')}</StageChip>
+                      <StageChip label="应用组装">{stageBadge(ts?.sit, TEST_ORDER, 'test', '应用组装')}</StageChip>
+                      <StageChip label="用户测试">{stageBadge(ts?.uat, TEST_ORDER, 'test', '用户测试')}</StageChip>
                       {ts?.nft && ts.nft.length > 0 && (
-                        <StageChip label="非功能测试"><div style={{ display: 'flex', gap: 4 }}>{ts.nft.map((s, i) => <StatusBadge key={i} status={s} />)}</div></StageChip>
+                        <StageChip label="非功能测试">{stageBadge(ts.nft, TEST_ORDER, 'test', '非功能测试')}</StageChip>
                       )}
                       {ts?.sec && ts.sec.length > 0 && (
-                        <StageChip label="安全测试"><div style={{ display: 'flex', gap: 4 }}>{ts.sec.map((s, i) => <StatusBadge key={i} status={s} />)}</div></StageChip>
+                        <StageChip label="安全测试">{stageBadge(ts.sec, TEST_ORDER, 'test', '安全测试')}</StageChip>
                       )}
                     </div>
                   </div>
@@ -486,6 +515,38 @@ export default function ReleaseDetail({ open, code, reqCode, onClose, onChanged 
       </Modal>
 
       <HistoryDrawer open={historyOpen} entityType="release" entityId={detail?.releaseTask?.id} onClose={() => setHistoryOpen(false)} />
-    </Modal>
+
+      {/* 多条任务时先弹任务列表，点选某条再打开对应详情（条件渲染，关闭即卸载） */}
+      {taskPicker && (
+        <Modal
+          open
+          title={`${taskPicker.label || ''}任务（${taskPicker.items?.length || 0}）`}
+          footer={null}
+          onCancel={() => setTaskPicker(null)}
+          width={460}
+          styles={{ body: { fontSize: 12 } }}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+            {(taskPicker.items || []).map((t) => (
+              <div
+                key={t.id}
+                onClick={() => { const k = taskPicker.kind, id = t.id; setTaskPicker(null); openTask(k, id); }}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', border: '1px solid var(--radar-border)', borderRadius: 4, cursor: 'pointer' }}
+              >
+                <span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', fontWeight: 600, color: 'var(--radar-primary)' }}>{t.task_code}</span>
+                {t.impl_system && <span style={{ color: 'var(--radar-text-secondary)' }}>{t.impl_system}</span>}
+                <span style={{ marginLeft: 'auto' }}><StatusBadge status={t.status} /></span>
+              </div>
+            ))}
+          </div>
+        </Modal>
+      )}
+
+      {/* 联动弹窗：阶段详情（需求 / 开发 / 测试）与投产申请详情 */}
+      <RequirementEditor open={reqOpen} code={entityType === 'requirement' ? entityCode : undefined} onClose={() => setReqOpen(false)} onSaved={reload} />
+      <TaskEditor open={!!devTaskId} kind="dev" taskId={devTaskId} onClose={() => setDevTaskId(null)} onSaved={reload} />
+      <TaskEditor open={!!testTaskId} kind="test" taskId={testTaskId} onClose={() => setTestTaskId(null)} onSaved={reload} />
+      <ReleaseApplyEditor open={!!applyCode} code={applyCode} onClose={() => setApplyCode(null)} onSaved={reload} />
+    </EditorShell>
   );
 }

@@ -18,6 +18,7 @@ import RequirementEditor from '../components/editors/RequirementEditor.jsx';
 import TaskEditor from '../components/editors/TaskEditor.jsx';
 import ReleaseDetail from '../components/editors/ReleaseDetail.jsx';
 import ReleaseApplyEditor from '../components/editors/ReleaseApplyEditor.jsx';
+import IssueDetail from '../components/editors/IssueDetail.jsx';
 import ResizableTitle from '../components/ResizableTitle.jsx';
 import { apiPost, apiGet, rawClient } from '../api/client.js';
 import FilterPanel from '../components/FilterPanel.jsx';
@@ -279,10 +280,56 @@ function ReleaseDetailCard({ release, onEdit }) {
           <StatusBadge status={s.result} />
         </div>
       )) : <div className="lc-muted">暂无会签</div>}
-      <div className="lc-section"><DeploymentUnitOutlined /> 系统投产</div>
-      {release.systems.length ? release.systems.map((s) => (
-        <div key={s.id} className="lc-sys-row"><SystemCard s={s.systemInfo} /><StatusBadge status={s.status} /></div>
-      )) : <div className="lc-muted">无改造系统</div>}
+      <div className="lc-section"><DeploymentUnitOutlined /> 制品投产</div>
+      {(release.artifacts && release.artifacts.length) ? release.artifacts.map((a) => (
+        <div key={a.id} style={{ border: '1px solid var(--radar-border)', borderRadius: 2, padding: '6px 8px', marginBottom: 6 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+            <span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', fontWeight: 600, fontSize: 11, color: 'var(--radar-ink)' }}>{a.change_code}</span>
+            {a.change_system_name && <span style={{ fontSize: 11, color: 'var(--radar-text-secondary)', textAlign: 'right', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.change_system_name}</span>}
+          </div>
+          {(a.units && a.units.length) ? a.units.map((u, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', background: 'var(--radar-bg)', border: '1px solid var(--radar-border)', borderRadius: 2, padding: '3px 6px', marginTop: 4 }}>
+              {u.artifact_type && <Tag className="status-tag tag-system" style={{ margin: 0, borderRadius: 2, fontSize: 10 }}>{u.artifact_type}</Tag>}
+              {u.new_version && <span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', fontSize: 11, color: 'var(--radar-ink)' }}>{u.new_version}</span>}
+              {u.delivery_unit && <span title={u.delivery_unit} style={{ fontSize: 11, color: 'var(--radar-text-secondary)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.delivery_unit}</span>}
+              <span style={{ marginLeft: 'auto' }}><StatusBadge status={u.ferry_status || '未摆渡'} /></span>
+            </div>
+          )) : <div className="lc-muted" style={{ fontSize: 11 }}>无交付制品</div>}
+        </div>
+      )) : <div className="lc-muted">无制品</div>}
+    </DetailCard>
+  );
+}
+
+/** 问题详情卡片（概览「问题列」用，字段按需展示；点击打开只读问题详情） */
+function IssueDetailCard({ issue, onEdit }) {
+  return (
+    <DetailCard status={issue.status} code={issue.issue_code} title={issue.summary} onEdit={onEdit} lg>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6, fontSize: 11, flexWrap: 'wrap' }}>
+        {issue.category && <Tag className="tag-type" style={{ borderRadius: 2, margin: 0, fontSize: 10 }}>{issue.category}</Tag>}
+        {issue.urgency && <Tag className="tag-org" style={{ borderRadius: 2, margin: 0, fontSize: 10 }}>{issue.urgency}</Tag>}
+        {issue.create_time && <span style={{ color: 'var(--radar-text-secondary)' }}>{issue.create_time}</span>}
+      </div>
+
+      {issue.details && (
+        <Field label="问题详情" col>
+          <div className="lc-text" style={{ color: 'var(--radar-ink)', whiteSpace: 'pre-wrap' }}>{issue.details}</div>
+        </Field>
+      )}
+
+      <Field label="所属系统" col>
+        <span style={{ color: 'var(--radar-ink)' }}>{issue.systemInfo?.sys_name || issue.system || '—'}</span>
+      </Field>
+      <Field label="计划投产点" col>
+        <span style={{ color: 'var(--radar-ink)' }}>{issue.release_date || '—'}</span>
+      </Field>
+
+      {issue.handler_name && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, margin: '8px 0' }}>
+          <span style={{ fontSize: 11, color: 'var(--radar-text-secondary)' }}>经办人</span>
+          <PersonCard p={{ name: issue.handler_name, org: issue.handler_org, phone: issue.handler_contact }} />
+        </div>
+      )}
     </DetailCard>
   );
 }
@@ -980,6 +1027,8 @@ export default function Overview() {
   const [editor, setEditor] = useState(null);
   // 投产申请·新增（未发起投产的需求点击投产卡片时弹出，并默认选中该需求）
   const [applyEditor, setApplyEditor] = useState(null);
+  // 问题只读详情（概览「问题列」点击打开）
+  const [issueDetailId, setIssueDetailId] = useState(null);
 
   const [filterQuery, setFilterQuery] = useState([]);
   
@@ -1030,10 +1079,10 @@ export default function Overview() {
   ];
 
   const filterConfigs = [
-    { field: 'req_code', label: '需求编号', type: 'input', isPrimary: true, op: 'like', placeholder: '需求编号检索' },
+    { field: 'req_code', label: '需求/问题编号', type: 'input', isPrimary: true, op: 'like', placeholder: '需求/问题编号检索' },
     { field: 'content', label: '需求内容', type: 'input', isPrimary: true, op: 'like', placeholder: '需求标题或概述检索' },
+    { field: 'org', label: '实施机构', type: 'select', isPrimary: true, op: 'in', options: orgOptions },
     { field: 'release_point_id', label: '计划投产点', type: 'select', op: 'in', options: pointOptions },
-    { field: 'org', label: '实施机构', type: 'select', op: 'in', options: orgOptions },
     { field: 'stage', label: '任务阶段', type: 'select', op: 'in', options: stageOptions },
     { field: 'taskStatus', label: '任务状态', type: 'select', op: 'in', options: taskStatuses },
     { field: 'main_systems', label: '主责系统', type: 'select', op: 'in', options: systemOptions },
@@ -1065,23 +1114,36 @@ export default function Overview() {
   };
   useEffect(load, [JSON.stringify(releasePointIds), JSON.stringify(filterQuery)]);
 
-  const loadDetail = async (reqCode) => {
+  // 加载概览详情：需求走 5 列详情；问题走两列详情（问题 + 投产）
+  const loadDetail = async (card) => {
     setDetailLoading(true);
-    try { setDetail(await apiGet(`/overview/${reqCode}/detail`)); }
-    finally { setDetailLoading(false); }
+    try {
+      if (card.entityType === 'issue') {
+        const d = await apiGet(`/overview/issue/${card.code}/detail`);
+        setDetail({ entityType: 'issue', ...d });
+      } else {
+        const d = await apiGet(`/overview/${card.code}/detail`);
+        setDetail({ entityType: 'requirement', ...d });
+      }
+    } finally { setDetailLoading(false); }
   };
-  const openDetail = async (card) => { setDetailCard(card); setDetailOpen(true); await loadDetail(card.req_code); };
+  const openDetail = async (card) => {
+    setDetailCard(card); setDetailOpen(true); await loadDetail(card);
+  };
 
   // 编辑保存后：刷新详情 + 概览
-  const onEditorSaved = () => { if (detail) loadDetail(detail.requirement.req_code); load(); };
+  const onEditorSaved = () => { if (detailCard) loadDetail(detailCard); load(); };
 
-  // 投产卡片点击：已发起投产 -> 查看投产审批详情；未发起 -> 弹出投产申请新增并默认选中该需求
+  // 投产卡片点击：已发起投产 -> 查看投产审批详情；未发起 -> 弹出投产申请新增并默认选中该实体
   const openReleaseCard = () => {
     if (!detail) return;
+    const code = detail.entityType === 'issue' ? detail.issue.issue_code : detail.requirement.req_code;
     if (detail.release) {
-      setEditor({ type: 'release', reqCode: detail.requirement.req_code });
+      setEditor({ type: 'release', reqCode: code });
+    } else if (detail.entityType === 'issue') {
+      setApplyEditor({ reqCode: code, releasePointId: detail.issue.release_point_id });
     } else {
-      setApplyEditor({ reqCode: detail.requirement.req_code, releasePointId: detail.requirement.release_point_id });
+      setApplyEditor({ reqCode: code, releasePointId: detail.requirement.release_point_id });
     }
   };
 
@@ -1112,17 +1174,26 @@ export default function Overview() {
           title={(
             <Space>
               <span style={{ fontWeight: 700 }}>{g.org}</span>
-              <Tag className="tag-type" style={{ borderRadius: 2 }}>{g.cards.length} 项需求</Tag>
+              {(() => {
+                const reqN = g.cards.filter((c) => c.entityType !== 'issue').length;
+                const issueN = g.cards.filter((c) => c.entityType === 'issue').length;
+                return (
+                  <>
+                    {reqN > 0 && <Tag className="tag-type" style={{ borderRadius: 2 }}>{reqN} 项需求</Tag>}
+                    {issueN > 0 && <Tag className="tag-org" style={{ borderRadius: 2 }}>{issueN} 项问题</Tag>}
+                  </>
+                );
+              })()}
             </Space>
           )}
         >
           <Row gutter={[16, 16]}>
             {g.cards.map((c) => (
-              <Col key={c.req_code} xs={24} xl={c.nodes.length >= 7 ? 24 : 12}>
+              <Col key={`${c.entityType}:${c.code}`} xs={24} xl={12}>
                 <div className="ov-req-card clickable" onClick={() => openDetail(c)}>
                   {/* 顶部：左=编号，右=当前状态标签 */}
                   <div className="ov-req-head">
-                    <span className="code-pill">{c.req_code}</span>
+                    <span className="code-pill">{c.code}</span>
                     <StatusBadge status={c.currentStage} />
                   </div>
 
@@ -1151,24 +1222,47 @@ export default function Overview() {
         styles={{ body: { minHeight: 360, overflowX: 'hidden' } }}
         title={detail && (
           <div className="lc-modal-title" style={{ paddingRight: 76 }}>
-            <span className="lc-id big">{detail.requirement.req_code}</span>
-            <span className="lc-modal-name">{detail.requirement.title}</span>
+            <span className="lc-id big">{detail.entityType === 'issue' ? detail.issue.issue_code : detail.requirement.req_code}</span>
+            <span className="lc-modal-name">{detail.entityType === 'issue' ? (detail.issue.summary || detail.issue.issue_code) : detail.requirement.title}</span>
             {detailCard?.systemName && detailCard.systemName !== '—' && <Tag className="tag-system" style={{ borderRadius: 2, margin: 0 }}>{detailCard.systemName}</Tag>}
-            <Tooltip title="历史记录">
-              <Button
-                type="text"
-                icon={<HistoryOutlined style={{ fontSize: 16 }} />}
-                onClick={() => setShowHistory(true)}
-                aria-label="历史记录"
-                style={{ position: 'absolute', top: 12, right: 48, width: 32, height: 32, borderRadius: 2, color: 'var(--radar-text-secondary)' }}
-              />
-            </Tooltip>
+            {detail.entityType !== 'issue' && (
+              <Tooltip title="历史记录">
+                <Button
+                  type="text"
+                  icon={<HistoryOutlined style={{ fontSize: 16 }} />}
+                  onClick={() => setShowHistory(true)}
+                  aria-label="历史记录"
+                  style={{ position: 'absolute', top: 12, right: 48, width: 32, height: 32, borderRadius: 2, color: 'var(--radar-text-secondary)' }}
+                />
+              </Tooltip>
+            )}
           </div>
         )}>
         {detailLoading || !detail ? (
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 360 }}>
             <Spin size="large" />
           </div>
+        ) : detail.entityType === 'issue' ? (
+          // 问题概览：仅「问题列 + 投产列」两列（窄屏页签 / 宽屏双列）
+          isTabMode ? (
+            <Tabs
+              items={[
+                { key: 'issue', label: '问题', children: <IssueDetailCard issue={detail.issue} onEdit={() => setIssueDetailId(detail.issue.id)} /> },
+                { key: 'rel', label: '投产', children: <ReleaseDetailCard release={detail.release} onEdit={openReleaseCard} /> },
+              ]}
+            />
+          ) : (
+            <div className="lc-columns-container">
+              <div className="lc-column">
+                <div className="lc-column-header"><span>问题</span></div>
+                <IssueDetailCard issue={detail.issue} onEdit={() => setIssueDetailId(detail.issue.id)} />
+              </div>
+              <div className="lc-column">
+                <div className="lc-column-header"><span>投产</span></div>
+                <ReleaseDetailCard release={detail.release} onEdit={openReleaseCard} />
+              </div>
+            </div>
+          )
         ) : (
           isTabMode ? (
             <Tabs
@@ -1257,6 +1351,8 @@ export default function Overview() {
         onClose={() => setEditor(null)} onSaved={onEditorSaved} />
       <ReleaseDetail open={editor?.type === 'release'} reqCode={editor?.type === 'release' ? editor?.reqCode : null}
         onClose={() => setEditor(null)} onChanged={onEditorSaved} />
+      {/* 问题只读详情（概览「问题列」点击打开） */}
+      <IssueDetail open={!!issueDetailId} issueId={issueDetailId} onClose={() => setIssueDetailId(null)} />
       {/* 未发起投产的需求：弹出投产申请新增并默认选中该需求 */}
       <ReleaseApplyEditor
         open={!!applyEditor}

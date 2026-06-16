@@ -234,12 +234,14 @@ export default async function releaseRoutes(fastify) {
         status: req?.status || null,
         release_date: rpMap[req?.release_point_id] || null,
       };
+      // 阶段任务：返回任务标识(id/编号/系统/状态)，供详情页点击状态标签直达对应任务弹窗
+      const tt = (type) => all('SELECT id, task_code, impl_system, status FROM test_task WHERE req_code = ? AND test_type = ? ORDER BY id', code, type);
       taskStatuses = {
-        dev: all('SELECT status FROM dev_task WHERE req_code = ?', code).map((t) => t.status),
-        sit: all('SELECT status FROM test_task WHERE req_code = ? AND test_type = ?', code, 'SIT').map((t) => t.status),
-        uat: all('SELECT status FROM test_task WHERE req_code = ? AND test_type = ?', code, 'UAT').map((t) => t.status),
-        nft: all('SELECT status FROM test_task WHERE req_code = ? AND test_type = ?', code, 'NFT').map((t) => t.status),
-        sec: all('SELECT status FROM test_task WHERE req_code = ? AND test_type = ?', code, 'SEC').map((t) => t.status),
+        dev: all('SELECT id, task_code, impl_system, status FROM dev_task WHERE req_code = ? ORDER BY id', code),
+        sit: tt('SIT'),
+        uat: tt('UAT'),
+        nft: tt('NFT'),
+        sec: tt('SEC'),
       };
     } else if (entityType === 'issue') {
       const issue = get('SELECT * FROM issue WHERE issue_code = ?', code);

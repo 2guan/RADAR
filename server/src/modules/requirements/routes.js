@@ -258,6 +258,13 @@ export default async function requirementRoutes(fastify) {
     return ok({ ...decode(row), has_tasks: linkedTaskCount(row.req_code) > 0, attachments: listByEntity('requirement', row.id) });
   });
 
+  // 按需求编号查询（供详情单页通过 URL 编号直达）
+  fastify.get('/requirements/by-code/:code', { preHandler: fastify.requirePerm('requirement', 'view') }, async (request) => {
+    const row = get('SELECT * FROM requirement WHERE req_code = ?', request.params.code);
+    if (!row) throw notFound();
+    return ok({ ...decode(row), has_tasks: linkedTaskCount(row.req_code) > 0, attachments: listByEntity('requirement', row.id) });
+  });
+
   // 新增
   fastify.post('/requirements', { preHandler: fastify.requirePerm('requirement', 'create') }, async (request) => {
     const body = request.body || {};

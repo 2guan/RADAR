@@ -22,6 +22,13 @@ import Release from './pages/Release.jsx';
 import ReleaseApply from './pages/ReleaseApply.jsx';
 import Users from './pages/Users.jsx';
 import Settings from './pages/Settings.jsx';
+import {
+  RequirementDetailPage,
+  DevTaskDetailPage,
+  TestTaskDetailPage,
+  ReleaseApplyDetailPage,
+  ReleaseApprovalDetailPage,
+} from './pages/DetailPages.jsx';
 
 export function getHomePath(defaultHome) {
   const routeMap = {
@@ -81,14 +88,17 @@ function Protected({ children }) {
   if (!user) return <Navigate to="/login" replace />;
 
   // 路由守卫：无该模块查看权限则重定向到默认首页
+  // 采用前缀匹配，兼顾列表页与详情单页（/requirements/:code、/release/apply/:code 等）；
+  // 顺序敏感：更具体的前缀须排在前面（/release/apply 先于 /release）。
   const path = location.pathname;
-  const moduleByPath = {
-    '/dashboard': 'dashboard', '/overview': 'overview', '/requirements': 'requirement',
-    '/issues': 'issue', '/dev': 'dev', '/test': 'test', '/release': 'release',
-    '/release/apply': 'release_apply',
-    '/users': 'user', '/settings': 'settings',
-  };
-  const mod = moduleByPath[path] || (path.startsWith('/test/') ? 'test' : undefined);
+  const PREFIX_MODULE = [
+    ['/dashboard', 'dashboard'], ['/overview', 'overview'],
+    ['/requirements', 'requirement'], ['/issues', 'issue'],
+    ['/dev', 'dev'], ['/test', 'test'],
+    ['/release/apply', 'release_apply'], ['/release', 'release'],
+    ['/users', 'user'], ['/settings', 'settings'],
+  ];
+  const mod = PREFIX_MODULE.find(([p]) => path === p || path.startsWith(p + '/'))?.[1];
   if (mod && !can(mod, 'view')) {
     const homePath = getHomePath(user?.defaultHome);
     return <Navigate to={homePath} replace />;
@@ -119,15 +129,20 @@ export default function AppRouter() {
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="overview" element={<Overview />} />
           <Route path="requirements" element={<Requirements />} />
+          <Route path="requirements/:code" element={<RequirementDetailPage />} />
           <Route path="issues" element={<Issues />} />
           <Route path="dev" element={<DevTasks />} />
+          <Route path="dev/:code" element={<DevTaskDetailPage />} />
           <Route path="test" element={<Navigate to="/test/sit" replace />} />
           <Route path="test/sit" element={<SitPage />} />
           <Route path="test/uat" element={<UatPage />} />
           <Route path="test/nft" element={<NftPage />} />
           <Route path="test/sec" element={<SecPage />} />
+          <Route path="test/detail/:code" element={<TestTaskDetailPage />} />
           <Route path="release" element={<Release />} />
           <Route path="release/apply" element={<ReleaseApply />} />
+          <Route path="release/apply/:code" element={<ReleaseApplyDetailPage />} />
+          <Route path="release/detail/:code" element={<ReleaseApprovalDetailPage />} />
           <Route path="users" element={<Users />} />
           <Route path="settings" element={<Settings />} />
         </Route>

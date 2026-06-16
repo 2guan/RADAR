@@ -767,3 +767,50 @@ body {
   }
 }
 
+
+/* ───────────────────────── 详情单页（EditorShell page 模式） ───────────────────────── */
+/* 复用各编辑器的弹窗正文，套在统一的「顶部操作条 + 正文卡片」单页布局内 */
+.detail-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+.detail-page-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--radar-surface);
+  border: 1px solid var(--radar-border);
+  border-radius: 8px;
+  margin-bottom: 12px;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+.detail-page-back { flex-shrink: 0; color: var(--radar-text-secondary); }
+.detail-page-title {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+}
+/* 单页模式无 Modal 关闭按钮，历史按钮回收到标题右侧 */
+.detail-page-title .ant-btn[aria-label="历史记录"],
+.detail-page-title .ant-btn[aria-label="变更历史"] {
+  top: 0 !important;
+  right: 0 !important;
+}
+.detail-page-actions { flex-shrink: 0; display: flex; align-items: center; gap: 8px; }
+.detail-page-content {
+  background: var(--radar-surface);
+  border: 1px solid var(--radar-border);
+  border-radius: 8px;
+  padding: 16px;
+}
+@media (max-width: 768px) {
+  .detail-page-bar { padding: 8px 10px; gap: 8px; }
+  .detail-page-content { padding: 10px; }
+}

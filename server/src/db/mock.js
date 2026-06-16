@@ -12,6 +12,7 @@
  */
 
 import { db, get, all, run, tx } from './index.js';
+import { config } from '../config.js';
 import { runMigrations } from './migrate.js';
 import { runSeed } from './seed.js';
 import { hashPassword } from '../lib/password.js';
@@ -32,7 +33,7 @@ function mulberry32(seed) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
-const rng = mulberry32(20260615);
+const rng = mulberry32(20260616);
 const pick = (arr) => arr[Math.floor(rng() * arr.length)];
 const pickN = (arr, n) => {
   const pool = [...arr];
@@ -51,28 +52,40 @@ function shift(base, days) {
 const ymd = (s) => `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
 
 // ---------------------------------------------------------------------------
-// 人员姓名池
+// 人员清单（真实导入名单）：[手机号, 姓名, 角色标识, 所属机构]。
+// 除既有 admin 超级管理员外的全部人员；其中「超级管理员」角色以 is_super=1 建号。
 // ---------------------------------------------------------------------------
-const SURNAMES = '王李张刘陈杨黄赵周吴徐孙马朱胡郭何高林郑谢罗梁宋唐许韩冯邓曹彭曾'.split('');
-const GIVEN = ['伟', '芳', '娜', '敏', '静', '强', '磊', '军', '洋', '勇', '艳', '杰', '娟', '涛', '明', '超', '霞', '平', '刚', '桂英', '建华', '志强', '晓东', '丽娟', '海燕', '文博', '志远', '思源', '雅婷'];
-const usedNames = new Set();
-function genName() {
-  for (let i = 0; i < 999; i++) {
-    const n = pick(SURNAMES) + pick(GIVEN);
-    if (!usedNames.has(n)) { usedNames.add(n); return n; }
-  }
-  return pick(SURNAMES) + pick(GIVEN) + (usedNames.size);
-}
-
-// 各角色应创建的用户数（6 个会签角色各 2 人，确保会签可被验证）
-const USER_PLAN = [
-  ['安全负责人', 2, '建信金科'], ['架构负责人', 2, '建信金科'], ['机构负责人', 2, '云南农信'],
-  ['项目负责人', 2, '建信金科'], ['测试负责人', 2, '建信金科'], ['配置负责人', 2, '基础技术中心'],
-  ['金科业务', 2, '建信金科'], ['农信业务', 2, '云南农信'],
-  ['金科开发', 3, '上海事业群'], ['农信开发', 2, '云南农信'],
-  ['金科测试', 2, '建信金科'], ['农信测试', 1, '云南农信'],
-  ['金科运维', 2, '建信金科'], ['农信运维', 1, '云南农信'],
-  ['管理员', 1, '建信金科'],
+const USERS = [
+  ['18918688193', '李通', '测试负责人', '交付事业部'],
+  ['18687112956', '谢恩宏', '测试负责人', '云南农信'],
+  ['15108711537', '李昶霖', '农信运维', '云南农信'],
+  ['13881954314', '李彪', '金科测试', '交付事业部'],
+  ['18918688029', '郭劲松', '项目负责人', '交付事业部'],
+  ['13811931599', '詹同宇', '金科开发', '交付事业部'],
+  ['18652954495', '杨锡明', '项目负责人', '交付事业部'],
+  ['18959228330', '李河杰', '金科开发', '大数据中心'],
+  ['18965810392', '张京', '金科开发', '厦门事业群'],
+  ['15810107688', '王凯', '金科运维', '交付事业部'],
+  ['18910053279', '王卫东', '配置负责人', '交付事业部'],
+  ['18313983383', '王冲生', '农信运维', '云南农信'],
+  ['13708487153', '鲁志兵', '机构负责人', '云南农信'],
+  ['18820995661', '胡霆', '机构负责人', '深圳事业群'],
+  ['18918689016', '胡伟钢', '机构负责人', '上海事业群'],
+  ['13706969866', '吴刚', '项目负责人', '交付事业部'],
+  ['18918688309', '忻健', '测试负责人', '交付事业部'],
+  ['13574870755', '彭景华', '金科业务', '交付事业部'],
+  ['15037691731', '肖乃峰', '安全负责人', '交付事业部'],
+  ['18601250615', '薛潇', '超级管理员', '交付事业部'],
+  ['13308236171', '曹志学', '管理员', '成都事业群'],
+  ['15818723430', '王晓坤', '管理员', '交付事业部'],
+  ['18261598684', '盛赛荣', '架构负责人', '交付事业部'],
+  ['13888920605', '陈旭', '农信测试', '云南农信'],
+  ['18787458157', '陈洁', '农信测试', '云南农信'],
+  ['15087190584', '王鲁', '农信业务', '云南农信'],
+  ['15808709229', '贺婵', '农信业务', '云南农信'],
+  ['15126311088', '崔晓林', '农信业务', '云南农信'],
+  ['13668758491', '孙雪峰', '农信业务', '云南农信'],
+  ['18918688502', '杨青', '金科业务', '交付事业部'],
 ];
 
 // 给定的可用问题编号（外部 PAMS 同步而来）
@@ -114,8 +127,8 @@ function wipe() {
     'attachment', 'audit_log', 'saved_filter', 'dashboard_chart',
   ];
   for (const t of tables) run(`DELETE FROM ${t}`);
-  // 删除非超管用户（user_role 等随级联删除）
-  run('DELETE FROM user WHERE is_super = 0');
+  // 删除除引导超管(admin)外的全部人员（含名单内的超管薛潇，保证可重复执行；user_role 随级联删除）
+  run('DELETE FROM user WHERE phone <> ?', config.superAdmin.phone);
   // release_point 被需求/投产申请引用，需在其后清空
   run('DELETE FROM release_point');
 }
@@ -128,28 +141,29 @@ export function runMock() {
     wipe();
 
     // ----------------------------------------------------------------------
-    // 1) 用户（按角色规划创建，密码统一 Radar@2026）
+    // 1) 用户（导入真实名单 USERS；密码统一 Radar@2026；「超级管理员」角色以 is_super=1 建号）
     // ----------------------------------------------------------------------
     const pwd = hashPassword('Radar@2026');
     const roleId = {};
     for (const r of all('SELECT id, code FROM role')) roleId[r.code] = r.id;
     const usersByRole = {}; // roleCode -> [name]
-    let phoneSeq = 1;
-    for (const [code, count, org] of USER_PLAN) {
-      usersByRole[code] = [];
-      for (let i = 0; i < count; i++) {
-        const name = genName();
-        const phone = `139${String(phoneSeq++).padStart(8, '0')}`;
-        const res = run(
-          `INSERT INTO user (phone, name, org, password_hash, status, is_super, password_changed_at)
-           VALUES (?,?,?,?,?,0,datetime('now','localtime'))`,
-          phone, name, org, pwd, '启用',
-        );
-        run('INSERT INTO user_role (user_id, role_id) VALUES (?,?)', res.lastInsertRowid, roleId[code]);
-        usersByRole[code].push(name);
-      }
+    for (const [phone, name, code, org] of USERS) {
+      if (!roleId[code]) throw new Error(`角色不存在：${code}（手机号 ${phone}）`);
+      const isSuper = code === '超级管理员' ? 1 : 0;
+      const res = run(
+        `INSERT INTO user (phone, name, org, password_hash, status, is_super, password_changed_at)
+         VALUES (?,?,?,?,?,?,datetime('now','localtime'))`,
+        phone, name, org, pwd, '启用', isSuper,
+      );
+      run('INSERT INTO user_role (user_id, role_id) VALUES (?,?)', res.lastInsertRowid, roleId[code]);
+      (usersByRole[code] ||= []).push(name);
     }
-    const pickUser = (code) => pick(usersByRole[code]);
+    // 按角色取一名人员；该角色无人时回退到任意可用人员，保证字段不为空
+    const anyUser = USERS[0][1];
+    const pickUser = (code) => {
+      const arr = usersByRole[code];
+      return arr && arr.length ? pick(arr) : anyUser;
+    };
 
     // ----------------------------------------------------------------------
     // 2) 投产点

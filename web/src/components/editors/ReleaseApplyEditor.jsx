@@ -8,17 +8,19 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Modal, Form, Input, Row, Col, Button, Select, Tabs, Tag, Space, message, Tooltip } from 'antd';
+import { Form, Input, Row, Col, Button, Select, Tabs, Tag, Space, message, Tooltip } from 'antd';
 import { HistoryOutlined, CloseOutlined, ThunderboltOutlined, PlusOutlined, MinusCircleOutlined } from '@ant-design/icons';
 import DictSelect from '../DictSelect.jsx';
 import SystemSelect from '../SystemSelect.jsx';
 import StatusBadge from '../StatusBadge.jsx';
 import HistoryDrawer from '../HistoryDrawer.jsx';
+import CodeLink from '../CodeLink.jsx';
+import EditorShell from './EditorShell.jsx';
 import { apiGet, apiPost, apiPut } from '../../api/client.js';
 import { useAppStore } from '../../stores/app.js';
 import { useResponsive } from '../../hooks/useResponsive.js';
 
-export default function ReleaseApplyEditor({ open, applyId, defaultReleasePointId, defaultReqCodes, onClose, onSaved }) {
+export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId, defaultReleasePointId, defaultReqCodes, onClose, onSaved }) {
   const [form] = Form.useForm();
   // 监听计划投产点，用于与所选需求的投产点做一致性校验提示
   const releasePointIdValue = Form.useWatch('release_point_id', form);
@@ -28,7 +30,8 @@ export default function ReleaseApplyEditor({ open, applyId, defaultReleasePointI
   const { can } = useAppStore();
   const releasePointIds = useAppStore((s) => s.releasePointIds);
   const { isMobile } = useResponsive();
-  const isEdit = !!applyId;
+  // 既有申请（按 id 或变更编号加载）即为编辑/查看态；其余为新增
+  const isEdit = !!applyId || !!code || mode === 'page';
   const readonly = isEdit ? !can('release_apply', 'edit') : !can('release_apply', 'create');
 
   // 关联需求/问题选择
@@ -43,7 +46,7 @@ export default function ReleaseApplyEditor({ open, applyId, defaultReleasePointI
   const debounceRef = useRef(null);
 
   useEffect(() => {
-    if (!open) return;
+    if (mode !== 'page' && !open) return;
     apiGet('/release-points/all').then(setPoints).catch(() => {});
     apiGet('/systems/all').then(setSystems).catch(() => {});
     // 加载全部需求（不限投产窗口），以便跨窗口关联与投产点一致性校验
@@ -55,6 +58,8 @@ export default function ReleaseApplyEditor({ open, applyId, defaultReleasePointI
         setCurrent(d);
         form.setFieldsValue(d);
       });
+    } else if (code) {
+      apiGet(`/release-apply/by-code/${encodeURIComponent(code)}`).then((d) => { setCurrent(d); form.setFieldsValue(d); });
     } else {
       setCurrent(null);
       setSelReqs(Array.isArray(defaultReqCodes) ? [...defaultReqCodes] : []);
@@ -65,7 +70,7 @@ export default function ReleaseApplyEditor({ open, applyId, defaultReleasePointI
         release_point_id: defaultReleasePointId,
       });
     }
-  }, [open, applyId]);
+  }, [open, applyId, code, mode]);
 
   // 编辑态：把已存 ref_codes 拆分为需求/问题（以问题编号集合判定，需求列表受投产窗口限制不可靠）
   useEffect(() => {
@@ -143,7 +148,7 @@ export default function ReleaseApplyEditor({ open, applyId, defaultReleasePointI
     const ref_codes = [...new Set([...selReqs, ...selIssues])];
     const payload = { ...v, ref_codes };
     if (isEdit) {
-      await apiPut(`/release-apply/${applyId}`, payload);
+      await apiPut(`/release-apply/${applyId ?? current?.id}`, payload);
       message.success('已保存');
     } else {
       const res = await apiPost('/release-apply', payload);
@@ -176,7 +181,8 @@ export default function ReleaseApplyEditor({ open, applyId, defaultReleasePointI
       debounceRef.current = setTimeout(async () => {
         try {
           const params = { code: trimmed };
-          if (applyId) params.excludeId = applyId;
+          const excludeId = applyId ?? current?.id;
+          if (excludeId) params.excludeId = excludeId;
           const res = await apiGet('/release-apply/check-code', params);
           res.exists ? reject('变更编号已存在') : resolve();
         } catch { resolve(); }
@@ -212,20 +218,19 @@ export default function ReleaseApplyEditor({ open, applyId, defaultReleasePointI
   };
 
   return (
-    <Modal
+    <EditorShell
+      mode={mode}
       open={open}
       width={980}
       okText="保存"
       onOk={save}
       onCancel={onClose}
-      destroyOnHidden
       okButtonProps={readonly ? { style: { display: 'none' } } : undefined}
       cancelText={readonly ? '关闭' : '取消'}
-      styles={{ body: { fontSize: 12 } }}
       title={(
         <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 10, rowGap: 6, minWidth: 0, width: '100%', paddingRight: 76 }}>
           {isEdit || current ? (
-            <span className="lc-id big" style={{ margin: 0 }}>{current?.change_code || 'CHG'}</span>
+            <CodeLink module="release_apply" code={current?.change_code} fallback="CHG" />
           ) : (
             <span className="lc-id big" style={{ margin: 0, background: 'var(--radar-status-in-progress-soft)', color: 'var(--radar-status-in-progress)' }}>NEW</span>
           )}
@@ -416,6 +421,6 @@ export default function ReleaseApplyEditor({ open, applyId, defaultReleasePointI
       </Form>
 
       <HistoryDrawer open={historyOpen} entityType="release_apply" entityId={current?.id} onClose={() => setHistoryOpen(false)} />
-    </Modal>
+    </EditorShell>
   );
 }

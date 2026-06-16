@@ -74,6 +74,31 @@ function resolveSystem(code) {
     || { sys_code: code, sys_name: code, org: null, sector: null };
 }
 
+/** 读取引用了该需求/问题编号的投产申请制品（含各交付单元的摆渡状态），供投产列展示 */
+function entityArtifacts(code) {
+  if (!code) return [];
+  const rows = all(
+    `SELECT * FROM release_apply ra
+       WHERE EXISTS (SELECT 1 FROM json_each(ra.ref_codes) WHERE value = ?)
+     ORDER BY ra.id DESC`,
+    code,
+  );
+  return rows.map((r) => {
+    let units = [];
+    try { units = r.delivery_units ? JSON.parse(r.delivery_units) : []; } catch { units = []; }
+    const sys = r.change_system ? resolveSystem(r.change_system) : null;
+    return {
+      id: r.id,
+      change_code: r.change_code,
+      change_system: r.change_system,
+      change_system_name: sys ? (sys.sys_name || r.change_system) : (r.change_system || null),
+      impl_org: r.impl_org,
+      change_content: r.change_content,
+      units,
+    };
+  });
+}
+
 /** 构建单需求链路概要（dev/test/rt 状态均由预载 Map 提供，免逐需求查询） */
 function buildChain(req, devMap, testMap, rtMap) {
   const dev = devMap[req.req_code] || [];
@@ -103,6 +128,94 @@ function buildChain(req, devMap, testMap, rtMap) {
     current = dones[dones.length - 1] || nodes[0];
   }
   return { nodes, currentStage: `${current.label}-${current.status || '未开始'}` };
+}
+
+// 问题状态的终态集合：待验证 / 已解决 视为已完成（进度条显示终态）
+const ISSUE_TERMINAL_STATUS = new Set(['待验证', '已解决']);
+
+/** 问题状态节点：待验证/已解决 视为终态(done)，其余有状态为 doing，无状态为 pending */
+function issueStatusNode(status) {
+  if (!status) return { key: '问题', label: '问题状态', state: 'pending', text: null, status: null };
+  const base = nodeState([{ status }]);
+  if (ISSUE_TERMINAL_STATUS.has(status)) base.state = 'done';
+  return { key: '问题', label: '问题状态', ...base };
+}
+
+/**
+ * 把「投产申请关联的问题」追加为概览卡片（与需求卡片混排于同一实施机构分组下）。
+ * 范围：当前投产窗口（或指定投产点）下的投产申请所关联的问题；进度仅含「问题状态 + 投产」两项。
+ * 仅套用对问题适用的筛选（实施机构/编号/内容）；命中需求专属筛选（阶段/任务状态/系统）时不纳入问题，避免误导。
+ */
+function appendIssueCards({ groups, body, targetReleasePointIds, sysMap, rtMap, filters }) {
+  const { orgsFilter, reqCodeFilter, contentFilter, stageFilter, taskStatusFilter, mainSystemsFilter, collabSystemsFilter } = filters;
+  // 命中需求专属筛选时，问题卡片整体不参与
+  if (stageFilter || taskStatusFilter || mainSystemsFilter || collabSystemsFilter) return;
+
+  // 1) 取窗口（或指定投产点）下的投产申请
+  let raSql = 'SELECT ref_codes, impl_org FROM release_apply';
+  const raParams = [];
+  if (targetReleasePointIds) {
+    if (!targetReleasePointIds.length) return;
+    raSql += ` WHERE release_point_id IN (${targetReleasePointIds.map(() => '?').join(',')})`;
+    raParams.push(...targetReleasePointIds);
+  } else {
+    const win = inClause('release_point_id', windowIds(body));
+    if (win.where) { raSql += ` WHERE ${win.where}`; raParams.push(...win.params); }
+  }
+  const applies = all(raSql, ...raParams);
+  if (!applies.length) return;
+
+  // 2) 问题主数据 + 系统名→机构 映射（问题的 system 字段多为系统名称）
+  const issueMap = {};
+  for (const it of all('SELECT issue_code, status, summary, system FROM issue')) issueMap[it.issue_code] = it;
+  const sysNameOrg = {};
+  for (const s of all('SELECT sys_name, org FROM system')) sysNameOrg[s.sys_name] = s.org;
+
+  // 3) 收集关联到的问题编号（去重，记录首个关联申请的实施机构作分组兜底）
+  const issueImplOrg = {};
+  for (const ra of applies) {
+    let refs = [];
+    try { refs = ra.ref_codes ? JSON.parse(ra.ref_codes) : []; } catch { refs = []; }
+    for (const code of refs) {
+      if (issueMap[code] && !(code in issueImplOrg)) issueImplOrg[code] = ra.impl_org || null;
+    }
+  }
+
+  // 4) 逐个问题生成卡片
+  for (const code of Object.keys(issueImplOrg)) {
+    const it = issueMap[code];
+    const org = (it.system && (sysMap[it.system]?.org || sysNameOrg[it.system])) || issueImplOrg[code] || '未分配机构';
+
+    if (orgsFilter && !orgsFilter.includes(org)) continue;
+    if (reqCodeFilter && !code.toLowerCase().includes(reqCodeFilter)) continue;
+    if (contentFilter) {
+      const sumMatch = it.summary && it.summary.toLowerCase().includes(contentFilter);
+      if (!sumMatch && !code.toLowerCase().includes(contentFilter)) continue;
+    }
+
+    const rtStatus = rtMap[code];
+    const rt = rtStatus ? { status: rtStatus } : null;
+    const nodes = [
+      issueStatusNode(it.status),
+      { key: '投产', label: '投产', ...nodeState(rt ? [{ status: rt.status === '已投产' ? '已上线' : '待评审' }] : []) },
+    ];
+    let current = nodes.find((n) => n.state === 'doing') || nodes.filter((n) => n.state === 'done').pop() || nodes[0];
+
+    // 物理子系统：问题表存的是子系统编号，按系统表解析为名称展示
+    const sysName = it.system ? (sysMap[it.system]?.name || it.system) : '—';
+    const card = {
+      entityType: 'issue',
+      code,
+      req_code: code,
+      title: it.summary || code,
+      systems: sysName !== '—' ? [sysName] : [],
+      systemName: sysName,
+      systemOrg: org,
+      currentStage: `${current.label}-${current.status || '未开始'}`,
+      nodes,
+    };
+    (groups[org] ||= []).push(card);
+  }
 }
 
 export default async function overviewRoutes(fastify) {
@@ -231,6 +344,8 @@ export default async function overviewRoutes(fastify) {
       }
  
       const card = {
+        entityType: 'requirement',
+        code: r.req_code,
         req_code: r.req_code,
         title: r.title,
         systems: names,
@@ -241,6 +356,13 @@ export default async function overviewRoutes(fastify) {
       };
       (groups[org] ||= []).push(card);
     }
+
+    // ── 投产申请关联的「问题」也纳入概览（卡片样式同需求，进度仅「问题状态 + 投产」两项） ──
+    appendIssueCards({
+      groups, body, targetReleasePointIds, sysMap, rtMap,
+      filters: { orgsFilter, reqCodeFilter, contentFilter, stageFilter, taskStatusFilter, mainSystemsFilter, collabSystemsFilter },
+    });
+
     const list = Object.entries(groups).map(([org, cards]) => ({ org, cards }));
     return ok({ list });
   });
@@ -273,6 +395,7 @@ export default async function overviewRoutes(fastify) {
         .map((s) => ({ ...s, systemInfo: resolveSystem(s.system_code) })),
       signoffs: all('SELECT * FROM release_signoff WHERE release_task_id = ?', rt.id)
         .map((s) => ({ ...s, signerInfo: resolvePerson(s.signer_name) })),
+      artifacts: entityArtifacts(reqCode),
     } : null;
 
     // 需求：解析人员、主责系统与协同改造系统
@@ -291,6 +414,42 @@ export default async function overviewRoutes(fastify) {
     };
 
     return ok({ requirement, dev, sit, nft, sec, uat, release: releaseDetail });
+  });
+
+  // 问题两列概览详情（问题 + 投产）：供版本概览中问题卡片点开
+  fastify.get('/overview/issue/:code/detail', { preHandler: fastify.requirePerm('overview', 'view') }, async (request) => {
+    const code = request.params.code;
+    const issue = get('SELECT * FROM issue WHERE issue_code = ?', code);
+    if (!issue) throw notFound('问题不存在');
+
+    // 关联投产申请（取最早一条）以推导计划投产点
+    const ap = get(
+      `SELECT release_point_id FROM release_apply
+         WHERE EXISTS (SELECT 1 FROM json_each(release_apply.ref_codes) WHERE value = ?)
+         ORDER BY id ASC LIMIT 1`,
+      code,
+    );
+    const rp = ap?.release_point_id ? get('SELECT release_date FROM release_point WHERE id = ?', ap.release_point_id) : null;
+
+    // 投产任务（与需求详情同款结构：负责人 + 会签 + 系统）
+    const rt = get('SELECT * FROM release_task WHERE req_code = ?', code);
+    const releaseDetail = rt ? {
+      ...rt,
+      ownerInfo: resolvePerson(rt.owner),
+      systems: all('SELECT * FROM release_system WHERE release_task_id = ?', rt.id)
+        .map((s) => ({ ...s, systemInfo: resolveSystem(s.system_code) })),
+      signoffs: all('SELECT * FROM release_signoff WHERE release_task_id = ?', rt.id)
+        .map((s) => ({ ...s, signerInfo: resolvePerson(s.signer_name) })),
+      artifacts: entityArtifacts(code),
+    } : null;
+
+    const issueOut = {
+      ...issue,
+      release_point_id: ap?.release_point_id || null,
+      release_date: rp ? rp.release_date : null,
+      systemInfo: resolveSystem(issue.system),
+    };
+    return ok({ issue: issueOut, release: releaseDetail });
   });
 
   // 需求全流程变更历史

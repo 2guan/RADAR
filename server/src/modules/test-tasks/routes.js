@@ -161,10 +161,33 @@ export default async function testTaskRoutes(fastify) {
   });
 
   // 详情
+  // 组装测试任务详情：附带关联需求(编号/标题/状态)与该需求的全部开发任务（供详情联动展示）
+  const buildTestDetail = (row) => {
+    const reqRow = get('SELECT title, status FROM requirement WHERE req_code = ?', row.req_code);
+    const sysMap = {};
+    for (const s of all('SELECT sys_code, sys_name FROM system')) sysMap[s.sys_code] = s.sys_name;
+    const dev_tasks = all('SELECT id, task_code, impl_system, status FROM dev_task WHERE req_code = ? ORDER BY id', row.req_code)
+      .map((t) => ({ ...t, impl_system_name: sysMap[t.impl_system] || t.impl_system || null }));
+    return {
+      ...row,
+      req_title: reqRow?.title || null,
+      req_status: reqRow?.status || null,
+      dev_tasks,
+      attachments: listByEntity('test', row.id),
+    };
+  };
+
   fastify.get('/test-tasks/:id', { preHandler: fastify.requirePerm('test', 'view') }, async (request) => {
     const row = get('SELECT * FROM test_task WHERE id = ?', request.params.id);
     if (!row) throw notFound();
-    return ok({ ...row, attachments: listByEntity('test', row.id) });
+    return ok(buildTestDetail(row));
+  });
+
+  // 按测试任务编号查询（供详情单页通过 URL 编号直达）
+  fastify.get('/test-tasks/by-code/:code', { preHandler: fastify.requirePerm('test', 'view') }, async (request) => {
+    const row = get('SELECT * FROM test_task WHERE task_code = ?', request.params.code);
+    if (!row) throw notFound();
+    return ok(buildTestDetail(row));
   });
 
   // 测试承接预览

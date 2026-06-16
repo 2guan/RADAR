@@ -34,6 +34,9 @@ export default function DashboardChart({
   const isDark = theme === 'dark';
   const height = forcedHeight != null ? forcedHeight : (chart.height ?? 320);
 
+  // 图表点击钻取：将用户点击的图元（系列名/数据名）反解为原始维度过滤条件，回调 onDrill。
+  // 兼容两种数据形态——二维交叉表（含 name_y，需同时还原 X/Y 两个维度）与一维分组（仅还原单维度）；
+  // 「合计」系列不可钻取，未提供 onDrill 时直接忽略。
   const handleEchartClick = (p) => {
     if (!onDrill || p.seriesName === '合计') return;
     const is2D = data[0] && 'name_y' in data[0];

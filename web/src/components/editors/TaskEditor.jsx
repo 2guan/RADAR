@@ -8,7 +8,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { Modal, Form, Input, DatePicker, Row, Col, Button, Tooltip, message } from 'antd';
+import { Form, Input, DatePicker, Row, Col, Button, Tooltip, message } from 'antd';
 import { HistoryOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import DictSelect from '../DictSelect.jsx';
@@ -16,7 +16,10 @@ import SystemSelect from '../SystemSelect.jsx';
 import PersonPicker from '../PersonPicker.jsx';
 import AttachmentField from '../AttachmentField.jsx';
 import HistoryDrawer from '../HistoryDrawer.jsx';
-import { getStatusType, statusSelectWidth } from '../StatusBadge.jsx';
+import CodeLink from '../CodeLink.jsx';
+import EditorShell from './EditorShell.jsx';
+import RequirementEditor from './RequirementEditor.jsx';
+import StatusBadge, { getStatusType, statusSelectWidth } from '../StatusBadge.jsx';
 import { apiGet, apiPut } from '../../api/client.js';
 import { useAppStore } from '../../stores/app.js';
 import { useResponsive } from '../../hooks/useResponsive.js';
@@ -34,20 +37,24 @@ const CFG = {
   },
 };
 
-export default function TaskEditor({ open, kind = 'dev', taskId, onClose, onSaved }) {
+export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', taskId, onClose, onSaved }) {
   const cfg = CFG[kind];
   const [form] = Form.useForm();
   // 监听任务状态，供标题栏内联选择器响应式回显
   const statusValue = Form.useWatch('status', form);
   const [current, setCurrent] = useState(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  // 联动：打开关联需求详情 / 关联开发任务详情
+  const [reqOpen, setReqOpen] = useState(false);
+  const [relDevId, setRelDevId] = useState(null);
   const { can } = useAppStore();
   const { isMobile } = useResponsive();
   const readonly = !can(cfg.entity, 'edit');
+  const linkStyle = { color: 'var(--radar-primary)', cursor: 'pointer' };
 
   useEffect(() => {
-    if (!open || !taskId) return;
-    apiGet(`${cfg.api}/${taskId}`).then((d) => {
+    // 回显数据到表单（弹窗按 id 取，单页按编号取）
+    const apply = (d) => {
       setCurrent(d);
       form.setFieldsValue({
         ...d,
@@ -56,35 +63,41 @@ export default function TaskEditor({ open, kind = 'dev', taskId, onClose, onSave
         actual_start: d.actual_start ? dayjs(d.actual_start) : null,
         actual_end: d.actual_end ? dayjs(d.actual_end) : null,
       });
-    });
-  }, [open, taskId, kind]);
+    };
+    if (mode === 'page') {
+      if (code) apiGet(`${cfg.api}/by-code/${encodeURIComponent(code)}`).then(apply);
+      return;
+    }
+    if (!open || !taskId) return;
+    apiGet(`${cfg.api}/${taskId}`).then(apply);
+  }, [open, taskId, code, kind, mode]);
 
   const save = async () => {
     const v = await form.validateFields();
+    const id = taskId ?? current?.id;
     const fmt = (x) => (x ? x.format('YYYY-MM-DD') : null);
-    await apiPut(`${cfg.api}/${taskId}`, {
+    await apiPut(`${cfg.api}/${id}`, {
       ...v, plan_start: fmt(v.plan_start), plan_end: fmt(v.plan_end),
       actual_start: fmt(v.actual_start), actual_end: fmt(v.actual_end),
     });
     message.success('已保存');
     onSaved?.();
-    onClose?.();   // 保存成功后关闭弹窗
+    onClose?.();   // 保存成功后关闭弹窗 / 返回
   };
 
   return (
-    <Modal
+    <EditorShell
+      mode={mode}
       open={open}
       width={860}
       okText="保存"
       onOk={save}
       onCancel={onClose}
-      destroyOnHidden
       okButtonProps={readonly ? { style: { display: 'none' } } : undefined}
       cancelText={readonly ? '关闭' : '取消'}
-      styles={{ body: { fontSize: 12 } }}
       title={(
         <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 10, rowGap: 6, minWidth: 0, width: '100%', paddingRight: 76 }}>
-          <span className="lc-id big" style={{ margin: 0 }}>{current?.task_code || cfg.title}</span>
+          <CodeLink module={cfg.entity} code={current?.task_code} fallback={cfg.title} />
           {/* 任务状态：标题栏内联编辑，点击即可切换；按主题状态色显示，宽度随内容自适应 */}
           <span className={`status-select status-select-${getStatusType(statusValue)}`}>
             <DictSelect
@@ -116,11 +129,32 @@ export default function TaskEditor({ open, kind = 'dev', taskId, onClose, onSave
       )}
     >
       {current && (
-        <div className="meta-bar" style={{ fontSize: 12, marginBottom: 12 }}>
-          <span className="meta-item"><span className="meta-label">关联需求</span><b>{current.req_code}</b></span>
-          <span className="meta-item"><span className="meta-label">实施方</span><b>{current.impl_org || '—'}</b></span>
-          <span className="meta-item"><span className="meta-label">偏差率</span><b>{current.deviation_rate == null ? '—' : `${current.deviation_rate}%`}</b></span>
-        </div>
+        <>
+          {/* 关联需求：编号 + 标题（测试详情再加需求状态），点击打开需求详情 */}
+          <div className="meta-bar" style={{ fontSize: 12, marginBottom: kind === 'test' && current.dev_tasks?.length ? 8 : 12 }}>
+            <span className="meta-item" style={{ flexWrap: 'wrap' }}>
+              <span className="meta-label">关联需求</span>
+              <span style={current.req_code ? linkStyle : undefined} onClick={() => current.req_code && setReqOpen(true)}>
+                <b>{current.req_code || '—'}</b>{current.req_title ? `　${current.req_title}` : ''}
+              </span>
+              {kind === 'test' && current.req_status && <StatusBadge status={current.req_status} />}
+            </span>
+          </div>
+
+          {/* 测试详情：列出该需求的全部开发任务（编号/所属系统/状态），点击打开开发任务详情 */}
+          {kind === 'test' && current.dev_tasks?.length > 0 && (
+            <div className="meta-bar" style={{ fontSize: 12, marginBottom: 12, alignItems: 'center' }}>
+              <span className="meta-label" style={{ marginRight: 2 }}>关联开发任务</span>
+              {current.dev_tasks.map((t) => (
+                <span key={t.id} className="meta-item" style={{ ...linkStyle, display: 'inline-flex', alignItems: 'center', gap: 6 }} onClick={() => setRelDevId(t.id)}>
+                  <b>{t.task_code}</b>
+                  <span style={{ color: 'var(--radar-text-secondary)' }}>{t.impl_system_name || '—'}</span>
+                  <StatusBadge status={t.status} />
+                </span>
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       <Form form={form} layout="vertical" requiredMark={false} className="editor-form" style={{ fontSize: 12 }}>
@@ -204,6 +238,13 @@ export default function TaskEditor({ open, kind = 'dev', taskId, onClose, onSave
       </Form>
 
       <HistoryDrawer open={historyOpen} entityType={cfg.entity} entityId={current?.id} onClose={() => setHistoryOpen(false)} />
-    </Modal>
+
+      {/* 联动弹窗：关联需求详情 */}
+      <RequirementEditor open={reqOpen} code={current?.req_code} onClose={() => setReqOpen(false)} />
+      {/* 联动弹窗：关联开发任务详情（仅测试详情用） */}
+      {kind === 'test' && (
+        <TaskEditor open={!!relDevId} kind="dev" taskId={relDevId} onClose={() => setRelDevId(null)} />
+      )}
+    </EditorShell>
   );
 }

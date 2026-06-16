@@ -8,13 +8,15 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Modal, Form, Input, DatePicker, Row, Col, Button, Select, Tag, Space, message, Tooltip } from 'antd';
+import { Form, Input, DatePicker, Row, Col, Button, Select, Tag, Space, message, Tooltip } from 'antd';
 import { HistoryOutlined, CloseOutlined, ThunderboltOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import DictSelect from '../DictSelect.jsx';
 import PersonPicker from '../PersonPicker.jsx';
 import AttachmentField from '../AttachmentField.jsx';
 import HistoryDrawer from '../HistoryDrawer.jsx';
+import CodeLink from '../CodeLink.jsx';
+import EditorShell from './EditorShell.jsx';
 import { getStatusType, statusSelectWidth } from '../StatusBadge.jsx';
 import { apiGet, apiPost, apiPut } from '../../api/client.js';
 import { useAppStore } from '../../stores/app.js';
@@ -123,7 +125,7 @@ function SystemPickerField({ title, hint, value = [], onChange, single, placehol
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default function RequirementEditor({ open, reqId, defaultReleasePointId, onClose, onSaved }) {
+export default function RequirementEditor({ open, mode = 'modal', code, reqId, defaultReleasePointId, onClose, onSaved }) {
   const [form] = Form.useForm();
   // 监听需求状态，供标题栏内联选择器响应式回显
   const statusValue = Form.useWatch('status', form);
@@ -133,7 +135,8 @@ export default function RequirementEditor({ open, reqId, defaultReleasePointId, 
   const [genLoading, setGenLoading] = useState(false); // 生成编号加载态
   const { can } = useAppStore();
   const { isMobile } = useResponsive();
-  const isEdit = !!reqId;
+  // 既有需求（按 id 或编号加载）即为编辑/查看态；其余为新增
+  const isEdit = !!reqId || !!code || mode === 'page';
   const readonly = isEdit ? !can('requirement', 'edit') : !can('requirement', 'create');
   // 已关联开发/测试任务时，需求编号锁定不可改
   const codeLocked = !!current?.has_tasks;
@@ -142,19 +145,22 @@ export default function RequirementEditor({ open, reqId, defaultReleasePointId, 
   const debounceRef = useRef(null);
 
   useEffect(() => {
-    if (!open) return;
+    const applyRow = (d) => {
+      setCurrent(d);
+      form.setFieldsValue({ ...d, propose_time: d.propose_time ? dayjs(d.propose_time) : null });
+    };
+    if (mode !== 'page' && !open) return;
     apiGet('/release-points/all').then(setPoints).catch(() => {});
     if (reqId) {
-      apiGet(`/requirements/${reqId}`).then((d) => {
-        setCurrent(d);
-        form.setFieldsValue({ ...d, propose_time: d.propose_time ? dayjs(d.propose_time) : null });
-      });
+      apiGet(`/requirements/${reqId}`).then(applyRow);
+    } else if (code) {
+      apiGet(`/requirements/by-code/${encodeURIComponent(code)}`).then(applyRow);
     } else {
       setCurrent(null);
       form.resetFields();
       form.setFieldsValue({ status: '需求登记', release_point_id: defaultReleasePointId });
     }
-  }, [open, reqId]);
+  }, [open, reqId, code, mode]);
 
   const save = async () => {
     const v = await form.validateFields();
@@ -163,7 +169,7 @@ export default function RequirementEditor({ open, reqId, defaultReleasePointId, 
       propose_time: v.propose_time ? v.propose_time.format('YYYY-MM-DD') : null,
     };
     if (isEdit) {
-      await apiPut(`/requirements/${reqId}`, payload);
+      await apiPut(`/requirements/${reqId ?? current?.id}`, payload);
       message.success('已保存');
     } else {
       const res = await apiPost('/requirements', payload);
@@ -203,7 +209,8 @@ export default function RequirementEditor({ open, reqId, defaultReleasePointId, 
       debounceRef.current = setTimeout(async () => {
         try {
           const params = { code: trimmed };
-          if (reqId) params.excludeId = reqId;
+          const excludeId = reqId ?? current?.id;
+          if (excludeId) params.excludeId = excludeId;
           const res = await apiGet('/requirements/check-code', params);
           res.exists ? reject('需求编号已存在') : resolve();
         } catch {
@@ -213,20 +220,19 @@ export default function RequirementEditor({ open, reqId, defaultReleasePointId, 
     });
 
   return (
-    <Modal
+    <EditorShell
+      mode={mode}
       open={open}
       width={980}
       okText="保存"
       onOk={save}
       onCancel={onClose}
-      destroyOnHidden
       okButtonProps={readonly ? { style: { display: 'none' } } : undefined}
       cancelText={readonly ? '关闭' : '取消'}
-      styles={{ body: { fontSize: 12 } }}
       title={(
         <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 10, rowGap: 6, minWidth: 0, width: '100%', paddingRight: 76 }}>
           {isEdit || current ? (
-            <span className="lc-id big" style={{ margin: 0 }}>{current?.req_code || 'REQ'}</span>
+            <CodeLink module="requirement" code={current?.req_code} fallback="REQ" />
           ) : (
             <span className="lc-id big" style={{ margin: 0, background: 'var(--radar-status-in-progress-soft)', color: 'var(--radar-status-in-progress)' }}>NEW</span>
           )}
@@ -424,6 +430,6 @@ export default function RequirementEditor({ open, reqId, defaultReleasePointId, 
         entityId={current?.id}
         onClose={() => setHistoryOpen(false)}
       />
-    </Modal>
+    </EditorShell>
   );
 }

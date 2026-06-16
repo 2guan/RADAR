@@ -178,6 +178,15 @@ export default async function releaseApplyRoutes(fastify) {
     return ok(decoded);
   });
 
+  // 按变更编号查询（供详情单页通过 URL 编号直达）
+  fastify.get('/release-apply/by-code/:code', { preHandler: fastify.requirePerm('release_apply', 'view') }, async (request) => {
+    const row = get('SELECT * FROM release_apply WHERE change_code = ?', request.params.code);
+    if (!row) throw notFound();
+    const decoded = decode(row);
+    decoded.review_status = deriveReviewStatus(decoded.ref_codes);
+    return ok(decoded);
+  });
+
   // 新增
   fastify.post('/release-apply', { preHandler: fastify.requirePerm('release_apply', 'create') }, async (request) => {
     const body = request.body || {};

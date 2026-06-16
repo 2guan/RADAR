@@ -153,10 +153,23 @@ export default async function devTaskRoutes(fastify) {
   });
 
   // 详情
+  // 组装开发任务详情：附带关联需求标题（供详情联动展示）
+  const buildDevDetail = (row) => {
+    const reqRow = get('SELECT title FROM requirement WHERE req_code = ?', row.req_code);
+    return { ...row, req_title: reqRow?.title || null, attachments: listByEntity('dev', row.id) };
+  };
+
   fastify.get('/dev-tasks/:id', { preHandler: fastify.requirePerm('dev', 'view') }, async (request) => {
     const row = get('SELECT * FROM dev_task WHERE id = ?', request.params.id);
     if (!row) throw notFound();
-    return ok({ ...row, attachments: listByEntity('dev', row.id) });
+    return ok(buildDevDetail(row));
+  });
+
+  // 按开发任务编号查询（供详情单页通过 URL 编号直达）
+  fastify.get('/dev-tasks/by-code/:code', { preHandler: fastify.requirePerm('dev', 'view') }, async (request) => {
+    const row = get('SELECT * FROM dev_task WHERE task_code = ?', request.params.code);
+    if (!row) throw notFound();
+    return ok(buildDevDetail(row));
   });
 
   // 开发承接预览
