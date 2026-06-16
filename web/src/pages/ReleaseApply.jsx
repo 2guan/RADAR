@@ -48,7 +48,7 @@ export default function ReleaseApply() {
     { field: 'change_code', label: '变更编号', type: 'input', isPrimary: true, op: 'like', placeholder: '变更编号检索' },
     { field: 'content', label: '变更内容', type: 'input', isPrimary: true, op: 'like', placeholder: '变更内容或影响范围检索' },
     { field: 'change_system', label: '变更系统', type: 'select', op: 'in', options: systemOptions },
-    { field: 'impl_org', label: '实施机构', type: 'select', op: 'in', options: orgOptions },
+    { field: 'impl_org', label: '实施机构', type: 'select', op: 'in', options: orgOptions, isPrimary: true },
     { field: 'artifact_type', label: '制品类型', type: 'select', op: 'in', options: artifactOptions },
     { field: 'ferry_status', label: '摆渡状态', type: 'select', op: 'in', options: ferryOptions },
   ];
