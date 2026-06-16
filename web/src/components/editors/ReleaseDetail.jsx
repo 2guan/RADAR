@@ -120,10 +120,20 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, onC
 
   const handleOpenSign = (so) => {
     setCurrentSignoff(so);
-    setSignResult(so.result === '已驳回' ? '已驳回' : '已签署');
-    setSignConclusion(so.conclusion || '');
+    const result = so.result === '已驳回' ? '已驳回' : '已签署';
+    setSignResult(result);
+    setSignConclusion(so.conclusion || (result === '已签署' ? '同意投产' : '不同意，[补充具体原因]'));
     setSignOpen(true);
     loadSignatures();
+  };
+
+  const handleSignResultChange = (val) => {
+    setSignResult(val);
+    if (val === '已签署' && (!signConclusion || signConclusion === '不同意，[补充具体原因]')) {
+      setSignConclusion('同意投产');
+    } else if (val === '已驳回' && (!signConclusion || signConclusion === '同意投产')) {
+      setSignConclusion('不同意，[补充具体原因]');
+    }
   };
 
   /** 保存当前手绘/上传的签名到签名库，并选中 */
@@ -459,7 +469,7 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, onC
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 12, fontSize: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 12, fontWeight: 600, width: 70 }}>签署结论：</span>
-            <Radio.Group value={signResult} onChange={(e) => setSignResult(e.target.value)} size="small">
+            <Radio.Group value={signResult} onChange={(e) => handleSignResultChange(e.target.value)} size="small">
               <Radio value="已签署">同意</Radio>
               <Radio value="已驳回">拒绝</Radio>
             </Radio.Group>
