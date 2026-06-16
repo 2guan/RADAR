@@ -68,7 +68,17 @@ export default function Release() {
 
   const columns = [
     { title: '投产状态', dataIndex: 'release_status', key: 'release_status', align: 'center', width: 96, render: (s) => <StatusBadge status={s} /> },
-    { title: '评审状态', dataIndex: 'review_status', key: 'review_status', align: 'center', width: 96, render: (s) => (s ? <StatusBadge status={s} /> : '—') },
+    {
+      title: '评审状态', dataIndex: 'review_status', key: 'review_status', align: 'center', width: 96,
+      render: (s) => (
+        s ? (
+          <StatusBadge
+            status={s}
+            style={{ width: 68, display: 'inline-flex', justifyContent: 'center' }}
+          />
+        ) : '—'
+      ),
+    },
     {
       title: '会签进度', key: 'signoff', width: 130,
       render: (_, r) => (r.signoff.total ? (
