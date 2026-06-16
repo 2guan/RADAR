@@ -7,6 +7,7 @@
 
 import { all, get, run } from '../../db/index.js';
 import { registerCrud } from '../../lib/crud.js';
+import { cascadeSystemRename } from '../../lib/dict-cascade.js';
 import { registerIO } from '../../lib/io.js';
 import { listQuery } from '../../lib/query.js';
 import { ok, badRequest } from '../../lib/http.js';
@@ -27,6 +28,12 @@ export default async function systemRoutes(fastify) {
     },
     codeField: 'sys_code',
     skipList: true,
+    // 修改系统编号时，级联同步所有引用旧编号的存量业务数据（主责/协同系统、实施系统、投产系统等）
+    afterWrite: ({ isCreate, request, data, old }) => {
+      if (isCreate || !old) return;
+      if (data.sys_code === undefined || data.sys_code === old.sys_code) return;
+      cascadeSystemRename(old.sys_code, data.sys_code, request.currentUser?.name);
+    },
   });
 
   // 列表（支持高级筛选：系统名称/编号、所属机构、所属板块）

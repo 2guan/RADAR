@@ -8,6 +8,7 @@
 
 import { all, get, run, tx } from '../../db/index.js';
 import { registerCrud } from '../../lib/crud.js';
+import { cascadeDictRename } from '../../lib/dict-cascade.js';
 import { listQuery } from '../../lib/query.js';
 import { exportXlsx, parseXlsx } from '../../lib/excel.js';
 import { ok, badRequest } from '../../lib/http.js';
@@ -54,6 +55,12 @@ export default async function dictRoutes(fastify) {
     },
     codeField: 'attr_value',
     skipList: true,
+    // 修改字典属性值时，级联同步所有引用旧值的存量业务数据（流程状态/机构/版本类型等）
+    afterWrite: ({ isCreate, request, data, old }) => {
+      if (isCreate || !old) return;
+      if (data.attr_value === undefined || data.attr_value === old.attr_value) return;
+      cascadeDictRename(old.category, old.attr_value, data.attr_value, request.currentUser?.name);
+    },
   });
 
   // 列表（自定义：支持流程状态阶段、状态类型及模糊搜索）

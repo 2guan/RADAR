@@ -25,7 +25,7 @@ import { ok, notFound, badRequest } from './http.js';
  * @param {object} cfg.fieldLabels 字段中文名映射（留痕用）
  * @param {string} [cfg.codeField] 业务编号字段（留痕展示），默认主键 id
  * @param {Function} [cfg.beforeWrite] (data, {isCreate, request}) => data 写入前钩子
- * @param {Function} [cfg.afterWrite] ({id, isCreate, request}) => void 写入后钩子（同事务外）
+ * @param {Function} [cfg.afterWrite] ({id, isCreate, request, data, old}) => void 写入后钩子（同事务外；old 仅修改时有值）
  * @param {Function} [cfg.beforeDelete] (row, request) => void 删除前钩子（可抛错阻止）
  */
 export function registerCrud(fastify, cfg) {
@@ -82,7 +82,7 @@ export function registerCrud(fastify, cfg) {
       );
       auditUpdate(entityType, id, String(old[codeField] ?? id), request.currentUser?.name, old, data, fieldLabels);
     }
-    if (afterWrite) afterWrite({ id, isCreate: false, request, data });
+    if (afterWrite) afterWrite({ id, isCreate: false, request, data, old });
     return ok({ id });
   });
 
