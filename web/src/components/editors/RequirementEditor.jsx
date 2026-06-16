@@ -363,8 +363,14 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
                 <Input placeholder="请输入需求标题" size="small" readOnly={readonly} />
               </Form.Item>
               <Form.Item name="summary" label="需求概述" rules={[{ max: 2000, message: '不超过 2000 字' }]} style={{ marginBottom: 18 }}>
-                <Input.TextArea rows={15} placeholder="描述该需求的核心背景与业务诉求（2000字以内）" showCount={!readonly} maxLength={2000} style={{ fontSize: 12 }} readOnly={readonly} />
+                <Input.TextArea rows={7} placeholder="描述该需求的核心背景与业务诉求（2000字以内）" showCount={!readonly} maxLength={2000} style={{ fontSize: 12 }} readOnly={readonly} />
               </Form.Item>
+            </div>
+
+            {/* 需求说明书（附件） */}
+            <div className="form-section-card">
+              <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>需求说明书<span style={{ fontWeight: 400, color: 'var(--radar-text-secondary)', marginLeft: 6, fontSize: 11 }}>（附件或路径，终态至少 1 个）</span></div>
+              <AttachmentField entityType="requirement" entityId={current?.id} fieldKey="需求说明书" readOnly={readonly} />
             </div>
           </Col>
 
@@ -413,12 +419,6 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
               <Form.Item name="jk_owner" label="建信金科业务负责人" style={{ marginBottom: 0 }}>
                 <PersonPicker style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择建信金科业务负责人" size="small" />
               </Form.Item>
-            </div>
-
-            {/* 需求说明书（附件） */}
-            <div className="form-section-card">
-              <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>需求说明书<span style={{ fontWeight: 400, color: 'var(--radar-text-secondary)', marginLeft: 6, fontSize: 11 }}>（附件或路径，终态至少 1 个）</span></div>
-              <AttachmentField entityType="requirement" entityId={current?.id} fieldKey="需求说明书" readOnly={readonly} />
             </div>
           </Col>
         </Row>
