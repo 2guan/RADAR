@@ -100,7 +100,7 @@ export default function Issues() {
 
   const columns = [
     {
-      title: '问题编号', dataIndex: 'issue_code', key: 'issue_code', sorter: true,
+      title: '问题编号', dataIndex: 'issue_code', key: 'issue_code', sorter: true, defaultSortOrder: 'descend',
       render: (val) => (
         <span style={{ fontFamily: 'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace', fontWeight: 500 }}>
           {val}
@@ -111,7 +111,7 @@ export default function Issues() {
     { title: '详细分类', dataIndex: 'detailed_classification', key: 'detailed_classification' },
     { title: '所属系统', dataIndex: 'system', key: 'system' },
     {
-      title: '问题概述', dataIndex: 'summary', key: 'summary',
+      title: '问题概述', dataIndex: 'summary', key: 'summary', width: 360,
       render: (v) => (
         <div
           title={v || ''}
@@ -144,6 +144,7 @@ export default function Issues() {
         columns={columns}
         fetcher={fetcher}
         baseQuery={{ filters: filterQuery }}
+        defaultSort={[{ field: 'issue_code', order: 'desc' }]}
         showSearch={false}
         onRowClick={openDetail}
         mobileCard={(item) => (
@@ -160,7 +161,12 @@ export default function Issues() {
         )}
       />
 
-      <IssueDetail open={detailOpen} issueId={detailId} onClose={() => setDetailOpen(false)} />
+      <IssueDetail
+        open={detailOpen}
+        issueId={detailId}
+        onClose={() => setDetailOpen(false)}
+        onSynced={() => { tableRef.current?.reload(); loadOptions(); }}
+      />
     </Card>
   );
 }

@@ -7,9 +7,11 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { Modal, Descriptions, Tag, Timeline, Empty, Spin, Typography } from 'antd';
+import { Modal, Descriptions, Tag, Timeline, Empty, Spin, Typography, Button, message } from 'antd';
+import { CloudSyncOutlined } from '@ant-design/icons';
 import StatusBadge from '../StatusBadge.jsx';
-import { apiGet } from '../../api/client.js';
+import Can from '../Can.jsx';
+import { apiGet, apiPost } from '../../api/client.js';
 import { useResponsive } from '../../hooks/useResponsive.js';
 
 const { Paragraph, Text } = Typography;
@@ -29,19 +31,44 @@ function BoolTag({ value }) {
   );
 }
 
-export default function IssueDetail({ open, issueId, onClose }) {
+export default function IssueDetail({ open, issueId, onClose, onSynced }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const { isMobile } = useResponsive();
 
-  useEffect(() => {
-    if (!open || !issueId) return;
+  // 拉取问题详情（同步后可复用以刷新弹窗内容）
+  const load = () => {
+    if (!issueId) return;
     setLoading(true);
-    setData(null);
     apiGet(`/issues/${issueId}`)
       .then(setData)
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    if (!open || !issueId) return;
+    setData(null);
+    load();
   }, [open, issueId]);
+
+  // 同步当前问题详情：仅按本问题编号拉取并更新明细
+  const onSyncOne = async () => {
+    if (!data?.issue_code) return;
+    setSyncing(true);
+    try {
+      const r = await apiPost('/issues/sync-detail', { codes: [data.issue_code] });
+      if (r.failed?.length) {
+        message.warning(`同步失败：${r.failed[0]?.error || '未知错误'}`);
+      } else {
+        message.success('已同步该问题详情');
+      }
+      load();
+      onSynced?.();
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const cols = isMobile ? 1 : 2;
   const log = Array.isArray(data?.analysis_log) ? data.analysis_log : [];
@@ -60,6 +87,13 @@ export default function IssueDetail({ open, issueId, onClose }) {
             {data?.issue_code || '问题详情'}
           </span>
           {data?.status && <StatusBadge status={data.status} />}
+          {data?.issue_code && (
+            <Can module="issue" action="sync">
+              <Button size="small" icon={<CloudSyncOutlined />} loading={syncing} onClick={onSyncOne}>
+                同步问题详情
+              </Button>
+            </Can>
+          )}
         </div>
       )}
     >

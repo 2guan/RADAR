@@ -26,12 +26,12 @@ export const MENU = [
       { key: '/test/sec', label: '安全测试', module: 'test' },
     ],
   },
-  { key: '/issues', label: '问题管理', module: 'issue', icon: React.createElement(BugOutlined) },
   {
     key: '/release-mgmt', label: '投产管理', module: 'release_apply', icon: React.createElement(RocketOutlined),
     children: [
       { key: '/release/apply', label: '投产申请', module: 'release_apply' },
       { key: '/release', label: '投产审批', module: 'release' },
+      { key: '/issues', label: '问题管理', module: 'issue', icon: React.createElement(BugOutlined) },
     ],
   },
   { key: '/users', label: '人员管理', module: 'user', icon: React.createElement(TeamOutlined) },

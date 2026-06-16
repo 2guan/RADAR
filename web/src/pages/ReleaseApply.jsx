@@ -72,11 +72,11 @@ export default function ReleaseApply() {
   const monoStyle = { fontFamily: 'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace' };
 
   const columns = [
-    { title: '变更编号', dataIndex: 'change_code', key: 'change_code', sorter: true, render: (v) => <span style={{ ...monoStyle, fontWeight: 500 }}>{v}</span> },
-    { title: '变更系统', dataIndex: 'change_system_name', key: 'change_system_name', render: (v) => v || '—' },
+    { title: '变更编号', dataIndex: 'change_code', key: 'change_code', width: 120, sorter: true, render: (v) => <span style={{ ...monoStyle, fontWeight: 500 }}>{v}</span> },
+    { title: '变更系统', dataIndex: 'change_system_name', key: 'change_system_name', width: 110, ellipsis: true, render: (v) => v || '—' },
     { title: '变更内容', dataIndex: 'change_content', key: 'change_content', ellipsis: true },
     {
-      title: '交付制品', key: 'delivery_units', width: 280,
+      title: '交付制品', key: 'delivery_units', width: 200,
       render: (_, row) => {
         const units = Array.isArray(row.delivery_units) ? row.delivery_units : [];
         if (!units.length) return '—';
@@ -96,10 +96,10 @@ export default function ReleaseApply() {
         );
       },
     },
-    { title: '评审状态', dataIndex: 'review_status', key: 'review_status', align: 'center', render: (v) => (v ? <StatusBadge status={v} /> : '—') },
-    { title: '实施机构', dataIndex: 'impl_org', key: 'impl_org', render: (v) => v || '—' },
+    { title: '评审状态', dataIndex: 'review_status', key: 'review_status', width: 88, align: 'center', render: (v) => (v ? <StatusBadge status={v} /> : '—') },
+    { title: '实施机构', dataIndex: 'impl_org', key: 'impl_org', width: 100, ellipsis: true, render: (v) => v || '—' },
     {
-      title: '操作', key: 'op', width: 80, fixed: 'right',
+      title: '操作', key: 'op', width: 80,
       render: (_, row) => (
         <Space size={0} onClick={(e) => e.stopPropagation()}>
           <Can module="release_apply" action="edit"><Button type="link" size="small" icon={<EditOutlined />} onClick={() => openEdit(row)} /></Can>
@@ -141,6 +141,8 @@ export default function ReleaseApply() {
         ref={tableRef} columns={columns} fetcher={fetcher}
         baseQuery={{ releasePointIds, filters: filterQuery }}
         showSearch={false}
+        tableLayout="fixed"
+        tableScroll={{ x: false }}
         onRowClick={openEdit}
         mobileCard={(item) => (
           <Space direction="vertical" size={4} style={{ width: '100%' }}>
