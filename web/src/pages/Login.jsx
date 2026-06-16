@@ -8,13 +8,14 @@
 import React, { useEffect, useState } from 'react';
 import { Card, Form, Input, Button, Typography, message } from 'antd';
 import { UserOutlined, LockOutlined } from '@ant-design/icons';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { apiPost, TOKEN_KEY } from '../api/client.js';
 import { useAppStore } from '../stores/app.js';
 import { getHomePath } from '../app.jsx';
 
 export default function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { platform, loadPlatform, loadMe, loadReleasePoint } = useAppStore();
   const [loading, setLoading] = useState(false);
 
@@ -28,8 +29,20 @@ export default function Login() {
       const me = await loadMe();
       await loadReleasePoint();
       message.success(`欢迎回来，${data.name}`);
-      const homePath = getHomePath(me?.defaultHome);
-      navigate(homePath);
+
+      const redirectHash = sessionStorage.getItem('radar_redirect_hash');
+      const from = location.state?.from;
+
+      if (redirectHash && redirectHash !== '#/login' && redirectHash !== '#') {
+        sessionStorage.removeItem('radar_redirect_hash');
+        const targetPath = redirectHash.startsWith('#') ? redirectHash.substring(1) : redirectHash;
+        navigate(targetPath, { replace: true });
+      } else if (from && from.pathname !== '/login') {
+        navigate(from, { replace: true });
+      } else {
+        const homePath = getHomePath(me?.defaultHome);
+        navigate(homePath, { replace: true });
+      }
     } catch {
       // 错误已由拦截器提示
     } finally {

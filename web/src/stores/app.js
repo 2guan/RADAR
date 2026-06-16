@@ -98,6 +98,7 @@ export const useAppStore = create((set, get) => ({
   /** 退出登录 */
   logout: () => {
     localStorage.removeItem(TOKEN_KEY);
+    sessionStorage.removeItem('radar_redirect_hash');
     set({ user: null, permissions: [] });
     location.hash = '#/login';
   },

@@ -32,7 +32,10 @@ rawClient.interceptors.response.use(
     const msg = error.response?.data?.message || '网络异常，请稍后再试';
     if (status === 401) {
       localStorage.removeItem(TOKEN_KEY);
-      if (location.hash !== '#/login') location.hash = '#/login';
+      if (location.hash !== '#/login') {
+        sessionStorage.setItem('radar_redirect_hash', location.hash);
+        location.hash = '#/login';
+      }
     }
     message.error(msg);
     return Promise.reject(error);

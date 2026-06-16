@@ -76,7 +76,7 @@ function Protected({ children }) {
     })();
   }, [token]);
 
-  if (!token) return <Navigate to="/login" replace />;
+  if (!token) return <Navigate to="/login" state={{ from: location }} replace />;
   if (loading) {
     return (
       <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center', justifyContent: 'center' }}>
@@ -85,7 +85,7 @@ function Protected({ children }) {
       </div>
     );
   }
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) return <Navigate to="/login" state={{ from: location }} replace />;
 
   // 路由守卫：无该模块查看权限则重定向到默认首页
   // 采用前缀匹配，兼顾列表页与详情单页（/requirements/:code、/release/apply/:code 等）；
