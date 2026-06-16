@@ -74,21 +74,27 @@ export default function ReleaseApply() {
   const columns = [
     { title: '变更编号', dataIndex: 'change_code', key: 'change_code', width: 120, sorter: true, render: (v) => <span style={{ ...monoStyle, fontWeight: 500 }}>{v}</span> },
     { title: '变更系统', dataIndex: 'change_system_name', key: 'change_system_name', width: 110, ellipsis: true, render: (v) => v || '—' },
-    { title: '变更内容', dataIndex: 'change_content', key: 'change_content', ellipsis: true },
     {
-      title: '交付制品', key: 'delivery_units', width: 200,
+      title: '变更内容', dataIndex: 'change_content', key: 'change_content', width: 260,
+      render: (v) => (
+        <div
+          title={v || ''}
+          style={{ display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: '18px', maxHeight: 54 }}
+        >
+          {v || '—'}
+        </div>
+      ),
+    },
+    {
+      title: '交付制品', key: 'delivery_units', width: 150,
       render: (_, row) => {
         const units = Array.isArray(row.delivery_units) ? row.delivery_units : [];
         if (!units.length) return '—';
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {units.map((u, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 {u.artifact_type && <Tag className="status-tag tag-system" style={{ margin: 0, borderRadius: 2 }}>{u.artifact_type}</Tag>}
-                {u.new_version && <span style={monoStyle}>{u.new_version}</span>}
-                {u.delivery_unit && (
-                  <span title={u.delivery_unit} style={{ color: 'var(--radar-text-secondary)', fontSize: 11, maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.delivery_unit}</span>
-                )}
                 {u.ferry_status && <StatusBadge status={u.ferry_status} />}
               </div>
             ))}

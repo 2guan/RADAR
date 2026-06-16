@@ -7,14 +7,14 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { Modal, Descriptions, Tag, Timeline, Empty, Spin, Typography, Button, message } from 'antd';
+import { Modal, Tag, Timeline, Empty, Spin, Typography, Button, message } from 'antd';
 import { CloudSyncOutlined } from '@ant-design/icons';
 import StatusBadge from '../StatusBadge.jsx';
 import Can from '../Can.jsx';
 import { apiGet, apiPost } from '../../api/client.js';
-import { useResponsive } from '../../hooks/useResponsive.js';
+import './IssueDetail.css';
 
-const { Paragraph, Text } = Typography;
+const { Text } = Typography;
 
 /** 多行长文本展示（保留换行），空值占位 */
 function LongText({ value }) {
@@ -35,7 +35,6 @@ export default function IssueDetail({ open, issueId, onClose, onSynced }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const { isMobile } = useResponsive();
 
   // 拉取问题详情（同步后可复用以刷新弹窗内容）
   const load = () => {
@@ -70,7 +69,6 @@ export default function IssueDetail({ open, issueId, onClose, onSynced }) {
     }
   };
 
-  const cols = isMobile ? 1 : 2;
   const log = Array.isArray(data?.analysis_log) ? data.analysis_log : [];
 
   return (
@@ -80,13 +78,18 @@ export default function IssueDetail({ open, issueId, onClose, onSynced }) {
       onCancel={onClose}
       footer={null}
       destroyOnHidden
-      styles={{ body: { fontSize: 12, maxHeight: '72vh', overflowY: 'auto' } }}
+      styles={{ body: { fontSize: 12, maxHeight: '78vh', overflowY: 'auto' } }}
       title={(
         <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 10, rowGap: 6, paddingRight: 40 }}>
           <span className="lc-id big" style={{ margin: 0, fontFamily: 'SFMono-Regular, Consolas, monospace' }}>
             {data?.issue_code || '问题详情'}
           </span>
           {data?.status && <StatusBadge status={data.status} />}
+          {data?.round && (
+            <span className="round-badge">
+              {data.round}
+            </span>
+          )}
           {data?.issue_code && (
             <Can module="issue" action="sync">
               <Button size="small" icon={<CloudSyncOutlined />} loading={syncing} onClick={onSyncOne}>
@@ -102,77 +105,230 @@ export default function IssueDetail({ open, issueId, onClose, onSynced }) {
       ) : !data ? (
         <Empty description="暂无数据" />
       ) : (
-        <div style={{ marginTop: 8 }}>
-          {/* 基本信息 */}
-          <Descriptions title="基本信息" bordered size="small" column={cols} styles={{ label: { width: 110 } }}>
-            <Descriptions.Item label="问题编号">{data.issue_code || '—'}</Descriptions.Item>
-            <Descriptions.Item label="状态"><StatusBadge status={data.status} /></Descriptions.Item>
-            <Descriptions.Item label="问题轮次">{data.round || '—'}</Descriptions.Item>
-            <Descriptions.Item label="紧急程度">{data.urgency || '—'}</Descriptions.Item>
-            <Descriptions.Item label="处理方式">{data.handling_method || '—'}</Descriptions.Item>
-            <Descriptions.Item label="工单编号">{data.work_order_no || '—'}</Descriptions.Item>
-            <Descriptions.Item label="分类">{data.category || '—'}</Descriptions.Item>
-            <Descriptions.Item label="详细分类">{data.detailed_classification || '—'}</Descriptions.Item>
-            <Descriptions.Item label="是否重大问题"><BoolTag value={data.is_major} /></Descriptions.Item>
-            <Descriptions.Item label="是否常见问题"><BoolTag value={data.is_common} /></Descriptions.Item>
-          </Descriptions>
+        <div className="issue-detail-wrapper">
+          {/* People Grid */}
+          <div className="grid-3">
+            <div className="person-card">
+              <div className="person-header">
+                <span className="person-role-tag role-tracker">跟踪人</span>
+                <span className="person-name">{data.tracker_name || '—'}</span>
+              </div>
+              <div className="person-details">
+                <span className="org-tag">{data.tracker_org || '—'}</span>
+                <span className="contact-text">{data.tracker_contact || '—'}</span>
+              </div>
+            </div>
 
-          {/* 归属与时间 */}
-          <Descriptions title="归属与时间" bordered size="small" column={cols} style={{ marginTop: 16 }} styles={{ label: { width: 110 } }}>
-            <Descriptions.Item label="所属实施机构">{data.business_group || '—'}</Descriptions.Item>
-            <Descriptions.Item label="所属板块">{data.module || '—'}</Descriptions.Item>
-            <Descriptions.Item label="所属系统">{data.system || '—'}</Descriptions.Item>
-            <Descriptions.Item label="发版情况">{data.release_status || '—'}</Descriptions.Item>
-            <Descriptions.Item label="版本编号" span={cols}><LongText value={data.version_codes} /></Descriptions.Item>
-            <Descriptions.Item label="提出时间">{data.create_time || '—'}</Descriptions.Item>
-            <Descriptions.Item label="计划解决时间">{data.plan_resolve_time || '—'}</Descriptions.Item>
-            <Descriptions.Item label="关联案例编号">{data.linked_case_code || '—'}</Descriptions.Item>
-            <Descriptions.Item label="关联案例名称">{data.linked_case_name || '—'}</Descriptions.Item>
-            <Descriptions.Item label="同步时间">{data.synced_at || '—'}</Descriptions.Item>
-          </Descriptions>
+            <div className="person-card">
+              <div className="person-header">
+                <span className="person-role-tag role-reporter">报障人</span>
+                <span className="person-name">{data.reporter_name || '—'}</span>
+              </div>
+              <div className="person-details">
+                <span className="org-tag">{data.reporter_org || '—'}</span>
+                <span className="contact-text">{data.reporter_contact || '—'}</span>
+              </div>
+            </div>
 
-          {/* 相关人员 */}
-          <Descriptions title="相关人员" bordered size="small" column={cols} style={{ marginTop: 16 }} styles={{ label: { width: 110 } }}>
-            <Descriptions.Item label="跟踪人">{data.tracker_name || '—'}</Descriptions.Item>
-            <Descriptions.Item label="跟踪人机构">{data.tracker_org || '—'}</Descriptions.Item>
-            <Descriptions.Item label="跟踪人联系方式">{data.tracker_contact || '—'}</Descriptions.Item>
-            <Descriptions.Item label="报障人">{data.reporter_name || '—'}</Descriptions.Item>
-            <Descriptions.Item label="报障人机构">{data.reporter_org || '—'}</Descriptions.Item>
-            <Descriptions.Item label="报障人联系方式">{data.reporter_contact || '—'}</Descriptions.Item>
-            <Descriptions.Item label="处理人">{data.handler_name || '—'}</Descriptions.Item>
-            <Descriptions.Item label="处理机构">{data.handler_org || '—'}</Descriptions.Item>
-            <Descriptions.Item label="处理人联系方式">{data.handler_contact || '—'}</Descriptions.Item>
-          </Descriptions>
+            <div className="person-card">
+              <div className="person-header">
+                <span className="person-role-tag role-handler">处理人</span>
+                <span className="person-name">{data.handler_name || '—'}</span>
+              </div>
+              <div className="person-details">
+                <span className="org-tag">{data.handler_org || '—'}</span>
+                <span className="contact-text">{data.handler_contact || '—'}</span>
+              </div>
+            </div>
+          </div>
 
-          {/* 问题内容 */}
-          <Descriptions title="问题内容" bordered size="small" column={1} style={{ marginTop: 16 }} styles={{ label: { width: 110 } }}>
-            <Descriptions.Item label="问题概述"><LongText value={data.summary} /></Descriptions.Item>
-            <Descriptions.Item label="问题详情"><LongText value={data.details} /></Descriptions.Item>
-            <Descriptions.Item label="问题原因分析"><LongText value={data.root_cause} /></Descriptions.Item>
-            <Descriptions.Item label="解决方案"><LongText value={data.solution} /></Descriptions.Item>
-          </Descriptions>
+          {/* Info Grid */}
+          <div className="grid-3">
+            <div className="info-card">
+              <span className="label-text">问题分类</span>
+              <div className="value-primary">
+                {data.category ? <Tag color="blue" style={{ margin: '0 4px 0 0', borderRadius: 2 }}>{data.category}</Tag> : null}
+                {data.detailed_classification || '—'}
+              </div>
+            </div>
 
-          {/* 分析修改记录 */}
-          <div style={{ marginTop: 16 }}>
-            <div className="form-section-title" style={{ marginBottom: 12 }}>分析修改记录</div>
-            {log.length === 0 ? (
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无记录" />
-            ) : (
-              <Timeline
-                items={log.map((e, i) => ({
-                  key: i,
-                  children: (
-                    <div>
-                      <div style={{ color: 'var(--radar-text-secondary)', fontSize: 11, marginBottom: 2 }}>
-                        {[e.handler_name, e.handler_org, e.handler_contact].filter(Boolean).join(' · ')}
-                        {e.time ? `  ${e.time}` : ''}
+            <div className="info-card">
+              <span className="label-text">所属系统</span>
+              <div className="value-primary" style={{ fontWeight: 'bold' }}>
+                {data.system || '—'}
+                {data.business_group && <span className="org-tag" style={{ marginLeft: 4 }}>{data.business_group}</span>}
+                {data.module && <span className="org-tag" style={{ marginLeft: 4 }}>{data.module}</span>}
+              </div>
+            </div>
+
+            <div className="info-card">
+              <span className="label-text">工单编号</span>
+              <div className="value-primary" style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', fontWeight: 600 }}>
+                {data.work_order_no || '—'}
+              </div>
+            </div>
+          </div>
+
+          {/* Time & Case Grid */}
+          <div className="grid-4">
+            <div className="info-card">
+              <span className="label-text">提出时间</span>
+              <div className="value-primary">
+                {data.create_time || '—'}
+              </div>
+            </div>
+
+            <div className="info-card">
+              <span className="label-text">计划解决时间</span>
+              <div className="value-primary">
+                {data.plan_resolve_time || '—'}
+              </div>
+            </div>
+
+            <div className="info-card">
+              <span className="label-text">同步时间</span>
+              <div className="value-primary">
+                {data.synced_at || '—'}
+              </div>
+            </div>
+
+            <div className="info-card">
+              <span className="label-text">关联案例</span>
+              <div className="value-primary" style={{ fontSize: '11px' }}>
+                {data.linked_case_code ? (
+                  <div>
+                    <span style={{ fontWeight: 500 }}>{data.linked_case_code}</span>
+                    {data.linked_case_name && (
+                      <div
+                        style={{ color: 'var(--radar-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                        title={data.linked_case_name}
+                      >
+                        {data.linked_case_name}
                       </div>
-                      <LongText value={e.content} />
-                    </div>
-                  ),
-                }))}
-              />
-            )}
+                    )}
+                  </div>
+                ) : '—'}
+              </div>
+            </div>
+          </div>
+
+          {/* Additional attributes Grid */}
+          <div className="grid-4">
+            <div className="info-card">
+              <span className="label-text">紧急程度</span>
+              <div className="value-primary">
+                {data.urgency ? (
+                  <Tag color={data.urgency === '高' ? 'red' : data.urgency === '中' ? 'orange' : 'green'} style={{ margin: 0, borderRadius: 2 }}>
+                    {data.urgency}
+                  </Tag>
+                ) : '—'}
+              </div>
+            </div>
+
+            <div className="info-card">
+              <span className="label-text">处理方式</span>
+              <div className="value-primary">
+                {data.handling_method ? (
+                  <Tag color="cyan" style={{ margin: 0, borderRadius: 2 }}>
+                    {data.handling_method}
+                  </Tag>
+                ) : '—'}
+              </div>
+            </div>
+
+            <div className="info-card">
+              <span className="label-text">版本编号</span>
+              <div className="value-primary">
+                {data.version_codes || '—'}
+              </div>
+            </div>
+
+            <div className="info-card">
+              <span className="label-text">发版情况</span>
+              <div className="value-primary">
+                {data.release_status || '—'}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid-4" style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}>
+            <div className="info-card" style={{ minHeight: 'auto', padding: '6px 12px' }}>
+              <span className="label-text" style={{ margin: '0 0 4px 0' }}>是否重大问题</span>
+              <BoolTag value={data.is_major} />
+            </div>
+
+            <div className="info-card" style={{ minHeight: 'auto', padding: '6px 12px' }}>
+              <span className="label-text" style={{ margin: '0 0 4px 0' }}>是否常见问题</span>
+              <BoolTag value={data.is_common} />
+            </div>
+          </div>
+
+          {/* Description & Timeline columns */}
+          <div className="content-columns">
+            <div className="content-section">
+              <div className="detail-box">
+                <div className="box-title-row">
+                  <span className="box-label">问题概述</span>
+                </div>
+                <div className="box-content" style={{ fontWeight: 'bold' }}>
+                  {data.summary || '—'}
+                </div>
+              </div>
+
+              <div className="detail-box">
+                <div className="box-title-row">
+                  <span className="box-label">问题详细描述</span>
+                </div>
+                <div className="box-content">
+                  <LongText value={data.details} />
+                </div>
+              </div>
+            </div>
+
+            <div className="content-section">
+              <div className="timeline-card" style={{ marginTop: 0, height: '100%' }}>
+                <div className="timeline-title">分析修改记录</div>
+                {log.length === 0 ? (
+                  <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无记录" />
+                ) : (
+                  <Timeline
+                    items={log.map((e, i) => ({
+                      key: i,
+                      children: (
+                        <div>
+                          <div style={{ color: 'var(--radar-text-secondary)', fontSize: 11, marginBottom: 2 }}>
+                            {[e.handler_name, e.handler_org, e.handler_contact].filter(Boolean).join(' · ')}
+                            {e.time ? `  ${e.time}` : ''}
+                          </div>
+                          <LongText value={e.content} />
+                        </div>
+                      ),
+                    }))}
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom Section: Cause Analysis & Solution */}
+          <div className="content-columns">
+            <div className="detail-box">
+              <div className="box-title-row">
+                <span className="box-label">问题原因分析</span>
+              </div>
+              <div className="box-content">
+                <LongText value={data.root_cause} />
+              </div>
+            </div>
+
+            <div className="detail-box">
+              <div className="box-title-row">
+                <span className="box-label">解决方案</span>
+              </div>
+              <div className="box-content">
+                <LongText value={data.solution} />
+              </div>
+            </div>
           </div>
         </div>
       )}

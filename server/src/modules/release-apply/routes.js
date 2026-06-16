@@ -192,19 +192,18 @@ export default async function releaseApplyRoutes(fastify) {
     const body = request.body || {};
     if (!body.change_content) throw badRequest('变更内容必填');
 
-    // 变更编号：手填校验唯一，否则按规则生成
-    let code = (body.change_code || '').trim();
-    if (code) {
-      if (get('SELECT id FROM release_apply WHERE change_code = ?', code)) throw badRequest('变更编号已存在');
-    } else {
-      code = genReleaseApplyCode(yearMonthOf(body.release_point_id));
-    }
-
     const picked = pick(body);
     const reviewStatus = deriveReviewStatus(Array.isArray(body.ref_codes) ? body.ref_codes : []);
     const data = encodeField(picked);
 
-    const id = tx(() => {
+    const result = tx(() => {
+      let code = (body.change_code || '').trim();
+      if (code) {
+        if (get('SELECT id FROM release_apply WHERE change_code = ?', code)) throw badRequest('变更编号已存在');
+      } else {
+        code = genReleaseApplyCode(yearMonthOf(body.release_point_id));
+      }
+
       const fields = ['change_code', 'review_status', 'registrar', 'register_time', ...Object.keys(data).filter((k) => k !== 'change_code')];
       const values = [
         code,
@@ -217,10 +216,11 @@ export default async function releaseApplyRoutes(fastify) {
         `INSERT INTO release_apply (${fields.join(',')}) VALUES (${fields.map(() => '?').join(',')})`,
         ...values,
       );
-      return res.lastInsertRowid;
+      return { id: res.lastInsertRowid, code };
     });
-    auditCreate('release_apply', id, code, request.currentUser?.name);
-    return ok({ id, change_code: code });
+
+    auditCreate('release_apply', result.id, result.code, request.currentUser?.name);
+    return ok({ id: result.id, change_code: result.code });
   });
 
   // 修改（留痕）

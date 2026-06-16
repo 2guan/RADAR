@@ -1141,9 +1141,9 @@ export default function Overview() {
     if (detail.release) {
       setEditor({ type: 'release', reqCode: code });
     } else if (detail.entityType === 'issue') {
-      setApplyEditor({ reqCode: code, releasePointId: detail.issue.release_point_id });
+      setApplyEditor({ reqCode: code, releasePointId: detail.issue.release_point_id, entityType: 'issue' });
     } else {
-      setApplyEditor({ reqCode: code, releasePointId: detail.requirement.release_point_id });
+      setApplyEditor({ reqCode: code, releasePointId: detail.requirement.release_point_id, entityType: 'requirement' });
     }
   };
 
@@ -1356,7 +1356,9 @@ export default function Overview() {
       {/* 未发起投产的需求：弹出投产申请新增并默认选中该需求 */}
       <ReleaseApplyEditor
         open={!!applyEditor}
-        defaultReqCodes={applyEditor ? [applyEditor.reqCode] : undefined}
+        defaultReqCodes={applyEditor?.entityType === 'requirement' ? [applyEditor.reqCode] : undefined}
+        defaultIssueCodes={applyEditor?.entityType === 'issue' ? [applyEditor.reqCode] : undefined}
+        defaultType={applyEditor?.entityType === 'issue' ? 'issue' : 'req'}
         defaultReleasePointId={applyEditor?.releasePointId}
         onClose={() => setApplyEditor(null)}
         onSaved={() => { setApplyEditor(null); onEditorSaved(); }}

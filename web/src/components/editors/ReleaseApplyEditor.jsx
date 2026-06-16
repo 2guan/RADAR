@@ -20,7 +20,7 @@ import { apiGet, apiPost, apiPut } from '../../api/client.js';
 import { useAppStore } from '../../stores/app.js';
 import { useResponsive } from '../../hooks/useResponsive.js';
 
-export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId, defaultReleasePointId, defaultReqCodes, onClose, onSaved }) {
+export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId, defaultReleasePointId, defaultReqCodes, defaultIssueCodes, defaultType = 'req', onClose, onSaved }) {
   const [form] = Form.useForm();
   // 监听计划投产点，用于与所选需求的投产点做一致性校验提示
   const releasePointIdValue = Form.useWatch('release_point_id', form);
@@ -33,6 +33,17 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
   // 既有申请（按 id 或变更编号加载）即为编辑/查看态；其余为新增
   const isEdit = !!applyId || !!code || mode === 'page';
   const readonly = isEdit ? !can('release_apply', 'edit') : !can('release_apply', 'create');
+
+  // 自动生成变更编号并填充
+  const autoGenCode = (pointId) => {
+    if (isEdit || !pointId) return;
+    apiGet('/release-apply/gen-code', { releasePointId: pointId })
+      .then((res) => {
+        form.setFieldValue('change_code', res.change_code);
+        form.validateFields(['change_code']);
+      })
+      .catch(() => {});
+  };
 
   // 关联需求/问题选择
   const [points, setPoints] = useState([]);
@@ -63,14 +74,18 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
     } else {
       setCurrent(null);
       setSelReqs(Array.isArray(defaultReqCodes) ? [...defaultReqCodes] : []);
-      setSelIssues([]);
+      setSelIssues(Array.isArray(defaultIssueCodes) ? [...defaultIssueCodes] : []);
+      setRefTab(defaultType);
       form.resetFields();
       form.setFieldsValue({
         delivery_units: [{ artifact_type: undefined, delivery_unit: undefined, new_version: undefined, ferry_status: '未摆渡' }],
         release_point_id: defaultReleasePointId,
       });
+      if (defaultReleasePointId) {
+        autoGenCode(defaultReleasePointId);
+      }
     }
-  }, [open, applyId, code, mode]);
+  }, [open, applyId, code, mode, defaultType, JSON.stringify(defaultReqCodes), JSON.stringify(defaultIssueCodes), defaultReleasePointId]);
 
   // 编辑态：把已存 ref_codes 拆分为需求/问题（以问题编号集合判定，需求列表受投产窗口限制不可靠）
   useEffect(() => {
@@ -125,7 +140,10 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
   const onSelReqsChange = (vals) => {
     setSelReqs(vals);
     const first = reqs.find((r) => r.req_code === vals[0]);
-    if (first && first.release_point_id != null) form.setFieldValue('release_point_id', first.release_point_id);
+    if (first && first.release_point_id != null) {
+      form.setFieldValue('release_point_id', first.release_point_id);
+      autoGenCode(first.release_point_id);
+    }
   };
 
   /** 选择变更系统后按系统所属机构返显实施机构（可再编辑） */
@@ -140,6 +158,11 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
     if (Object.prototype.hasOwnProperty.call(changed, 'change_system')) {
       const sys = sysMap[changed.change_system];
       if (sys?.org) form.setFieldValue('impl_org', sys.org);
+    }
+    if (Object.prototype.hasOwnProperty.call(changed, 'release_point_id')) {
+      if (changed.release_point_id) {
+        autoGenCode(changed.release_point_id);
+      }
     }
   };
 
