@@ -198,9 +198,9 @@ export default async function releaseApplyRoutes(fastify) {
 
     const result = tx(() => {
       let code = (body.change_code || '').trim();
-      if (code) {
-        if (get('SELECT id FROM release_apply WHERE change_code = ?', code)) throw badRequest('变更编号已存在');
-      } else {
+      // 若前端传来的编号已存在（并发提交导致冲突），重新生成而非报错；
+      // 空编号同样走生成逻辑。两种路径均在 BEGIN IMMEDIATE 事务内串行执行，保证唯一。
+      if (!code || get('SELECT id FROM release_apply WHERE change_code = ?', code)) {
         code = genReleaseApplyCode(yearMonthOf(body.release_point_id));
       }
 
