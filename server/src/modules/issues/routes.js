@@ -1,10 +1,11 @@
 /**
  * 文件：modules/issues/routes.js
  * 用途：问题管理模块接口（只读展示 + 外部同步）。提供问题列表、问题详情，
- *       以及「同步问题」（拉取概述列表）与「同步问题详情」（逐条更新明细）两个同步端点。
+ *       以及「同步问题」（拉取概述列表）与「同步问题详情」（后台逐条慢速更新明细）两个同步端点。
  * 作者：hengguan
  * 说明：数据来源为外部 PAMS 系统，本平台不提供新增/编辑/删除；以 issue_code 为同步主键做 upsert。
  *       JSON 字段（analysis_log/tags/linked_cases）入库为字符串、出参解析为数组；is_major/is_common 出参转布尔。
+ *       后台同步状态（bgState）保存在内存中，服务重启后重置；前端通过轮询 /issues/sync-detail-status 获取进度。
  */
 
 import { get, run, all, tx } from '../../db/index.js';
@@ -70,6 +71,66 @@ const DETAIL_FIELDS = [
   'reporter_contact', 'handler_name', 'handler_org', 'handler_contact', 'linked_case_code', 'linked_case_name',
   'root_cause', 'solution', 'release_status',
 ];
+
+// ── 后台同步状态（内存，重启重置） ──────────────────────────────────────────
+const bgState = {
+  running: false,
+  total: 0,
+  done: 0,
+  failed: 0,
+  startTime: null,
+  lastFinishTime: null, // 最近一次完成时间（本地时间字符串）
+};
+
+/** 后台逐条同步问题详情，每条间隔 1 秒；不阻塞请求线程 */
+async function runBgSyncDetail(codes) {
+  bgState.running = true;
+  bgState.total = codes.length;
+  bgState.done = 0;
+  bgState.failed = 0;
+  bgState.startTime = new Date().toISOString();
+
+  for (const code of codes) {
+    try {
+      const d = await fetchIssueDetail(code);
+      if (!d) { bgState.failed++; continue; }
+
+      const setData = {};
+      for (const f of DETAIL_FIELDS) if (d[f] !== undefined) setData[f] = d[f] ?? null;
+      setData.analysis_log = toJson(d.analysis_log);
+      setData.tags         = toJson(d.tags);
+      setData.linked_cases = toJson(d.linked_cases);
+      setData.is_major     = toBit(d.is_major);
+      setData.is_common    = toBit(d.is_common);
+      setData.synced_at    = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+      const keys = Object.keys(setData);
+      const exists = get('SELECT id FROM issue WHERE issue_code = ?', code);
+      if (exists) {
+        run(
+          `UPDATE issue SET ${keys.map((k) => `${k}=?`).join(',')}, updated_at=datetime('now','localtime') WHERE issue_code=?`,
+          ...keys.map((k) => setData[k]), code,
+        );
+      } else {
+        run(
+          `INSERT INTO issue (issue_code, ${keys.join(',')}) VALUES (?, ${keys.map(() => '?').join(',')})`,
+          code, ...keys.map((k) => setData[k]),
+        );
+      }
+      bgState.done++;
+    } catch {
+      bgState.failed++;
+    }
+    // 每条间隔 1 秒，避免对 PAMS 造成压力
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+
+  bgState.running = false;
+  // 本地时间格式：MM-DD HH:MM
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  bgState.lastFinishTime = `${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+}
 
 export default async function issueRoutes(fastify) {
   // 列表
@@ -170,5 +231,24 @@ export default async function issueRoutes(fastify) {
     }
 
     return ok({ total: codes.length, updated, failed }, '同步问题详情完成');
+  });
+
+  // 启动后台同步：立即返回，任务在后台以每秒一条的速度执行
+  fastify.post('/issues/sync-detail-bg', { preHandler: fastify.requirePerm('issue', 'sync') }, async (request) => {
+    if (bgState.running) return ok(bgState, '后台同步已在运行中');
+    const body = request.body || {};
+    let codes = Array.isArray(body.codes) ? body.codes.filter(Boolean) : null;
+    if (!codes || !codes.length) {
+      codes = all('SELECT issue_code FROM issue ORDER BY id ASC').map((r) => r.issue_code);
+    }
+    if (!codes.length) throw badRequest('暂无可同步的问题，请先点击「同步问题」');
+    // 不 await，让任务在后台运行
+    runBgSyncDetail(codes).catch(() => { bgState.running = false; });
+    return ok({ ...bgState, total: codes.length }, '后台同步已启动');
+  });
+
+  // 查询后台同步状态
+  fastify.get('/issues/sync-detail-status', { preHandler: fastify.requirePerm('issue', 'view') }, async () => {
+    return ok({ ...bgState });
   });
 }

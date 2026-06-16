@@ -1,14 +1,15 @@
 /**
  * 文件：pages/Issues.jsx
  * 用途：问题管理页面（只读）。展示从外部 PAMS 系统同步的问题清单，点击查看问题详情；
- *       提供「同步问题」（拉取概述列表）与「同步问题详情」（逐条更新明细）两个同步按钮。
+ *       提供「同步问题」（拉取概述列表）与「同步问题详情」（后台逐条慢速更新明细）两个同步按钮。
+ *       后台同步通过轮询 /issues/sync-detail-status 实时展示进度和最后完成时间。
  * 作者：hengguan
  * 说明：列表仅显示 问题编号/状态/详细分类/所属系统/问题概述；无新增/编辑/删除能力。
  */
 
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Card, Button, Space, message, Modal } from 'antd';
-import { SyncOutlined, CloudSyncOutlined } from '@ant-design/icons';
+import { SyncOutlined, CloudSyncOutlined, LoadingOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import DataTable from '../components/DataTable.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
 import FilterPanel from '../components/FilterPanel.jsx';
@@ -22,7 +23,9 @@ export default function Issues() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [filterQuery, setFilterQuery] = useState([]);
   const [syncing, setSyncing] = useState(false);
-  const [syncingDetail, setSyncingDetail] = useState(false);
+  // 后台同步详情状态（轮询自服务端）
+  const [bgStatus, setBgStatus] = useState(null); // { running, total, done, failed, lastFinishTime }
+  const pollTimerRef = useRef(null);
 
   // 下拉选项：状态、详细分类、系统
   const [statuses, setStatuses] = useState([]);
@@ -40,7 +43,29 @@ export default function Issues() {
     }).catch(() => {});
   };
 
-  useEffect(() => { loadOptions(); }, []);
+  // 轮询后台同步状态
+  const pollStatus = useCallback(async () => {
+    try {
+      const s = await apiGet('/issues/sync-detail-status');
+      setBgStatus(s);
+      if (s?.running) {
+        pollTimerRef.current = setTimeout(pollStatus, 2000);
+      } else {
+        // 同步刚完成时刷新列表
+        if (bgStatus?.running) { tableRef.current?.reload(); loadOptions(); }
+      }
+    } catch { /* 网络异常时静默，等下次触发 */ }
+  }, [bgStatus?.running]);
+
+  useEffect(() => {
+    loadOptions();
+    // 页面加载时拉取一次状态（恢复页面时同步可能仍在进行）
+    apiGet('/issues/sync-detail-status').then((s) => {
+      setBgStatus(s);
+      if (s?.running) { pollTimerRef.current = setTimeout(pollStatus, 2000); }
+    }).catch(() => {});
+    return () => clearTimeout(pollTimerRef.current);
+  }, []);
 
   const filterConfigs = [
     { field: 'issue_code', label: '问题编号', type: 'input', isPrimary: true, op: 'like', placeholder: '问题编号检索' },
@@ -77,22 +102,23 @@ export default function Issues() {
     }
   };
 
-  // 同步问题详情：逐条按问题编号更新明细
+  // 启动后台同步问题详情
   const onSyncDetail = () => {
+    if (bgStatus?.running) { message.warning('后台同步正在进行中，请等待完成'); return; }
     Modal.confirm({
-      title: '同步问题详情',
-      content: '将按问题编号逐条拉取并更新问题明细，问题较多时可能耗时较长，确认继续？',
+      title: '后台同步问题详情',
+      content: '系统将在后台每秒同步一条问题明细，期间可正常使用页面。确认开始？',
       okText: '开始同步',
       cancelText: '取消',
       onOk: async () => {
-        setSyncingDetail(true);
         try {
-          const r = await apiPost('/issues/sync-detail', {});
-          message.success(`同步问题详情完成：更新 ${r.updated}/${r.total}${r.failed?.length ? `，失败 ${r.failed.length}` : ''}`);
-          tableRef.current?.reload();
-          loadOptions();
-        } finally {
-          setSyncingDetail(false);
+          await apiPost('/issues/sync-detail-bg', {});
+          message.success('后台同步已启动');
+          // 开始轮询
+          clearTimeout(pollTimerRef.current);
+          pollTimerRef.current = setTimeout(pollStatus, 1000);
+        } catch (e) {
+          message.error(e.message || '启动失败');
         }
       },
     });
@@ -124,6 +150,30 @@ export default function Issues() {
     },
   ];
 
+  // 后台同步进度文字
+  const bgStatusText = (() => {
+    if (!bgStatus || (!bgStatus.running && !bgStatus.lastFinishTime && !bgStatus.total)) return null;
+    if (bgStatus.running) {
+      const pct = bgStatus.total ? Math.round((bgStatus.done / bgStatus.total) * 100) : 0;
+      return (
+        <span style={{ fontSize: 12, color: 'var(--radar-text-secondary)', whiteSpace: 'nowrap' }}>
+          <LoadingOutlined style={{ marginRight: 4, color: 'var(--radar-primary)' }} />
+          同步中 {bgStatus.done}/{bgStatus.total}
+          {bgStatus.failed > 0 && <span style={{ color: '#cf1322', marginLeft: 4 }}>失败 {bgStatus.failed}</span>}
+          <span style={{ marginLeft: 4, color: 'var(--radar-text-secondary)' }}>（{pct}%）</span>
+        </span>
+      );
+    }
+    return (
+      <span style={{ fontSize: 12, color: 'var(--radar-text-secondary)', whiteSpace: 'nowrap' }}>
+        <CheckCircleOutlined style={{ marginRight: 4, color: '#52c41a' }} />
+        已完成 {bgStatus.done}/{bgStatus.total}
+        {bgStatus.failed > 0 && <span style={{ color: '#cf1322', marginLeft: 4 }}>失败 {bgStatus.failed}</span>}
+        {bgStatus.lastFinishTime && <span style={{ marginLeft: 6 }}>最后同步：{bgStatus.lastFinishTime}</span>}
+      </span>
+    );
+  })();
+
   return (
     <Card
       title={
@@ -133,8 +183,9 @@ export default function Issues() {
             <Button type="primary" icon={<SyncOutlined />} loading={syncing} onClick={onSync}>同步问题</Button>
           </Can>
           <Can module="issue" action="sync">
-            <Button icon={<CloudSyncOutlined />} loading={syncingDetail} onClick={onSyncDetail}>同步问题详情</Button>
+            <Button icon={<CloudSyncOutlined />} disabled={bgStatus?.running} onClick={onSyncDetail}>同步问题详情</Button>
           </Can>
+          {bgStatusText}
         </Space>
       }
       variant="borderless"
