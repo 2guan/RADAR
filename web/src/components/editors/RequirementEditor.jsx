@@ -149,15 +149,18 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
       setCurrent(d);
       form.setFieldsValue({ ...d, propose_time: d.propose_time ? dayjs(d.propose_time) : null });
     };
-    if (mode !== 'page' && !open) return;
+    if (mode !== 'page' && !open) {
+      form.resetFields();
+      return;
+    }
     apiGet('/release-points/all').then(setPoints).catch(() => {});
+    form.resetFields();
     if (reqId) {
       apiGet(`/requirements/${reqId}`).then(applyRow);
     } else if (code) {
       apiGet(`/requirements/by-code/${encodeURIComponent(code)}`).then(applyRow);
     } else {
       setCurrent(null);
-      form.resetFields();
       form.setFieldsValue({ status: '需求登记', release_point_id: defaultReleasePointId });
     }
   }, [open, reqId, code, mode]);

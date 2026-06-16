@@ -31,7 +31,11 @@ export default function ChartEditor({ open, onClose, onSave, initialData, scope,
   const supportsX = X_TYPES.includes(chartType);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      form.resetFields();
+      return;
+    }
+    form.resetFields();
     if (initialData) {
       const cfg = typeof initialData.config === 'string' ? JSON.parse(initialData.config) : (initialData.config || {});
       const filterList = Object.entries(cfg.filters || {}).map(([dim, val]) => {

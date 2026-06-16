@@ -68,8 +68,14 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
       if (code) apiGet(`${cfg.api}/by-code/${encodeURIComponent(code)}`).then(apply);
       return;
     }
-    if (!open || !taskId) return;
-    apiGet(`${cfg.api}/${taskId}`).then(apply);
+    if (!open) {
+      form.resetFields();
+      return;
+    }
+    form.resetFields();
+    if (taskId) {
+      apiGet(`${cfg.api}/${taskId}`).then(apply);
+    }
   }, [open, taskId, code, kind, mode]);
 
   const save = async () => {

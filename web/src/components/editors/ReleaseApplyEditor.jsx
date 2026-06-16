@@ -59,13 +59,21 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
   const initialSelIssuesRef = useRef([]);
 
   useEffect(() => {
-    if (mode !== 'page' && !open) return;
+    if (mode !== 'page' && !open) {
+      form.resetFields();
+      setSelReqs([]);
+      setSelIssues([]);
+      initialSelReqsRef.current = [];
+      initialSelIssuesRef.current = [];
+      return;
+    }
     apiGet('/release-points/all').then(setPoints).catch(() => {});
     apiGet('/systems/all').then(setSystems).catch(() => {});
     // 加载全部需求（不限投产窗口），以便跨窗口关联与投产点一致性校验
     apiPost('/requirements/list', { pageSize: 0, releasePointIds: [] }).then((d) => setReqs(d?.list || [])).catch(() => {});
     apiPost('/issues/list', { pageSize: 0 }).then((d) => setIssues(d?.list || [])).catch(() => {});
 
+    form.resetFields();
     if (applyId) {
       apiGet(`/release-apply/${applyId}`).then((d) => {
         setCurrent(d);
@@ -82,7 +90,6 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
       initialSelReqsRef.current = sr;
       initialSelIssuesRef.current = si;
       setRefTab(defaultType);
-      form.resetFields();
       form.setFieldsValue({
         delivery_units: [{ artifact_type: undefined, delivery_unit: undefined, new_version: undefined, ferry_status: '未摆渡' }],
         release_point_id: defaultReleasePointId,

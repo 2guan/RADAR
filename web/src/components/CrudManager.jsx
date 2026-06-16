@@ -59,10 +59,12 @@ export default function CrudManager({
         cancelText: '保留修改',
         onOk: () => {
           setOpen(false);
+          form.resetFields();
         }
       });
     } else {
       setOpen(false);
+      form.resetFields();
     }
   };
 

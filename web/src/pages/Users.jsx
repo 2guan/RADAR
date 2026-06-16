@@ -75,10 +75,10 @@ export default function Users() {
    */
   const openEdit = (row) => {
     setCurrent(row);
+    form.resetFields();
     form.setFieldsValue(row
       ? { ...row, roles: row.roles?.map((r) => r.code) }
       : { status: '启用' });
-    if (!row) form.resetFields();
     setOpen(true);
   };
 
@@ -103,10 +103,12 @@ export default function Users() {
         cancelText: '保留修改',
         onOk: () => {
           setOpen(false);
+          form.resetFields();
         }
       });
     } else {
       setOpen(false);
+      form.resetFields();
     }
   };
 
