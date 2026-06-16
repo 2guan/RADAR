@@ -47,7 +47,6 @@ export default function Release() {
     { field: 'impl_org', label: '实施机构', type: 'select', isPrimary: true, op: 'in', options: orgOptions },
     { field: 'code', label: '需求/问题编号', type: 'input', isPrimary: true, op: 'like', placeholder: '需求/问题编号检索' },
     { field: 'content', label: '标题/概述', type: 'input', isPrimary: true, op: 'like', placeholder: '需求标题或问题概述检索' },
-    { field: 'release_point_id', label: '计划投产点', type: 'select', op: 'in', options: pointOptions },
     { field: 'status', label: '投产状态', type: 'select', op: 'in', options: statusOptions },
     { field: 'review_status', label: '评审状态', type: 'select', op: 'in', options: reviewOptions },
   ];
