@@ -133,6 +133,7 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
   const [historyOpen, setHistoryOpen] = useState(false);
   const [points, setPoints] = useState([]);
   const [genLoading, setGenLoading] = useState(false); // 生成编号加载态
+  const [isDirty, setIsDirty] = useState(false);
   const { can } = useAppStore();
   const { isMobile } = useResponsive();
   // 既有需求（按 id 或编号加载）即为编辑/查看态；其余为新增
@@ -148,19 +149,18 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
     const applyRow = (d) => {
       setCurrent(d);
       form.setFieldsValue({ ...d, propose_time: d.propose_time ? dayjs(d.propose_time) : null });
+      setIsDirty(false);
     };
-    if (mode !== 'page' && !open) {
-      form.resetFields();
-      return;
-    }
+    if (mode !== 'page' && !open) return;
+    setIsDirty(false);
     apiGet('/release-points/all').then(setPoints).catch(() => {});
-    form.resetFields();
     if (reqId) {
       apiGet(`/requirements/${reqId}`).then(applyRow);
     } else if (code) {
       apiGet(`/requirements/by-code/${encodeURIComponent(code)}`).then(applyRow);
     } else {
       setCurrent(null);
+      form.resetFields();
       form.setFieldsValue({ status: '需求登记', release_point_id: defaultReleasePointId });
     }
   }, [open, reqId, code, mode]);
@@ -230,9 +230,9 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
       okText="保存"
       onOk={save}
       onCancel={onClose}
+      isDirty={!readonly && isDirty}
       okButtonProps={readonly ? { style: { display: 'none' } } : undefined}
       cancelText={readonly ? '关闭' : '取消'}
-      isDirty={form.isFieldsTouched()}
       title={(
         <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 10, rowGap: 6, minWidth: 0, width: '100%', paddingRight: 76 }}>
           {isEdit || current ? (
@@ -251,7 +251,7 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
               popupClassName="status-select-dropdown"
               popupMatchSelectWidth={false}
               value={statusValue}
-              onChange={(v) => form.setFieldValue('status', v)}
+              onChange={(v) => { form.setFieldValue('status', v); if (!readonly) setIsDirty(true); }}
               placeholder="需求状态"
               style={{ width: statusSelectWidth(statusValue, '需求状态'), ...(readonly ? { pointerEvents: 'none' } : {}) }}
             />
@@ -276,6 +276,7 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
         requiredMark={false}
         className="editor-form"
         style={{ marginTop: 10, fontSize: 12 }}
+        onValuesChange={() => { if (!readonly) setIsDirty(true); }}
       >
         <Row gutter={12}>
           {/* ── 左栏 ── */}

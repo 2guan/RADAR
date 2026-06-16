@@ -7,7 +7,7 @@
  * 说明：看板图表配置编辑器，支持用户在交互式界面中设定图表的维度、指标和展示过滤条件。
  */
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Modal, Form, Input, Select, Radio, InputNumber, Divider, Button, Card, Space, DatePicker, App,
 } from 'antd';
@@ -20,6 +20,7 @@ const X_TYPES = ['stacked_bar', 'stacked_bar_horizontal', 'line', 'area', 'table
 
 export default function ChartEditor({ open, onClose, onSave, initialData, scope, meta }) {
   const [form] = Form.useForm();
+  const [isDirty, setIsDirty] = useState(false);
   const { message } = App.useApp();
   const source = Form.useWatch('source', form);
   const chartType = Form.useWatch('chart_type', form);
@@ -31,11 +32,8 @@ export default function ChartEditor({ open, onClose, onSave, initialData, scope,
   const supportsX = X_TYPES.includes(chartType);
 
   useEffect(() => {
-    if (!open) {
-      form.resetFields();
-      return;
-    }
-    form.resetFields();
+    if (!open) return;
+    setIsDirty(false);
     if (initialData) {
       const cfg = typeof initialData.config === 'string' ? JSON.parse(initialData.config) : (initialData.config || {});
       const filterList = Object.entries(cfg.filters || {}).map(([dim, val]) => {
@@ -102,22 +100,6 @@ export default function ChartEditor({ open, onClose, onSave, initialData, scope,
     onSave({ title: v.title, chart_type: v.chart_type, col_span: v.col_span, height: v.height, scope, config });
   };
 
-  const handleCancel = () => {
-    if (form.isFieldsTouched()) {
-      Modal.confirm({
-        title: '确认取消',
-        content: '检测到您已修改了内容，确认要取消并退出吗？未保存的内容将丢失。',
-        okText: '确认取消',
-        cancelText: '保留修改',
-        onOk: () => {
-          onClose();
-        }
-      });
-    } else {
-      onClose();
-    }
-  };
-
   // 分组列表（主/次维度共用渲染）
   const renderGroups = (name, dim) => (
     <Form.List name={name}>
@@ -146,10 +128,25 @@ export default function ChartEditor({ open, onClose, onSave, initialData, scope,
     </Form.List>
   );
 
+  const handleCancel = (e) => {
+    const isMaskClick = e?.target?.classList?.contains('ant-modal-wrap');
+    if (isDirty && isMaskClick) {
+      Modal.confirm({
+        title: '确认取消',
+        content: '检测到您已修改了内容，确认要取消并退出吗？未保存的内容将丢失。',
+        okText: '确认取消',
+        cancelText: '继续编辑',
+        onOk: () => onClose(),
+      });
+    } else {
+      onClose();
+    }
+  };
+
   return (
     <Modal title={initialData ? '编辑图表' : '新增图表'} open={open} onOk={handleOk} onCancel={handleCancel}
       width={620} okText="保存" cancelText="取消" destroyOnHidden>
-      <Form form={form} layout="vertical">
+      <Form form={form} layout="vertical" onValuesChange={() => setIsDirty(true)}>
         <Form.Item name="title" label="图表标题" rules={[{ required: true, message: '请输入标题' }]}>
           <Input placeholder="如 各机构需求分布" />
         </Form.Item>

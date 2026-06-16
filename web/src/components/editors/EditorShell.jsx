@@ -21,19 +21,19 @@ export default function EditorShell({
   onCancel,
   okButtonProps,
   cancelText = '取消',
-  isDirty = false,
+  isDirty = false,   // 外层传入：表单是否有未保存改动
   children,
 }) {
   const handleCancel = (e) => {
-    if (mode !== 'page' && isDirty) {
+    // 仅点击遮罩（外侧区域）时弹确认；点击取消按钮直接关闭
+    const isMaskClick = e?.target?.classList?.contains('ant-modal-wrap');
+    if (mode !== 'page' && isDirty && isMaskClick) {
       Modal.confirm({
         title: '确认取消',
         content: '检测到您已修改了内容，确认要取消并退出吗？未保存的内容将丢失。',
         okText: '确认取消',
-        cancelText: '保留修改',
-        onOk: () => {
-          onCancel?.(e);
-        }
+        cancelText: '继续编辑',
+        onOk: () => onCancel?.(e),
       });
     } else {
       onCancel?.(e);

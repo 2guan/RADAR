@@ -30,6 +30,7 @@ export default function CrudManager({
   const [current, setCurrent] = useState(null);
   const [importOpen, setImportOpen] = useState(false);
   const [filterQuery, setFilterQuery] = useState([]);
+  const [isDirty, setIsDirty] = useState(false);
 
   const fetcher = (q) => apiPost(`${apiBase}/list`, q);
 
@@ -37,6 +38,7 @@ export default function CrudManager({
     setCurrent(row);
     form.resetFields();
     if (row) form.setFieldsValue(transformIn(row));
+    setIsDirty(false);
     setOpen(true);
   };
 
@@ -50,21 +52,18 @@ export default function CrudManager({
     tableRef.current?.reload();
   };
 
-  const handleCancel = () => {
-    if (form.isFieldsTouched()) {
+  const handleCancel = (e) => {
+    const isMaskClick = e?.target?.classList?.contains('ant-modal-wrap');
+    if (isDirty && isMaskClick) {
       Modal.confirm({
         title: '确认取消',
         content: '检测到您已修改了内容，确认要取消并退出吗？未保存的内容将丢失。',
         okText: '确认取消',
-        cancelText: '保留修改',
-        onOk: () => {
-          setOpen(false);
-          form.resetFields();
-        }
+        cancelText: '继续编辑',
+        onOk: () => setOpen(false),
       });
     } else {
       setOpen(false);
-      form.resetFields();
     }
   };
 
@@ -176,7 +175,7 @@ export default function CrudManager({
       )}
 
       <Modal open={open} title={current ? `编辑${title}` : `新增${title}`} onCancel={handleCancel} onOk={onSave} okText="保存">
-        <Form form={form} layout="vertical">{fields(form, current)}</Form>
+        <Form form={form} layout="vertical" onValuesChange={() => setIsDirty(true)}>{fields(form, current)}</Form>
       </Modal>
     </>
   );

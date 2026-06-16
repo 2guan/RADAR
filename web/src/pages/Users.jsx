@@ -27,6 +27,7 @@ export default function Users() {
   const { platform } = useAppStore();
   const [open, setOpen] = useState(false);
   const [current, setCurrent] = useState(null);
+  const [isDirty, setIsDirty] = useState(false);
   const [roles, setRoles] = useState([]);
   
   const [filterQuery, setFilterQuery] = useState([]);
@@ -79,6 +80,7 @@ export default function Users() {
     form.setFieldsValue(row
       ? { ...row, roles: row.roles?.map((r) => r.code) }
       : { status: '启用' });
+    setIsDirty(false);
     setOpen(true);
   };
 
@@ -94,21 +96,18 @@ export default function Users() {
     tableRef.current?.reload();
   };
 
-  const handleCancel = () => {
-    if (form.isFieldsTouched()) {
+  const handleCancel = (e) => {
+    const isMaskClick = e?.target?.classList?.contains('ant-modal-wrap');
+    if (isDirty && isMaskClick) {
       Modal.confirm({
         title: '确认取消',
         content: '检测到您已修改了内容，确认要取消并退出吗？未保存的内容将丢失。',
         okText: '确认取消',
-        cancelText: '保留修改',
-        onOk: () => {
-          setOpen(false);
-          form.resetFields();
-        }
+        cancelText: '继续编辑',
+        onOk: () => setOpen(false),
       });
     } else {
       setOpen(false);
-      form.resetFields();
     }
   };
 
@@ -256,7 +255,7 @@ export default function Users() {
       />
 
       <Modal open={open} title={current ? '编辑人员' : '新增人员'} onCancel={handleCancel} onOk={onSave} okText="保存">
-        <Form form={form} layout="vertical">
+        <Form form={form} layout="vertical" onValuesChange={() => setIsDirty(true)}>
           <Form.Item name="phone" label="手机号（登录名）" rules={[{ required: true, message: '请输入手机号' }]}>
             <Input disabled={!!current} placeholder="如 13800010000" />
           </Form.Item>

@@ -36,8 +36,8 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
 
   // 自动生成变更编号并填充
   const autoGenCode = (pointId) => {
-    if (isEdit || !pointId) return;
-    apiGet('/release-apply/gen-code', { releasePointId: pointId })
+    if (isEdit) return;
+    apiGet('/release-apply/gen-code', pointId ? { releasePointId: pointId } : {})
       .then((res) => {
         form.setFieldValue('change_code', res.change_code);
         form.validateFields(['change_code']);
@@ -53,27 +53,19 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
   const [selReqs, setSelReqs] = useState([]); // 已选需求编号
   const [selIssues, setSelIssues] = useState([]); // 已选问题编号
   const [refTab, setRefTab] = useState('req');
+  const [isDirty, setIsDirty] = useState(false);
 
   const debounceRef = useRef(null);
-  const initialSelReqsRef = useRef([]);
-  const initialSelIssuesRef = useRef([]);
 
   useEffect(() => {
-    if (mode !== 'page' && !open) {
-      form.resetFields();
-      setSelReqs([]);
-      setSelIssues([]);
-      initialSelReqsRef.current = [];
-      initialSelIssuesRef.current = [];
-      return;
-    }
+    if (mode !== 'page' && !open) return;
+    setIsDirty(false);
     apiGet('/release-points/all').then(setPoints).catch(() => {});
     apiGet('/systems/all').then(setSystems).catch(() => {});
     // 加载全部需求（不限投产窗口），以便跨窗口关联与投产点一致性校验
     apiPost('/requirements/list', { pageSize: 0, releasePointIds: [] }).then((d) => setReqs(d?.list || [])).catch(() => {});
     apiPost('/issues/list', { pageSize: 0 }).then((d) => setIssues(d?.list || [])).catch(() => {});
 
-    form.resetFields();
     if (applyId) {
       apiGet(`/release-apply/${applyId}`).then((d) => {
         setCurrent(d);
@@ -83,20 +75,15 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
       apiGet(`/release-apply/by-code/${encodeURIComponent(code)}`).then((d) => { setCurrent(d); form.setFieldsValue(d); });
     } else {
       setCurrent(null);
-      const sr = Array.isArray(defaultReqCodes) ? [...defaultReqCodes] : [];
-      const si = Array.isArray(defaultIssueCodes) ? [...defaultIssueCodes] : [];
-      setSelReqs(sr);
-      setSelIssues(si);
-      initialSelReqsRef.current = sr;
-      initialSelIssuesRef.current = si;
+      setSelReqs(Array.isArray(defaultReqCodes) ? [...defaultReqCodes] : []);
+      setSelIssues(Array.isArray(defaultIssueCodes) ? [...defaultIssueCodes] : []);
       setRefTab(defaultType);
+      form.resetFields();
       form.setFieldsValue({
         delivery_units: [{ artifact_type: undefined, delivery_unit: undefined, new_version: undefined, ferry_status: '未摆渡' }],
         release_point_id: defaultReleasePointId,
       });
-      if (defaultReleasePointId) {
-        autoGenCode(defaultReleasePointId);
-      }
+      autoGenCode(defaultReleasePointId);
     }
   }, [open, applyId, code, mode, defaultType, JSON.stringify(defaultReqCodes), JSON.stringify(defaultIssueCodes), defaultReleasePointId]);
 
@@ -112,8 +99,6 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
     }
     setSelReqs(sr);
     setSelIssues(si);
-    initialSelReqsRef.current = sr;
-    initialSelIssuesRef.current = si;
   }, [current, issues]);
 
   const sysMap = {};
@@ -154,6 +139,7 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
   /** 选择需求：联动把计划投产点设为首个需求的计划投产点（仅新增态有下拉，可再手改） */
   const onSelReqsChange = (vals) => {
     setSelReqs(vals);
+    if (!readonly) setIsDirty(true);
     const first = reqs.find((r) => r.req_code === vals[0]);
     if (first && first.release_point_id != null) {
       form.setFieldValue('release_point_id', first.release_point_id);
@@ -168,8 +154,9 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
     if (sys?.org) form.setFieldValue('impl_org', sys.org);
   };
 
-  /** 表单值变化：变更系统改变时返显实施机构 */
+  /** 表单值变化：变更系统改变时返显实施机构，同时标记脏状态 */
   const onValuesChange = (changed) => {
+    if (!readonly) setIsDirty(true);
     if (Object.prototype.hasOwnProperty.call(changed, 'change_system')) {
       const sys = sysMap[changed.change_system];
       if (sys?.org) form.setFieldValue('impl_org', sys.org);
@@ -182,6 +169,10 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
   };
 
   const save = async () => {
+    if (!readonly && selReqs.length + selIssues.length === 0) {
+      message.error('请至少关联 1 个需求或问题');
+      return;
+    }
     const v = await form.validateFields();
     const ref_codes = [...new Set([...selReqs, ...selIssues])];
     const payload = { ...v, ref_codes };
@@ -231,6 +222,7 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
   const removeRef = (code, type) => {
     if (type === 'req') setSelReqs((p) => p.filter((x) => x !== code));
     else setSelIssues((p) => p.filter((x) => x !== code));
+    if (!readonly) setIsDirty(true);
   };
 
   // 已选需求/问题合并展示区（带底纹）。编辑态不可修改（无关闭按钮）。
@@ -255,13 +247,6 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
     );
   };
 
-  const isDirty = () => {
-    if (form.isFieldsTouched()) return true;
-    if (JSON.stringify(selReqs) !== JSON.stringify(initialSelReqsRef.current)) return true;
-    if (JSON.stringify(selIssues) !== JSON.stringify(initialSelIssuesRef.current)) return true;
-    return false;
-  };
-
   return (
     <EditorShell
       mode={mode}
@@ -270,9 +255,9 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
       okText="提交申请"
       onOk={save}
       onCancel={onClose}
+      isDirty={!readonly && isDirty}
       okButtonProps={readonly ? { style: { display: 'none' } } : undefined}
       cancelText={readonly ? '关闭' : '取消'}
-      isDirty={isDirty()}
       title={(
         <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 10, rowGap: 6, minWidth: 0, width: '100%', paddingRight: 76 }}>
           {isEdit || current ? (
@@ -326,7 +311,7 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
                       key: 'issue', label: `问题${selIssues.length ? `（${selIssues.length}）` : ''}`,
                       children: (
                         <Select
-                          mode="multiple" value={selIssues} onChange={setSelIssues} options={issueOptions}
+                          mode="multiple" value={selIssues} onChange={(v) => { setSelIssues(v); if (!readonly) setIsDirty(true); }} options={issueOptions}
                           size="small" showSearch allowClear={false} optionFilterProp="label" placeholder="按问题编号或概述检索"
                           style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} maxTagCount={0}
                           tabIndex={readonly ? -1 : undefined}
@@ -371,7 +356,7 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item name="release_point_id" label="计划投产点" style={{ marginBottom: (multiReqDiffer || pointMismatch) ? 2 : 8 }}>
+                  <Form.Item name="release_point_id" label="计划投产点" rules={[{ required: !readonly, message: '请选择计划投产点' }]} style={{ marginBottom: (multiReqDiffer || pointMismatch) ? 2 : 8 }}>
                     <Select placeholder="选择计划投产点" size="small" allowClear showSearch optionFilterProp="label"
                       style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined}
                       options={points.map((p) => ({ value: p.id, label: `${p.release_date}${p.version_type ? ' · ' + p.version_type : ''}` }))} />
@@ -386,7 +371,7 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
                 </Col>
               </Row>
 
-              <Form.Item name="change_system" label="变更系统" style={{ marginBottom: 4 }}>
+              <Form.Item name="change_system" label="变更系统" rules={[{ required: !readonly, message: '请选择变更系统' }]} style={{ marginBottom: 4 }}>
                 <SystemSelect single size="small" placeholder="输入系统编号或名称检索"
                   style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} />
               </Form.Item>
@@ -434,13 +419,13 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
                 {fields.map((field, idx) => (
                   <div key={field.key} style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap', paddingBottom: idx < fields.length - 1 ? 8 : 0, borderBottom: idx < fields.length - 1 ? '1px dashed var(--radar-border)' : 'none' }}>
                     <div style={{ width: 18, textAlign: 'center', fontSize: 11, fontWeight: 600, color: 'var(--radar-text-secondary)', paddingBottom: 6, flexShrink: 0 }}>{idx + 1}</div>
-                    <Form.Item name={[field.name, 'artifact_type']} label={idx === 0 ? '制品类型' : undefined} style={{ marginBottom: 0, flex: '1 1 130px', minWidth: 120 }}>
+                    <Form.Item name={[field.name, 'artifact_type']} label={idx === 0 ? '制品类型' : undefined} rules={[{ required: !readonly, message: '请选择制品类型' }]} style={{ marginBottom: 0, flex: '1 1 130px', minWidth: 120 }}>
                       <DictSelect category="artifact_type" size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} />
                     </Form.Item>
-                    <Form.Item name={[field.name, 'delivery_unit']} label={idx === 0 ? '交付单元名称（介质库路径/文件名）' : undefined} style={{ marginBottom: 0, flex: '2 1 220px', minWidth: 180 }}>
+                    <Form.Item name={[field.name, 'delivery_unit']} label={idx === 0 ? '交付单元名称（介质库路径/文件名）' : undefined} rules={[{ required: !readonly, message: '请填写交付单元名称' }]} style={{ marginBottom: 0, flex: '2 1 220px', minWidth: 180 }}>
                       <Input size="small" placeholder="介质库路径 / 文件名" readOnly={readonly} />
                     </Form.Item>
-                    <Form.Item name={[field.name, 'new_version']} label={idx === 0 ? '新版本号' : undefined} style={{ marginBottom: 0, flex: '1 1 110px', minWidth: 100 }}>
+                    <Form.Item name={[field.name, 'new_version']} label={idx === 0 ? '新版本号' : undefined} rules={[{ required: !readonly, message: '请填写新版本号' }]} style={{ marginBottom: 0, flex: '1 1 110px', minWidth: 100 }}>
                       <Input size="small" placeholder="如 V1.2.0" readOnly={readonly} />
                     </Form.Item>
                     {/* 摆渡状态：仅编辑时显示；新增默认「未摆渡」（由后端默认值写入） */}

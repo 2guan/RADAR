@@ -47,6 +47,7 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
   // 联动：打开关联需求详情 / 关联开发任务详情
   const [reqOpen, setReqOpen] = useState(false);
   const [relDevId, setRelDevId] = useState(null);
+  const [isDirty, setIsDirty] = useState(false);
   const { can } = useAppStore();
   const { isMobile } = useResponsive();
   const readonly = !can(cfg.entity, 'edit');
@@ -63,19 +64,15 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
         actual_start: d.actual_start ? dayjs(d.actual_start) : null,
         actual_end: d.actual_end ? dayjs(d.actual_end) : null,
       });
+      setIsDirty(false);
     };
     if (mode === 'page') {
       if (code) apiGet(`${cfg.api}/by-code/${encodeURIComponent(code)}`).then(apply);
       return;
     }
-    if (!open) {
-      form.resetFields();
-      return;
-    }
-    form.resetFields();
-    if (taskId) {
-      apiGet(`${cfg.api}/${taskId}`).then(apply);
-    }
+    if (!open || !taskId) return;
+    setIsDirty(false);
+    apiGet(`${cfg.api}/${taskId}`).then(apply);
   }, [open, taskId, code, kind, mode]);
 
   const save = async () => {
@@ -99,9 +96,9 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
       okText="保存"
       onOk={save}
       onCancel={onClose}
+      isDirty={!readonly && isDirty}
       okButtonProps={readonly ? { style: { display: 'none' } } : undefined}
       cancelText={readonly ? '关闭' : '取消'}
-      isDirty={form.isFieldsTouched()}
       title={(
         <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 10, rowGap: 6, minWidth: 0, width: '100%', paddingRight: 76 }}>
           <CodeLink module={cfg.entity} code={current?.task_code} fallback={cfg.title} />
@@ -116,7 +113,7 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
               popupClassName="status-select-dropdown"
               popupMatchSelectWidth={false}
               value={statusValue}
-              onChange={(val) => form.setFieldValue('status', val)}
+              onChange={(val) => { form.setFieldValue('status', val); if (!readonly) setIsDirty(true); }}
               placeholder={cfg.statusLabel}
               style={{ width: statusSelectWidth(statusValue, cfg.statusLabel), ...(readonly ? { pointerEvents: 'none' } : {}) }}
             />
@@ -164,7 +161,7 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
         </>
       )}
 
-      <Form form={form} layout="vertical" requiredMark={false} className="editor-form" style={{ fontSize: 12 }}>
+      <Form form={form} layout="vertical" requiredMark={false} className="editor-form" style={{ fontSize: 12 }} onValuesChange={() => { if (!readonly) setIsDirty(true); }}>
         {/* 状态改由标题栏内联编辑，此处保留隐藏字段以保证保存 */}
         <Form.Item name="status" hidden><Input /></Form.Item>
 
