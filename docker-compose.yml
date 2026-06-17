@@ -18,9 +18,9 @@ services:
       # 生产环境务必修改 JWT 密钥与管理员密码
       - NODE_ENV=production
       - PORT=3000
-      - JWT_SECRET=please-change-this-secret-in-production
-      - ADMIN_PASSWORD=admin2026
+      - JWT_SECRET=eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.eyJuYW1lIjoiSm9obiIsImFkbWluIjp0cnVlfQ.efj_jdGYPHI7Z6ObaJQV9xdCb1__y841HeoNtUYKW3wnsy1wnuQCmC_ovRmjpuROjrzp1q70Coyidq5B48qK_A
+      - ADMIN_PASSWORD=Admin@2026
     volumes:
       # 关键数据挂载到宿主机，容器删除后不丢失
-      - ./data:/app/data
-      - ./attachments:/app/attachments
+      - ./RADARdata/data:/app/data
+      - ./RADARdata/attachments:/app/attachments
