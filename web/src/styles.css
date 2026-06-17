@@ -610,6 +610,15 @@ body {
 }
 .dash-chart-actions { opacity: 0; transition: opacity .18s; }
 .dash-chart-card:hover .dash-chart-actions { opacity: 1; }
+.dash-chart-editor-titlebar {
+  padding-right: 64px;
+}
+.dash-chart-code-trigger.ant-btn {
+  position: absolute; top: 17px; right: 48px;
+  width: 22px; height: 22px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  line-height: 22px; font-size: 16px;
+}
 .dash-pivot .ant-table-thead > tr > th {
   background: var(--radar-primary-soft) !important;
   color: var(--radar-ink); font-weight: 600;

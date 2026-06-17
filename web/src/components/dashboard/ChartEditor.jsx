@@ -11,7 +11,7 @@ import React, { useEffect, useState } from 'react';
 import {
   Modal, Form, Input, Select, Radio, InputNumber, Divider, Button, Card, Space, DatePicker, App,
 } from 'antd';
-import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
+import { PlusOutlined, DeleteOutlined, CodeOutlined, CopyOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import ColorPickerField from './ColorPickerField.jsx';
 
@@ -21,6 +21,8 @@ const X_TYPES = ['stacked_bar', 'stacked_bar_horizontal', 'line', 'area', 'table
 export default function ChartEditor({ open, onClose, onSave, initialData, scope, meta }) {
   const [form] = Form.useForm();
   const [isDirty, setIsDirty] = useState(false);
+  const [codeOpen, setCodeOpen] = useState(false);
+  const [codeText, setCodeText] = useState('');
   const { message } = App.useApp();
   const source = Form.useWatch('source', form);
   const chartType = Form.useWatch('chart_type', form);
@@ -75,29 +77,78 @@ export default function ChartEditor({ open, onClose, onSave, initialData, scope,
     message.success(`已加载 ${opts.length} 条预设`);
   };
 
-  const handleOk = async () => {
-    const v = await form.validateFields().catch(() => null);
-    if (!v) return;
+  const buildPayload = (v) => {
     const filters = {};
     (v.filterList || []).forEach((f) => {
       if (!f?.dim || f.val == null) return;
       if (isDate(f.dim) && Array.isArray(f.val) && f.val.length === 2) {
-        filters[f.dim] = [f.val[0].format('YYYY-MM-DD'), f.val[1].format('YYYY-MM-DD')];
+        filters[f.dim] = f.val.map((d) => (dayjs.isDayjs(d) ? d.format('YYYY-MM-DD') : d));
       } else if (Array.isArray(f.val) ? f.val.length : f.val !== '') {
         filters[f.dim] = f.val;
       }
     });
     const clean = (arr) => (arr || []).filter((g) => g?.label && g.values?.length)
       .map((g) => ({ label: g.label, values: g.values, ...(g.color ? { color: g.color } : {}) }));
+    const nextSupportsX = X_TYPES.includes(v.chart_type);
     const config = {
       source: v.source,
       dimension: v.dimension,
-      xAxisDimension: supportsX ? (v.xAxisDimension || undefined) : undefined,
+      xAxisDimension: nextSupportsX ? (v.xAxisDimension || undefined) : undefined,
       filters,
       groups: clean(v.groups),
-      xAxisGroups: supportsX ? clean(v.xAxisGroups) : [],
+      xAxisGroups: nextSupportsX ? clean(v.xAxisGroups) : [],
     };
-    onSave({ title: v.title, chart_type: v.chart_type, col_span: v.col_span, height: v.height, scope, config });
+    return { title: v.title, chart_type: v.chart_type, col_span: v.col_span, height: v.height, scope, config };
+  };
+
+  const handleOk = async () => {
+    const v = await form.validateFields().catch(() => null);
+    if (!v) return;
+    onSave(buildPayload(v));
+  };
+
+  const filtersToList = (filters = {}) => Object.entries(filters).map(([dim, val]) => {
+    if (meta.dimMeta(dim)?.isDate && Array.isArray(val) && val.length === 2) {
+      return { dim, val: [dayjs(val[0]), dayjs(val[1])] };
+    }
+    return { dim, val };
+  });
+
+  const openCodeEditor = () => {
+    setCodeText(JSON.stringify(buildPayload(form.getFieldsValue(true)), null, 2));
+    setCodeOpen(true);
+  };
+
+  const copyCode = async () => {
+    await navigator.clipboard.writeText(codeText);
+    message.success('配置代码已复制');
+  };
+
+  const applyCode = () => {
+    let parsed;
+    try {
+      parsed = JSON.parse(codeText);
+    } catch {
+      message.error('JSON 格式不正确，请检查后再应用');
+      return;
+    }
+    const current = form.getFieldsValue(true);
+    const cfg = parsed.config || parsed;
+    form.setFieldsValue({
+      title: parsed.title ?? current.title,
+      chart_type: parsed.chart_type ?? current.chart_type,
+      col_span: parsed.col_span ?? current.col_span,
+      height: parsed.height ?? current.height,
+      source: cfg.source ?? current.source,
+      dimension: cfg.dimension ?? current.dimension,
+      xAxisDimension: cfg.xAxisDimension,
+      filterList: filtersToList(cfg.filters),
+      groups: cfg.groups || [],
+      xAxisGroups: cfg.xAxisGroups || [],
+    });
+    setIsDirty(true);
+    setCodeOpen(false);
+    message.success('配置代码已应用到表单');
   };
 
   // 分组列表（主/次维度共用渲染）
@@ -144,7 +195,13 @@ export default function ChartEditor({ open, onClose, onSave, initialData, scope,
   };
 
   return (
-    <Modal title={initialData ? '编辑图表' : '新增图表'} open={open} onOk={handleOk} onCancel={handleCancel}
+    <Modal title={(
+      <div className="dash-chart-editor-titlebar">
+        <span>{initialData ? '编辑图表' : '新增图表'}</span>
+        <Button className="dash-chart-code-trigger" type="text" icon={<CodeOutlined />} onClick={openCodeEditor}
+          aria-label="编辑代码" title="编辑代码" />
+      </div>
+    )} open={open} onOk={handleOk} onCancel={handleCancel}
       width={620} okText="保存" cancelText="取消" destroyOnHidden>
       <Form form={form} layout="vertical" onValuesChange={() => setIsDirty(true)}>
         <Form.Item name="title" label="图表标题" rules={[{ required: true, message: '请输入标题' }]}>
@@ -232,6 +289,20 @@ export default function ChartEditor({ open, onClose, onSave, initialData, scope,
           </Form.Item>
         </Space>
       </Form>
+
+      <Modal title="编辑图表配置代码" open={codeOpen} onCancel={() => setCodeOpen(false)} onOk={applyCode}
+        okText="应用到表单" cancelText="关闭" width={720}
+        footer={(_, { OkBtn, CancelBtn }) => (
+          <>
+            <Button icon={<CopyOutlined />} onClick={copyCode}>复制代码</Button>
+            <CancelBtn />
+            <OkBtn />
+          </>
+        )}>
+        <Input.TextArea value={codeText} onChange={(e) => setCodeText(e.target.value)}
+          autoSize={{ minRows: 16, maxRows: 24 }} spellCheck={false}
+          style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace', fontSize: 12 }} />
+      </Modal>
     </Modal>
   );
 }
