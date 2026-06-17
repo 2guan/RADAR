@@ -19,6 +19,8 @@ const rawClient = axios.create({
 
 // 请求拦截：注入 token
 rawClient.interceptors.request.use((cfg) => {
+  // CSRF 防护：所有请求携带自定义头（浏览器的 SOP 策略阻止跨域设置自定义头）
+  cfg.headers['X-Requested-By'] = 'RADAR';
   const token = localStorage.getItem(TOKEN_KEY);
   if (token) cfg.headers.Authorization = `Bearer ${token}`;
   return cfg;

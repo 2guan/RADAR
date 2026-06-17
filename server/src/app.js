@@ -57,16 +57,40 @@ export async function buildApp() {
 
   // ---- 安全与基础插件 ----
   await app.register(helmet, {
-    contentSecurityPolicy: false, // 前端 SPA 由 Vite 构建，单独配置 CSP，避免内联脚本被拦
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "blob:"],
+        connectSrc: ["'self'", "https://aiguan.xyz"],
+        fontSrc: ["'self'", "data:"],
+        objectSrc: ["'none'"],
+        frameAncestors: ["'self'"],
+        formAction: ["'self'"],
+      },
+    },
   });
-  await app.register(cors, { origin: true, credentials: true });
+  // CORS：优先从环境变量读取允许的来源（逗号分隔），开发环境退回到本地端口
+  const corsOrigins = process.env.CORS_ORIGINS
+    ? process.env.CORS_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean)
+    : config.isProd
+      ? []
+      : ['http://127.0.0.1:3000', 'http://localhost:3000', 'http://127.0.0.1:5173', 'http://localhost:5173'];
+  await app.register(cors, {
+    origin: corsOrigins.length ? corsOrigins : false,
+    credentials: true,
+  });
   await app.register(rateLimit, {
     max: 600,            // 单 IP 每窗口最多请求数
     timeWindow: '1 minute',
   });
-  await app.register(multipart, {
-    limits: { fileSize: config.upload.maxFileSize },
-  });
+ await app.register(multipart, {
+   limits: { fileSize: config.upload.maxFileSize },
+ });
+  // ---- API 请求体大小限制：JSON/表单类请求限制 1MB，文件上传走 multipart 独立限制 ----
+  const API_BODY_LIMIT = 1024 * 1024;
 
   // ---- 鉴权插件 ----
   await app.register(authPlugin);
@@ -88,6 +112,33 @@ export async function buildApp() {
 
   // ---- 业务路由（统一 /api 前缀）----
   app.register(async (api) => {
+    // 非 multipart 请求限制 body 大小（利用 onRequest 钩子在解析前拦截）
+    api.addHook('onRequest', async (request, reply) => {
+      // ---- CSRF 防护：所有写操作必须携带自定义头（浏览器无法跨域设置自定义头）----
+      if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method)) {
+        // 登录、健康检查等开放接口不需要 CSRF token
+        const path = request.url.split('?')[0];
+        const exemptPaths = ['/api/auth/login', '/api/health', '/api/settings/public'];
+        const isExempt = exemptPaths.some((p) => path === p || path.startsWith(p + '/'));
+        if (!isExempt && !exemptPaths.some((p) => path.startsWith(p))) {
+          const requestedBy = request.headers['x-requested-by'];
+          if (config.isProd && requestedBy !== 'RADAR') {
+            return reply.code(403).send({ code: 403, data: null, message: 'CSRF 校验失败' });
+          }
+          // 开发环境也校验（不强制，但会记录警告）
+          if (!requestedBy || requestedBy !== 'RADAR') {
+            request.log.warn({ path, method: request.method }, 'Missing X-Requested-By header (CSRF)');
+          }
+        }
+      }
+      const ct = request.headers['content-type'] || '';
+      if (!ct.includes('multipart/')) {
+        const cl = parseInt(request.headers['content-length'] || '0', 10);
+        if (cl > API_BODY_LIMIT && Number.isFinite(cl)) {
+          return reply.code(413).send({ code: 413, data: null, message: '请求体过大' });
+        }
+      }
+    });
     api.get('/health', async () => ok({ status: 'ok', time: new Date().toISOString() }));
     await api.register(authRoutes);
     await api.register(dictRoutes);

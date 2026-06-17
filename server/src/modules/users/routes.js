@@ -12,6 +12,7 @@ import { hashPassword, validatePasswordComplexity, getSecurityConfig } from '../
 import { exportXlsx, parseXlsx } from '../../lib/excel.js';
 import { ok, notFound, badRequest } from '../../lib/http.js';
 import { resolveDictAttr } from '../../lib/resolver.js';
+import { sanitizeText } from '../../lib/sanitize.js';
 
 // 导出列定义（不含密码）
 const EXPORT_COLUMNS = [
@@ -111,7 +112,7 @@ export default async function userRoutes(fastify) {
       query,
       baseWhere,
       baseParams,
-      select: 'id, phone, name, org, status, is_super, created_at',
+      select: 'id, phone, name, org, status, is_super, created_at, login_fail_count, lockout_until',
     });
     result.list = result.list.map((u) => ({ ...u, roles: rolesOfUser(u.id) }));
     return ok(result);
@@ -134,15 +135,30 @@ export default async function userRoutes(fastify) {
 
   // 详情
   fastify.get('/users/:id', { preHandler: fastify.requirePerm('user', 'view') }, async (request) => {
-    const u = get('SELECT id, phone, name, org, status, is_super FROM user WHERE id = ?', request.params.id);
+    const u = get('SELECT id, phone, name, org, status, is_super, login_fail_count, lockout_until FROM user WHERE id = ?', request.params.id);
     if (!u) throw notFound();
     return ok({ ...u, roles: rolesOfUser(u.id) });
   });
 
+  // 解锁用户（重置登录失败计数与锁定时间）
+  fastify.post('/users/:id/unlock', { preHandler: fastify.requirePerm('user', 'edit') }, async (request) => {
+    const id = request.params.id;
+    const u = get('SELECT id, name, login_fail_count, lockout_until FROM user WHERE id = ?', id);
+    if (!u) throw notFound();
+    if (!u.lockout_until && !u.login_fail_count) throw badRequest('该账号未被锁定，无需解锁');
+    run(
+      "UPDATE user SET login_fail_count = 0, lockout_until = NULL, updated_at = datetime('now','localtime') WHERE id = ?",
+      id
+    );
+    return ok(null, `已解锁用户 ${u.name}`);
+  });
+
   // 新增
   fastify.post('/users', { preHandler: fastify.requirePerm('user', 'create') }, async (request) => {
-    const { phone, name, org, password, roles } = request.body || {};
+    let { phone, name, org, password, roles } = request.body || {};
     if (!phone || !name) throw badRequest('手机号与姓名必填');
+    name = sanitizeText(name);
+    if (!name) throw badRequest('姓名不能为空或仅含无效字符');
     if (get('SELECT id FROM user WHERE phone = ?', phone)) throw badRequest('手机号已存在');
 
     const finalPwd = password || 'Radar@2026!';
@@ -167,7 +183,8 @@ export default async function userRoutes(fastify) {
     const id = request.params.id;
     const old = get('SELECT * FROM user WHERE id = ?', id);
     if (!old) throw notFound();
-    const { name, org, status, roles } = request.body || {};
+    const { name: rawName, org, status, roles } = request.body || {};
+    const name = rawName !== undefined ? sanitizeText(rawName) : undefined;
     tx(() => {
       run(
         `UPDATE user SET name=?, org=?, status=?, updated_at=datetime('now','localtime') WHERE id=?`,

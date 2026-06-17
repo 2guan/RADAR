@@ -10,7 +10,7 @@ import {
   Card, Button, Space, Modal, Form, Input, Select, Tag, Popconfirm, message,
 } from 'antd';
 import {
-  PlusOutlined, EditOutlined, DeleteOutlined, KeyOutlined, ImportOutlined, ExportOutlined,
+  PlusOutlined, EditOutlined, DeleteOutlined, KeyOutlined, UnlockOutlined, ImportOutlined, ExportOutlined,
 } from '@ant-design/icons';
 import DataTable from '../components/DataTable.jsx';
 import DictSelect from '../components/DictSelect.jsx';
@@ -153,7 +153,20 @@ export default function Users() {
     });
   };
 
-  const [importOpen, setImportOpen] = useState(false);
+   const [importOpen, setImportOpen] = useState(false);
+  // 解锁用户：重置登录失败计数和锁定时间
+  const unlockUser = async (row) => {
+    Modal.confirm({
+      title: `确认解锁 ${row.name}？`,
+      content: '解锁后将清除该用户的登录失败计数和锁定状态。',
+      onOk: async () => {
+        await apiPost(`/users/${row.id}/unlock`);
+        message.success(`已解锁 ${row.name}`);
+        tableRef.current?.reload();
+      },
+    });
+  };
+ 
 
   const columns = [
     {
@@ -196,8 +209,13 @@ export default function Users() {
       render: (_, row) => (
         <Space size={0}>
           <Can module="user" action="edit"><Button type="link" size="small" icon={<EditOutlined />} onClick={() => openEdit(row)} /></Can>
-          <Can module="user" action="edit"><Button type="link" size="small" icon={<KeyOutlined />} onClick={() => resetPwd(row)} title="重置密码" /></Can>
-          <Can module="user" action="delete"><Popconfirm title="确认删除？" onConfirm={() => onDelete(row)}><Button type="link" size="small" danger icon={<DeleteOutlined />} /></Popconfirm></Can>
+         <Can module="user" action="edit"><Button type="link" size="small" icon={<KeyOutlined />} onClick={() => resetPwd(row)} title="重置密码" /></Can>
+          <Can module="user" action="edit">
+            {((row.login_fail_count || 0) > 0 || !!row.lockout_until) && (
+              <Button type="link" size="small" icon={<UnlockOutlined />} onClick={() => unlockUser(row)} title="解锁" />
+            )}
+          </Can>
+         <Can module="user" action="delete"><Popconfirm title="确认删除？" onConfirm={() => onDelete(row)}><Button type="link" size="small" danger icon={<DeleteOutlined />} /></Popconfirm></Can>
         </Space>
       ),
     },

@@ -8,6 +8,7 @@
 import { get, all, run } from '../../db/index.js';
 import { verifyPassword, hashPassword, validatePasswordComplexity, isPasswordExpired, getSecurityConfig } from '../../lib/password.js';
 import { ok, badRequest, unauthorized } from '../../lib/http.js';
+import { sanitizeText } from '../../lib/sanitize.js';
 
 // Non-existent users lockout tracking
 const failedAttempts = new Map();
@@ -27,7 +28,6 @@ export default async function authRoutes(fastify) {
     },
   }, async (request) => {
     const { phone, password } = request.body;
-
     const configSettings = getSecurityConfig();
     const lockoutEnabled = configSettings['security.lockout.enabled'];
     const maxAttempts = configSettings['security.lockout.maxAttempts'];
@@ -54,14 +54,14 @@ export default async function authRoutes(fastify) {
     // 2. 如果用户不存在，记录失败次数并抛错
     if (!user) {
       if (!lockoutEnabled) {
-        throw unauthorized('登录名或密码错误');
+        throw unauthorized(AUTH_FAILED_MSG);
       }
       const attempt = failedAttempts.get(phone) || { count: 0, lockoutUntil: null };
       const newCount = attempt.count + 1;
       if (newCount >= maxAttempts) {
         const lockoutUntil = new Date(Date.now() + durationMinutes * 60 * 1000).toISOString();
         failedAttempts.set(phone, { count: newCount, lockoutUntil });
-        throw badRequest(`密码错误次数过多，账号已锁定 ${durationMinutes} 分钟`);
+        throw badRequest(`登录过于频繁，请稍后再试`);
       } else {
         failedAttempts.set(phone, { count: newCount, lockoutUntil: null });
         const attemptsLeft = maxAttempts - newCount;
@@ -69,7 +69,7 @@ export default async function authRoutes(fastify) {
       }
     }
 
-    if (user.status !== '启用') throw badRequest('账号已停用，请联系管理员');
+    if (user.status !== '启用') throw badRequest('登录名或密码错误');
 
     // 3. 已有用户的锁定检查
     if (lockoutEnabled && user.lockout_until) {
@@ -94,7 +94,7 @@ export default async function authRoutes(fastify) {
       if (newFailCount >= maxAttempts) {
         const lockoutUntil = new Date(Date.now() + durationMinutes * 60 * 1000).toISOString();
         run('UPDATE user SET login_fail_count = ?, lockout_until = ? WHERE id = ?', newFailCount, lockoutUntil, user.id);
-        throw badRequest(`密码错误次数过多，账号已锁定 ${durationMinutes} 分钟`);
+        throw badRequest(`登录过于频繁，请稍后再试`);
       } else {
         run('UPDATE user SET login_fail_count = ? WHERE id = ?', newFailCount, user.id);
         const attemptsLeft = maxAttempts - newFailCount;
