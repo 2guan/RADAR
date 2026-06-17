@@ -1,15 +1,16 @@
 /**
  * 文件：pages/Login.jsx
  * 用途：登录页。读取平台公开信息渲染标题，提交登录后保存 token 并加载用户信息跳转首页。
+ *       改进：支持验证码输入（输错2次密码后自动出现）。
  * 作者：hengguan
- * 说明：系统登录页面，提供账号/密码验证、登录异常提示、并自适应拉取系统主题和平台品牌名称。
+ * 说明：验证码通过 GET /api/auth/captcha 获取，不依赖外部服务。
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Card, Form, Input, Button, Typography, message } from 'antd';
-import { UserOutlined, LockOutlined } from '@ant-design/icons';
+import { UserOutlined, LockOutlined, SafetyOutlined } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { apiPost, TOKEN_KEY } from '../api/client.js';
+import { apiPost, apiGet, TOKEN_KEY, rawClient } from '../api/client.js';
 import { useAppStore } from '../stores/app.js';
 import { getHomePath } from '../app.jsx';
 
@@ -18,13 +19,53 @@ export default function Login() {
   const location = useLocation();
   const { platform, loadPlatform, loadMe, loadReleasePoint } = useAppStore();
   const [loading, setLoading] = useState(false);
+  const [needsCaptcha, setNeedsCaptcha] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState('');
+  const [captchaSvg, setCaptchaSvg] = useState('');
+  const [captchaAnswer, setCaptchaAnswer] = useState('');
+  const captchaRef = useRef(null);
 
   useEffect(() => { loadPlatform(); }, []);
+
+  /** 加载验证码（后端返回 SVG + token） */
+  const loadCaptcha = useCallback(async () => {
+    try {
+      const data = await apiGet('/auth/captcha');
+      setCaptchaSvg(data.captchaSvg);
+      setCaptchaToken(data.captchaToken);
+      // 清除旧的验证码输入
+      setCaptchaAnswer('');
+    } catch {
+      // 静默处理
+    }
+  }, []);
+
+  /** 处理登录失败，检查是否需要显示验证码 */
+  const handleLoginError = useCallback(async (err) => {
+    const resp = err?.response?.data;
+    if (resp?.data?.needsCaptcha) {
+      setNeedsCaptcha(true);
+      if (resp.data.captchaToken && resp.data.captchaSvg) {
+        // 验证码已随错误返回，直接使用
+        setCaptchaToken(resp.data.captchaToken);
+        setCaptchaSvg(resp.data.captchaSvg);
+      } else {
+        // 重新获取验证码
+        await loadCaptcha();
+      }
+    }
+  }, [loadCaptcha]);
 
   const onFinish = async (values) => {
     setLoading(true);
     try {
-      const data = await apiPost('/auth/login', values);
+      // 如果有验证码 token，一并提交
+      const payload = { ...values };
+      if (needsCaptcha && captchaToken) {
+        payload.captchaToken = captchaToken;
+        payload.captchaAnswer = captchaAnswer;
+      }
+      const data = await apiPost('/auth/login', payload);
       localStorage.setItem(TOKEN_KEY, data.token);
       const me = await loadMe();
       await loadReleasePoint();
@@ -43,8 +84,9 @@ export default function Login() {
         const homePath = getHomePath(me?.defaultHome);
         navigate(homePath, { replace: true });
       }
-    } catch {
-      // 错误已由拦截器提示
+    } catch (err) {
+      // 检查是否需要验证码
+      await handleLoginError(err);
     } finally {
       setLoading(false);
     }
@@ -104,6 +146,25 @@ export default function Login() {
           <Form.Item name="password" rules={[{ required: true, message: '请输入密码' }]}>
             <Input.Password prefix={<LockOutlined />} placeholder="密码" aria-label="密码" />
           </Form.Item>
+          {needsCaptcha && (
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 24 }}>
+              <Input
+                size="large"
+                placeholder="验证码"
+                value={captchaAnswer}
+                onChange={(e) => setCaptchaAnswer(e.target.value)}
+                style={{ width: 140 }}
+                prefix={<SafetyOutlined />}
+              />
+              <div
+                ref={captchaRef}
+                onClick={(e) => { e.preventDefault(); loadCaptcha(); }}
+                style={{ cursor: 'pointer', lineHeight: 0, border: '1px solid var(--radar-border)', borderRadius: 2, overflow: 'hidden' }}
+                dangerouslySetInnerHTML={{ __html: captchaSvg }}
+                title="点击刷新验证码"
+              />
+            </div>
+          )}
           <Form.Item style={{ marginBottom: 0 }}>
             <Button type="primary" htmlType="submit" block loading={loading}>登 录</Button>
           </Form.Item>

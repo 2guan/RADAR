@@ -1,21 +1,52 @@
 /**
  * 文件：modules/auth/routes.js
  * 用途：鉴权相关接口——登录、获取当前用户信息（含角色与权限集）、登出。
+ *       改进：统一登录失败追踪（login_fail_tracker 表），防止用户枚举；
+ *       输错 2 次后需要验证码；登录接口额外限流。
  * 作者：hengguan
  * 说明：登录成功签发 JWT；/auth/me 返回前端用于菜单/路由/按钮级权限控制的数据。
+ *       验证码使用自绘 SVG，无外部依赖。
  */
 
 import { get, all, run } from '../../db/index.js';
 import { verifyPassword, hashPassword, validatePasswordComplexity, isPasswordExpired, getSecurityConfig } from '../../lib/password.js';
 import { ok, badRequest, unauthorized } from '../../lib/http.js';
 import { sanitizeText } from '../../lib/sanitize.js';
-
-// Non-existent users lockout tracking
-const failedAttempts = new Map();
+import { createCaptcha, verifyCaptcha } from '../../lib/captcha.js';
 
 export default async function authRoutes(fastify) {
+  // 获取验证码（无需登录）
+  fastify.get('/auth/captcha', async () => {
+    const captcha = createCaptcha();
+    return ok({ captchaSvg: captcha.svg, captchaToken: captcha.token });
+  });
+
+  /**
+   * 读取或创建 login_fail_tracker 记录。
+   * 已存在的用户会同步数据库中已有的 login_fail_count（迁移兼容）。
+   */
+  function getTracker(phone) {
+    let tracker = get('SELECT * FROM login_fail_tracker WHERE phone = ?', phone);
+    if (!tracker) {
+      const existingUser = get('SELECT login_fail_count, lockout_until FROM user WHERE phone = ?', phone);
+      const failCount = existingUser?.login_fail_count || 0;
+      const lockoutUntil = existingUser?.lockout_until || null;
+      run('INSERT INTO login_fail_tracker (phone, fail_count, lockout_until) VALUES (?, ?, ?)', phone, failCount, lockoutUntil);
+      tracker = { phone, fail_count: failCount, lockout_until: lockoutUntil };
+    }
+    return tracker;
+  }
+
   // 登录
   fastify.post('/auth/login', {
+    // 登录接口独立限流（10 次/分钟/每 IP），弥补全局 600/min 的不足
+    config: {
+      rateLimit: {
+        max: 10,
+        timeWindow: '1 minute',
+        keyGenerator: (request) => request.ip,
+      },
+    },
     schema: {
       body: {
         type: 'object',
@@ -23,90 +54,97 @@ export default async function authRoutes(fastify) {
         properties: {
           phone: { type: 'string', minLength: 1 },
           password: { type: 'string', minLength: 1 },
+          captchaToken: { type: 'string' },
+          captchaAnswer: { type: 'string' },
         },
       },
     },
-  }, async (request) => {
-    const { phone, password } = request.body;
+  }, async (request, reply) => {
+    const { phone, password, captchaToken, captchaAnswer } = request.body;
     const configSettings = getSecurityConfig();
     const lockoutEnabled = configSettings['security.lockout.enabled'];
     const maxAttempts = configSettings['security.lockout.maxAttempts'];
     const durationMinutes = configSettings['security.lockout.durationMinutes'];
 
-    // 1. 非存在用户的锁定检查
-    if (lockoutEnabled) {
-      const attempt = failedAttempts.get(phone);
-      if (attempt && attempt.lockoutUntil) {
-        const lockoutTime = new Date(attempt.lockoutUntil);
-        const now = new Date();
-        if (lockoutTime > now) {
-          const minutesLeft = Math.ceil((lockoutTime - now) / 60000);
-          throw badRequest(`账号已被锁定，请于 ${minutesLeft} 分钟后重试`);
-        } else {
-          // 锁定已过期，清空重试计数
-          failedAttempts.delete(phone);
-        }
-      }
-    }
+    // 1. 获取/创建统一失败追踪记录
+    const tracker = getTracker(phone);
 
-    const user = get('SELECT * FROM user WHERE phone = ?', phone);
-
-    // 2. 如果用户不存在，记录失败次数并抛错
-    if (!user) {
-      if (!lockoutEnabled) {
-        throw unauthorized(AUTH_FAILED_MSG);
-      }
-      const attempt = failedAttempts.get(phone) || { count: 0, lockoutUntil: null };
-      const newCount = attempt.count + 1;
-      if (newCount >= maxAttempts) {
-        const lockoutUntil = new Date(Date.now() + durationMinutes * 60 * 1000).toISOString();
-        failedAttempts.set(phone, { count: newCount, lockoutUntil });
-        throw badRequest(`登录过于频繁，请稍后再试`);
-      } else {
-        failedAttempts.set(phone, { count: newCount, lockoutUntil: null });
-        const attemptsLeft = maxAttempts - newCount;
-        throw unauthorized(`登录名或密码错误，还可尝试 ${attemptsLeft} 次`);
-      }
-    }
-
-    if (user.status !== '启用') throw badRequest('登录名或密码错误');
-
-    // 3. 已有用户的锁定检查
-    if (lockoutEnabled && user.lockout_until) {
-      const lockoutTime = new Date(user.lockout_until);
+    // 2. 检查是否处于锁定状态（统一从 login_fail_tracker 读取）
+    if (lockoutEnabled && tracker.lockout_until) {
+      const lockoutTime = new Date(tracker.lockout_until);
       const now = new Date();
       if (lockoutTime > now) {
         const minutesLeft = Math.ceil((lockoutTime - now) / 60000);
-        throw badRequest(`账号已被锁定，请于 ${minutesLeft} 分钟后重试`);
-      } else {
-        // 锁定已过期，清空重试计数并重置内存中的副本
-        run('UPDATE user SET login_fail_count = 0, lockout_until = NULL WHERE id = ?', user.id);
-        user.login_fail_count = 0;
-        user.lockout_until = null;
+        return reply.code(400).send({ code: 400, data: null, message: `账号已被锁定，请于 ${minutesLeft} 分钟后重试` });
+      }
+      // 锁定已过期，清空
+      run('UPDATE login_fail_tracker SET fail_count = 0, lockout_until = NULL WHERE phone = ?', phone);
+      tracker.fail_count = 0;
+      tracker.lockout_until = null;
+    }
+
+    // 3. 失败 >=2 次后需要验证码
+    if (tracker.fail_count >= 2) {
+      if (!captchaToken || !verifyCaptcha(captchaToken, captchaAnswer)) {
+        const captcha = createCaptcha();
+        return reply.code(400).send({
+          code: 400,
+          data: { needsCaptcha: true, captchaToken: captcha.token, captchaSvg: captcha.svg },
+          message: !captchaToken ? '请输入验证码' : '验证码错误',
+        });
       }
     }
 
-    if (!verifyPassword(password, user.password_hash)) {
-      if (!lockoutEnabled) {
-        throw unauthorized('登录名或密码错误');
-      }
-      const newFailCount = (user.login_fail_count || 0) + 1;
-      if (newFailCount >= maxAttempts) {
+    // 4. 查询用户
+    const user = get('SELECT * FROM user WHERE phone = ?', phone);
+
+    // 5. 校验密码（用户不存在或密码错误统一处理，防止用户枚举）
+    if (!user || !verifyPassword(password, user?.password_hash)) {
+      const newFailCount = tracker.fail_count + 1;
+
+      if (lockoutEnabled && newFailCount >= maxAttempts) {
         const lockoutUntil = new Date(Date.now() + durationMinutes * 60 * 1000).toISOString();
-        run('UPDATE user SET login_fail_count = ?, lockout_until = ? WHERE id = ?', newFailCount, lockoutUntil, user.id);
-        throw badRequest(`登录过于频繁，请稍后再试`);
-      } else {
-        run('UPDATE user SET login_fail_count = ? WHERE id = ?', newFailCount, user.id);
-        const attemptsLeft = maxAttempts - newFailCount;
-        throw unauthorized(`登录名或密码错误，还可尝试 ${attemptsLeft} 次`);
+        // 更新 tracker
+        run("UPDATE login_fail_tracker SET fail_count = ?, lockout_until = ?, last_attempt_at = datetime('now','localtime') WHERE phone = ?",
+            newFailCount, lockoutUntil, phone);
+        // 若用户存在，同步更新 user 表（后台解锁功能依赖 user.login_fail_count）
+        if (user) {
+          run('UPDATE user SET login_fail_count = ?, lockout_until = ? WHERE id = ?', newFailCount, lockoutUntil, user.id);
+        }
+        return reply.code(400).send({ code: 400, data: null, message: '登录过于频繁，请稍后再试' });
       }
+
+      // 更新 tracker
+      run("UPDATE login_fail_tracker SET fail_count = ?, last_attempt_at = datetime('now','localtime') WHERE phone = ?",
+          newFailCount, phone);
+      if (user) {
+        run('UPDATE user SET login_fail_count = ? WHERE id = ?', newFailCount, user.id);
+      }
+
+      const attemptsLeft = maxAttempts - newFailCount;
+      const needsCaptcha = newFailCount >= 2;
+      const respData = needsCaptcha ? { needsCaptcha: true } : null;
+      return reply.code(401).send({
+        code: 401,
+        data: respData,
+        message: `登录名或密码错误，还可尝试 ${attemptsLeft} 次`,
+      });
     }
 
-    // 登录成功，重置所有计数并清除临时缓存记录
-    run('UPDATE user SET login_fail_count = 0, lockout_until = NULL WHERE id = ?', user.id);
-    if (lockoutEnabled) {
-      failedAttempts.delete(phone);
+    // 6. 检查用户状态（仍返回通用错误，防止状态枚举）
+    if (user.status !== '启用') {
+      const newFailCount = tracker.fail_count + 1;
+      run('UPDATE login_fail_tracker SET fail_count = ? WHERE phone = ?', newFailCount, phone);
+      return reply.code(401).send({
+        code: 401,
+        data: null,
+        message: `登录名或密码错误，还可尝试 ${maxAttempts - newFailCount} 次`,
+      });
     }
+
+    // 7. 登录成功——清空所有失败记录
+    run('DELETE FROM login_fail_tracker WHERE phone = ?', phone);
+    run('UPDATE user SET login_fail_count = 0, lockout_until = NULL WHERE id = ?', user.id);
 
     const token = await fastify.jwt.sign({ id: user.id, phone: user.phone });
     const expired = isPasswordExpired(user);
@@ -173,7 +211,7 @@ export default async function authRoutes(fastify) {
 
     // 更新密码，更新 password_changed_at 并重置错误计数
     run(
-      `UPDATE user SET password_hash=?, updated_at=datetime('now','localtime'), password_changed_at=datetime('now','localtime'), login_fail_count=0, lockout_until=NULL WHERE id=?`,
+      "UPDATE user SET password_hash=?, updated_at=datetime('now','localtime'), password_changed_at=datetime('now','localtime'), login_fail_count=0, lockout_until=NULL WHERE id=?",
       hashPassword(newPassword),
       u.id
     );
