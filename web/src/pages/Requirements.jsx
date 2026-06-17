@@ -118,7 +118,28 @@ export default function Requirements() {
         </span>
       ),
     },
-    { title: '需求标题', dataIndex: 'title', key: 'title', ellipsis: true },
+    {
+      title: '需求标题',
+      dataIndex: 'title',
+      key: 'title',
+      width: 280,
+      render: (text) => (
+        <div
+          style={{
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'normal',
+            wordBreak: 'break-all',
+          }}
+          title={text}
+        >
+          {text}
+        </div>
+      ),
+    },
     { title: '需求类型', dataIndex: 'req_type', key: 'req_type' },
     {
       title: '提出人',
