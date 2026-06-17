@@ -120,7 +120,12 @@ export default function Requirements() {
     },
     { title: '需求标题', dataIndex: 'title', key: 'title', ellipsis: true },
     { title: '需求类型', dataIndex: 'req_type', key: 'req_type' },
-    { title: '提出人', dataIndex: 'proposer', key: 'proposer' },
+    {
+      title: '提出人',
+      dataIndex: 'proposer',
+      key: 'proposer',
+      render: (val) => (Array.isArray(val) ? val.join(', ') : (val || '—')),
+    },
     {
       title: '提出时间',
       dataIndex: 'propose_time',

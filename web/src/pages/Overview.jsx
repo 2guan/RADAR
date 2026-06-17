@@ -187,7 +187,19 @@ function ReqDetailCard({ req, onEdit }) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, margin: '8px 0' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
           <span style={{ fontSize: 11, color: 'var(--radar-text-secondary)' }}>提出人</span>
-          <PersonCard p={req.proposerInfo} />
+          {Array.isArray(req.proposerInfo) ? (
+            req.proposerInfo.length ? (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {req.proposerInfo.map((p, idx) => (
+                  <PersonCard key={idx} p={p} />
+                ))}
+              </div>
+            ) : (
+              <span className="lc-muted">—</span>
+            )
+          ) : (
+            <PersonCard p={req.proposerInfo} />
+          )}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
           <span style={{ fontSize: 11, color: 'var(--radar-text-secondary)' }}>云南农信负责人</span>

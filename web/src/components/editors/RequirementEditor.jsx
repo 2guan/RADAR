@@ -413,15 +413,15 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
             <div className="form-section-card">
               <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>相关负责人</div>
               <Row gutter={8}>
-                {/* 农信提出部门 + 农信提出人：手机端各占一行（充满），PC 端双栏 */}
+                {/* 提出部门 + 提出人：手机端各占一行（充满），PC 端双栏 */}
                 <Col span={isMobile ? 24 : 12}>
-                  <Form.Item name="propose_dept" label="农信提出部门" rules={[{ required: !readonly, message: '请选择农信提出部门' }]} style={{ marginBottom: 8 }}>
+                  <Form.Item name="propose_dept" label="提出部门" rules={[{ required: !readonly, message: '请选择提出部门' }]} style={{ marginBottom: 8 }}>
                     <DictSelect category="req_dept" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} size="small" />
                   </Form.Item>
                 </Col>
                 <Col span={isMobile ? 24 : 12}>
-                  <Form.Item name="proposer" label="农信提出人" rules={[{ required: !readonly, message: '请选择农信提出人' }]} style={{ marginBottom: 8 }}>
-                    <PersonPicker style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择提出人" size="small" />
+                  <Form.Item name="proposer" label="提出人" rules={[{ required: !readonly, type: 'array', message: '请选择提出人' }]} style={{ marginBottom: 8 }}>
+                    <PersonPicker mode="multiple" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择提出人" size="small" />
                   </Form.Item>
                 </Col>
               </Row>

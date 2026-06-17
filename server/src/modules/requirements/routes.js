@@ -30,8 +30,8 @@ const IO_COLUMNS = [
   { key: 'summary', title: '需求概述' },
   { key: 'status', title: '需求状态' },
   { key: 'req_type', title: '需求类型' },
-  { key: 'propose_dept', title: '农信提出部门' },
-  { key: 'proposer', title: '农信提出人' },
+  { key: 'propose_dept', title: '提出部门' },
+  { key: 'proposer', title: '提出人' },
   { key: 'yn_owner', title: '云南农信业务负责人' },
   { key: 'jk_owner', title: '建信金科业务负责人' },
   { key: 'propose_time', title: '提出时间' },
@@ -48,7 +48,7 @@ const COLUMNS = [
   'issue_no',
 ];
 const SEARCH = ['req_code', 'title', 'summary', 'proposer', 'issue_no'];
-const JSON_FIELDS = ['main_systems', 'collab_dev_systems', 'collab_test_systems'];
+const JSON_FIELDS = ['main_systems', 'collab_dev_systems', 'collab_test_systems', 'proposer'];
 const WRITABLE = [
   'req_code', 'title', 'summary', 'status', 'req_type', 'propose_dept', 'proposer', 'yn_owner', 'jk_owner',
   'propose_time', 'main_systems', 'collab_dev_systems', 'collab_test_systems', 'release_point_id',
@@ -56,7 +56,7 @@ const WRITABLE = [
 ];
 const LABELS = {
   req_code: '需求编号', title: '需求标题', summary: '需求概述', status: '需求状态', req_type: '需求类型',
-  propose_dept: '农信提出部门', proposer: '农信提出人', yn_owner: '云南农信业务负责人',
+  propose_dept: '提出部门', proposer: '提出人', yn_owner: '云南农信业务负责人',
   jk_owner: '建信金科业务负责人', propose_time: '提出时间', main_systems: '主责系统',
   collab_dev_systems: '协同改造系统', collab_test_systems: '协同测试系统', release_point_id: '计划投产点',
   issue_no: '关联问题/工单编号',
@@ -66,7 +66,18 @@ const LABELS = {
 function decode(row) {
   if (!row) return row;
   const out = { ...row };
-  for (const f of JSON_FIELDS) out[f] = row[f] ? JSON.parse(row[f]) : [];
+  for (const f of JSON_FIELDS) {
+    if (row[f]) {
+      try {
+        const parsed = JSON.parse(row[f]);
+        out[f] = Array.isArray(parsed) ? parsed : [parsed];
+      } catch {
+        out[f] = [row[f]];
+      }
+    } else {
+      out[f] = [];
+    }
+  }
   return out;
 }
 
@@ -393,8 +404,8 @@ export default async function requirementRoutes(fastify) {
       { key: 'summary', title: '需求概述' },
       { key: 'status', title: '需求状态' },
       { key: 'req_type', title: '需求类型' },
-      { key: 'propose_dept', title: '农信提出部门' },
-      { key: 'proposer', title: '农信提出人' },
+      { key: 'propose_dept', title: '提出部门' },
+      { key: 'proposer', title: '提出人' },
       { key: 'yn_owner', title: '云南农信业务负责人' },
       { key: 'jk_owner', title: '建信金科业务负责人' },
       { key: 'propose_time', title: '提出时间' },
@@ -414,9 +425,20 @@ export default async function requirementRoutes(fastify) {
       const collabTest = row.collab_test_systems ? JSON.parse(row.collab_test_systems) : [];
       const attaches = all("SELECT * FROM attachment WHERE entity_type = 'requirement' AND entity_id = ?", row.id);
 
+      const proposerArray = (() => {
+        if (!row.proposer) return [];
+        try {
+          const parsed = JSON.parse(row.proposer);
+          return Array.isArray(parsed) ? parsed : [row.proposer];
+        } catch {
+          return [row.proposer];
+        }
+      })();
+
       return {
         ...row,
         release_date: rpMap[row.release_point_id] || '',
+        proposer: proposerArray.join(', '),
         main_systems: main.map(c => sysMap[c] || c).join(', '),
         collab_dev_systems: collabDev.map(c => sysMap[c] || c).join(', '),
         collab_test_systems: collabTest.map(c => sysMap[c] || c).join(', '),
@@ -480,6 +502,11 @@ export default async function requirementRoutes(fastify) {
           const collabDevSystems = resolveSystemCodes(r.collab_dev_systems);
           const collabTestSystems = resolveSystemCodes(r.collab_test_systems);
 
+          const proposerArray = r.proposer
+            ? String(r.proposer).split(/[，,]/).map(s => s.trim()).filter(Boolean)
+            : [];
+          const proposerJson = JSON.stringify(proposerArray);
+
           let code = String(r.req_code || '').trim();
           const exists = code ? get('SELECT * FROM requirement WHERE req_code = ?', code) : null;
 
@@ -507,12 +534,23 @@ export default async function requirementRoutes(fastify) {
               }
             };
 
+            const oldProposers = (() => {
+              if (!exists.proposer) return '';
+              try {
+                const parsed = JSON.parse(exists.proposer);
+                return Array.isArray(parsed) ? parsed.join(', ') : exists.proposer;
+              } catch {
+                return exists.proposer;
+              }
+            })();
+            const newProposers = proposerArray.join(', ');
+
             compareAndPush('title', '需求标题', exists.title || '', r.title || '');
             compareAndPush('summary', '需求概述', exists.summary || '', r.summary || '');
             compareAndPush('status', '需求状态', exists.status || '', status || '');
             compareAndPush('req_type', '需求类型', exists.req_type || '', reqType || '');
-            compareAndPush('propose_dept', '农信提出部门', exists.propose_dept || '', proposeDept || '');
-            compareAndPush('proposer', '农信提出人', exists.proposer || '', r.proposer || '');
+            compareAndPush('propose_dept', '提出部门', exists.propose_dept || '', proposeDept || '');
+            compareAndPush('proposer', '提出人', oldProposers, newProposers);
             compareAndPush('yn_owner', '云南农信业务负责人', exists.yn_owner || '', r.yn_owner || '');
             compareAndPush('jk_owner', '建信金科业务负责人', exists.jk_owner || '', r.jk_owner || '');
             compareAndPush('propose_time', '提出时间', exists.propose_time || '', r.propose_time || '');
@@ -537,13 +575,13 @@ export default async function requirementRoutes(fastify) {
                    issue_no=?,
                    updated_at=datetime('now','localtime') 
                  WHERE id=?`,
-                r.title, r.summary || null, status, reqType || null, proposeDept || null, r.proposer || null,
+                r.title, r.summary || null, status, reqType || null, proposeDept || null, proposerJson,
                 r.yn_owner || null, r.jk_owner || null, r.propose_time || null, rpId,
                 mainSystems, collabDevSystems, collabTestSystems, r.issue_no || null, exists.id
               );
               auditUpdate('requirement', exists.id, code, request.currentUser?.name, exists, {
                 title: r.title, summary: r.summary || null, status, req_type: reqType || null,
-                propose_dept: proposeDept || null, proposer: r.proposer || null, yn_owner: r.yn_owner || null,
+                propose_dept: proposeDept || null, proposer: proposerJson, yn_owner: r.yn_owner || null,
                 jk_owner: r.jk_owner || null, propose_time: r.propose_time || null, release_point_id: rpId,
                 main_systems: mainSystems, collab_dev_systems: collabDevSystems, collab_test_systems: collabTestSystems,
                 issue_no: r.issue_no || null
@@ -568,7 +606,7 @@ export default async function requirementRoutes(fastify) {
                  (req_code, title, summary, status, req_type, propose_dept, proposer, yn_owner, jk_owner, 
                   propose_time, release_point_id, main_systems, collab_dev_systems, collab_test_systems, registrar, register_time, issue_no)
                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-              code, r.title, r.summary || null, status, reqType || null, proposeDept || null, r.proposer || null,
+              code, r.title, r.summary || null, status, reqType || null, proposeDept || null, proposerJson,
               r.yn_owner || null, r.jk_owner || null, r.propose_time || null, rpId,
               mainSystems, collabDevSystems, collabTestSystems, request.currentUser?.name, new Date().toISOString().slice(0, 10),
               r.issue_no || null

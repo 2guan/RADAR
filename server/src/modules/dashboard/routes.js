@@ -63,7 +63,16 @@ function projectRecord(source, row, ctx) {
   const sysName = (code) => ctx.sysMap[code]?.name || code;
   const systems = extract(realSource, 'system', row, ctx).map(sysName).join('、');
   if (realSource === 'requirement') {
-    return { req_code: row.req_code, code: row.req_code, name: row.title, status: row.status, system: systems, org: extract(realSource, 'org', row, ctx).join('、'), owner: row.proposer || '' };
+    const proposerNames = (() => {
+      if (!row.proposer) return '';
+      try {
+        const parsed = JSON.parse(row.proposer);
+        return Array.isArray(parsed) ? parsed.join('、') : row.proposer;
+      } catch {
+        return row.proposer;
+      }
+    })();
+    return { req_code: row.req_code, code: row.req_code, name: row.title, status: row.status, system: systems, org: extract(realSource, 'org', row, ctx).join('、'), owner: proposerNames };
   }
   if (realSource === 'releaseSystem') {
     return { req_code: row.req_code, code: row.system_code, name: sysName(row.system_code), status: row.status, system: systems, org: row.impl_org || '', owner: '' };

@@ -64,12 +64,13 @@ function addUser(phone, name, org, roleCodes) {
 
 /** 新增需求 */
 function addReq(o) {
+  const proposerJson = JSON.stringify(o.proposer ? [o.proposer] : []);
   const res = run(
     `INSERT INTO requirement
        (req_code, title, summary, status, req_type, propose_dept, proposer, yn_owner, jk_owner,
         propose_time, main_systems, collab_dev_systems, collab_test_systems, release_point_id, registrar, register_time, issue_no)
      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    o.req_code, o.title, nz(o.summary), o.status, nz(o.req_type), nz(o.propose_dept), nz(o.proposer), nz(o.yn_owner), nz(o.jk_owner),
+    o.req_code, o.title, nz(o.summary), o.status, nz(o.req_type), nz(o.propose_dept), proposerJson, nz(o.yn_owner), nz(o.jk_owner),
     nz(o.propose_time), JSON.stringify(o.main || []), JSON.stringify(o.collabDev || []), JSON.stringify(o.collabTest || []),
     o.rp, o.registrar || '超级管理员', o.register_time || o.propose_time, nz(o.issue_no),
   );

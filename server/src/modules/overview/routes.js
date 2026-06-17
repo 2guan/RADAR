@@ -402,11 +402,21 @@ export default async function overviewRoutes(fastify) {
     const mainCodes = req.main_systems ? JSON.parse(req.main_systems) : [];
     const collabCodes = req.collab_dev_systems ? JSON.parse(req.collab_dev_systems) : [];
     const rp = req.release_point_id ? get('SELECT release_date FROM release_point WHERE id = ?', req.release_point_id) : null;
+    const proposerNames = (() => {
+      if (!req.proposer) return [];
+      try {
+        const parsed = JSON.parse(req.proposer);
+        return Array.isArray(parsed) ? parsed : [req.proposer];
+      } catch {
+        return [req.proposer];
+      }
+    })();
+
     const requirement = {
       ...req,
       release_date: rp ? rp.release_date : null,
       attachments: attachOf('requirement', req.id),
-      proposerInfo: resolvePerson(req.proposer),
+      proposerInfo: proposerNames.map(resolvePerson).filter(Boolean),
       ynOwnerInfo: resolvePerson(req.yn_owner),
       jkOwnerInfo: resolvePerson(req.jk_owner),
       mainSystemsInfo: mainCodes.map(resolveSystem),
@@ -616,6 +626,16 @@ export default async function overviewRoutes(fastify) {
       const reqAttaches = all("SELECT * FROM attachment WHERE entity_type = 'requirement' AND entity_id = ?", r.id);
       const reqSpecFormatted = formatAttachments(reqAttaches, '需求说明书');
 
+      const proposerArray = (() => {
+        if (!r.proposer) return [];
+        try {
+          const parsed = JSON.parse(r.proposer);
+          return Array.isArray(parsed) ? parsed : [r.proposer];
+        } catch {
+          return [r.proposer];
+        }
+      })();
+
       const reqInfo = {
         req_code: r.req_code,
         req_title: r.title,
@@ -623,7 +643,7 @@ export default async function overviewRoutes(fastify) {
         req_status: r.status,
         req_type: r.req_type,
         propose_dept: r.propose_dept,
-        proposer: r.proposer,
+        proposer: proposerArray.join(', '),
         yn_owner: r.yn_owner,
         jk_owner: r.jk_owner,
         propose_time: r.propose_time,
@@ -807,8 +827,8 @@ export default async function overviewRoutes(fastify) {
       { key: 'req_summary', title: '需求概述' },
       { key: 'req_status', title: '需求状态' },
       { key: 'req_type', title: '需求类型' },
-      { key: 'propose_dept', title: '农信提出部门' },
-      { key: 'proposer', title: '农信提出人' },
+      { key: 'propose_dept', title: '提出部门' },
+      { key: 'proposer', title: '提出人' },
       { key: 'yn_owner', title: '云南农信业务负责人' },
       { key: 'jk_owner', title: '建信金科业务负责人' },
       { key: 'propose_time', title: '提出时间' },

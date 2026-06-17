@@ -231,7 +231,7 @@ export function runMock() {
         reqStatus,
         pick(['新增需求', '已有功能的需求变更', '缺陷修复', '紧急变更']),
         pick(['云南农信', '智能云事业部', '大数据中心']),
-        pickUser('农信业务'), pickUser('农信业务'), pickUser('金科业务'),
+        JSON.stringify([pickUser('农信业务')]), pickUser('农信业务'), pickUser('金科业务'),
         proposeTime,
         JSON.stringify(main), JSON.stringify(collabDev), JSON.stringify(collabTest),
         spec.rp.id, pickUser('农信业务'), shift(proposeTime, 2),
