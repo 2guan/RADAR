@@ -125,6 +125,62 @@ function SystemPickerField({ title, hint, value = [], onChange, single, placehol
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+function PersonPickerField({ value = [], onChange, readonly, placeholder }) {
+  const handlePickerChange = (vals) => {
+    const combined = [...new Set([...(value || []), ...vals])];
+    onChange?.(combined);
+  };
+
+  const remove = (name) => {
+    onChange?.((value || []).filter((v) => v !== name));
+  };
+
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <PersonPicker
+          mode="multiple"
+          value={[]}
+          onChange={handlePickerChange}
+          placeholder={placeholder || '选择人员'}
+          size="small"
+          style={{ flex: 1, minWidth: 0, fontSize: 12, ...(readonly ? { pointerEvents: 'none' } : {}) }}
+          tabIndex={readonly ? -1 : undefined}
+        />
+      </div>
+
+      {value && value.length > 0 && (
+        <div
+          style={{
+            marginTop: 8,
+            padding: '8px 10px',
+            background: 'var(--radar-primary-soft)',
+            border: '1px solid var(--radar-border)',
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 6,
+          }}
+        >
+          {value.map((name) => (
+            <Tag
+              key={name}
+              className="tag-system"
+              style={{ borderRadius: 2, margin: 0, fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+              closeIcon={readonly ? null : <CloseOutlined style={{ fontSize: 10 }} />}
+              closable={!readonly}
+              onClose={() => remove(name)}
+            >
+              {name}
+            </Tag>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function RequirementEditor({ open, mode = 'modal', code, reqId, defaultReleasePointId, onClose, onSaved }) {
   const [form] = Form.useForm();
   // 监听需求状态，供标题栏内联选择器响应式回显
@@ -421,7 +477,7 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
                 </Col>
                 <Col span={isMobile ? 24 : 12}>
                   <Form.Item name="proposer" label="提出人" rules={[{ required: !readonly, type: 'array', message: '请选择提出人' }]} style={{ marginBottom: 8 }}>
-                    <PersonPicker mode="multiple" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择提出人" size="small" />
+                    <PersonPickerField readonly={readonly} placeholder="选择提出人" />
                   </Form.Item>
                 </Col>
               </Row>
