@@ -66,6 +66,7 @@ export default function Requirements() {
     { field: 'org', label: '实施机构', type: 'select', op: 'in', options: orgOptions, isPrimary: true },
     { field: 'req_code', label: '需求编号', type: 'input', isPrimary: true, op: 'like', placeholder: '需求编号检索' },
     { field: 'content', label: '需求内容', type: 'input', isPrimary: true, op: 'like', placeholder: '需求标题或概述检索' },
+    { field: 'issue_no', label: '关联问题/工单', type: 'input', op: 'like', placeholder: '问题/工单编号检索' },
     { field: 'release_point_id', label: '计划投产点', type: 'select', op: 'in', options: pointOptions },
     { field: 'status', label: '需求状态', type: 'select', op: 'in', options: statusOptions },
     { field: 'req_type', label: '需求类型', type: 'select', op: 'in', options: typeOptions },

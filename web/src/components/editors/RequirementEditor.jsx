@@ -362,6 +362,12 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
                     <DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" />
                   </Form.Item>
                 </Col>
+                {/* 关联问题/工单编号 */}
+                <Col span={24}>
+                  <Form.Item name="issue_no" label="关联问题/工单编号" style={{ marginBottom: 8 }}>
+                    <Input placeholder="手动输入关联问题/工单编号（选填）" size="small" readOnly={readonly} />
+                  </Form.Item>
+                </Col>
               </Row>
 
               {/* 需求标题 */}

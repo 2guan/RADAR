@@ -39,23 +39,27 @@ const IO_COLUMNS = [
   { key: 'main_systems', title: '主责系统' },
   { key: 'collab_dev_systems', title: '协同改造系统' },
   { key: 'collab_test_systems', title: '协同测试系统' },
+  { key: 'issue_no', title: '关联问题/工单编号' },
 ];
 
 const COLUMNS = [
   'id', 'req_code', 'title', 'summary', 'status', 'req_type', 'propose_dept', 'proposer',
   'yn_owner', 'jk_owner', 'propose_time', 'release_point_id', 'registrar', 'register_time', 'created_at',
+  'issue_no',
 ];
-const SEARCH = ['req_code', 'title', 'summary', 'proposer'];
+const SEARCH = ['req_code', 'title', 'summary', 'proposer', 'issue_no'];
 const JSON_FIELDS = ['main_systems', 'collab_dev_systems', 'collab_test_systems'];
 const WRITABLE = [
   'req_code', 'title', 'summary', 'status', 'req_type', 'propose_dept', 'proposer', 'yn_owner', 'jk_owner',
   'propose_time', 'main_systems', 'collab_dev_systems', 'collab_test_systems', 'release_point_id',
+  'issue_no',
 ];
 const LABELS = {
   req_code: '需求编号', title: '需求标题', summary: '需求概述', status: '需求状态', req_type: '需求类型',
   propose_dept: '农信提出部门', proposer: '农信提出人', yn_owner: '云南农信业务负责人',
   jk_owner: '建信金科业务负责人', propose_time: '提出时间', main_systems: '主责系统',
   collab_dev_systems: '协同改造系统', collab_test_systems: '协同测试系统', release_point_id: '计划投产点',
+  issue_no: '关联问题/工单编号',
 };
 
 /** 把 JSON 字符串字段解析为数组返回给前端 */
@@ -398,6 +402,7 @@ export default async function requirementRoutes(fastify) {
       { key: 'main_systems', title: '主责系统' },
       { key: 'collab_dev_systems', title: '协同改造系统' },
       { key: 'collab_test_systems', title: '协同测试系统' },
+      { key: 'issue_no', title: '关联问题/工单编号' },
       { key: 'registrar', title: '登记人' },
       { key: 'register_time', title: '登记时间' },
       { key: 'attachments', title: '需求说明书' },
@@ -511,6 +516,7 @@ export default async function requirementRoutes(fastify) {
             compareAndPush('yn_owner', '云南农信业务负责人', exists.yn_owner || '', r.yn_owner || '');
             compareAndPush('jk_owner', '建信金科业务负责人', exists.jk_owner || '', r.jk_owner || '');
             compareAndPush('propose_time', '提出时间', exists.propose_time || '', r.propose_time || '');
+            compareAndPush('issue_no', '关联问题/工单编号', exists.issue_no || '', r.issue_no || '');
             
             // 计划投产点比较
             const oldRpDate = rpMap[exists.release_point_id] || '';
@@ -528,17 +534,19 @@ export default async function requirementRoutes(fastify) {
                 `UPDATE requirement SET 
                    title=?, summary=?, status=?, req_type=?, propose_dept=?, proposer=?, yn_owner=?, jk_owner=?, 
                    propose_time=?, release_point_id=?, main_systems=?, collab_dev_systems=?, collab_test_systems=?, 
+                   issue_no=?,
                    updated_at=datetime('now','localtime') 
                  WHERE id=?`,
                 r.title, r.summary || null, status, reqType || null, proposeDept || null, r.proposer || null,
                 r.yn_owner || null, r.jk_owner || null, r.propose_time || null, rpId,
-                mainSystems, collabDevSystems, collabTestSystems, exists.id
+                mainSystems, collabDevSystems, collabTestSystems, r.issue_no || null, exists.id
               );
               auditUpdate('requirement', exists.id, code, request.currentUser?.name, exists, {
                 title: r.title, summary: r.summary || null, status, req_type: reqType || null,
                 propose_dept: proposeDept || null, proposer: r.proposer || null, yn_owner: r.yn_owner || null,
                 jk_owner: r.jk_owner || null, propose_time: r.propose_time || null, release_point_id: rpId,
-                main_systems: mainSystems, collab_dev_systems: collabDevSystems, collab_test_systems: collabTestSystems
+                main_systems: mainSystems, collab_dev_systems: collabDevSystems, collab_test_systems: collabTestSystems,
+                issue_no: r.issue_no || null
               }, LABELS);
             }
 
@@ -558,11 +566,12 @@ export default async function requirementRoutes(fastify) {
             const res = run(
               `INSERT INTO requirement 
                  (req_code, title, summary, status, req_type, propose_dept, proposer, yn_owner, jk_owner, 
-                  propose_time, release_point_id, main_systems, collab_dev_systems, collab_test_systems, registrar, register_time)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+                  propose_time, release_point_id, main_systems, collab_dev_systems, collab_test_systems, registrar, register_time, issue_no)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
               code, r.title, r.summary || null, status, reqType || null, proposeDept || null, r.proposer || null,
               r.yn_owner || null, r.jk_owner || null, r.propose_time || null, rpId,
-              mainSystems, collabDevSystems, collabTestSystems, request.currentUser?.name, new Date().toISOString().slice(0, 10)
+              mainSystems, collabDevSystems, collabTestSystems, request.currentUser?.name, new Date().toISOString().slice(0, 10),
+              r.issue_no || null
             );
             auditCreate('requirement', res.lastInsertRowid, code, request.currentUser?.name);
             stat.inserted++;
