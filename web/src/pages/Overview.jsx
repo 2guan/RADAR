@@ -7,6 +7,7 @@
  * 说明：系统概览和个人待办面板，以工作流看板形式展示个人的开发和测试任务，支持拖拽状态更新。
  */
 import React, { useEffect, useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Card, Row, Col, Tag, Typography, Empty, Modal, Space, Spin, Select, Avatar, Tabs, Button, Table, Radio, message, Timeline, Tooltip, List, Checkbox,
 } from 'antd';
@@ -18,7 +19,6 @@ import RequirementEditor from '../components/editors/RequirementEditor.jsx';
 import TaskEditor from '../components/editors/TaskEditor.jsx';
 import ReleaseDetail from '../components/editors/ReleaseDetail.jsx';
 import ReleaseApplyEditor from '../components/editors/ReleaseApplyEditor.jsx';
-import IssueDetail from '../components/editors/IssueDetail.jsx';
 import ResizableTitle from '../components/ResizableTitle.jsx';
 import { apiPost, apiGet, rawClient } from '../api/client.js';
 import FilterPanel from '../components/FilterPanel.jsx';
@@ -1022,6 +1022,7 @@ function TaskGrid({ items, attachFields, onEdit, emptyText, onIntake, hasIntakeP
 }
 
 export default function Overview() {
+  const navigate = useNavigate();
   const releasePointIds = useAppStore((s) => s.releasePointIds);
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -1039,9 +1040,6 @@ export default function Overview() {
   const [editor, setEditor] = useState(null);
   // 投产申请·新增（未发起投产的需求点击投产卡片时弹出，并默认选中该需求）
   const [applyEditor, setApplyEditor] = useState(null);
-  // 问题只读详情（概览「问题列」点击打开）
-  const [issueDetailId, setIssueDetailId] = useState(null);
-
   const [filterQuery, setFilterQuery] = useState([]);
   
   // 下拉列表选项数据源
@@ -1259,7 +1257,7 @@ export default function Overview() {
           isTabMode ? (
             <Tabs
               items={[
-                { key: 'issue', label: '问题', children: <IssueDetailCard issue={detail.issue} onEdit={() => setIssueDetailId(detail.issue.id)} /> },
+                { key: 'issue', label: '问题', children: <IssueDetailCard issue={detail.issue} onEdit={() => navigate(`/pams/issues/${detail.issue.issue_code}`)} /> },
                 { key: 'rel', label: '投产', children: <ReleaseDetailCard release={detail.release} onEdit={openReleaseCard} /> },
               ]}
             />
@@ -1267,7 +1265,7 @@ export default function Overview() {
             <div className="lc-columns-container">
               <div className="lc-column">
                 <div className="lc-column-header"><span>问题</span></div>
-                <IssueDetailCard issue={detail.issue} onEdit={() => setIssueDetailId(detail.issue.id)} />
+                <IssueDetailCard issue={detail.issue} onEdit={() => navigate(`/pams/issues/${detail.issue.issue_code}`)} />
               </div>
               <div className="lc-column">
                 <div className="lc-column-header"><span>投产</span></div>
@@ -1363,8 +1361,6 @@ export default function Overview() {
         onClose={() => setEditor(null)} onSaved={onEditorSaved} />
       <ReleaseDetail open={editor?.type === 'release'} reqCode={editor?.type === 'release' ? editor?.reqCode : null}
         onClose={() => setEditor(null)} onChanged={onEditorSaved} />
-      {/* 问题只读详情（概览「问题列」点击打开） */}
-      <IssueDetail open={!!issueDetailId} issueId={issueDetailId} onClose={() => setIssueDetailId(null)} />
       {/* 未发起投产的需求：弹出投产申请新增并默认选中该需求 */}
       <ReleaseApplyEditor
         open={!!applyEditor}

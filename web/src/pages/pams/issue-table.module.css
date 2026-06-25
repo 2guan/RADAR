@@ -1,0 +1,278 @@
+/* ==========================================================
+   样式作用: PAMS 系统功能页面 / 提供 [issue-table.module.css] 相关的业务操作 UI 界面
+   编写作者: hengguan
+   编写日期: 2026-05-20
+   ========================================================== */
+
+/* Shared styles for Issue Tables based on newissues design */
+
+/* Status Badges */
+.statusBadge {
+    padding: 1px 6px;
+    background-color: var(--radar-bg);
+    border: 1px solid var(--radar-border);
+    color: var(--radar-text-secondary);
+    border-radius: 9999px;
+    font-size: 10px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    white-space: nowrap;
+}
+
+.statusBadgeDot {
+    width: 0.3rem;
+    height: 0.3rem;
+    border-radius: 9999px;
+    background-color: var(--radar-text-secondary);
+}
+
+.issueIdText {
+    font-size: 11px;
+    font-weight: normal;
+    font-family: 'Microsoft YaHei', sans-serif;
+    white-space: nowrap;
+    display: inline-block;
+    width: 90px;
+    text-align: center;
+    vertical-align: middle;
+}
+
+.issueIdMain {
+    font-weight: bold;
+    font-size: 0.95rem;
+    /* Reduced from 1.125rem */
+    line-height: 1.2;
+    color: var(--radar-ink);
+    font-family: 'Microsoft YaHei', sans-serif;
+    white-space: nowrap;
+}
+
+.statusProcessing {
+    background-color: var(--radar-primary-soft);
+    color: var(--radar-primary);
+    border-color: var(--radar-primary-fade);
+}
+
+
+.statusProcessing .statusBadgeDot {
+    background-color: var(--radar-primary);
+    box-shadow: 0 0 5px rgba(59, 130, 246, 0.4);
+}
+
+.statusSolved {
+    background-color: var(--radar-status-final-soft);
+    color: var(--radar-status-final);
+    border-color: var(--radar-status-final-fade);
+}
+
+.statusSolved .statusBadgeDot {
+    background-color: var(--radar-status-final);
+    box-shadow: 0 0 5px rgba(34, 197, 94, 0.4);
+}
+
+.statusVerify {
+    background-color: var(--radar-status-in-progress-soft);
+    color: var(--radar-status-in-progress);
+    border-color: var(--radar-status-in-progress-fade);
+}
+
+.statusVerify .statusBadgeDot {
+    background-color: var(--radar-status-in-progress);
+    box-shadow: 0 0 5px rgba(234, 88, 12, 0.4);
+}
+
+.statusReproduce {
+    background-color: rgba(220, 38, 38, 0.12);
+    color: #dc2626;
+    border-color: rgba(220, 38, 38, 0.24);
+}
+
+.statusReproduce .statusBadgeDot {
+    background-color: #ef4444;
+    box-shadow: 0 0 5px rgba(239, 68, 68, 0.4);
+}
+
+.statusFound {
+    background-color: var(--radar-accent-soft);
+    color: var(--radar-accent);
+    border-color: var(--radar-accent-fade);
+}
+
+.statusFound .statusBadgeDot {
+    background-color: var(--radar-accent);
+    box-shadow: 0 0 5px rgba(13, 148, 136, 0.4);
+}
+
+
+/* Category Tags */
+.categoryTag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: bold;
+    border: 1px solid transparent;
+    margin-bottom: 2px;
+}
+
+.tagBlue {
+    background-color: var(--radar-primary-soft);
+    color: var(--radar-primary);
+    border-color: var(--radar-primary-fade);
+}
+
+.tagOrange {
+    background-color: var(--radar-status-in-progress-soft);
+    color: var(--radar-status-in-progress);
+    border-color: var(--radar-status-in-progress-fade);
+}
+
+.tagRed {
+    background-color: rgba(220, 38, 38, 0.12);
+    color: #dc2626;
+    border-color: rgba(220, 38, 38, 0.24);
+}
+
+.tagDefault {
+    background-color: var(--radar-bg);
+    color: var(--radar-text-secondary);
+    border-color: var(--radar-border);
+}
+
+/* Personnel Tags and Layout */
+.peopleGrid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.375rem;
+    margin-top: 8px;
+}
+
+.personCard {
+    background: var(--radar-surface);
+    padding: 0.25rem 0.375rem;
+    /* Adjusted padding */
+    border-radius: 0.25rem;
+    border: 1px solid var(--radar-border);
+    display: flex;
+    flex-direction: row;
+    /* Horizontal layout */
+    align-items: center;
+    /* Vertically center everything */
+    justify-content: flex-start;
+    height: 28px;
+    /* Fixed height for consistency */
+}
+
+.personTag {
+    font-size: 9px;
+    padding: 0.125rem 0.375rem;
+    border-radius: 0.25rem;
+    font-weight: 500;
+    line-height: 1;
+    white-space: nowrap;
+    border-width: 1px;
+    border-style: solid;
+    margin-right: 4px;
+    /* Common gray styles */
+    background: var(--radar-bg);
+    color: var(--radar-text-secondary);
+    border-color: var(--radar-border);
+    flex-shrink: 0;
+    /* Prevent tag from shrinking */
+}
+
+/* ... tag colors ... */
+.tagTracker {
+    background: var(--radar-bg);
+    color: var(--radar-text-secondary);
+    border-color: var(--radar-border);
+}
+
+.tagReporter {
+    background: var(--radar-bg);
+    color: var(--radar-text-secondary);
+    border-color: var(--radar-border);
+}
+
+.tagHandler {
+    background: var(--radar-bg);
+    color: var(--radar-text-secondary);
+    border-color: var(--radar-border);
+}
+
+.orgTag {
+    font-size: 9px;
+    background: var(--radar-bg);
+    color: var(--radar-text-secondary);
+    border: 1px solid var(--radar-border);
+    padding: 0 4px;
+    border-radius: 2px;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.personName {
+    font-weight: 500;
+    font-size: 0.75rem;
+    color: var(--radar-ink);
+    line-height: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex-grow: 1;
+    /* Take up remaining space */
+    text-align: center;
+    /* Horizontally center text */
+}
+
+/* System & Text */
+.systemName {
+    font-weight: bold;
+    color: var(--radar-ink);
+    font-size: 12px;
+    /* Slightly smaller */
+}
+
+.tagGray {
+    display: inline-flex;
+    align-items: center;
+    padding: 0 4px;
+    border-radius: 2px;
+    background: var(--radar-bg);
+    color: var(--radar-text-secondary);
+    font-size: 10px;
+    border: 1px solid var(--radar-border);
+}
+
+.valuePrimary {
+    font-size: 13px;
+    color: var(--radar-ink);
+}
+
+.valueSecondary {
+    font-size: 12px;
+    color: var(--radar-text-secondary);
+}
+
+/* Detail Preview */
+.issueDetailPreview {
+    font-size: 12px;
+    color: var(--radar-text-secondary);
+    line-height: 1.3;
+    margin-bottom: 8px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    /* Added for standard compatibility */
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    /* background-color: #f8fafc; */
+    /* Removed per user request */
+    /* padding: 4px; */
+    /* Removed per user request */
+    /* border-radius: 4px; */
+    /* Removed per user request */
+}

@@ -14,6 +14,7 @@ import { ok, badRequest, notFound, forbidden } from '../../lib/http.js';
 import {
   SOURCES, DIMENSIONS, CHART_TYPES, buildContext, aggregate, extract, matchFilters, isValidDim, testTypeOf,
 } from '../../lib/chart-dims.js';
+import { listPamsIssuesByCodes } from '../../lib/pams-issues.js';
 
 /** 取所选投产窗口下的需求编号集合；ids 为空返回 null（=全部，不过滤） */
 function reqCodesInWindow(ids) {
@@ -132,7 +133,7 @@ export default async function dashboardRoutes(fastify) {
     let issueRows = [];
     if (refSet.size) {
       const arr = [...refSet];
-      issueRows = all(`SELECT status FROM issue WHERE issue_code IN (${arr.map(() => '?').join(',')})`, ...arr);
+      issueRows = listPamsIssuesByCodes(arr, 'issue_id, status');
     }
     const ISSUE_TERMINAL = new Set(['已解决', '待验证']);
     const issue = { total: issueRows.length, terminal: issueRows.filter((r) => ISSUE_TERMINAL.has(r.status)).length };

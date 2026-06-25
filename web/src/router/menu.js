@@ -12,6 +12,43 @@ import {
   ExperimentOutlined, RocketOutlined, TeamOutlined, SettingOutlined, BugOutlined,
 } from '@ant-design/icons';
 
+export const PAMS_TOP_MENU = [
+  { key: '/pams/dashboard', label: '统计仪表盘', module: 'pams' },
+  {
+    key: 'pams-report', label: '问题上报', module: 'pams',
+    children: [
+      { key: '/pams/report', label: '问题上报-报障人', module: 'pams' },
+      { key: '/pams/report-tracker', label: '问题上报-跟踪人', module: 'pams' },
+      { key: '/pams/report-ticket', label: '问题上报-工单', module: 'pams' },
+    ],
+  },
+  {
+    key: 'pams-detail', label: '问题详情', module: 'pams',
+    children: [
+      { key: '/pams/my-issues', label: '我的问题', module: 'pams' },
+      { key: '/pams/issues', label: '问题管理', module: 'pams' },
+      { key: '/pams/major-issues', label: '重大问题', module: 'pams' },
+      { key: '/pams/faq', label: '常见问题', module: 'pams' },
+    ],
+  },
+  {
+    key: 'pams-ticket', label: '工单明细', module: 'pams',
+    children: [
+      { key: '/pams/business-ticket', label: '业务工单', module: 'pams' },
+      { key: '/pams/kongming', label: '孔明工单', module: 'pams' },
+      { key: '/pams/itsm', label: 'ITSM工单', module: 'pams' },
+    ],
+  },
+  {
+    key: 'pams-analysis', label: '问题分析', module: 'pams',
+    children: [
+      { key: '/pams/problem-report', label: '问题快报', module: 'pams' },
+      { key: '/pams/analyst', label: '分析报告', module: 'pams' },
+    ],
+  },
+  { key: '/pams/config', label: '系统配置', module: 'pams' },
+];
+
 export const MENU = [
   { key: '/dashboard', label: '效能仪表盘', module: 'dashboard', icon: React.createElement(DashboardOutlined) },
   { key: '/overview', label: '版本概览', module: 'overview', icon: React.createElement(AppstoreOutlined) },
@@ -31,9 +68,9 @@ export const MENU = [
     children: [
       { key: '/release/apply', label: '投产申请', module: 'release_apply' },
       { key: '/release', label: '投产审批', module: 'release' },
-      { key: '/issues', label: '问题管理', module: 'issue', icon: React.createElement(BugOutlined) },
     ],
   },
+  { key: '/pams/dashboard', label: '问题管理', module: 'pams', icon: React.createElement(BugOutlined) },
   { key: '/users', label: '人员管理', module: 'user', icon: React.createElement(TeamOutlined) },
   { key: '/settings', label: '系统设置', module: 'settings', icon: React.createElement(SettingOutlined) },
 ];

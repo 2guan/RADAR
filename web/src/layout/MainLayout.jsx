@@ -15,7 +15,7 @@ import {
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { useAppStore } from '../stores/app.js';
 import { useResponsive } from '../hooks/useResponsive.js';
-import { MENU } from '../router/menu.js';
+import { MENU, PAMS_TOP_MENU } from '../router/menu.js';
 import { apiGet, apiPost } from '../api/client.js';
 import ThemeSwitcher from '../components/ThemeSwitcher.jsx';
 
@@ -103,8 +103,54 @@ export default function MainLayout() {
       const c = m.children?.find((x) => x.key === location.pathname);
       if (c) return c.label;
     }
+    for (const m of PAMS_TOP_MENU) {
+      if (m.key === location.pathname) return m.label;
+      const c = m.children?.find((x) => x.key === location.pathname);
+      if (c) return c.label;
+    }
     return platform['platform.name'];
   })();
+
+  const pamsNavVisible = location.pathname.startsWith('/pams') && can('pams', 'view');
+
+  useEffect(() => {
+    document.body.classList.toggle('pams-route-active', location.pathname.startsWith('/pams'));
+    return () => document.body.classList.remove('pams-route-active');
+  }, [location.pathname]);
+
+  const renderPamsTopNav = () => {
+    if (!pamsNavVisible || isMobile) return null;
+    return (
+      <div className="pams-top-nav">
+        {PAMS_TOP_MENU.map((m) => {
+          const active = location.pathname === m.key || m.children?.some((c) => location.pathname === c.key);
+          if (!m.children) {
+            return (
+              <Button
+                key={m.key}
+                type={active ? 'primary' : 'text'}
+                size="small"
+                onClick={() => go(m.key)}
+              >
+                {m.label}
+              </Button>
+            );
+          }
+          return (
+            <Dropdown
+              key={m.key}
+              menu={{ items: m.children.map((c) => ({ key: c.key, label: c.label })), onClick: ({ key }) => go(key) }}
+              trigger={['click']}
+            >
+              <Button type={active ? 'primary' : 'text'} size="small">
+                {m.label} <DownOutlined />
+              </Button>
+            </Dropdown>
+          );
+        })}
+      </div>
+    );
+  };
 
   // 渲染单个菜单项（支持一级子菜单）
   const renderNavItem = (m) => {
@@ -217,8 +263,9 @@ export default function MainLayout() {
           <Button type="text" shape="circle" icon={theme === 'dark' ? <BulbFilled /> : <BulbOutlined />} onClick={toggleTheme} title="切换白天/夜间" />
           {/* Global top-right profile removed */}
         </Header>
+        {renderPamsTopNav()}
 
-        <Content className="radar-content" style={{ margin: isMobile ? 12 : 20, overflow: 'auto hidden' }}>
+        <Content className={`radar-content ${location.pathname.startsWith('/pams') ? 'pams-theme-scope' : ''}`} style={{ margin: isMobile ? 12 : 20, overflow: 'auto hidden' }}>
           <Outlet />
         </Content>
       </Layout>

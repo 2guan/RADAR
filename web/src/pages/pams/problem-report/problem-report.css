@@ -1,0 +1,35 @@
+/* ==========================================================
+   样式作用: PAMS 系统功能页面 / 提供 [problem-report/problem-report.css] 相关的业务操作 UI 界面
+   编写作者: hengguan
+   编写日期: 2026-05-20
+   ========================================================== */
+
+/* Summary row styling */
+.summary-row {
+    background-color: var(--radar-primary-soft) !important;
+    font-weight: bold !important;
+}
+
+.summary-row td {
+    font-weight: bold !important;
+    border-top: 2px solid var(--radar-border) !important;
+}
+
+/* Compact table row spacing */
+.ant-table-small .ant-table-tbody>tr>td {
+    padding: 4px 8px !important;
+}
+
+.ant-table-small .ant-table-thead>tr>th {
+    padding: 6px 8px !important;
+}
+
+/* Jinke statistics card - light blue theme */
+.jinke-stats-card .ant-card-head {
+    background-color: var(--radar-primary-soft) !important;
+}
+
+/* Nongxin statistics card - light red theme */
+.nongxin-stats-card .ant-card-head {
+    background-color: var(--radar-accent-soft) !important;
+}

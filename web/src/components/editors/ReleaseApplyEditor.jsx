@@ -64,7 +64,9 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
     apiGet('/systems/all').then(setSystems).catch(() => {});
     // 加载全部需求（不限投产窗口），以便跨窗口关联与投产点一致性校验
     apiPost('/requirements/list', { pageSize: 0, releasePointIds: [] }).then((d) => setReqs(d?.list || [])).catch(() => {});
-    apiPost('/issues/list', { pageSize: 0 }).then((d) => setIssues(d?.list || [])).catch(() => {});
+    apiGet('/pams/issues', { page: 1, pageSize: 5000 })
+      .then((d) => setIssues((d?.items || []).map((i) => ({ ...i, issue_code: i.issue_id }))))
+      .catch(() => {});
 
     if (applyId) {
       apiGet(`/release-apply/${applyId}`).then((d) => {

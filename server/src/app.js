@@ -28,7 +28,7 @@ import roleRoutes from './modules/roles/routes.js';
 import userRoutes from './modules/users/routes.js';
 import settingsRoutes from './modules/settings/routes.js';
 import requirementRoutes from './modules/requirements/routes.js';
-import issueRoutes from './modules/issues/routes.js';
+import pamsRoutes from './modules/pams/routes.js';
 import devTaskRoutes from './modules/dev-tasks/routes.js';
 import testTaskRoutes from './modules/test-tasks/routes.js';
 import releaseRoutes from './modules/release/routes.js';
@@ -148,7 +148,7 @@ export async function buildApp() {
     await api.register(userRoutes);
     await api.register(settingsRoutes);
     await api.register(requirementRoutes);
-    await api.register(issueRoutes);
+    await api.register(pamsRoutes);
     await api.register(devTaskRoutes);
     await api.register(testTaskRoutes);
     await api.register(releaseRoutes);

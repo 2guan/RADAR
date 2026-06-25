@@ -13,6 +13,7 @@ import { windowIds, inClause } from '../../lib/window.js';
 import { ok, notFound } from '../../lib/http.js';
 import { exportXlsx } from '../../lib/excel.js';
 import { formatAttachments } from '../../lib/resolver.js';
+import { getPamsIssue, listAllPamsIssues } from '../../lib/pams-issues.js';
 
 /** 计算一组任务的节点状态（含单一代表状态 status，供阶段标签展示） */
 function nodeState(tasks) {
@@ -70,7 +71,7 @@ function resolvePerson(name) {
 /** 按编号解析系统（编号 + 名称 + 所属机构 + 业务板块） */
 function resolveSystem(code) {
   if (!code) return null;
-  return get('SELECT sys_code, sys_name, org, sector FROM system WHERE sys_code = ?', code)
+  return get('SELECT sys_code, sys_name, org, sector FROM system WHERE sys_code = ? OR sys_name = ?', code, code)
     || { sys_code: code, sys_name: code, org: null, sector: null };
 }
 
@@ -167,7 +168,7 @@ function appendIssueCards({ groups, body, targetReleasePointIds, sysMap, rtMap, 
 
   // 2) 问题主数据 + 系统名→机构 映射（问题的 system 字段多为系统名称）
   const issueMap = {};
-  for (const it of all('SELECT issue_code, status, summary, system FROM issue')) issueMap[it.issue_code] = it;
+  for (const it of listAllPamsIssues('issue_id, status, summary, system')) issueMap[it.issue_code] = it;
   const sysNameOrg = {};
   for (const s of all('SELECT sys_name, org FROM system')) sysNameOrg[s.sys_name] = s.org;
 
@@ -429,7 +430,7 @@ export default async function overviewRoutes(fastify) {
   // 问题两列概览详情（问题 + 投产）：供版本概览中问题卡片点开
   fastify.get('/overview/issue/:code/detail', { preHandler: fastify.requirePerm('overview', 'view') }, async (request) => {
     const code = request.params.code;
-    const issue = get('SELECT * FROM issue WHERE issue_code = ?', code);
+    const issue = getPamsIssue(code);
     if (!issue) throw notFound('问题不存在');
 
     // 关联投产申请（取最早一条）以推导计划投产点

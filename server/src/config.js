@@ -38,6 +38,9 @@ export const config = {
   // 数据库文件路径（挂载目录）
   dbFile: process.env.DB_FILE || path.join(REPO_ROOT, 'data', 'radar.db'),
 
+  // PAMS 问题管理子系统数据库文件路径（与 RADAR 主库隔离）
+  pamsDbFile: process.env.PAMS_DB_FILE || path.join(REPO_ROOT, 'data', 'pams.db'),
+
   // 附件存储根目录（挂载目录）
   attachmentDir: process.env.ATTACHMENT_DIR || path.join(REPO_ROOT, 'attachments'),
 

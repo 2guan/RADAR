@@ -15,7 +15,24 @@ import Login from './pages/Login.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import Overview from './pages/Overview.jsx';
 import Requirements from './pages/Requirements.jsx';
-import Issues from './pages/Issues.jsx';
+import PamsDashboard from './pages/pams/dashboard/page.tsx';
+import PamsReport from './pages/pams/report/page.tsx';
+import PamsReportTracker from './pages/pams/report-tracker/page.tsx';
+import PamsReportTicket from './pages/pams/report-ticket/page.tsx';
+import PamsMyIssues from './pages/pams/my-issues/page.tsx';
+import PamsIssues from './pages/pams/issues/page.tsx';
+import PamsMajorIssues from './pages/pams/major-issues/page.tsx';
+import PamsFaq from './pages/pams/faq/page.tsx';
+import PamsIssueDetail from './pages/pams/issues/detail-page.tsx';
+import PamsBusinessTicket from './pages/pams/business-ticket/page.tsx';
+import PamsBusinessTicketDetail from './pages/pams/business-ticketdetail/page.tsx';
+import PamsKongming from './pages/pams/kongming/page.tsx';
+import PamsKongmingDetail from './pages/pams/kongmingdetail/page.tsx';
+import PamsItsm from './pages/pams/itsm/page.tsx';
+import PamsItsmDetail from './pages/pams/itsmdetail/page.tsx';
+import PamsProblemReport from './pages/pams/problem-report/page.tsx';
+import PamsAnalyst from './pages/pams/analyst/page.tsx';
+import PamsConfig from './pages/pams/config/page.tsx';
 import DevTasks from './pages/DevTasks.jsx';
 import { SitPage, UatPage, NftPage, SecPage } from './pages/TestTasks.jsx';
 import Release from './pages/Release.jsx';
@@ -36,7 +53,9 @@ export function getHomePath(defaultHome) {
     '效能仪表盘': '/dashboard',
     '版本概览': '/overview',
     '需求分析': '/requirements',
-    '问题管理': '/issues',
+    '问题管理': '/pams/dashboard',
+    'PAMS问题管理': '/pams/dashboard',
+    'PAMS 问题管理': '/pams/dashboard',
     '开发管理': '/dev',
     '测试管理': '/test/sit',
     '应用组装测试': '/test/sit',
@@ -93,7 +112,7 @@ function Protected({ children }) {
   const path = location.pathname;
   const PREFIX_MODULE = [
     ['/dashboard', 'dashboard'], ['/overview', 'overview'],
-    ['/requirements', 'requirement'], ['/issues', 'issue'],
+    ['/requirements', 'requirement'], ['/pams', 'pams'],
     ['/dev', 'dev'], ['/test', 'test'],
     ['/release/apply', 'release_apply'], ['/release', 'release'],
     ['/users', 'user'], ['/settings', 'settings'],
@@ -130,7 +149,25 @@ export default function AppRouter() {
           <Route path="overview" element={<Overview />} />
           <Route path="requirements" element={<Requirements />} />
           <Route path="requirements/:code" element={<RequirementDetailPage />} />
-          <Route path="issues" element={<Issues />} />
+          <Route path="pams" element={<Navigate to="/pams/dashboard" replace />} />
+          <Route path="pams/dashboard" element={<PamsDashboard />} />
+          <Route path="pams/report" element={<PamsReport />} />
+          <Route path="pams/report-tracker" element={<PamsReportTracker />} />
+          <Route path="pams/report-ticket" element={<PamsReportTicket />} />
+          <Route path="pams/my-issues" element={<PamsMyIssues />} />
+          <Route path="pams/issues" element={<PamsIssues />} />
+          <Route path="pams/issues/:id" element={<PamsIssueDetail />} />
+          <Route path="pams/major-issues" element={<PamsMajorIssues />} />
+          <Route path="pams/faq" element={<PamsFaq />} />
+          <Route path="pams/business-ticket" element={<PamsBusinessTicket />} />
+          <Route path="pams/business-ticketdetail/:id" element={<PamsBusinessTicketDetail />} />
+          <Route path="pams/kongming" element={<PamsKongming />} />
+          <Route path="pams/kongmingdetail/:id" element={<PamsKongmingDetail />} />
+          <Route path="pams/itsm" element={<PamsItsm />} />
+          <Route path="pams/itsmdetail/:id" element={<PamsItsmDetail />} />
+          <Route path="pams/problem-report" element={<PamsProblemReport />} />
+          <Route path="pams/analyst" element={<PamsAnalyst />} />
+          <Route path="pams/config" element={<PamsConfig />} />
           <Route path="dev" element={<DevTasks />} />
           <Route path="dev/:code" element={<DevTaskDetailPage />} />
           <Route path="test" element={<Navigate to="/test/sit" replace />} />

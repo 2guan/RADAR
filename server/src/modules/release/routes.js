@@ -15,6 +15,7 @@ import { ok, notFound, badRequest, forbidden } from '../../lib/http.js';
 import { exportXlsx } from '../../lib/excel.js';
 import { signatureDataUrl } from '../../lib/signature.js';
 import { buildReleaseWordDoc } from '../../lib/release-word.js';
+import { getPamsIssue, hasPamsIssue, pamsIssueMapByCode } from '../../lib/pams-issues.js';
 
 /** 读取被打标为"会签角色"的角色列表 */
 function signoffRoles() {
@@ -54,7 +55,7 @@ function recomputeReviewStatus(releaseTaskId) {
 /** 判定实体类型：需求 / 问题 / 未知 */
 function classifyEntity(code) {
   if (get('SELECT 1 FROM requirement WHERE req_code = ?', code)) return 'requirement';
-  if (get('SELECT 1 FROM issue WHERE issue_code = ?', code)) return 'issue';
+  if (hasPamsIssue(code)) return 'issue';
   return 'unknown';
 }
 
@@ -138,11 +139,12 @@ function computeEntities(windowIdList) {
 
   // 会签角色数：未发起的实体会签进度按 0/角色数 展示（与首次打开详情后惰性创建的会签项数一致）
   const signoffRoleCount = get('SELECT COUNT(*) AS c FROM role WHERE is_signoff_role = 1')?.c || 0;
+  const issueMap = pamsIssueMapByCode([...codeMap.keys()], 'issue_id, summary, status');
 
   const list = [];
   for (const [code, info] of codeMap) {
     const req = get('SELECT req_code, title, status, release_point_id FROM requirement WHERE req_code = ?', code);
-    const issue = req ? null : get('SELECT issue_code, summary, status FROM issue WHERE issue_code = ?', code);
+    const issue = req ? null : issueMap.get(code);
     const type = req ? 'requirement' : (issue ? 'issue' : 'unknown');
     const title = req ? req.title : (issue ? issue.summary : '');
     const pointId = req ? req.release_point_id : info.applyPointId;
@@ -257,7 +259,7 @@ export default async function releaseRoutes(fastify) {
         sec: tt('SEC'),
       };
     } else if (entityType === 'issue') {
-      const issue = get('SELECT * FROM issue WHERE issue_code = ?', code);
+      const issue = getPamsIssue(code);
       // 问题无自身计划投产点，取引用它的投产申请的计划投产点
       const ap = get(
         `SELECT release_point_id FROM release_apply ra
@@ -380,7 +382,7 @@ export default async function releaseRoutes(fastify) {
         code,
       );
     } else if (entityType === 'issue') {
-      const issue = get('SELECT * FROM issue WHERE issue_code = ?', code);
+      const issue = getPamsIssue(code);
       const ap = get(
         `SELECT release_point_id FROM release_apply ra
            WHERE EXISTS (SELECT 1 FROM json_each(ra.ref_codes) WHERE value = ?) ORDER BY ra.id LIMIT 1`,

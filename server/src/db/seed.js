@@ -21,6 +21,7 @@ const ROLES = [
   { code: '农信测试', name: '农信测试' },
   { code: '金科运维', name: '金科运维' },
   { code: '农信运维', name: '农信运维' },
+  { code: '问题管理', name: '问题管理' },
   { code: '安全负责人', name: '安全负责人', signoff: 1 },
   { code: '架构负责人', name: '架构负责人', signoff: 1 },
   { code: '机构负责人', name: '机构负责人', signoff: 1 },
@@ -39,7 +40,7 @@ const MODULE_ACTIONS = {
   dashboard: ['view', 'manage'],
   overview: ['view'],
   requirement: ['view', 'create', 'edit', 'delete', 'import', 'export'],
-  issue: ['view', 'sync'],
+  pams: ['view', 'manage', 'config', 'import', 'export'],
   dev: ['view', 'create', 'edit', 'delete', 'import', 'export', 'dev.intake'],
   test: ['view', 'create', 'edit', 'delete', 'import', 'export', 'test.intake'],
   release: ['view', 'edit', 'export', 'release.signoff', 'release.register'],
@@ -49,7 +50,7 @@ const MODULE_ACTIONS = {
 };
 
 // 业务主链路模块（非管理类角色默认可见）
-const CHAIN_MODULES = ['dashboard', 'overview', 'requirement', 'issue', 'dev', 'test', 'release', 'release_apply'];
+const CHAIN_MODULES = ['dashboard', 'overview', 'requirement', 'dev', 'test', 'release', 'release_apply'];
 
 // 流程状态字典：[阶段, 属性值, 显示值, 排序, 是否终态]
 const PROCESS_STATUS = [
@@ -291,6 +292,9 @@ export function runSeed() {
     }
 
     // 5) 权限矩阵默认值
+    // 旧投产问题管理已下线，避免历史 issue 权限继续出现在角色配置中。
+    run("DELETE FROM permission WHERE module_key = 'issue'");
+
     // 管理员 / 超级管理员：全部权限
     for (const code of ['管理员', '超级管理员']) {
       for (const [mod, actions] of Object.entries(MODULE_ACTIONS)) {
@@ -310,6 +314,7 @@ export function runSeed() {
       const rid = roleIdByCode[r.code];
       // 所有主链路模块可见
       for (const mod of CHAIN_MODULES) grant(rid, mod, ['view']);
+      if (r.code === '问题管理') grant(rid, 'pams', MODULE_ACTIONS.pams);
       // 按职责授予写权限
       for (const [mod, roleCodes] of Object.entries(dutyMap)) {
         if (roleCodes.includes(r.code)) grant(rid, mod, MODULE_ACTIONS[mod]);

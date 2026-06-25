@@ -18,6 +18,7 @@
     "echarts": "^5.5.1",
     "echarts-for-react": "^3.0.2",
     "react": "^18.3.1",
+    "react-colorful": "^5.7.0",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.27.0",
     "zustand": "^5.0.0"

@@ -9,12 +9,16 @@
 import { config } from './config.js';
 import { runMigrations } from './db/migrate.js';
 import { runSeed } from './db/seed.js';
+import { initPamsDatabase } from './db/pams.js';
+import { runPamsSeed } from './db/pams-seed.js';
 import { buildApp } from './app.js';
 
 async function main() {
   // 1) 数据库迁移与初始化
   runMigrations();
   runSeed();
+  initPamsDatabase();
+  runPamsSeed();
 
   // 2) 构建并启动应用
   const app = await buildApp();

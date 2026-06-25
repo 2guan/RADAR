@@ -21,6 +21,7 @@ import {
   genRequirementCode, genDevCode, genTestCode, genReleaseApplyCode,
 } from '../lib/code-gen.js';
 import { auditCreate, auditUpdate } from '../lib/audit.js';
+import { initPamsDatabase, pamsGet, pamsRun } from './pams.js';
 
 // ---------------------------------------------------------------------------
 // 确定性随机数（mulberry32），保证每次生成结果一致，便于复现与对照验证
@@ -88,7 +89,7 @@ const USERS = [
   ['18918688502', '杨青', '金科业务', '交付事业部'],
 ];
 
-// 给定的可用问题编号（外部 PAMS 同步而来）
+// 给定的可用问题编号（PAMS 问题库）
 const ISSUE_CODES = [
   'NX20260603013', 'NX20260603012', 'NX20260603011', 'NX20260603010', 'NX20260603009',
   'NX20260603008', 'NX20260603007', 'NX20260603006', 'NX20260603005', 'NX20260603004',
@@ -136,6 +137,7 @@ function wipe() {
 export function runMock() {
   runMigrations();
   runSeed();
+  initPamsDatabase();
 
   tx(() => {
     wipe();
@@ -427,7 +429,9 @@ export function runMock() {
     }
 
     // ----------------------------------------------------------------------
-    // 7) 问题清单（20 个，使用给定编号）
+    pamsRun('DELETE FROM biz_issue');
+
+    // 7) 问题清单（20 个，写入 PAMS 独立问题库，投产申请通过编号引用）
     // ----------------------------------------------------------------------
     const ISSUE_STATUS = ['待处理', '处理中', '已解决', '已关闭'];
     const ISSUE_CLASS = ['功能缺陷', '性能问题', '数据问题', '安全漏洞', '配置问题', '兼容性问题'];
@@ -436,23 +440,22 @@ export function runMock() {
       const sys = pick(systems);
       const status = pick(ISSUE_STATUS);
       const cls = ISSUE_CLASS[i % ISSUE_CLASS.length];
-      run(
-        `INSERT INTO issue
-           (issue_code, round, urgency, handling_method, business_group, module, system, work_order_no,
-            create_time, plan_resolve_time, status, category, detailed_classification, summary, details,
-            tracker_name, tracker_org, reporter_name, reporter_org, handler_name, handler_org,
-            is_major, is_common, root_cause, solution, release_status, synced_at)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      pamsRun(
+        `INSERT INTO biz_issue
+           (issue_id, round, urgency, handling_method, business_group, module, system, work_order_no,
+            create_time, plan_fix_time, status, category, detailed_classification, summary, details,
+            tracker_name, tracker_org, tracker_contact, reporter_name, reporter_org, reporter_contact,
+            handler_name, handler_org, handler_contact, is_major, is_common, root_cause, solution, release_status)
+         VALUES (${Array(29).fill('?').join(',')})`,
         ISSUE_CODES[i], `第${1 + (i % 3)}轮`, pick(ISSUE_URGENCY), pick(['版本修复', '热修补丁', '配置调整']),
         sys.org, sys.sector, sys.sys_code, `GD2026${pad3(100 + i)}`,
         shift('2026-06-02', i % 10), shift('2026-06-20', i % 12), status, '生产问题', cls,
         `${sys.sys_name}${cls}：${pick(REQ_TOPICS)}相关异常`,
         `${sys.sys_name}在生产环境中出现${cls}，影响部分业务办理，需评估并随版本修复。`,
-        pickUser('机构负责人'), '云南农信', pickUser('农信业务'), '云南农信',
-        pickUser('金科开发'), sys.org,
+        pickUser('机构负责人'), '云南农信', '13800000000', pickUser('农信业务'), '云南农信', '13800000000',
+        pickUser('金科开发'), sys.org, '13800000000',
         i % 5 === 0 ? 1 : 0, i % 4 === 0 ? 1 : 0,
         '经分析为边界场景处理缺失导致', '修正处理逻辑并补充单元测试', status === '已关闭' ? '已发版' : '待发版',
-        '2026-06-14 18:00:00',
       );
     }
 
@@ -527,6 +530,12 @@ export function runMock() {
     // ----------------------------------------------------------------------
     // 输出统计
     // ----------------------------------------------------------------------
+    const issueCodeSet = new Set(ISSUE_CODES);
+    const applyIssueCount = all('SELECT ref_codes FROM release_apply').filter((ra) => {
+      let refs = [];
+      try { refs = ra.ref_codes ? JSON.parse(ra.ref_codes) : []; } catch { refs = []; }
+      return refs.some((code) => issueCodeSet.has(code));
+    }).length;
     const stat = {
       用户: get('SELECT COUNT(*) c FROM user').c,
       会签角色: signRoles.map((r) => r.name).join('、'),
@@ -539,11 +548,9 @@ export function runMock() {
       'NFT/SEC任务': get("SELECT COUNT(*) c FROM test_task WHERE test_type IN ('NFT','SEC')").c,
       投产审批: get('SELECT COUNT(*) c FROM release_task').c,
       会签记录: get('SELECT COUNT(*) c FROM release_signoff').c,
-      问题: get('SELECT COUNT(*) c FROM issue').c,
+      问题: pamsGet('SELECT COUNT(*) c FROM biz_issue').c,
       投产申请: get('SELECT COUNT(*) c FROM release_apply').c,
-      关联问题的投产申请: get(`SELECT COUNT(*) c FROM release_apply ra
-        WHERE EXISTS (SELECT 1 FROM json_each(ra.ref_codes) je
-          JOIN issue i ON i.issue_code = je.value)`).c,
+      关联问题的投产申请: applyIssueCount,
       评审状态分布: all("SELECT review_status, COUNT(*) c FROM release_task GROUP BY review_status")
         .map((r) => `${r.review_status}:${r.c}`).join('、'),
     };

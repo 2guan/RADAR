@@ -96,10 +96,10 @@ function Root() {
           colorWarning: '#F59E0B',
           colorError: '#DC2626',
           colorLink: primary,
-          // 直角风格：卡片/弹窗等大容器 0 圆角，小控件保留极小圆角更显专业
-          borderRadius: 2,
+          // 直角风格：PAMS 问题管理要求圆角矩形改为方形
+          borderRadius: 0,
           borderRadiusLG: 0,
-          borderRadiusSM: 2,
+          borderRadiusSM: 0,
           borderRadiusXS: 0,
           fontSize: 14,
           fontFamily: FONT,
@@ -131,6 +131,9 @@ function Root() {
           },
           Modal: { titleFontSize: 17 },
           Button: { fontWeight: 500, primaryShadow: 'none' },
+          Dropdown: { borderRadiusLG: 0, borderRadiusOuter: 0 },
+          Select: { borderRadius: 0 },
+          Input: { borderRadius: 0 },
           Tabs: { inkBarColor: primary, itemSelectedColor: primary },
           Statistic: { contentFontSize: 30 },
         },
