@@ -18,7 +18,7 @@ import { runSeed } from './seed.js';
 import { hashPassword } from '../lib/password.js';
 import { calcDeviation } from '../lib/deviation.js';
 import {
-  genRequirementCode, genDevCode, genTestCode, genReleaseApplyCode,
+  genRequirementCode, genDevCode, genTestCode, genReleaseApplyCode, genTicketCode,
 } from '../lib/code-gen.js';
 import { auditCreate, auditUpdate } from '../lib/audit.js';
 
@@ -88,13 +88,26 @@ const USERS = [
   ['18918688502', '杨青', '金科业务', '交付事业部'],
 ];
 
-// 给定的可用问题编号（外部 PAMS 同步而来）
-const ISSUE_CODES = [
-  'NX20260603013', 'NX20260603012', 'NX20260603011', 'NX20260603010', 'NX20260603009',
-  'NX20260603008', 'NX20260603007', 'NX20260603006', 'NX20260603005', 'NX20260603004',
-  'NX20260603003', 'NX20260603002', 'NX20260603001', 'NX20260602016', 'NX20260602015',
-  'NX20260602014', 'NX20260602013', 'NX20260602012', 'NX20260602011', 'NX20260602010',
+// 实际从 PAMS 同步的问题数据（含工单号，用于 issue 表与 release_apply 关联）
+const REAL_ISSUES = [
+  { code: 'NX20260626010', system: 'W10120', cls: '工单阻塞问题', status: '提出',   work_order_no: 'ZHQQ_202606025_004', urgency: '高',   round: '第1轮', summary: '非现场审计系统临时结果表、结果表限定为100万条，达到100万条后系统不再继续查询存储符合条件的结果，针对农信客户数量大、交易流水量大的特点，该限制导致建模过程中符合条件的数据大量丢失、建模结果不准确。' },
+  { code: 'NX20260626009', system: 'W10120', cls: '工单阻塞问题', status: '提出',   work_order_no: 'ZHQQ_202606025_003', urgency: '高',   round: '第1轮', summary: 'python建模实验室，to_sql操作页面显示成功，但结果表无数据问题。（5月27日向金科反馈该问题、6月8日组会讨论，至今未解决）' },
+  { code: 'NX20260626008', system: 'W10120', cls: '工单阻塞问题', status: '提出',   work_order_no: 'ZHQQ_202606025_002', urgency: '高',   round: '第1轮', summary: 'python建模实验室，投产演练实验室、工作空间脏数据清理问题。（5月26日向金科反馈该问题、6月8日组会讨论，至今未解决）' },
+  { code: 'NX20260626007', system: '068-01', cls: '工单阻塞问题', status: '提出',   work_order_no: 'ZHQQ_202606025_001', urgency: '紧急', round: '第1轮', summary: '识别审计问题，发送审计对象确认后：1.审计对接岗领取任务后，"配合审计问题"列表未显示该问题，选择转派、转派回复都不会更新列表，直至点击"回复审计组"后，列表才会显示该问题。2.审计对接岗选择转派后审计岗发现无法确认转派任务。' },
+  { code: 'NX20260625012', system: 'W06731', cls: '金科-应用配置', status: '提出',   work_order_no: 'ZHQQ_202606023_014', urgency: '紧急', round: '第1轮', summary: '审批进件面签"与后台通信发生错误"柜面无法办理对应交易。' },
+  { code: 'NX20260625010', system: 'YP8003', cls: '金科-应用配置', status: '提出',   work_order_no: 'ZHQQ_202606023_002', urgency: '中',   round: '第2轮', summary: '社保卡制卡产生两条制卡数据导致制卡失败，需排查批量制卡逻辑中的重复写入问题。' },
+  { code: 'NX20260625009', system: 'W06730', cls: '工单阻塞问题', status: '提出',   work_order_no: 'ZHQQ_202606023_001', urgency: '高',   round: '第1轮', summary: '同一客户同一天办理3笔协商分期还款均成功，欠款金额为0仍然可以办理分期，分期后形成溢缴款。' },
+  { code: 'NX20260623022', system: 'W05810', cls: '工单阻塞问题', status: '提出',   work_order_no: 'ZHQQ_202606022_001', urgency: '高',   round: '第1轮', summary: '行社反馈，边贸网银界面，汇款信息查询打印功能中，查询出的交易明细显示的付款账号展示错误，当前展示的是清算账号，实际应展示付款账号。' },
+  { code: 'NX20260623021', system: 'W08384', cls: '工单阻塞问题', status: '处理中', work_order_no: 'ZHQQ_202606023_004', urgency: '高',   round: '第2轮', summary: '人行反馈存在202603报送202604未报送的情况，经排查发现个贷存在放款日期与首次还款日期超过两个月的情况，以上情况需要征信系统兜底月末报送。' },
+  { code: 'NX20260623014', system: 'WP1031', cls: '工单阻塞问题', status: '处理中', work_order_no: 'ZHQQ_202606022_001', urgency: '中',   round: '第1轮', summary: '界面展示账号有误，付款账号字段取值逻辑错误，部分联机交易返回清算账号代替客户账号展示。' },
+  { code: 'NX20260622011', system: 'W08384', cls: '工单阻塞问题', status: '待验证', work_order_no: 'ZHQQ_202606017_009', urgency: '高',   round: '第2轮', summary: '对公贷款多记了一条贷款应计利息金额，造成征信报送时还款总金额与实际情况不一致。' },
+  { code: 'NX20260622010', system: 'W08384', cls: '工单阻塞问题', status: '处理中', work_order_no: 'ZHQQ_202606017_008', urgency: '高',   round: '第2轮', summary: '个人贷款系统对非循环类贷款支持一次性放款和分次放款，而目前所有的数据均按照一次性放款进行报送D1账户，存在报送口径偏差。' },
+  { code: 'NX20260622009', system: 'W08384', cls: '工单阻塞问题', status: '处理中', work_order_no: 'ZHQQ_202606017_007', urgency: '高',   round: '第2轮', summary: '征信非月度表现段还款金额、还款日期报送错误，影响个人征信数据准确性，需紧急修复。' },
+  { code: 'NX20260622008', system: 'W08384', cls: '工单阻塞问题', status: '处理中', work_order_no: 'ZHQQ_202606017_006', urgency: '中',   round: '第2轮', summary: '个人贷款R1账户没有报送保证人信息，导致征信保证担保关系缺失，需补充保证人关联逻辑。' },
+  { code: 'NX20260617017', system: 'W08384', cls: '工单阻塞问题', status: '已解决', work_order_no: 'ZHQQ_202606017_001', urgency: '紧急', round: '第1轮', summary: '调额审批进件岗-发起批量邀约调额进件时，出现"外呼【A0838Q001查询人行报告异常】"，导致批量进件中断，影响调额业务办理。' },
 ];
+// 用于 release_apply 关联的问题编号列表（前10条）
+const ISSUE_CODES = REAL_ISSUES.slice(0, 10).map((r) => r.code);
 
 // 12 个投产点（投产窗口）：YYYYMMDD、版本类型、是否默认、是否归档
 const RELEASE_POINTS = [
@@ -123,7 +136,7 @@ const IMPL_ORGS = ['上海事业群', '北京事业群', '成都事业群', '深
 function wipe() {
   const tables = [
     'release_signoff', 'release_system', 'release_task', 'release_apply',
-    'test_task', 'dev_task', 'requirement', 'issue',
+    'test_task', 'dev_task', 'requirement', 'ticket', 'issue',
     'attachment', 'audit_log', 'saved_filter', 'dashboard_chart',
   ];
   for (const t of tables) run(`DELETE FROM ${t}`);
@@ -432,15 +445,27 @@ export function runMock() {
     }
 
     // ----------------------------------------------------------------------
-    // 7) 问题清单（20 个，使用给定编号）
+    // 7) 问题清单（15 条，使用 PAMS 实际同步数据，补充完整明细字段）
     // ----------------------------------------------------------------------
-    const ISSUE_STATUS = ['待处理', '处理中', '已解决', '已关闭'];
-    const ISSUE_CLASS = ['功能缺陷', '性能问题', '数据问题', '安全漏洞', '配置问题', '兼容性问题'];
-    const ISSUE_URGENCY = ['紧急', '高', '中', '低'];
-    for (let i = 0; i < ISSUE_CODES.length; i++) {
-      const sys = pick(systems);
-      const status = pick(ISSUE_STATUS);
-      const cls = ISSUE_CLASS[i % ISSUE_CLASS.length];
+    const HANDLING = ['版本修复', '热修补丁', '配置调整', '数据修复'];
+    const ROOT_CAUSES = [
+      '边界场景处理逻辑缺失，未对极值进行校验',
+      '接口参数映射错误，源字段与目标字段对应关系有误',
+      '批处理任务并发控制缺失，导致重复写入',
+      '配置项未同步至生产环境，开发与生产参数不一致',
+      '第三方数据报送口径变更，本地逻辑未同步更新',
+    ];
+    const SOLUTIONS = [
+      '修正处理逻辑并补充单元测试覆盖边界场景',
+      '修复字段映射关系，完善接口联调测试',
+      '增加幂等控制机制，确保批处理唯一性',
+      '同步配置项至生产环境并建立配置检查机制',
+      '对齐最新报送口径，完成回归测试后上线',
+    ];
+    for (let i = 0; i < REAL_ISSUES.length; i++) {
+      const issue = REAL_ISSUES[i];
+      const isSolved = ['已解决', '待验证'].includes(issue.status);
+      const createDate = shift('2026-06-01', i);
       run(
         `INSERT INTO issue
            (issue_code, round, urgency, handling_method, business_group, module, system, work_order_no,
@@ -448,21 +473,134 @@ export function runMock() {
             tracker_name, tracker_org, reporter_name, reporter_org, handler_name, handler_org,
             is_major, is_common, root_cause, solution, release_status, synced_at)
          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-        ISSUE_CODES[i], `第${1 + (i % 3)}轮`, pick(ISSUE_URGENCY), pick(['版本修复', '热修补丁', '配置调整']),
-        sys.org, sys.sector, sys.sys_code, `GD2026${pad3(100 + i)}`,
-        shift('2026-06-02', i % 10), shift('2026-06-20', i % 12), status, '生产问题', cls,
-        `${sys.sys_name}${cls}：${pick(REQ_TOPICS)}相关异常`,
-        `${sys.sys_name}在生产环境中出现${cls}，影响部分业务办理，需评估并随版本修复。`,
-        pickUser('机构负责人'), '云南农信', pickUser('农信业务'), '云南农信',
-        pickUser('金科开发'), sys.org,
-        i % 5 === 0 ? 1 : 0, i % 4 === 0 ? 1 : 0,
-        '经分析为边界场景处理缺失导致', '修正处理逻辑并补充单元测试', status === '已关闭' ? '已发版' : '待发版',
+        issue.code, issue.round, issue.urgency, pick(HANDLING),
+        '云南农信', '业务系统', issue.system, issue.work_order_no,
+        createDate, shift(createDate, 14 + (i % 7)),
+        issue.status, '生产问题', issue.cls,
+        issue.summary,
+        `${issue.system}生产环境出现${issue.cls}，具体表现：${issue.summary.slice(0, 60)}。已提交工单${issue.work_order_no}，待建信金科排查处理。`,
+        pickUser('机构负责人'), '云南农信',
+        pickUser('农信业务'), '云南农信',
+        pickUser('金科开发'), '建信金科',
+        issue.urgency === '紧急' ? 1 : 0,
+        i % 5 === 0 ? 1 : 0,
+        isSolved ? ROOT_CAUSES[i % ROOT_CAUSES.length] : null,
+        isSolved ? SOLUTIONS[i % SOLUTIONS.length] : null,
+        isSolved ? '待发版' : null,
         '2026-06-14 18:00:00',
       );
     }
 
     // ----------------------------------------------------------------------
-    // 8) 投产申请（≥20 个关联问题）—— 引用需求/问题编号
+    // 8) 工单分析（10 条，关联实际问题编号，含开发/测试任务）
+    // ----------------------------------------------------------------------
+    const TICKET_TYPES = ['工单阻塞问题', '工单急迫需求', '延后承诺需求'];
+    // 工单画像：released/sit/dev/analysis - 对应全链路进度
+    const TICKET_SPECS = [
+      { profile: 'released', rp: rpIds[4], issueIdx: 14, type: '工单阻塞问题', isAccounting: '否' }, // 已上线
+      { profile: 'released', rp: rpIds[3], issueIdx: 11, type: '工单阻塞问题', isAccounting: '是' }, // 已上线涉账
+      { profile: 'sit',      rp: rpIds[5], issueIdx: 8,  type: '工单阻塞问题', isAccounting: '否' }, // 测试中
+      { profile: 'sit',      rp: rpIds[5], issueIdx: 9,  type: '工单急迫需求', isAccounting: '否' }, // 测试中
+      { profile: 'dev',      rp: rpIds[6], issueIdx: 4,  type: '工单阻塞问题', isAccounting: '否' }, // 开发中
+      { profile: 'dev',      rp: rpIds[6], issueIdx: 5,  type: '工单急迫需求', isAccounting: '是' }, // 开发中涉账
+      { profile: 'dev',      rp: rpIds[7], issueIdx: 6,  type: '工单阻塞问题', isAccounting: '否' }, // 开发中
+      { profile: 'analysis', rp: rpIds[7], issueIdx: 0,  type: '工单阻塞问题', isAccounting: '否' }, // 工单分析
+      { profile: 'analysis', rp: rpIds[8], issueIdx: 1,  type: '延后承诺需求', isAccounting: '否' }, // 工单分析
+      { profile: 'register', rp: rpIds[8], issueIdx: 3,  type: '工单阻塞问题', isAccounting: '否' }, // 工单登记
+    ];
+    const TICKET_DONE = new Set(['released', 'sit', 'dev']);
+    const TICKET_STATUS = {
+      released: '分析完成', sit: '分析完成', dev: '分析完成',
+      analysis: '工单分析', register: '工单登记',
+    };
+
+    for (const tspec of TICKET_SPECS) {
+      const linkedIssue = REAL_ISSUES[tspec.issueIdx];
+      const code = genTicketCode(tspec.rp.date);
+      const tStatus = TICKET_STATUS[tspec.profile];
+      const main = pickN(sysCodes, 1);
+      const proposeTime = shift(ymd(tspec.rp.date), -40 - Math.floor(rng() * 20));
+      run(
+        `INSERT INTO ticket
+           (ticket_code, title, summary, status, ticket_type, is_accounting,
+            propose_dept, proposer, yn_owner, jk_owner, propose_time,
+            main_systems, collab_dev_systems, collab_test_systems,
+            release_point_id, issue_no, registrar, register_time)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        code,
+        linkedIssue.summary.slice(0, 50).trimEnd() + (linkedIssue.summary.length > 50 ? '…' : ''),
+        linkedIssue.summary,
+        tStatus, tspec.type, tspec.isAccounting,
+        '云南农信', JSON.stringify([pickUser('农信业务')]),
+        pickUser('农信业务'), pickUser('金科业务'),
+        proposeTime,
+        JSON.stringify(main), JSON.stringify([]), JSON.stringify([]),
+        tspec.rp.id, linkedIssue.code,
+        pickUser('农信业务'), shift(proposeTime, 1),
+      );
+      const ticketId = get('SELECT id FROM ticket WHERE ticket_code = ?', code).id;
+      auditCreate('ticket', ticketId, code, '系统初始化');
+
+      // 开发任务（released/sit/dev 各有）
+      if (['released', 'sit', 'dev'].includes(tspec.profile)) {
+        const devStatus = tspec.profile === 'dev' ? pick(['开发设计', '开发实施', '单元测试']) : '开发完成';
+        const devCode = genDevCode(code);
+        const window = ymd(tspec.rp.date);
+        const planStart = shift(window, -40);
+        const planEnd = shift(window, -18);
+        const actualStart = shift(planStart, Math.floor(rng() * 3));
+        const actualEnd = devStatus === '开发完成' ? shift(planEnd, Math.floor(rng() * 6) - 2) : null;
+        const sys = sysByCode[main[0]];
+        run(
+          `INSERT INTO dev_task
+             (req_code, task_code, task_name, content, status, owner, impl_system, impl_org,
+              plan_start, plan_end, actual_start, actual_end, deviation_rate, registrar, register_time)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          code, devCode,
+          `${sys.sys_name}${linkedIssue.cls}修复`,
+          `${sys.sys_name}（${main[0]}）${linkedIssue.cls}：${linkedIssue.summary.slice(0, 40)}相关修复实施。`,
+          devStatus, pickUser('金科开发'), main[0], sys.org,
+          planStart, planEnd, actualStart, actualEnd,
+          devStatus === '开发完成' ? calcDeviation(planStart, planEnd, actualEnd) : null,
+          pickUser('金科开发'), shift(planStart, -2),
+        );
+        devCount++;
+      }
+
+      // 测试任务（released/sit）
+      if (['released', 'sit'].includes(tspec.profile)) {
+        const testStatus = tspec.profile === 'released' ? '测试完成' : pick(['测试方案', '测试实施']);
+        const testCode = genTestCode('SIT', code);
+        const window = ymd(tspec.rp.date);
+        const planStart = shift(window, -16);
+        const planEnd = shift(window, -4);
+        const actualStart = shift(planStart, Math.floor(rng() * 3));
+        const actualEnd = testStatus === '测试完成' ? shift(planEnd, Math.floor(rng() * 5) - 1) : null;
+        const sys = sysByCode[main[0]];
+        run(
+          `INSERT INTO test_task
+             (req_code, task_code, task_name, test_type, status, owner, impl_system, impl_org, impl_agency,
+              plan_start, plan_end, actual_start, actual_end, deviation_rate, registrar, register_time)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          code, testCode,
+          `${sys.sys_name}工单问题修复SIT验证`,
+          'SIT', testStatus,
+          pickUser('金科测试'), main[0], sys.org, pick(IMPL_ORGS),
+          planStart, planEnd, actualStart, actualEnd,
+          testStatus === '测试完成' ? calcDeviation(planStart, planEnd, actualEnd) : null,
+          pickUser('测试负责人'), shift(planStart, -1),
+        );
+        testCount++;
+      }
+
+      // 投产审批（released）
+      if (tspec.profile === 'released') {
+        makeReleaseTask(code, 'ticket', '已投产', '评审同意', allSigned, shift(ymd(tspec.rp.date), -3));
+      }
+    }
+
+    // ----------------------------------------------------------------------
+    // 9) 投产申请（≥20 个关联问题）—— 引用需求/问题编号
     // ----------------------------------------------------------------------
     const ARTIFACTS = ['镜像制品', '二进制制品', '介质库文件', '无制品'];
     const FERRY = ['未摆渡', '待发送', '已摆渡', '摆渡失败'];
@@ -513,10 +651,10 @@ export function runMock() {
       auditCreate('release_apply', id, code, '系统初始化');
     }
 
-    // 22 个投产审批需求各一个投产申请；前 20 个同时关联一个问题编号（满足"≥20 关联问题"）
+    // 22 个投产审批需求各一个投产申请；关联问题编号（循环复用 ISSUE_CODES）
     approvalReqs.forEach((req, idx) => {
       const refs = [req.code];
-      if (idx < 20) refs.push(ISSUE_CODES[idx]);
+      refs.push(ISSUE_CODES[idx % ISSUE_CODES.length]);
       makeApply(refs, req.rp, req.main[0]);
     });
     // 另增 6 个仅含问题/或问题+advanced 需求的投产申请，丰富关联关系
@@ -538,6 +676,7 @@ export function runMock() {
       投产点: get('SELECT COUNT(*) c FROM release_point').c,
       需求: get('SELECT COUNT(*) c FROM requirement').c,
       分析完成: get("SELECT COUNT(*) c FROM requirement WHERE status='分析完成'").c,
+      工单: get('SELECT COUNT(*) c FROM ticket').c,
       开发任务: get('SELECT COUNT(*) c FROM dev_task').c,
       测试任务: get('SELECT COUNT(*) c FROM test_task').c,
       'SIT(应用组装)完成': get("SELECT COUNT(*) c FROM test_task WHERE test_type='SIT' AND status='测试完成'").c,
