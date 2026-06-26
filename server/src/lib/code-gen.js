@@ -31,15 +31,39 @@ function nextSeq(table, column, prefix) {
   return String(max + 1).padStart(3, '0');
 }
 
+function currentDateStr() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}`;
+}
+
+function normalizeReleaseWindow(releaseWindow) {
+  const value = String(releaseWindow || '').trim();
+  return /^\d{8}$/.test(value) ? value : currentDateStr();
+}
+
 /**
  * 生成需求编号。RC_{投产窗口}_{序号}
  * @param {string} releaseWindow 投产窗口（YYYYMMDD）
  */
 export function genRequirementCode(releaseWindow) {
+  const window = normalizeReleaseWindow(releaseWindow);
   const tpl = template('code.requirement', 'RC_{投产窗口}_{序号}');
-  const prefix = tpl.replace('{投产窗口}', releaseWindow).replace('{序号}', '');
+  const prefix = tpl.replace('{投产窗口}', window).replace('{序号}', '');
   const seq = nextSeq('requirement', 'req_code', prefix);
-  return tpl.replace('{投产窗口}', releaseWindow).replace('{序号}', seq);
+  return tpl.replace('{投产窗口}', window).replace('{序号}', seq);
+}
+
+/**
+ * 生成工单编号。TK_{投产窗口}_{序号}
+ * @param {string} releaseWindow 投产窗口（YYYYMMDD）
+ */
+export function genTicketCode(releaseWindow) {
+  const window = normalizeReleaseWindow(releaseWindow);
+  const tpl = template('code.ticket', 'TK_{投产窗口}_{序号}');
+  const prefix = tpl.replace('{投产窗口}', window).replace('{序号}', '');
+  const seq = nextSeq('ticket', 'ticket_code', prefix);
+  return tpl.replace('{投产窗口}', window).replace('{序号}', seq);
 }
 
 /**

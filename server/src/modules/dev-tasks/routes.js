@@ -17,10 +17,11 @@ import { windowIds, inClause } from '../../lib/window.js';
 import { ok, notFound, badRequest } from '../../lib/http.js';
 import { exportXlsx, parseXlsx } from '../../lib/excel.js';
 import { resolveDictAttr, resolveSystemCode, formatAttachments } from '../../lib/resolver.js';
+import { getWorkItem, workItemCodesInReleasePoints, releaseDateMapForCodes } from '../../lib/work-items.js';
 
 // 导入模板和常用列定义
 const IO_COLUMNS = [
-  { key: 'req_code', title: '关联需求编号' },
+  { key: 'req_code', title: '关联需求/工单编号' },
   { key: 'task_code', title: '开发任务编号' },
   { key: 'task_name', title: '开发任务名称' },
   { key: 'content', title: '开发内容概述' },
@@ -47,7 +48,8 @@ const LABELS = {
   actual_start: '实际开始时间', actual_end: '实际结束时间',
 };
 // 本阶段附件字段
-const ATTACH_FIELDS = ['概要设计', '详细设计', '代码走查', '单元测试报告'];
+const ATTACH_FIELDS = ['概要设计', '详细设计', '代码走查', '单元测试报告', '影响性分析文档'];
+const REQUIRED_TERMINAL_ATTACH_FIELD = '影响性分析文档';
 
 /** 终态校验：附件≥1，计划/实际起止时间必填 */
 function validateTerminal(id, status, row) {
@@ -55,8 +57,8 @@ function validateTerminal(id, status, row) {
   if (!row.plan_start || !row.plan_end || !row.actual_start || !row.actual_end) {
     throw badRequest('开发完成（终态）时，计划/实际的开始与结束时间均必填');
   }
-  if (countByFields('dev', id, ATTACH_FIELDS) === 0) {
-    throw badRequest('开发完成（终态）时，本阶段附件或路径至少填写 1 个');
+  if (countByFields('dev', id, [REQUIRED_TERMINAL_ATTACH_FIELD]) === 0) {
+    throw badRequest('开发完成（终态）时，影响性分析文档附件或路径必填');
   }
 }
 
@@ -82,8 +84,12 @@ export default async function devTaskRoutes(fastify) {
         const ids = Array.isArray(f.value) ? f.value : [f.value];
         if (ids.length) {
           const placeholders = ids.map(() => '?').join(',');
-          wh.push(`req_code IN (SELECT req_code FROM requirement WHERE release_point_id IN (${placeholders}))`);
-          params.push(...ids);
+          wh.push(`req_code IN (
+            SELECT req_code FROM requirement WHERE release_point_id IN (${placeholders})
+            UNION
+            SELECT ticket_code FROM ticket WHERE release_point_id IN (${placeholders})
+          )`);
+          params.push(...ids, ...ids);
         }
       } else if (f.field === 'org') {
         const orgs = Array.isArray(f.value) ? f.value : [f.value];
@@ -108,10 +114,15 @@ export default async function devTaskRoutes(fastify) {
       wh.push('req_code = ?');
       params.push(body.reqCode);
     } else if (!hasReleasePointFilter) {
-      const sub = inClause('release_point_id', windowIds(body));
-      if (sub.where) {
-        wh.push(`req_code IN (SELECT req_code FROM requirement WHERE ${sub.where})`);
-        params.push(...sub.params);
+      const codes = workItemCodesInReleasePoints(windowIds(body));
+      if (codes) {
+        if (codes.length) {
+          const sub = inClause('req_code', codes);
+          wh.push(sub.where);
+          params.push(...sub.params);
+        } else {
+          wh.push('1=0');
+        }
       }
     }
 
@@ -120,32 +131,26 @@ export default async function devTaskRoutes(fastify) {
 
     const result = listQuery({ table: 'dev_task', columns: COLUMNS, searchColumns: SEARCH, query: newBody, baseWhere, baseParams: params });
 
-    // 仅针对当前页任务涉及的需求映射计划投产点，避免随翻页整表扫描 requirement
+    // 仅针对当前页任务涉及的需求/工单映射计划投产点，避免随翻页整表扫描
     const pageCodes = [...new Set(result.list.map((r) => r.req_code).filter(Boolean))];
-    const reqMap = {};
-    if (pageCodes.length) {
-      const ph = pageCodes.map(() => '?').join(',');
-      const reqs = all(
-        `SELECT r.req_code, rp.release_date
-           FROM requirement r
-           LEFT JOIN release_point rp ON r.release_point_id = rp.id
-          WHERE r.req_code IN (${ph})`,
-        ...pageCodes,
-      );
-      for (const r of reqs) {
-        reqMap[r.req_code] = r.release_date;
-      }
-    }
+    const reqMap = releaseDateMapForCodes(pageCodes);
 
     const systems = all('SELECT sys_code, sys_name FROM system');
     const sysMap = {};
     for (const s of systems) {
       sysMap[s.sys_code] = s.sys_name;
     }
+    const itemMap = {};
+    for (const code of pageCodes) {
+      const item = getWorkItem(code);
+      if (item) itemMap[code] = item;
+    }
 
     result.list = result.list.map((row) => ({
       ...row,
       release_date: reqMap[row.req_code] || null,
+      entity_type: itemMap[row.req_code]?.entity_type || null,
+      entity_label: itemMap[row.req_code]?.entity_label || null,
       impl_system_name: sysMap[row.impl_system] || row.impl_system,
     }));
 
@@ -153,10 +158,16 @@ export default async function devTaskRoutes(fastify) {
   });
 
   // 详情
-  // 组装开发任务详情：附带关联需求标题（供详情联动展示）
+  // 组装开发任务详情：附带关联需求/工单标题（供详情联动展示）
   const buildDevDetail = (row) => {
-    const reqRow = get('SELECT title FROM requirement WHERE req_code = ?', row.req_code);
-    return { ...row, req_title: reqRow?.title || null, attachments: listByEntity('dev', row.id) };
+    const item = getWorkItem(row.req_code);
+    return {
+      ...row,
+      req_title: item?.title || null,
+      entity_type: item?.entity_type || null,
+      entity_label: item?.entity_label || null,
+      attachments: listByEntity('dev', row.id),
+    };
   };
 
   fastify.get('/dev-tasks/:id', { preHandler: fastify.requirePerm('dev', 'view') }, async (request) => {
@@ -175,12 +186,12 @@ export default async function devTaskRoutes(fastify) {
   // 开发承接预览
   fastify.post('/dev-tasks/intake-preview', { preHandler: fastify.requirePerm('dev', 'dev.intake') }, async (request) => {
     const { reqCode } = request.body || {};
-    if (!reqCode) throw badRequest('请选择需求');
-    const req = get('SELECT * FROM requirement WHERE req_code = ?', reqCode);
-    if (!req) throw notFound('需求不存在');
+    if (!reqCode) throw badRequest('请选择需求/工单');
+    const req = getWorkItem(reqCode);
+    if (!req) throw notFound('需求/工单不存在');
 
-    const main = req.main_systems ? JSON.parse(req.main_systems) : [];
-    const collab = req.collab_dev_systems ? JSON.parse(req.collab_dev_systems) : [];
+    const main = req.main_systems || [];
+    const collab = req.collab_dev_systems || [];
 
     const existingTasks = all('SELECT impl_system, task_code, task_name, status FROM dev_task WHERE req_code = ?', reqCode);
     const existingMap = new Map(existingTasks.map(t => [t.impl_system, t]));
@@ -254,15 +265,15 @@ export default async function devTaskRoutes(fastify) {
   // 开发承接（按系统拆分）
   fastify.post('/dev-tasks/intake', { preHandler: fastify.requirePerm('dev', 'dev.intake') }, async (request) => {
     const { reqCode, systems } = request.body || {};
-    if (!reqCode) throw badRequest('请选择需求');
-    const req = get('SELECT * FROM requirement WHERE req_code = ?', reqCode);
-    if (!req) throw notFound('需求不存在');
+    if (!reqCode) throw badRequest('请选择需求/工单');
+    const req = getWorkItem(reqCode);
+    if (!req) throw notFound('需求/工单不存在');
 
     // 目标系统：默认主责系统 ∪ 协同改造系统；可由 systems 指定子集
-    const main = req.main_systems ? JSON.parse(req.main_systems) : [];
-    const collab = req.collab_dev_systems ? JSON.parse(req.collab_dev_systems) : [];
+    const main = req.main_systems || [];
+    const collab = req.collab_dev_systems || [];
     let targets = Array.isArray(systems) && systems.length ? systems : [...new Set([...main, ...collab])];
-    if (!targets.length) throw badRequest('该需求未配置主责/协同改造系统，无法承接开发');
+    if (!targets.length) throw badRequest('该需求/工单未配置主责/协同改造系统，无法承接开发');
 
     // 已存在开发任务的系统跳过
     const existing = new Set(all('SELECT impl_system FROM dev_task WHERE req_code = ?', reqCode).map((r) => r.impl_system));
@@ -331,11 +342,13 @@ export default async function devTaskRoutes(fastify) {
     let finalWhere = baseWhere;
     let finalParams = [...baseParams];
     if (!body.req_code) {
-      const win = inClause('req_code', all("SELECT req_code FROM requirement WHERE release_point_id IN (SELECT id FROM release_point WHERE is_default = 1 OR release_date >= date('now'))").map(r => r.req_code));
-      if (win.where) {
-        finalWhere = win.where;
-        finalParams = win.params;
-      }
+      const codes = [
+        ...all("SELECT req_code AS code FROM requirement WHERE release_point_id IN (SELECT id FROM release_point WHERE is_default = 1 OR release_date >= date('now'))").map(r => r.code),
+        ...all("SELECT ticket_code AS code FROM ticket WHERE release_point_id IN (SELECT id FROM release_point WHERE is_default = 1 OR release_date >= date('now'))").map(r => r.code),
+      ];
+      const win = inClause('req_code', [...new Set(codes)]);
+      finalWhere = win.where || '1=0';
+      finalParams = win.params;
     }
 
     const result = listQuery({
@@ -348,7 +361,7 @@ export default async function devTaskRoutes(fastify) {
     for (const s of systems) sysMap[s.sys_code] = s.sys_name;
 
     const cols = [
-      { key: 'req_code', title: '关联需求编号' },
+      { key: 'req_code', title: '关联需求/工单编号' },
       { key: 'task_code', title: '开发任务编号' },
       { key: 'task_name', title: '开发任务名称' },
       { key: 'content', title: '开发内容概述' },
@@ -367,6 +380,7 @@ export default async function devTaskRoutes(fastify) {
       { key: 'design_detail', title: '详细设计' },
       { key: 'code_review', title: '代码走查' },
       { key: 'unit_test', title: '单元测试报告' },
+      { key: 'impact_analysis', title: '影响性分析文档' },
     ];
 
     const mappedList = result.list.map(row => {
@@ -379,6 +393,7 @@ export default async function devTaskRoutes(fastify) {
         design_detail: formatAttachments(attaches, '详细设计'),
         code_review: formatAttachments(attaches, '代码走查'),
         unit_test: formatAttachments(attaches, '单元测试报告'),
+        impact_analysis: formatAttachments(attaches, '影响性分析文档'),
       };
     });
 
@@ -416,12 +431,12 @@ export default async function devTaskRoutes(fastify) {
       for (const r of rows) {
         const rowNum = r.__rowNum__;
         try {
-          if (!r.req_code) throw new Error('关联需求编号不能为空');
+          if (!r.req_code) throw new Error('关联需求/工单编号不能为空');
           if (!r.task_name) throw new Error('开发任务名称不能为空');
 
-          // 校验关联需求编号是否存在
-          const req = get('SELECT id FROM requirement WHERE req_code = ?', r.req_code);
-          if (!req) throw new Error(`关联需求编号 [${r.req_code}] 不存在`);
+          // 校验关联需求/工单编号是否存在
+          const req = getWorkItem(r.req_code);
+          if (!req) throw new Error(`关联需求/工单编号 [${r.req_code}] 不存在`);
 
           // 兼容性字典/系统转换
           const status = resolveDictAttr('process_status', r.status) || '开发承接';

@@ -101,11 +101,22 @@ export default function DevTasks() {
 
   /**
    * 打开“开发承接”弹窗
-   * 拉取所有当前投产点关联的且未开始或未终态的需求，用以按系统进行任务拆分
+   * 拉取所有当前投产点关联的且未开始或未终态的需求/工单，用以按系统进行任务拆分
    */
   const openIntake = async () => {
-    const res = await apiPost('/requirements/list', { releasePointIds, pageSize: 0 });
-    const list = (res.list || []).filter(
+    const [reqRes, ticketRes] = await Promise.all([
+      apiPost('/requirements/list', { releasePointIds, pageSize: 0 }),
+      apiPost('/tickets/list', { releasePointIds, pageSize: 0 }),
+    ]);
+    const reqs = (reqRes.list || []).map((r) => ({ ...r, entity_type: 'requirement', entity_label: '需求' }));
+    const tickets = (ticketRes.list || []).map((t) => ({
+      ...t,
+      req_code: t.ticket_code,
+      entity_type: 'ticket',
+      entity_label: '工单',
+      main_systems_names: t.main_systems_names || [],
+    }));
+    const list = [...reqs, ...tickets].filter(
       (r) => !r.release_stage_type || (r.release_stage_type !== 'in-progress' && r.release_stage_type !== 'final')
     );
     setReqList(list);
@@ -117,7 +128,7 @@ export default function DevTasks() {
   };
 
   /**
-   * 选中某个需求时，请求后端获取该需求下各个涉及系统对应的开发任务生成预览
+   * 选中某个需求/工单时，请求后端获取该工作项下各个涉及系统对应的开发任务生成预览
    * 默认勾选尚未建立任务（exists 为 false）的涉及系统
    */
   const handleSelectReq = async (record) => {
@@ -148,7 +159,7 @@ export default function DevTasks() {
    */
   const doIntake = async () => {
     if (!selectedReq) {
-      message.warning('请先选择需求');
+      message.warning('请先选择需求/工单');
       return;
     }
     if (!selectedNewSystems.length) {
@@ -196,7 +207,7 @@ export default function DevTasks() {
     },
     { title: '任务名称', dataIndex: 'task_name', key: 'task_name', ellipsis: true },
     {
-      title: '关联需求',
+      title: '关联需求/工单',
       dataIndex: 'req_code',
       key: 'req_code',
       render: (val) => (
@@ -238,7 +249,14 @@ export default function DevTasks() {
       ),
     },
     {
-      title: '需求编号',
+      title: '类型',
+      dataIndex: 'entity_label',
+      key: 'entity_label',
+      width: 70,
+      render: (val) => val ? <Tag className="status-tag" style={{ margin: 0 }}>{val}</Tag> : '—',
+    },
+    {
+      title: '需求/工单编号',
       dataIndex: 'req_code',
       key: 'req_code',
       width: 130,
@@ -249,7 +267,7 @@ export default function DevTasks() {
       ),
     },
     {
-      title: '需求标题',
+      title: '标题/概述',
       dataIndex: 'title',
       key: 'title',
       ellipsis: true,
@@ -430,10 +448,10 @@ export default function DevTasks() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* 1. 选择需求 */}
           <div className="form-section-card" style={{ marginBottom: 0 }}>
-            <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>1. 选择需求</div>
+            <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>1. 选择需求/工单</div>
             <div style={{ marginBottom: 8 }}>
               <Input.Search
-                placeholder="投产点、需求编号、需求标题、主责系统检索..."
+                placeholder="投产点、需求/工单编号、标题/概述、主责系统检索..."
                 value={searchText}
                 onChange={(e) => setSearchText(e.target.value)}
                 size="small"
@@ -466,6 +484,7 @@ export default function DevTasks() {
                           <span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', fontWeight: 600 }}>
                             {r.req_code}
                           </span>
+                          <Tag className="status-tag" style={{ margin: 0 }}>{r.entity_label || '需求'}</Tag>
                           <Radio checked={isSelected} />
                         </Space>
                         <div style={{ fontWeight: 600, fontSize: 13 }}>{r.title}</div>
@@ -595,7 +614,7 @@ export default function DevTasks() {
                 )}
               </Spin>
             ) : (
-              <div className="lc-empty" style={{ padding: '24px 0' }}>请在上方选择一条需求进行承接</div>
+              <div className="lc-empty" style={{ padding: '24px 0' }}>请在上方选择一条需求/工单进行承接</div>
             )}
           </div>
         </div>

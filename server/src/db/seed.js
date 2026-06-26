@@ -39,7 +39,8 @@ const MODULE_ACTIONS = {
   dashboard: ['view', 'manage'],
   overview: ['view'],
   requirement: ['view', 'create', 'edit', 'delete', 'import', 'export'],
-  issue: ['view', 'sync'],
+  ticket: ['view', 'create', 'edit', 'delete', 'import', 'export'],
+  issue: ['view', 'sync', 'delete'],
   dev: ['view', 'create', 'edit', 'delete', 'import', 'export', 'dev.intake'],
   test: ['view', 'create', 'edit', 'delete', 'import', 'export', 'test.intake'],
   release: ['view', 'edit', 'export', 'release.signoff', 'release.register'],
@@ -49,29 +50,32 @@ const MODULE_ACTIONS = {
 };
 
 // 业务主链路模块（非管理类角色默认可见）
-const CHAIN_MODULES = ['dashboard', 'overview', 'requirement', 'issue', 'dev', 'test', 'release', 'release_apply'];
+const CHAIN_MODULES = ['dashboard', 'overview', 'requirement', 'ticket', 'issue', 'dev', 'test', 'release', 'release_apply'];
 
 // 流程状态字典：[阶段, 属性值, 显示值, 排序, 是否终态]
 const PROCESS_STATUS = [
   ['需求', '需求登记', '需求登记', 1, 'initial'],
   ['需求', '需求分析', '需求分析', 2, 'in-progress'],
   ['需求', '分析完成', '分析完成', 3, 'final'],
-  ['开发', '开发承接', '开发承接', 4, 'initial'],
-  ['开发', '开发设计', '开发设计', 5, 'in-progress'],
-  ['开发', '开发实施', '开发实施', 6, 'in-progress'],
-  ['开发', '单元测试', '单元测试', 7, 'in-progress'],
-  ['开发', '开发完成', '开发完成', 8, 'final'],
-  ['测试', '测试承接', '测试承接', 9, 'initial'],
-  ['测试', '测试方案', '测试方案', 10, 'in-progress'],
-  ['测试', '测试实施', '测试实施', 11, 'in-progress'],
-  ['测试', '测试报告', '测试报告', 12, 'in-progress'],
-  ['测试', '测试完成', '测试完成', 13, 'final'],
-  ['投产', '待评审', '待评审', 14, 'in-progress'],
-  ['投产', '评审通过', '评审通过', 15, 'in-progress'],
-  ['投产', '已上线', '已上线', 16, 'final'],
-  ['评审', '未签署', '未签署', 17, 'in-progress'],
-  ['评审', '已签署', '已签署', 18, 'final'],
-  ['评审', '已驳回', '已驳回', 19, 'in-progress'],
+  ['工单', '工单登记', '工单登记', 4, 'initial'],
+  ['工单', '工单分析', '工单分析', 5, 'in-progress'],
+  ['工单', '分析完成', '分析完成', 6, 'final'],
+  ['开发', '开发承接', '开发承接', 7, 'initial'],
+  ['开发', '开发设计', '开发设计', 8, 'in-progress'],
+  ['开发', '开发实施', '开发实施', 9, 'in-progress'],
+  ['开发', '单元测试', '单元测试', 10, 'in-progress'],
+  ['开发', '开发完成', '开发完成', 11, 'final'],
+  ['测试', '测试承接', '测试承接', 12, 'initial'],
+  ['测试', '测试方案', '测试方案', 13, 'in-progress'],
+  ['测试', '测试实施', '测试实施', 14, 'in-progress'],
+  ['测试', '测试报告', '测试报告', 15, 'in-progress'],
+  ['测试', '测试完成', '测试完成', 16, 'final'],
+  ['投产', '待评审', '待评审', 17, 'in-progress'],
+  ['投产', '评审通过', '评审通过', 18, 'in-progress'],
+  ['投产', '已上线', '已上线', 19, 'final'],
+  ['评审', '未签署', '未签署', 20, 'in-progress'],
+  ['评审', '已签署', '已签署', 21, 'final'],
+  ['评审', '已驳回', '已驳回', 22, 'in-progress'],
 ];
 
 // 投产版本类型
@@ -84,6 +88,12 @@ const REQ_TYPE = [
   ['新增优化需求', 2],
   ['延期需求', 3],
   ['急迫需求', 4]
+];
+// 工单类型
+const TICKET_TYPE = [
+  ['工单急迫需求', 1],
+  ['工单阻塞问题', 2],
+  ['延后承诺需求', 3],
 ];
 // 评审状态（投产评审会签）：待评审为默认，评审同意/拒绝自动推导，评审撤销/应急审批手动设置
 const REVIEW_STATUS = [['待评审', 1], ['评审同意', 2], ['评审拒绝', 3], ['评审撤销', 4], ['应急审批', 5]];
@@ -190,6 +200,7 @@ const APP_CONFIG = [
   ['platform.copyright', '© 2026 RADAR · 日常需求研发流程管理', '版权信息'],
   ['platform.themeColor', '#2F54EB', '主题色（靛蓝）'],
   ['code.requirement', 'RC_{投产窗口}_{序号}', '需求编号规则'],
+  ['code.ticket', 'TK_{投产窗口}_{序号}', '工单编号规则'],
   ['code.dev', 'RW_{需求编号}_{序号}', '开发任务编号规则'],
   ['code.test.SIT', 'SIT_{需求编号}_{序号}', '应用组装测试任务编号规则'],
   ['code.test.UAT', 'UAT_{需求编号}_{序号}', '用户测试任务编号规则'],
@@ -210,10 +221,26 @@ const APP_CONFIG = [
  * 插入字典项（不存在才插）。
  */
 function seedDict(category, attrValue, displayValue, sort, extra) {
-  const exists = get(
-    'SELECT id FROM dict_item WHERE category = ? AND attr_value = ?',
-    category, attrValue,
-  );
+  let exists = null;
+  if (category === 'process_status' && extra?.stage) {
+    const rows = all(
+      'SELECT id, extra FROM dict_item WHERE category = ? AND attr_value = ?',
+      category, attrValue,
+    );
+    exists = rows.find((r) => {
+      try {
+        const parsed = r.extra ? JSON.parse(r.extra) : {};
+        return parsed.stage === extra.stage;
+      } catch {
+        return false;
+      }
+    });
+  } else {
+    exists = get(
+      'SELECT id FROM dict_item WHERE category = ? AND attr_value = ?',
+      category, attrValue,
+    );
+  }
   if (!exists) {
     run(
       'INSERT INTO dict_item (category, attr_value, display_value, sort, extra) VALUES (?,?,?,?,?)',
@@ -254,6 +281,7 @@ export function runSeed() {
     for (const [attr, sort] of VERSION_TYPE) seedDict('version_type', attr, attr, sort);
     for (const [attr, sort] of RELEASE_STATUS) seedDict('release_status', attr, attr, sort);
     for (const [attr, sort] of REQ_TYPE) seedDict('req_type', attr, attr, sort);
+    for (const [attr, sort] of TICKET_TYPE) seedDict('ticket_type', attr, attr, sort);
     for (const [attr, sort] of REVIEW_STATUS) seedDict('review_status', attr, attr, sort);
     for (const [attr, sort] of ARTIFACT_TYPE) seedDict('artifact_type', attr, attr, sort);
     for (const [attr, sort] of FERRY_STATUS) seedDict('ferry_status', attr, attr, sort);
@@ -300,6 +328,7 @@ export function runSeed() {
     // 业务/开发/测试/运维角色：主链路模块默认可见，并按职责授予功能权限
     const dutyMap = {
       requirement: ['金科业务', '农信业务'],
+      ticket: ['金科业务', '农信业务'],
       dev: ['金科开发', '农信开发'],
       test: ['金科测试', '农信测试', '金科业务', '农信业务'], // UAT 涉及业务
       release: ['金科运维', '农信运维'],

@@ -1,9 +1,9 @@
 /**
  * 文件：pages/Release.jsx
- * 用途：投产审批页面。逐条展示「投产申请」中所选择的需求/问题，含投产状态、评审状态、计划投产点、
- *       需求/问题编号、需求标题/问题概述、会签进度。点击行打开投产审批详情（复用 ReleaseDetail）。
+ * 用途：投产审批页面。逐条展示「投产申请」中所选择的需求/工单/问题，含投产状态、评审状态、计划投产点、
+ *       需求/问题/工单编号、需求标题/工单概述/问题概述、会签进度。点击行打开投产审批详情（复用 ReleaseDetail）。
  * 作者：hengguan
- * 说明：审批对象来源于投产申请的 ref_codes（需求或问题）；不再列出全部投产点需求，也不再有「UAT 终态发起评审」逻辑。
+ * 说明：审批对象来源于投产申请的 ref_codes（需求、工单或问题）；不再列出全部投产点需求，也不再有「UAT 终态发起评审」逻辑。
  */
 
 import React, { useRef, useState, useEffect } from 'react';
@@ -45,8 +45,9 @@ export default function Release() {
 
   const filterConfigs = [
     { field: 'impl_org', label: '实施机构', type: 'select', isPrimary: true, op: 'in', options: orgOptions },
-    { field: 'code', label: '需求/问题编号', type: 'input', isPrimary: true, op: 'like', placeholder: '需求/问题编号检索' },
-    { field: 'content', label: '标题/概述', type: 'input', isPrimary: true, op: 'like', placeholder: '需求标题或问题概述检索' },
+    { field: 'change_code', label: '变更编号', type: 'input', isPrimary: true, op: 'like', placeholder: '变更编号检索' },
+    { field: 'code', label: '需求/问题/工单编号', type: 'input', isPrimary: true, op: 'like', placeholder: '需求/问题/工单编号检索' },
+    { field: 'content', label: '标题/概述', type: 'input', isPrimary: true, op: 'like', placeholder: '需求标题、工单概述或问题概述检索' },
     { field: 'status', label: '投产状态', type: 'select', op: 'in', options: statusOptions },
     { field: 'review_status', label: '评审状态', type: 'select', op: 'in', options: reviewOptions },
   ];
@@ -97,16 +98,33 @@ export default function Release() {
       render: (v) => v || '—',
     },
     {
-      title: '需求/问题编号', dataIndex: 'code', key: 'code', width: 220,
+      title: '变更编号',
+      dataIndex: 'change_codes',
+      key: 'change_codes',
+      width: 170,
+      render: (codes) => {
+        const list = Array.isArray(codes) ? codes : [];
+        if (!list.length) return '—';
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            {list.map((code) => (
+              <span key={code} style={{ ...monoStyle, color: 'var(--radar-primary)', lineHeight: '16px' }}>{code}</span>
+            ))}
+          </div>
+        );
+      },
+    },
+    {
+      title: '需求/问题/工单编号', dataIndex: 'code', key: 'code', width: 220,
       render: (val, r) => (
         <Space size={6}>
-          <Tag className="status-tag tag-system" style={{ margin: 0, borderRadius: 2 }}>{r.entity_type === 'issue' ? '问题' : (r.entity_type === 'requirement' ? '需求' : '其他')}</Tag>
+          <Tag className="status-tag tag-system" style={{ margin: 0, borderRadius: 2 }}>{r.entity_type === 'issue' ? '问题' : (r.entity_type === 'ticket' ? '工单' : (r.entity_type === 'requirement' ? '需求' : '其他'))}</Tag>
           <span style={{ ...monoStyle, fontWeight: 500 }}>{val}</span>
         </Space>
       ),
     },
     {
-      title: '需求标题/问题概述', dataIndex: 'title', key: 'title',
+      title: '需求标题/工单概述/问题概述', dataIndex: 'title', key: 'title',
       render: (v) => (
         <div
           title={v || ''}
@@ -141,6 +159,12 @@ export default function Release() {
               <Space size={4}><StatusBadge status={r.release_status} />{r.review_status && <StatusBadge status={r.review_status} />}</Space>
             </Space>
             <div>{r.title}</div>
+            {Array.isArray(r.change_codes) && r.change_codes.length > 0 && (
+              <div style={{ fontSize: '11px', color: 'var(--radar-text-secondary)', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <span>变更编号：</span>
+                {r.change_codes.map((code) => <span key={code} style={monoStyle}>{code}</span>)}
+              </div>
+            )}
             {r.impl_org && (
               <div style={{ fontSize: '11px', color: 'var(--radar-text-secondary)' }}>实施机构：{r.impl_org}</div>
             )}

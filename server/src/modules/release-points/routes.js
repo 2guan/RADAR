@@ -4,7 +4,7 @@
  *       以及"当前投产窗口"判定接口（供顶栏全局选择器初始化）。
  * 作者：hengguan
  * 说明：默认投产窗口判定：① 若有 is_default=1 的投产点取之；② 否则取今天起最近的未来投产点；
- *       ③ 再否则取最新一条。同一时刻最多一个默认投产点。
+ *       ③ 再否则取最新日期投产点；若只有非日期投产点则取最新一条。同一时刻最多一个默认投产点。
  */
 
 import { get, all, run, tx } from '../../db/index.js';
@@ -15,6 +15,8 @@ import { ok, notFound, badRequest } from '../../lib/http.js';
 
 const COLUMNS = ['id', 'release_date', 'version_type', 'remark', 'is_default', 'is_archived', 'created_at'];
 const LABELS = { release_date: '投产日期', version_type: '版本类型', remark: '备注' };
+const PENDING_RELEASE_DATE = '投产点待定';
+const DATE_RE = /^\d{8}$/;
 
 /** 取当天 YYYYMMDD */
 function todayStr() {
@@ -23,16 +25,30 @@ function todayStr() {
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}`;
 }
 
+function isReleaseDate(v) {
+  return DATE_RE.test(String(v || '').trim());
+}
+
+function normalizeReleaseDate(v) {
+  const value = String(v || '').trim();
+  if (!value) throw badRequest('投产日期必填');
+  if (value === PENDING_RELEASE_DATE || isReleaseDate(value)) return value;
+  throw badRequest('投产日期需为 YYYYMMDD 或 投产点待定');
+}
+
 /** 计算当前投产窗口 */
 function resolveCurrent() {
   const def = get('SELECT * FROM release_point WHERE is_default = 1 AND is_archived = 0 LIMIT 1');
   if (def) return def;
-  const future = get(
-    'SELECT * FROM release_point WHERE is_archived = 0 AND release_date >= ? ORDER BY release_date ASC LIMIT 1',
-    todayStr(),
-  );
-  if (future) return future;
-  return get('SELECT * FROM release_point WHERE is_archived = 0 ORDER BY release_date DESC LIMIT 1');
+  const today = todayStr();
+  const list = all('SELECT * FROM release_point WHERE is_archived = 0');
+  const dated = list.filter((p) => isReleaseDate(p.release_date));
+  const future = dated.filter((p) => p.release_date >= today)
+    .sort((a, b) => a.release_date.localeCompare(b.release_date));
+  if (future.length) return future[0];
+  const past = dated.sort((a, b) => b.release_date.localeCompare(a.release_date));
+  if (past.length) return past[0];
+  return list.sort((a, b) => (b.id || 0) - (a.id || 0))[0] || null;
 }
 
 export default async function releasePointRoutes(fastify) {
@@ -62,6 +78,9 @@ export default async function releasePointRoutes(fastify) {
     }
 
     const newBody = { ...body, filters: normalFilters };
+    if (!Array.isArray(newBody.sort) || newBody.sort.length === 0) {
+      newBody.sort = [{ field: 'release_date', order: 'asc' }];
+    }
     const baseWhere = wh.join(' AND ');
 
     return ok(listQuery({
@@ -77,9 +96,11 @@ export default async function releasePointRoutes(fastify) {
   fastify.get('/release-points/all', { preHandler: fastify.authenticate }, async () => {
     const today = todayStr();
     const list = all('SELECT * FROM release_point WHERE is_archived = 0');
-    const future = list.filter(p => p.release_date >= today).sort((a, b) => a.release_date.localeCompare(b.release_date));
-    const past = list.filter(p => p.release_date < today).sort((a, b) => a.release_date.localeCompare(b.release_date));
-    return ok([...future, ...past]);
+    const dated = list.filter((p) => isReleaseDate(p.release_date));
+    const pending = list.filter((p) => !isReleaseDate(p.release_date)).sort((a, b) => (b.id || 0) - (a.id || 0));
+    const future = dated.filter((p) => p.release_date >= today).sort((a, b) => a.release_date.localeCompare(b.release_date));
+    const past = dated.filter((p) => p.release_date < today).sort((a, b) => a.release_date.localeCompare(b.release_date));
+    return ok([...future, ...past, ...pending]);
   });
 
   // 当前投产窗口
@@ -90,12 +111,12 @@ export default async function releasePointRoutes(fastify) {
   // 新增
   fastify.post('/release-points', { preHandler: fastify.requirePerm('settings', 'create') }, async (request) => {
     const { release_date, version_type, remark } = request.body || {};
-    if (!release_date) throw badRequest('投产日期必填');
+    const dateValue = normalizeReleaseDate(release_date);
     const res = run(
       'INSERT INTO release_point (release_date, version_type, remark) VALUES (?,?,?)',
-      release_date, version_type || null, remark || null,
+      dateValue, version_type || null, remark || null,
     );
-    auditCreate('release_point', res.lastInsertRowid, release_date, request.currentUser?.name);
+    auditCreate('release_point', res.lastInsertRowid, dateValue, request.currentUser?.name);
     return ok({ id: res.lastInsertRowid });
   });
 
@@ -106,7 +127,7 @@ export default async function releasePointRoutes(fastify) {
     if (!old) throw notFound();
     const { release_date, version_type, remark } = request.body || {};
     const data = {
-      release_date: release_date ?? old.release_date,
+      release_date: release_date === undefined ? old.release_date : normalizeReleaseDate(release_date),
       version_type: version_type ?? old.version_type,
       remark: remark ?? old.remark,
     };
@@ -159,16 +180,17 @@ export default async function releasePointRoutes(fastify) {
       .list.map((r) => ({ ...r, is_default: r.is_default ? '是' : '' })),
     upsert: (r, mode) => {
       if (!r.release_date) return 'skipped';
-      const exists = get('SELECT id FROM release_point WHERE release_date = ?', String(r.release_date));
+      const releaseDate = normalizeReleaseDate(r.release_date);
+      const exists = get('SELECT id FROM release_point WHERE release_date = ?', releaseDate);
       if (exists) {
         if (mode === 'skip') return 'skipped';
-        if (mode === 'rollback') throw badRequest(`投产日期重复：${r.release_date}，已回滚`);
+        if (mode === 'rollback') throw badRequest(`投产日期重复：${releaseDate}，已回滚`);
         run('UPDATE release_point SET version_type=?, remark=?, updated_at=datetime(\'now\',\'localtime\') WHERE id=?',
           r.version_type || null, r.remark || null, exists.id);
         return 'updated';
       }
       run('INSERT INTO release_point (release_date, version_type, remark) VALUES (?,?,?)',
-        String(r.release_date), r.version_type || null, r.remark || null);
+        releaseDate, r.version_type || null, r.remark || null);
       return 'inserted';
     },
   });

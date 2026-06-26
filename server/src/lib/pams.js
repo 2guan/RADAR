@@ -48,7 +48,7 @@ async function pamsFetch(path, opts = {}) {
 
 /**
  * 拉取全部问题概述列表。
- * @returns {Promise<Array<{issue_id,status,detailed_classification,system,summary}>>}
+ * @returns {Promise<Array<{issue_id,status,detailed_classification,system,summary,work_order_no,details}>>}
  */
 export async function fetchIssueOverview() {
   const data = await pamsFetch('/PAMS/api/report/overview', { method: 'GET' });

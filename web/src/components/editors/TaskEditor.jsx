@@ -27,7 +27,7 @@ import { useResponsive } from '../../hooks/useResponsive.js';
 const CFG = {
   dev: {
     api: '/dev-tasks', entity: 'dev', stage: '开发', title: '开发任务',
-    attachFields: ['概要设计', '详细设计', '代码走查', '单元测试报告'],
+    attachFields: ['概要设计', '详细设计', '代码走查', '单元测试报告', '影响性分析文档'],
     statusLabel: '开发状态', ownerLabel: '开发负责人', orgLabel: '开发实施方',
   },
   test: {
@@ -52,6 +52,9 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
   const { isMobile } = useResponsive();
   const readonly = !can(cfg.entity, 'edit');
   const linkStyle = { color: 'var(--radar-primary)', cursor: 'pointer' };
+  const attachFields = kind === 'test' && current?.test_type === 'SIT'
+    ? [...cfg.attachFields, '测试覆盖设计文档']
+    : cfg.attachFields;
 
   useEffect(() => {
     // 回显数据到表单（弹窗按 id 取，单页按编号取）
@@ -226,7 +229,7 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
 
           {/* ── 右栏：阶段附件 ── */}
           <Col xs={24} md={10}>
-            {cfg.attachFields.map((f) => (
+            {attachFields.map((f) => (
               <div className="form-section-card" key={f} style={{ marginBottom: 12 }}>
                 <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>
                   {f}

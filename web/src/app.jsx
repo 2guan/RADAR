@@ -15,6 +15,7 @@ import Login from './pages/Login.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import Overview from './pages/Overview.jsx';
 import Requirements from './pages/Requirements.jsx';
+import Tickets from './pages/Tickets.jsx';
 import Issues from './pages/Issues.jsx';
 import DevTasks from './pages/DevTasks.jsx';
 import { SitPage, UatPage, NftPage, SecPage } from './pages/TestTasks.jsx';
@@ -36,6 +37,7 @@ export function getHomePath(defaultHome) {
     '效能仪表盘': '/dashboard',
     '版本概览': '/overview',
     '需求分析': '/requirements',
+    '工单分析': '/tickets',
     '问题管理': '/issues',
     '开发管理': '/dev',
     '测试管理': '/test/sit',
@@ -93,7 +95,7 @@ function Protected({ children }) {
   const path = location.pathname;
   const PREFIX_MODULE = [
     ['/dashboard', 'dashboard'], ['/overview', 'overview'],
-    ['/requirements', 'requirement'], ['/issues', 'issue'],
+    ['/requirements', 'requirement'], ['/tickets', 'ticket'], ['/issues', 'issue'],
     ['/dev', 'dev'], ['/test', 'test'],
     ['/release/apply', 'release_apply'], ['/release', 'release'],
     ['/users', 'user'], ['/settings', 'settings'],
@@ -130,6 +132,7 @@ export default function AppRouter() {
           <Route path="overview" element={<Overview />} />
           <Route path="requirements" element={<Requirements />} />
           <Route path="requirements/:code" element={<RequirementDetailPage />} />
+          <Route path="tickets" element={<Tickets />} />
           <Route path="issues" element={<Issues />} />
           <Route path="dev" element={<DevTasks />} />
           <Route path="dev/:code" element={<DevTaskDetailPage />} />

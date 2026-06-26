@@ -1,7 +1,7 @@
 /**
  * 文件：lib/release-word.js
  * 用途：投产审批「版本发布评审单」Word 文档生成。按模板格式输出：
- *       一、投产基本信息；二、需求/问题信息；三、开发情况；四、测试情况；评审会签。
+ *       一、投产基本信息；二、需求/工单/问题信息；三、开发情况；四、测试情况；评审会签。
  *       全文微软雅黑、黑色；表头/标签列灰色底纹。
  * 作者：hengguan
  */
@@ -135,7 +135,8 @@ function kvTable(rows) {
  */
 export async function buildReleaseWordDoc(detail, devTasksFull, testTasksFull) {
   const { entityType, entity, releaseTask, signoffs = [], artifacts = [] } = detail;
-  const isReq = entityType === 'requirement';
+  const isWorkItem = entityType === 'requirement' || entityType === 'ticket';
+  const workLabel = entityType === 'ticket' ? '工单' : '需求';
 
   const children = [];
 
@@ -147,7 +148,7 @@ export async function buildReleaseWordDoc(detail, devTasksFull, testTasksFull) {
   }));
 
   // 副标题：编号 + 标题/概述
-  const entityLabel = isReq ? (entity.title || '') : (entity.summary || '');
+  const entityLabel = isWorkItem ? (entity.title || '') : (entity.summary || '');
   children.push(new Paragraph({
     alignment: AlignmentType.CENTER,
     spacing: { after: 300 },
@@ -212,17 +213,17 @@ export async function buildReleaseWordDoc(detail, devTasksFull, testTasksFull) {
     children.push(para(run('暂无关联投产申请', { size: 18 })));
   }
 
-  // ── 二、需求/问题信息 ─────────────────────────────────────────────────
+  // ── 二、需求/工单/问题信息 ─────────────────────────────────────────────
   children.push(spacer());
-  children.push(section(isReq ? '二、需求信息' : '二、问题信息'));
+  children.push(section(isWorkItem ? `二、${workLabel}信息` : '二、问题信息'));
 
-  if (isReq) {
+  if (isWorkItem) {
     children.push(kvTable([
-      kvRow('需求标题', entity.title),
-      kvRow('需求概述', entity.summary),
-      kvRow('云南农信业务负责人', entity.yn_owner),
-      kvRow('建信金科业务负责人', entity.jk_owner),
-      kvRow('需求状态', entity.status),
+      kvRow(`${workLabel}${entityType === 'ticket' ? '概述' : '标题'}`, entity.title),
+      kvRow(`${workLabel}详情`, entity.summary),
+      kvRow(entityType === 'ticket' ? '云南农信工单负责人' : '云南农信业务负责人', entity.yn_owner),
+      kvRow(entityType === 'ticket' ? '建信金科工单负责人' : '建信金科业务负责人', entity.jk_owner),
+      kvRow(`${workLabel}状态`, entity.status),
       kvRow('计划投产点', entity.release_date),
     ]));
   } else {
@@ -235,8 +236,8 @@ export async function buildReleaseWordDoc(detail, devTasksFull, testTasksFull) {
     ]));
   }
 
-  // ── 三、开发情况（仅需求） ───────────────────────────────────────────
-  if (isReq) {
+  // ── 三、开发情况（仅需求/工单） ───────────────────────────────────────
+  if (isWorkItem) {
     children.push(spacer());
     children.push(section('三、开发情况'));
 
@@ -256,8 +257,8 @@ export async function buildReleaseWordDoc(detail, devTasksFull, testTasksFull) {
     }
   }
 
-  // ── 四、测试情况（仅需求） ───────────────────────────────────────────
-  if (isReq) {
+  // ── 四、测试情况（仅需求/工单） ───────────────────────────────────────
+  if (isWorkItem) {
     const typeLabel = { SIT: '应用组装', UAT: '用户测试', NFT: '非功能测试', SEC: '安全测试' };
     children.push(spacer());
     children.push(section('四、测试情况'));
@@ -280,7 +281,7 @@ export async function buildReleaseWordDoc(detail, devTasksFull, testTasksFull) {
   }
 
   // ── 评审会签（紧凑5列表） ─────────────────────────────────────────────
-  const signoffSectionNum = isReq ? '五' : '三';
+  const signoffSectionNum = isWorkItem ? '五' : '三';
   children.push(spacer());
   children.push(section(`${signoffSectionNum}、评审会签`));
 

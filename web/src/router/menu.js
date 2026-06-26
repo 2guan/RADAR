@@ -16,6 +16,7 @@ export const MENU = [
   { key: '/dashboard', label: '效能仪表盘', module: 'dashboard', icon: React.createElement(DashboardOutlined) },
   { key: '/overview', label: '版本概览', module: 'overview', icon: React.createElement(AppstoreOutlined) },
   { key: '/requirements', label: '需求分析', module: 'requirement', icon: React.createElement(FileTextOutlined) },
+  { key: '/tickets', label: '工单分析', module: 'ticket', icon: React.createElement(FileTextOutlined) },
   { key: '/dev', label: '开发管理', module: 'dev', icon: React.createElement(CodeOutlined) },
   {
     key: '/test', label: '测试管理', module: 'test', icon: React.createElement(ExperimentOutlined),

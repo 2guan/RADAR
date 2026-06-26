@@ -17,10 +17,11 @@ import { windowIds, inClause } from '../../lib/window.js';
 import { ok, notFound, badRequest } from '../../lib/http.js';
 import { exportXlsx, parseXlsx } from '../../lib/excel.js';
 import { resolveDictAttr, resolveSystemCode, formatAttachments } from '../../lib/resolver.js';
+import { getWorkItem, workItemCodesInReleasePoints, releaseDateMapForCodes } from '../../lib/work-items.js';
 
 // 导入模板列定义
 const IO_COLUMNS = [
-  { key: 'req_code', title: '关联需求编号' },
+  { key: 'req_code', title: '关联需求/工单编号' },
   { key: 'task_code', title: '测试任务编号' },
   { key: 'task_name', title: '测试任务名称' },
   { key: 'test_type', title: '测试类型' },
@@ -49,6 +50,7 @@ const LABELS = {
   actual_start: '实际开始时间', actual_end: '实际结束时间',
 };
 const ATTACH_FIELDS = ['测试方案', '测试报告'];
+const SIT_REQUIRED_TERMINAL_ATTACH_FIELD = '测试覆盖设计文档';
 
 function validateTerminal(id, status, row) {
   if (!isTerminalStatus(status)) return;
@@ -57,6 +59,9 @@ function validateTerminal(id, status, row) {
   }
   if (countByFields('test', id, ATTACH_FIELDS) === 0) {
     throw badRequest('测试完成（终态）时，本阶段附件或路径至少填写 1 个');
+  }
+  if (row.test_type === 'SIT' && countByFields('test', id, [SIT_REQUIRED_TERMINAL_ATTACH_FIELD]) === 0) {
+    throw badRequest('应用组装测试完成（终态）时，测试覆盖设计文档附件或路径必填');
   }
 }
 
@@ -87,8 +92,12 @@ export default async function testTaskRoutes(fastify) {
         const ids = Array.isArray(f.value) ? f.value : [f.value];
         if (ids.length) {
           const placeholders = ids.map(() => '?').join(',');
-          wh.push(`req_code IN (SELECT req_code FROM requirement WHERE release_point_id IN (${placeholders}))`);
-          params.push(...ids);
+          wh.push(`req_code IN (
+            SELECT req_code FROM requirement WHERE release_point_id IN (${placeholders})
+            UNION
+            SELECT ticket_code FROM ticket WHERE release_point_id IN (${placeholders})
+          )`);
+          params.push(...ids, ...ids);
         }
       } else if (f.field === 'org') {
         const orgs = Array.isArray(f.value) ? f.value : [f.value];
@@ -113,10 +122,15 @@ export default async function testTaskRoutes(fastify) {
       wh.push('req_code = ?');
       params.push(body.reqCode);
     } else if (!hasReleasePointFilter) {
-      const sub = inClause('release_point_id', windowIds(body));
-      if (sub.where) {
-        wh.push(`req_code IN (SELECT req_code FROM requirement WHERE ${sub.where})`);
-        params.push(...sub.params);
+      const codes = workItemCodesInReleasePoints(windowIds(body));
+      if (codes) {
+        if (codes.length) {
+          const sub = inClause('req_code', codes);
+          wh.push(sub.where);
+          params.push(...sub.params);
+        } else {
+          wh.push('1=0');
+        }
       }
     }
 
@@ -128,32 +142,26 @@ export default async function testTaskRoutes(fastify) {
       baseWhere, baseParams: params,
     });
 
-    // 仅针对当前页任务涉及的需求映射计划投产点，避免随翻页整表扫描 requirement
+    // 仅针对当前页任务涉及的需求/工单映射计划投产点，避免随翻页整表扫描
     const pageCodes = [...new Set(result.list.map((r) => r.req_code).filter(Boolean))];
-    const reqMap = {};
-    if (pageCodes.length) {
-      const ph = pageCodes.map(() => '?').join(',');
-      const reqs = all(
-        `SELECT r.req_code, rp.release_date
-           FROM requirement r
-           LEFT JOIN release_point rp ON r.release_point_id = rp.id
-          WHERE r.req_code IN (${ph})`,
-        ...pageCodes,
-      );
-      for (const r of reqs) {
-        reqMap[r.req_code] = r.release_date;
-      }
-    }
+    const reqMap = releaseDateMapForCodes(pageCodes);
 
     const systems = all('SELECT sys_code, sys_name FROM system');
     const sysMap = {};
     for (const s of systems) {
       sysMap[s.sys_code] = s.sys_name;
     }
+    const itemMap = {};
+    for (const code of pageCodes) {
+      const item = getWorkItem(code);
+      if (item) itemMap[code] = item;
+    }
 
     result.list = result.list.map((row) => ({
       ...row,
       release_date: reqMap[row.req_code] || null,
+      entity_type: itemMap[row.req_code]?.entity_type || null,
+      entity_label: itemMap[row.req_code]?.entity_label || null,
       impl_system_name: sysMap[row.impl_system] || row.impl_system,
     }));
 
@@ -161,17 +169,19 @@ export default async function testTaskRoutes(fastify) {
   });
 
   // 详情
-  // 组装测试任务详情：附带关联需求(编号/标题/状态)与该需求的全部开发任务（供详情联动展示）
+  // 组装测试任务详情：附带关联需求/工单(编号/标题/状态)与该工作项的全部开发任务（供详情联动展示）
   const buildTestDetail = (row) => {
-    const reqRow = get('SELECT title, status FROM requirement WHERE req_code = ?', row.req_code);
+    const item = getWorkItem(row.req_code);
     const sysMap = {};
     for (const s of all('SELECT sys_code, sys_name FROM system')) sysMap[s.sys_code] = s.sys_name;
     const dev_tasks = all('SELECT id, task_code, impl_system, status FROM dev_task WHERE req_code = ? ORDER BY id', row.req_code)
       .map((t) => ({ ...t, impl_system_name: sysMap[t.impl_system] || t.impl_system || null }));
     return {
       ...row,
-      req_title: reqRow?.title || null,
-      req_status: reqRow?.status || null,
+      req_title: item?.title || null,
+      req_status: item?.status || null,
+      entity_type: item?.entity_type || null,
+      entity_label: item?.entity_label || null,
       dev_tasks,
       attachments: listByEntity('test', row.id),
     };
@@ -193,13 +203,13 @@ export default async function testTaskRoutes(fastify) {
   // 测试承接预览
   fastify.post('/test-tasks/intake-preview', { preHandler: fastify.requirePerm('test', 'test.intake') }, async (request) => {
     const { reqCode, testType } = request.body || {};
-    if (!reqCode) throw badRequest('请选择需求');
+    if (!reqCode) throw badRequest('请选择需求/工单');
     if (!testType) throw badRequest('请选择测试类型');
-    const req = get('SELECT * FROM requirement WHERE req_code = ?', reqCode);
-    if (!req) throw notFound('需求不存在');
+    const req = getWorkItem(reqCode);
+    if (!req) throw notFound('需求/工单不存在');
 
-    const main = req.main_systems ? JSON.parse(req.main_systems) : [];
-    const collab = req.collab_test_systems ? JSON.parse(req.collab_test_systems) : [];
+    const main = req.main_systems || [];
+    const collab = req.collab_test_systems || [];
 
     const existingTasks = all('SELECT impl_system, task_code, task_name, status FROM test_task WHERE req_code = ? AND test_type = ?', reqCode, testType);
 
@@ -302,12 +312,12 @@ export default async function testTaskRoutes(fastify) {
   // 测试承接
   fastify.post('/test-tasks/intake', { preHandler: fastify.requirePerm('test', 'test.intake') }, async (request) => {
     const { reqCode, testType, systems, splitMode } = request.body || {};
-    if (!reqCode) throw badRequest('请选择需求');
+    if (!reqCode) throw badRequest('请选择需求/工单');
     if (!TYPE_NAME[testType]) throw badRequest('测试类型非法');
-    const req = get('SELECT * FROM requirement WHERE req_code = ?', reqCode);
-    if (!req) throw notFound('需求不存在');
+    const req = getWorkItem(reqCode);
+    if (!req) throw notFound('需求/工单不存在');
 
-    const main = req.main_systems ? JSON.parse(req.main_systems) : [];
+    const main = req.main_systems || [];
     const firstMainSysCode = main[0] || null;
 
     const systemsList = all('SELECT sys_code, sys_name FROM system');
@@ -389,11 +399,13 @@ export default async function testTaskRoutes(fastify) {
     let finalWhere = baseWhere;
     let finalParams = [...baseParams];
     if (!body.req_code) {
-      const win = inClause('req_code', all("SELECT req_code FROM requirement WHERE release_point_id IN (SELECT id FROM release_point WHERE is_default = 1 OR release_date >= date('now'))").map(r => r.req_code));
-      if (win.where) {
-        finalWhere = win.where;
-        finalParams = win.params;
-      }
+      const codes = [
+        ...all("SELECT req_code AS code FROM requirement WHERE release_point_id IN (SELECT id FROM release_point WHERE is_default = 1 OR release_date >= date('now'))").map(r => r.code),
+        ...all("SELECT ticket_code AS code FROM ticket WHERE release_point_id IN (SELECT id FROM release_point WHERE is_default = 1 OR release_date >= date('now'))").map(r => r.code),
+      ];
+      const win = inClause('req_code', [...new Set(codes)]);
+      finalWhere = win.where || '1=0';
+      finalParams = win.params;
     }
 
     // 过滤特定的测试类型（前端分四个页面，所以会传入 test_type 的过滤条件）
@@ -413,7 +425,7 @@ export default async function testTaskRoutes(fastify) {
     for (const s of systems) sysMap[s.sys_code] = s.sys_name;
 
     const cols = [
-      { key: 'req_code', title: '关联需求编号' },
+      { key: 'req_code', title: '关联需求/工单编号' },
       { key: 'task_code', title: '测试任务编号' },
       { key: 'task_name', title: '测试任务名称' },
       { key: 'test_type', title: '测试类型' },
@@ -430,6 +442,7 @@ export default async function testTaskRoutes(fastify) {
       { key: 'registrar', title: '登记人' },
       { key: 'register_time', title: '登记时间' },
       { key: 'test_plan', title: '测试方案' },
+      { key: 'test_coverage_design', title: '测试覆盖设计文档' },
       { key: 'test_report', title: '测试报告' },
     ];
 
@@ -441,6 +454,7 @@ export default async function testTaskRoutes(fastify) {
         impl_system: sysMap[row.impl_system] || row.impl_system,
         deviation_rate: row.deviation_rate != null ? `${row.deviation_rate}%` : '0%',
         test_plan: formatAttachments(attaches, '测试方案'),
+        test_coverage_design: row.test_type === 'SIT' ? formatAttachments(attaches, '测试覆盖设计文档') : '',
         test_report: formatAttachments(attaches, '测试报告'),
       };
     });
@@ -486,13 +500,13 @@ export default async function testTaskRoutes(fastify) {
       for (const r of rows) {
         const rowNum = r.__rowNum__;
         try {
-          if (!r.req_code) throw new Error('关联需求编号不能为空');
+          if (!r.req_code) throw new Error('关联需求/工单编号不能为空');
           if (!r.task_name) throw new Error('测试任务名称不能为空');
           if (!r.test_type) throw new Error('测试类型不能为空');
 
-          // 校验关联需求编号是否存在
-          const req = get('SELECT id FROM requirement WHERE req_code = ?', r.req_code);
-          if (!req) throw new Error(`关联需求编号 [${r.req_code}] 不存在`);
+          // 校验关联需求/工单编号是否存在
+          const req = getWorkItem(r.req_code);
+          if (!req) throw new Error(`关联需求/工单编号 [${r.req_code}] 不存在`);
 
           // 翻译中文测试类型为 Code
           const testTypeCode = TYPE_CODE[String(r.test_type).trim()];

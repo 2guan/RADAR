@@ -178,6 +178,11 @@ export function runMock() {
       );
       rpIds.push({ id: res.lastInsertRowid, date });
     }
+    run(
+      `INSERT INTO release_point (release_date, version_type, remark, is_default, is_archived)
+       VALUES (?,?,?,?,?)`,
+      '投产点待定', '常规版本', '系统内置投产点', 0, 0,
+    );
 
     // 系统主数据
     const systems = all('SELECT sys_code, sys_name, org, sector FROM system');

@@ -1,19 +1,18 @@
 /**
- * 文件：components/editors/RequirementEditor.jsx
- * 用途：需求新增/编辑弹窗（可复用：需求分析页与版本概览均使用）。
- *       双栏卡片布局；字体紧凑；需求说明书在基本信息下方；
+ * 文件：components/editors/TicketEditor.jsx
+ * 用途：需求新增/编辑弹窗（可复用：工单分析页与版本概览均使用）。
+ *       双栏卡片布局；字体紧凑；
  *       协同改造/测试系统采用下拉选择 + 外置已选区双模式展示。
  * 作者：hengguan
  * 说明：需求明细抽屉编辑器，支持需求的创建、编辑、归属主责系统、附件关联以及各项开发/测试任务的联动修改。
  */
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Form, Input, DatePicker, Row, Col, Button, Select, Tag, Space, message, Tooltip } from 'antd';
-import { HistoryOutlined, CloseOutlined, ThunderboltOutlined, CheckCircleOutlined } from '@ant-design/icons';
+import { AutoComplete, Form, Input, DatePicker, Row, Col, Button, Select, Tag, Space, message, Tooltip } from 'antd';
+import { HistoryOutlined, CloseOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import DictSelect from '../DictSelect.jsx';
 import PersonPicker from '../PersonPicker.jsx';
-import AttachmentField from '../AttachmentField.jsx';
 import HistoryDrawer from '../HistoryDrawer.jsx';
 import CodeLink from '../CodeLink.jsx';
 import EditorShell from './EditorShell.jsx';
@@ -181,25 +180,100 @@ function PersonPickerField({ value = [], onChange, readonly, placeholder }) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default function RequirementEditor({ open, mode = 'modal', code, reqId, defaultReleasePointId, onClose, onSaved }) {
+export default function TicketEditor({ open, mode = 'modal', code, reqId, defaultReleasePointId, onClose, onSaved }) {
   const [form] = Form.useForm();
-  // 监听需求状态，供标题栏内联选择器响应式回显
+  // 监听工单状态，供标题栏内联选择器响应式回显
   const statusValue = Form.useWatch('status', form);
   const [current, setCurrent] = useState(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [points, setPoints] = useState([]);
-  const [genLoading, setGenLoading] = useState(false); // 生成编号加载态
   const [isDirty, setIsDirty] = useState(false);
   const { can } = useAppStore();
   const { isMobile } = useResponsive();
   // 既有需求（按 id 或编号加载）即为编辑/查看态；其余为新增
   const isEdit = !!reqId || !!code || mode === 'page';
-  const readonly = isEdit ? !can('requirement', 'edit') : !can('requirement', 'create');
-  // 已关联开发/测试任务时，需求编号锁定不可改
+  const readonly = isEdit ? !can('ticket', 'edit') : !can('ticket', 'create');
+  // 已关联开发/测试任务时，工单编号锁定不可改
   const codeLocked = !!current?.has_tasks;
 
   // 防抖 timer ref，供编号唯一性校验使用
   const debounceRef = useRef(null);
+  const issueLookupDebounceRef = useRef(null);
+  const [issueOptions, setIssueOptions] = useState([]);
+
+  const ensureSystems = async () => {
+    if (!_sysCache) _sysCache = await apiGet('/systems/all');
+    return _sysCache || [];
+  };
+
+  const applyIssue = async (issue) => {
+    if (!issue || readonly || codeLocked) return;
+    const patch = {
+      ticket_code: issue.issue_code || '',
+      ticket_type: issue.detailed_classification || issue.category || undefined,
+      issue_no: issue.work_order_no || '',
+      title: issue.summary || '',
+      summary: issue.details || '',
+    };
+    const issueSystem = String(issue.system || '').trim();
+    if (issueSystem) {
+      const systems = await ensureSystems();
+      const matched = systems.find((s) => s.sys_code === issueSystem);
+      if (matched) patch.main_systems = [matched.sys_code];
+    }
+    form.setFieldsValue(patch);
+    setIsDirty(true);
+  };
+
+  const toIssueOption = (issue) => ({
+    value: issue.issue_code,
+    issue,
+    label: (
+      <div style={{ lineHeight: '16px', padding: '2px 0' }}>
+        <div style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', fontWeight: 600, fontSize: 11, whiteSpace: 'nowrap' }}>
+          {issue.issue_code}
+        </div>
+        <div style={{ minHeight: 16, fontFamily: 'SFMono-Regular, Consolas, monospace', color: 'var(--radar-text-secondary)', fontSize: 11, whiteSpace: 'nowrap' }}>
+          {issue.work_order_no && (
+            <span>
+              {issue.work_order_no}
+            </span>
+          )}
+        </div>
+        <div style={{ color: 'var(--radar-text-secondary)', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {issue.summary || '—'}
+        </div>
+      </div>
+    ),
+  });
+
+  const lookupIssues = async (q) => {
+    const keyword = String(q || '').trim();
+    if (!keyword) {
+      setIssueOptions([]);
+      return [];
+    }
+    const list = await apiGet('/tickets/issue-lookup', { q: keyword });
+    setIssueOptions((list || []).map(toIssueOption));
+    return list || [];
+  };
+
+  const onIssueSearch = (q) => {
+    if (readonly || codeLocked) return;
+    if (issueLookupDebounceRef.current) clearTimeout(issueLookupDebounceRef.current);
+    issueLookupDebounceRef.current = setTimeout(() => {
+      lookupIssues(q).catch(() => setIssueOptions([]));
+    }, 300);
+  };
+
+  const onIssueInputBlur = async () => {
+    if (readonly || codeLocked) return;
+    const keyword = String(form.getFieldValue('ticket_code') || '').trim();
+    if (!keyword) return;
+    const list = await lookupIssues(keyword).catch(() => []);
+    const exact = list.find((item) => item.issue_code === keyword || item.work_order_no === keyword);
+    if (exact) await applyIssue(exact);
+  };
 
   useEffect(() => {
     const applyRow = (d) => {
@@ -211,13 +285,13 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
     setIsDirty(false);
     apiGet('/release-points/all').then(setPoints).catch(() => {});
     if (reqId) {
-      apiGet(`/requirements/${reqId}`).then(applyRow);
+      apiGet(`/tickets/${reqId}`).then(applyRow);
     } else if (code) {
-      apiGet(`/requirements/by-code/${encodeURIComponent(code)}`).then(applyRow);
+      apiGet(`/tickets/by-code/${encodeURIComponent(code)}`).then(applyRow);
     } else {
       setCurrent(null);
       form.resetFields();
-      form.setFieldsValue({ status: '需求登记', is_accounting: '否', release_point_id: defaultReleasePointId });
+      form.setFieldsValue({ status: '工单登记', ticket_type: '工单急迫需求', is_accounting: '否', release_point_id: defaultReleasePointId });
     }
   }, [open, reqId, code, mode]);
 
@@ -228,38 +302,17 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
       propose_time: v.propose_time ? v.propose_time.format('YYYY-MM-DD') : null,
     };
     if (isEdit) {
-      await apiPut(`/requirements/${reqId ?? current?.id}`, payload);
+      await apiPut(`/tickets/${reqId ?? current?.id}`, payload);
       message.success('已保存');
     } else {
-      const res = await apiPost('/requirements', payload);
-      message.success(`已创建需求 ${res.req_code}`);
+      const res = await apiPost('/tickets', payload);
+      message.success(`已创建工单 ${res.ticket_code}`);
     }
     onSaved?.();
     onClose?.();   // 保存成功后关闭弹窗
   };
 
-  /** 点击「生成编号」按钮 */
-  const generateCode = async () => {
-    const releasePointId = form.getFieldValue('release_point_id');
-    if (!releasePointId) {
-      message.warning('请先选择「计划投产点」');
-      return;
-    }
-    setGenLoading(true);
-    try {
-      const res = await apiGet('/requirements/gen-code', { releasePointId });
-      form.setFieldValue('req_code', res.req_code);
-      // 触发校验以更新状态
-      form.validateFields(['req_code']);
-      message.success(`已生成编号：${res.req_code}`);
-    } catch (e) {
-      message.error('生成失败，请稍后重试');
-    } finally {
-      setGenLoading(false);
-    }
-  };
-
-  /** 防抖异步校验需求编号唯一性 */
+  /** 防抖异步校验工单编号唯一性 */
   const checkCodeUnique = (code) =>
     new Promise((resolve, reject) => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -270,8 +323,8 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
           const params = { code: trimmed };
           const excludeId = reqId ?? current?.id;
           if (excludeId) params.excludeId = excludeId;
-          const res = await apiGet('/requirements/check-code', params);
-          res.exists ? reject('需求编号已存在') : resolve();
+          const res = await apiGet('/tickets/check-code', params);
+          res.exists ? reject('工单编号已存在') : resolve();
         } catch {
           resolve(); // 网络异常不阻断表单
         }
@@ -292,15 +345,15 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
       title={(
         <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 10, rowGap: 6, minWidth: 0, width: '100%', paddingRight: 76 }}>
           {isEdit || current ? (
-            <CodeLink module="requirement" code={current?.req_code} fallback="REQ" />
+            <CodeLink module="ticket" code={current?.ticket_code} fallback="TKT" />
           ) : (
             <span className="lc-id big" style={{ margin: 0, background: 'var(--radar-status-in-progress-soft)', color: 'var(--radar-status-in-progress)' }}>NEW</span>
           )}
-          {/* 需求状态：标题栏内联编辑，点击即可切换；按主题状态色显示，宽度随内容自适应 */}
+          {/* 工单状态：标题栏内联编辑，点击即可切换；按主题状态色显示，宽度随内容自适应 */}
           <span className={`status-select status-select-${getStatusType(statusValue)}`}>
             <DictSelect
               category="process_status"
-              stage="需求"
+              stage="工单"
               size="small"
               allowClear={false}
               showSearch={false}
@@ -308,8 +361,8 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
               popupMatchSelectWidth={false}
               value={statusValue}
               onChange={(v) => { form.setFieldValue('status', v); if (!readonly) setIsDirty(true); }}
-              placeholder="需求状态"
-              style={{ width: statusSelectWidth(statusValue, '需求状态'), ...(readonly ? { pointerEvents: 'none' } : {}) }}
+              placeholder="工单状态"
+              style={{ width: statusSelectWidth(statusValue, '工单状态'), ...(readonly ? { pointerEvents: 'none' } : {}) }}
             />
           </span>
           {current && (
@@ -342,17 +395,17 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
             <div className="form-section-card">
               <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>基本信息</div>
 
-              {/* 需求状态改由标题栏内联编辑，此处保留隐藏字段以保证保存 */}
+              {/* 工单状态改由标题栏内联编辑，此处保留隐藏字段以保证保存 */}
               <Form.Item name="status" hidden><Input /></Form.Item>
 
               <Row gutter={8}>
-                {/* 需求编号 + 需求类型 */}
+                {/* 工单编号 + 工单类型 */}
                 <Col span={12}>
                   <Form.Item
-                    name="req_code"
+                    name="ticket_code"
                     label={(
                       <span>
-                        需求编号
+                        工单编号
                         {codeLocked && !isMobile && (
                           <span style={{ marginLeft: 6, fontWeight: 400, fontSize: 11, color: 'var(--radar-text-secondary)' }}>
                             （已关联，不可改）
@@ -362,37 +415,28 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
                     )}
                     style={{ marginBottom: 8 }}
                     rules={[
-                      { required: !readonly, message: '请填写需求编号' },
+                      { required: !readonly, message: '请填写工单编号' },
                       { pattern: /^\S+$/, message: '编号不能包含空格' },
                       { validator: (_, val) => checkCodeUnique(val) },
                     ]}
                     validateTrigger={['onBlur', 'onChange']}
                   >
-                    <Input
-                      placeholder="手填或点击「生成」"
+                    <AutoComplete
+                      options={issueOptions}
+                      onSearch={onIssueSearch}
+                      onSelect={(_, opt) => applyIssue(opt.issue)}
+                      onBlur={onIssueInputBlur}
+                      popupMatchSelectWidth={360}
+                      placeholder="请输入工单编号"
                       size="small"
-                      readOnly={readonly || codeLocked}
+                      disabled={readonly || codeLocked}
                       style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', letterSpacing: '0.3px' }}
-                      suffix={(codeLocked || readonly) ? null : (
-                        <Tooltip title="根据所选投产点自动生成编号">
-                          <Button
-                            type="link"
-                            size="small"
-                            icon={<ThunderboltOutlined />}
-                            loading={genLoading}
-                            onClick={generateCode}
-                            style={{ padding: 0, height: 'auto', fontSize: 13, color: 'var(--radar-primary)' }}
-                          >
-                            生成
-                          </Button>
-                        </Tooltip>
-                      )}
                     />
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item name="req_type" label="需求类型" rules={[{ required: !readonly, message: '请选择需求类型' }]} style={{ marginBottom: 8 }}>
-                    <DictSelect category="req_type" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} size="small" />
+                  <Form.Item name="ticket_type" label="工单类型" rules={[{ required: !readonly, message: '请选择工单类型' }]} style={{ marginBottom: 8 }}>
+                    <DictSelect category="ticket_type" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} size="small" />
                   </Form.Item>
                 </Col>
                 {/* 计划投产点 + 提出时间 */}
@@ -435,20 +479,15 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
                 </Col>
               </Row>
 
-              {/* 需求标题 */}
-              <Form.Item name="title" label="需求标题" rules={[{ required: !readonly, message: '请输入需求标题' }]} style={{ marginBottom: 8 }}>
-                <Input placeholder="请输入需求标题" size="small" readOnly={readonly} />
+              {/* 工单概述 */}
+              <Form.Item name="title" label="工单概述" rules={[{ required: !readonly, message: '请输入工单概述' }]} style={{ marginBottom: 8 }}>
+                <Input placeholder="请输入工单概述" size="small" readOnly={readonly} />
               </Form.Item>
-              <Form.Item name="summary" label="需求概述" rules={[{ required: !readonly, message: '请填写需求概述' }, { max: 2000, message: '不超过 2000 字' }]} style={{ marginBottom: 18 }}>
-                <Input.TextArea rows={7} placeholder="描述该需求的核心背景与业务诉求（2000字以内）" showCount={!readonly} maxLength={2000} style={{ fontSize: 12 }} readOnly={readonly} />
+              <Form.Item name="summary" label="工单详情" rules={[{ required: !readonly, message: '请填写工单详情' }, { max: 2000, message: '不超过 2000 字' }]} style={{ marginBottom: 18 }}>
+                <Input.TextArea rows={7} placeholder="描述该工单的核心背景与业务诉求（2000字以内）" showCount={!readonly} maxLength={2000} style={{ fontSize: 12 }} readOnly={readonly} />
               </Form.Item>
             </div>
 
-            {/* 需求说明书（附件） */}
-            <div className="form-section-card">
-              <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>需求说明书<span style={{ fontWeight: 400, color: 'var(--radar-text-secondary)', marginLeft: 6, fontSize: 11 }}>（附件或路径，终态至少 1 个）</span></div>
-              <AttachmentField entityType="requirement" entityId={current?.id} fieldKey="需求说明书" readOnly={readonly} />
-            </div>
           </Col>
 
           {/* ── 右栏 ── */}
@@ -490,11 +529,11 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
                   </Form.Item>
                 </Col>
               </Row>
-              <Form.Item name="yn_owner" label="云南农信业务负责人" style={{ marginBottom: 8 }}>
-                <PersonPicker style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择云南农信业务负责人" size="small" />
+              <Form.Item name="yn_owner" label="云南农信工单负责人" style={{ marginBottom: 8 }}>
+                <PersonPicker style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择云南农信工单负责人" size="small" />
               </Form.Item>
-              <Form.Item name="jk_owner" label="建信金科业务负责人" style={{ marginBottom: 0 }}>
-                <PersonPicker style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择建信金科业务负责人" size="small" />
+              <Form.Item name="jk_owner" label="建信金科工单负责人" style={{ marginBottom: 0 }}>
+                <PersonPicker style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择建信金科工单负责人" size="small" />
               </Form.Item>
             </div>
           </Col>
@@ -503,7 +542,7 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
 
       <HistoryDrawer
         open={historyOpen}
-        entityType="requirement"
+        entityType="ticket"
         entityId={current?.id}
         onClose={() => setHistoryOpen(false)}
       />

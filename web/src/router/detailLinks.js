@@ -10,6 +10,7 @@
 // 各模块详情单页的 Hash 路由路径（不含 # 前缀）
 const PATH_BUILDERS = {
   requirement: (code) => `/requirements/${encodeURIComponent(code)}`,
+  ticket: (code) => `/tickets?code=${encodeURIComponent(code)}`,
   dev: (code) => `/dev/${encodeURIComponent(code)}`,
   test: (code) => `/test/detail/${encodeURIComponent(code)}`,
   release_apply: (code) => `/release/apply/${encodeURIComponent(code)}`,

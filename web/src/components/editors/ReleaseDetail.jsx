@@ -1,9 +1,9 @@
 /**
  * 文件：components/editors/ReleaseDetail.jsx
- * 用途：投产审批详情弹窗（可复用：投产审批页与版本概览）。展示实体（需求/问题）基本信息、评审会签、
- *       投产信息、关联制品情况（引用了本需求/问题的投产申请制品）。
+ * 用途：投产审批详情弹窗（可复用：投产审批页与版本概览）。展示实体（需求/工单/问题）基本信息、评审会签、
+ *       投产信息、关联制品情况（引用了本需求/工单/问题的投产申请制品）。
  * 作者：hengguan
- * 说明：审批对象为需求或问题，由后端 entityType 区分；首次打开惰性创建投产任务与会签项。
+ * 说明：审批对象为需求、工单或问题，由后端 entityType 区分；首次打开惰性创建投产任务与会签项。
  *       「各系统投产登记」已改为「关联制品情况」，按卡片只读展示投产申请的制品信息。
  */
 
@@ -17,6 +17,7 @@ import EditorShell from './EditorShell.jsx';
 import RequirementEditor from './RequirementEditor.jsx';
 import TaskEditor from './TaskEditor.jsx';
 import ReleaseApplyEditor from './ReleaseApplyEditor.jsx';
+import TicketEditor from './TicketEditor.jsx';
 import StatusBadge, { getStatusType, statusSelectWidth } from '../StatusBadge.jsx';
 import DictSelect from '../DictSelect.jsx';
 import PersonPicker from '../PersonPicker.jsx';
@@ -359,7 +360,7 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, onC
               <div className="form-section-card">
                 <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>基本信息</div>
 
-                {entityType === 'requirement' ? (
+                {(entityType === 'requirement' || entityType === 'ticket') ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
                       <div style={{ flex: 1, minWidth: 200 }}>
@@ -374,7 +375,7 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, onC
                       {entity.summary || '无概述内容'}
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
-                      <StageChip label="需求">
+                      <StageChip label={entityType === 'ticket' ? '工单' : '需求'}>
                         <span style={stageLinkStyle} onClick={() => setReqOpen(true)}><StatusBadge status={entity.status} /></span>
                       </StageChip>
                       <StageChip label="开发">{stageBadge(ts?.dev, DEV_ORDER, 'dev', '开发')}</StageChip>
@@ -468,7 +469,7 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, onC
               <div className="form-section-card">
                 <div className="form-section-title" style={{ marginTop: 0, marginBottom: 4 }}>关联制品情况</div>
                 <div style={{ fontSize: 11, color: 'var(--radar-text-secondary)', marginBottom: 8 }}>
-                  引用了本{entityType === 'issue' ? '问题' : '需求'}的投产申请制品
+                  引用了本{entityType === 'issue' ? '问题' : (entityType === 'ticket' ? '工单' : '需求')}的投产申请制品
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', maxHeight: 360, overflowY: 'auto', gap: 2 }}>
                   {(!detail.artifacts || detail.artifacts.length === 0) ? (
@@ -578,8 +579,9 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, onC
         </Modal>
       )}
 
-      {/* 联动弹窗：阶段详情（需求 / 开发 / 测试）与投产申请详情 */}
-      <RequirementEditor open={reqOpen} code={entityType === 'requirement' ? entityCode : undefined} onClose={() => setReqOpen(false)} onSaved={reload} />
+      {/* 联动弹窗：阶段详情（需求/工单 / 开发 / 测试）与投产申请详情 */}
+      <RequirementEditor open={reqOpen && entityType === 'requirement'} code={entityType === 'requirement' ? entityCode : undefined} onClose={() => setReqOpen(false)} onSaved={reload} />
+      <TicketEditor open={reqOpen && entityType === 'ticket'} code={entityType === 'ticket' ? entityCode : undefined} onClose={() => setReqOpen(false)} onSaved={reload} />
       <TaskEditor open={!!devTaskId} kind="dev" taskId={devTaskId} onClose={() => setDevTaskId(null)} onSaved={reload} />
       <TaskEditor open={!!testTaskId} kind="test" taskId={testTaskId} onClose={() => setTestTaskId(null)} onSaved={reload} />
       <ReleaseApplyEditor open={!!applyCode} code={applyCode} onClose={() => setApplyCode(null)} onSaved={reload} />

@@ -1,6 +1,6 @@
 /**
- * 文件：pages/Requirements.jsx
- * 用途：需求分析页面。需求列表（默认按当前投产窗口过滤）+ 新增/编辑（复用 RequirementEditor）
+ * 文件：pages/Tickets.jsx
+ * 用途：工单分析页面。需求列表（默认按当前投产窗口过滤）+ 新增/编辑（复用 TicketEditor）
  *       + 历史记录 + 导入导出/模板。
  * 作者：hengguan
  * 说明：需求列表管理页面，支持新建、批量导入、状态筛选、模糊搜索和投产点关联，提供入口至需求编辑器。
@@ -14,7 +14,7 @@ import {
 import DataTable from '../components/DataTable.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
 import HistoryDrawer from '../components/HistoryDrawer.jsx';
-import RequirementEditor from '../components/editors/RequirementEditor.jsx';
+import TicketEditor from '../components/editors/TicketEditor.jsx';
 import FilterPanel from '../components/FilterPanel.jsx';
 import Can from '../components/Can.jsx';
 import { apiPost, apiDelete, apiGet } from '../api/client.js';
@@ -22,7 +22,7 @@ import { exportXlsx, downloadGet } from '../utils/io.js';
 import { useAppStore } from '../stores/app.js';
 import ImportModal from '../components/ImportModal.jsx';
 
-export default function Requirements() {
+export default function Tickets() {
   const tableRef = useRef();
   const releasePointIds = useAppStore((s) => s.releasePointIds);
   const [editOpen, setEditOpen] = useState(false);
@@ -46,10 +46,10 @@ export default function Requirements() {
     apiGet('/dict/by-category/org').then(setOrgs).catch(() => {});
     apiGet('/dict/by-category/req_dept').then(setReqDepts).catch(() => {});
     apiGet('/dict/by-category/process_status').then(res => {
-      const filtered = (res || []).filter(item => item.extra?.stage === '需求');
+      const filtered = (res || []).filter(item => item.extra?.stage === '工单');
       setStatuses(filtered);
     }).catch(() => {});
-    apiGet('/dict/by-category/req_type').then(setTypes).catch(() => {});
+    apiGet('/dict/by-category/ticket_type').then(setTypes).catch(() => {});
     apiGet('/users/active').then(setUsers).catch(() => {});
     apiGet('/systems/all').then(setSystems).catch(() => {});
   }, []);
@@ -64,12 +64,12 @@ export default function Requirements() {
 
   const filterConfigs = [
     { field: 'org', label: '实施机构', type: 'select', op: 'in', options: orgOptions, isPrimary: true },
-    { field: 'req_code', label: '需求编号', type: 'input', isPrimary: true, op: 'like', placeholder: '需求编号检索' },
-    { field: 'content', label: '需求内容', type: 'input', isPrimary: true, op: 'like', placeholder: '需求标题或概述检索' },
+    { field: 'ticket_code', label: '工单编号', type: 'input', isPrimary: true, op: 'like', placeholder: '工单编号检索' },
+    { field: 'content', label: '工单内容', type: 'input', isPrimary: true, op: 'like', placeholder: '工单概述或详情检索' },
     { field: 'issue_no', label: '关联问题/工单', type: 'input', op: 'like', placeholder: '问题/工单编号检索' },
     { field: 'release_point_id', label: '计划投产点', type: 'select', op: 'in', options: pointOptions },
-    { field: 'status', label: '需求状态', type: 'select', op: 'in', options: statusOptions },
-    { field: 'req_type', label: '需求类型', type: 'select', op: 'in', options: typeOptions },
+    { field: 'status', label: '工单状态', type: 'select', op: 'in', options: statusOptions },
+    { field: 'ticket_type', label: '工单类型', type: 'select', op: 'in', options: typeOptions },
     { field: 'is_accounting', label: '是否涉账', type: 'select', op: 'in', options: [{ value: '否', label: '否' }, { value: '是', label: '是' }] },
     { field: 'propose_dept', label: '提出部门', type: 'select', op: 'in', options: reqDeptOptions },
     { field: 'proposer', label: '提出人', type: 'select', op: 'in', options: userOptions },
@@ -88,11 +88,11 @@ export default function Requirements() {
     setFilterQuery(arr);
   };
 
-  const fetcher = (q) => apiPost('/requirements/list', q);
+  const fetcher = (q) => apiPost('/tickets/list', q);
 
   const openEdit = (row) => { setEditId(row?.id || null); setEditOpen(true); };
   const openCreate = () => { setEditId(null); setEditOpen(true); };
-  const onDelete = async (row) => { await apiDelete(`/requirements/${row.id}`); message.success('已删除'); tableRef.current?.reload(); };
+  const onDelete = async (row) => { await apiDelete(`/tickets/${row.id}`); message.success('已删除'); tableRef.current?.reload(); };
 
 
 
@@ -109,9 +109,9 @@ export default function Requirements() {
       ),
     },
     {
-      title: '需求编号',
-      dataIndex: 'req_code',
-      key: 'req_code',
+      title: '工单编号',
+      dataIndex: 'ticket_code',
+      key: 'ticket_code',
       sorter: true,
       render: (val) => (
         <span style={{ fontFamily: 'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace', fontWeight: 500 }}>
@@ -120,7 +120,7 @@ export default function Requirements() {
       ),
     },
     {
-      title: '需求标题',
+      title: '工单概述',
       dataIndex: 'title',
       key: 'title',
       width: 280,
@@ -141,7 +141,7 @@ export default function Requirements() {
         </div>
       ),
     },
-    { title: '需求类型', dataIndex: 'req_type', key: 'req_type' },
+    { title: '工单类型', dataIndex: 'ticket_type', key: 'ticket_type' },
     { title: '是否涉账', dataIndex: 'is_accounting', key: 'is_accounting', width: 90, render: (v) => v || '否' },
     {
       title: '提出人',
@@ -188,14 +188,14 @@ export default function Requirements() {
       title: '操作', key: 'op', width: 80, fixed: 'right',
       render: (_, row) => (
         <Space size={0} onClick={(e) => e.stopPropagation()}>
-          <Can module="requirement" action="edit"><Button type="link" size="small" icon={<EditOutlined />} onClick={() => openEdit(row)} /></Can>
-          <Can module="requirement" action="delete">
+          <Can module="ticket" action="edit"><Button type="link" size="small" icon={<EditOutlined />} onClick={() => openEdit(row)} /></Can>
+          <Can module="ticket" action="delete">
             {row.has_tasks ? (
-              <Tooltip title="该需求已关联开发/测试任务，无法删除">
+              <Tooltip title="该工单已关联开发/测试任务，无法删除">
                 <Button type="link" size="small" danger disabled icon={<DeleteOutlined />} />
               </Tooltip>
             ) : (
-              <Popconfirm title="确认删除该需求？" onConfirm={() => onDelete(row)}><Button type="link" size="small" danger icon={<DeleteOutlined />} /></Popconfirm>
+              <Popconfirm title="确认删除该工单？" onConfirm={() => onDelete(row)}><Button type="link" size="small" danger icon={<DeleteOutlined />} /></Popconfirm>
             )}
           </Can>
         </Space>
@@ -207,10 +207,10 @@ export default function Requirements() {
     <Card 
       title={
         <Space size={12}>
-          <span>需求分析</span>
-          <Can module="requirement" action="create">
+          <span>工单分析</span>
+          <Can module="ticket" action="create">
             <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-              新增需求
+              添加工单
             </Button>
           </Can>
         </Space>
@@ -221,11 +221,11 @@ export default function Requirements() {
         configs={filterConfigs}
         onChange={handleFilterChange}
         actions={[
-          <Can key="imp" module="requirement" action="import">
+          <Can key="imp" module="ticket" action="import">
             <Button icon={<ImportOutlined />} onClick={() => setImportOpen(true)} style={{ width: 88 }}>导入</Button>
           </Can>,
-          <Can key="exp" module="requirement" action="export">
-            <Button icon={<ExportOutlined />} onClick={() => exportXlsx('/requirements/export', { releasePointIds, filters: filterQuery }, '需求清单.xlsx')} style={{ width: 88 }}>导出</Button>
+          <Can key="exp" module="ticket" action="export">
+            <Button icon={<ExportOutlined />} onClick={() => exportXlsx('/tickets/export', { releasePointIds, filters: filterQuery }, '工单清单.xlsx')} style={{ width: 88 }}>导出</Button>
           </Can>,
         ]}
       />
@@ -236,7 +236,7 @@ export default function Requirements() {
         onRowClick={openEdit}
         mobileCard={(item) => (
           <Space direction="vertical" size={4} style={{ width: '100%' }}>
-            <Space style={{ justifyContent: 'space-between', width: '100%' }}><strong>{item.req_code}</strong><StatusBadge status={item.status} /></Space>
+            <Space style={{ justifyContent: 'space-between', width: '100%' }}><strong>{item.ticket_code}</strong><StatusBadge status={item.status} /></Space>
             <div>{item.title}</div>
             {item.release_date && (
               <div style={{ fontSize: '11px', color: 'var(--radar-text-secondary)' }}>
@@ -259,16 +259,16 @@ export default function Requirements() {
         open={importOpen}
         onCancel={() => setImportOpen(false)}
         onSuccess={() => tableRef.current?.reload()}
-        importUrl="/requirements/import"
-        templateUrl="/requirements/template"
-        templateFilename="需求导入模板.xlsx"
+        importUrl="/tickets/import"
+        templateUrl="/tickets/template"
+        templateFilename="工单导入模板.xlsx"
       />
 
-      <RequirementEditor
+      <TicketEditor
         open={editOpen} reqId={editId} defaultReleasePointId={releasePointIds.length === 1 ? releasePointIds[0] : undefined}
         onClose={() => setEditOpen(false)} onSaved={() => tableRef.current?.reload()}
       />
-      <HistoryDrawer open={!!historyId} entityType="requirement" entityId={historyId} onClose={() => setHistoryId(null)} />
+      <HistoryDrawer open={!!historyId} entityType="ticket" entityId={historyId} onClose={() => setHistoryId(null)} />
     </Card>
   );
 }

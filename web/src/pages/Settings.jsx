@@ -3,7 +3,7 @@
  * 用途：系统设置页面。聚合基础配置、参数配置、投产点设置、机构系统配置、人员配置；
  *       所有配置项支持新增/编辑/删除 + 导入/导出/模板下载。
  * 作者：hengguan
- * 说明：字典/系统/投产点/角色复用 CrudManager；投产点日期用 DatePicker(存 YYYYMMDD)；
+ * 说明：字典/系统/投产点/角色复用 CrudManager；投产点新增使用 DatePicker(存 YYYYMMDD)；
  *       角色配置含"会签角色"打标；流程状态含阶段/终态（extra JSON）。
  */
 
@@ -22,6 +22,8 @@ import { MENU } from '../router/menu.js';
 import { PRESETS } from '../theme/presets.js';
 import { apiPost, apiGet } from '../api/client.js';
 
+const PENDING_RELEASE_DATE = '投产点待定';
+const RELEASE_DATE_RE = /^\d{8}$/;
 dayjs.extend(customParseFormat);
 
 /** 安全解析 extra（可能是字符串或对象） */
@@ -148,7 +150,7 @@ function ProcessStatusManager() {
   );
 }
 
-/** 投产点管理器（日期选择，存 YYYYMMDD；含设为/取消默认） */
+/** 投产点管理器（新增时日期选择，另有系统内置“投产点待定”；含设为/取消默认） */
 function ReleasePointManager() {
   const [points, setPoints] = useState([]);
   useEffect(() => {
@@ -173,13 +175,29 @@ function ReleasePointManager() {
         { title: '默认', dataIndex: 'is_default', width: 90, render: (v) => (v ? <Tag color="green">默认</Tag> : '—') },
         { title: '备注', dataIndex: 'remark' },
       ]}
-      transformIn={(row) => ({ ...row, release_date: row.release_date ? dayjs(row.release_date, 'YYYYMMDD') : null })}
-      transformOut={(v) => ({ ...v, release_date: v.release_date ? v.release_date.format('YYYYMMDD') : '' })}
-      fields={() => (
+      transformIn={(row) => ({
+        ...row,
+        release_date: RELEASE_DATE_RE.test(String(row.release_date || ''))
+          ? dayjs(row.release_date, 'YYYYMMDD')
+          : row.release_date,
+      })}
+      transformOut={(v, current) => ({
+        ...v,
+        release_date: current?.release_date === PENDING_RELEASE_DATE
+          ? PENDING_RELEASE_DATE
+          : (v.release_date ? v.release_date.format('YYYYMMDD') : ''),
+      })}
+      fields={(form, current) => (
         <>
-          <Form.Item name="release_date" label="投产日期" rules={[{ required: true, message: '请选择投产日期' }]} extra="存储格式 YYYYMMDD">
-            <DatePicker style={{ width: '100%' }} format="YYYYMMDD" placeholder="选择投产日期" />
-          </Form.Item>
+          {current?.release_date === PENDING_RELEASE_DATE ? (
+            <Form.Item name="release_date" label="投产日期" extra="系统内置投产点">
+              <Input disabled />
+            </Form.Item>
+          ) : (
+            <Form.Item name="release_date" label="投产日期" rules={[{ required: true, message: '请选择投产日期' }]} extra="存储格式 YYYYMMDD">
+              <DatePicker style={{ width: '100%' }} format="YYYYMMDD" placeholder="选择投产日期" />
+            </Form.Item>
+          )}
           <Form.Item name="version_type" label="投产版本类型">
             <DictSelect category="version_type" style={{ width: '100%' }} />
           </Form.Item>
@@ -229,6 +247,8 @@ function SystemManager() {
         { title: '系统名称', dataIndex: 'sys_name', width: 220 },
         { title: '所属机构', dataIndex: 'org', width: 140 },
         { title: '所属板块', dataIndex: 'sector', width: 120 },
+        { title: '变更负责部门（输出口径）', dataIndex: 'out_dept', width: 180, ellipsis: true },
+        { title: '变更负责部门（部署口径）', dataIndex: 'deploy_dept', width: 180, ellipsis: true },
         { title: '排序', dataIndex: 'sort', width: 80, sorter: true },
       ]}
       fields={() => (
@@ -237,6 +257,8 @@ function SystemManager() {
           <Form.Item name="sys_name" label="系统名称" rules={[{ required: true }]}><Input /></Form.Item>
           <Form.Item name="org" label="所属机构"><DictSelect category="org" style={{ width: '100%' }} /></Form.Item>
           <Form.Item name="sector" label="所属板块"><DictSelect category="sector" style={{ width: '100%' }} /></Form.Item>
+          <Form.Item name="out_dept" label="变更负责部门（输出口径）"><DictSelect category="org" style={{ width: '100%' }} /></Form.Item>
+          <Form.Item name="deploy_dept" label="变更负责部门（部署口径）"><DictSelect category="org" style={{ width: '100%' }} /></Form.Item>
           <Form.Item name="sort" label="排序" initialValue={0}><InputNumber min={0} style={{ width: '100%' }} /></Form.Item>
         </>
       )}
@@ -373,6 +395,7 @@ export default function Settings() {
       { key: 'release', label: '投产状态', children: <DictManager category="release_status" title="投产状态" /> },
       { key: 'review', label: '评审状态', children: <DictManager category="review_status" title="评审状态" /> },
       { key: 'reqtype', label: '需求类型', children: <DictManager category="req_type" title="需求类型" /> },
+      { key: 'tickettype', label: '工单类型', children: <DictManager category="ticket_type" title="工单类型" /> },
       { key: 'reqdept', label: '需求部门', children: <DictManager category="req_dept" title="需求部门" /> },
       { key: 'artifact', label: '制品类型', children: <DictManager category="artifact_type" title="制品类型" /> },
       { key: 'ferry', label: '摆渡状态', children: <DictManager category="ferry_status" title="摆渡状态" /> },

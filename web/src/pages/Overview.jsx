@@ -15,6 +15,7 @@ import { useResponsive } from '../hooks/useResponsive.js';
 import ChainBar from '../components/ChainBar.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
 import RequirementEditor from '../components/editors/RequirementEditor.jsx';
+import TicketEditor from '../components/editors/TicketEditor.jsx';
 import TaskEditor from '../components/editors/TaskEditor.jsx';
 import ReleaseDetail from '../components/editors/ReleaseDetail.jsx';
 import ReleaseApplyEditor from '../components/editors/ReleaseApplyEditor.jsx';
@@ -27,6 +28,7 @@ import { exportXlsx } from '../utils/io.js';
 import Can from '../components/Can.jsx';
 
 const TEST_ATTACH = ['测试方案', '测试报告'];
+const SIT_ATTACH = ['测试方案', '测试覆盖设计文档', '测试报告'];
 const DEV_ATTACH = ['概要设计', '详细设计', '代码走查', '单元测试报告'];
 const AV_COLORS = ['#2E6BFF', '#22C55E', '#F59E0B', '#8B5CF6', '#06B6D4', '#EC4899', '#F1683C'];
 
@@ -172,13 +174,16 @@ function DetailCard({ status, code, title, onEdit, lg, children }) {
   );
 }
 
-/** 需求详情卡片（完整字段） */
-function ReqDetailCard({ req, onEdit }) {
+/** 需求/工单详情卡片（完整字段） */
+function ReqDetailCard({ req, entityType = 'requirement', onEdit }) {
+  const isTicket = entityType === 'ticket';
   return (
     <DetailCard status={req.status} code={req.req_code} title={req.title} onEdit={onEdit} lg>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6, fontSize: 11 }}>
         <Tag className="tag-type" style={{ borderRadius: 2, margin: 0, fontSize: 10 }}>{req.req_type || '—'}</Tag>
+        <Tag className="tag-org" style={{ borderRadius: 2, margin: 0, fontSize: 10 }}>涉账：{req.is_accounting || '否'}</Tag>
         <span style={{ color: 'var(--radar-text-secondary)' }}>{req.propose_time || '—'}</span>
+        <span style={{ color: 'var(--radar-text-secondary)' }}>计划投产点：{req.release_date || '—'}</span>
       </div>
       <div className="lc-text" style={{ marginBottom: 8, color: 'var(--radar-ink)' }}>
         {req.summary || '—'}
@@ -202,11 +207,11 @@ function ReqDetailCard({ req, onEdit }) {
           )}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-          <span style={{ fontSize: 11, color: 'var(--radar-text-secondary)' }}>云南农信负责人</span>
+          <span style={{ fontSize: 11, color: 'var(--radar-text-secondary)' }}>{isTicket ? '云南农信工单负责人' : '云南农信负责人'}</span>
           <PersonCard p={req.ynOwnerInfo} />
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-          <span style={{ fontSize: 11, color: 'var(--radar-text-secondary)' }}>建信金科负责人</span>
+          <span style={{ fontSize: 11, color: 'var(--radar-text-secondary)' }}>{isTicket ? '建信金科工单负责人' : '建信金科负责人'}</span>
           <PersonCard p={req.jkOwnerInfo} />
         </div>
       </div>
@@ -231,7 +236,7 @@ function ReqDetailCard({ req, onEdit }) {
         </div>
       </Field>
 
-      <AttachList attachments={req.attachments} fields={['需求说明书']} />
+      {!isTicket && <AttachList attachments={req.attachments} fields={['需求说明书']} />}
     </DetailCard>
   );
 }
@@ -934,6 +939,7 @@ function RequirementHistoryModal({ open, onClose, reqCode }) {
 
   const ENTITY_TYPE_LABEL = {
     requirement: '需求',
+    ticket: '工单',
     dev: '开发',
     test: '测试',
     release: '投产',
@@ -1024,6 +1030,7 @@ function TaskGrid({ items, attachFields, onEdit, emptyText, onIntake, hasIntakeP
 export default function Overview() {
   const releasePointIds = useAppStore((s) => s.releasePointIds);
   const [groups, setGroups] = useState([]);
+  const [collapsedGroups, setCollapsedGroups] = useState({});
   const [loading, setLoading] = useState(false);
   const [detail, setDetail] = useState(null);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -1035,7 +1042,7 @@ export default function Overview() {
   const [testIntakeReq, setTestIntakeReq] = useState(null); // { req, testType }
   const [showHistory, setShowHistory] = useState(false);
 
-  // 阶段编辑器：{type:'requirement'|'dev'|'test'|'release', id, reqCode}
+  // 阶段编辑器：{type:'requirement'|'ticket'|'dev'|'test'|'release', id, reqCode}
   const [editor, setEditor] = useState(null);
   // 投产申请·新增（未发起投产的需求点击投产卡片时弹出，并默认选中该需求）
   const [applyEditor, setApplyEditor] = useState(null);
@@ -1056,7 +1063,7 @@ export default function Overview() {
     apiGet('/systems/all').then(setSystems).catch(() => {});
     apiGet('/dict/by-category/process_status').then(res => {
       const opts = [];
-      const stages = ['需求', '开发', '应用组装', '非功能测试', '安全测试', '用户测试', '投产'];
+      const stages = ['需求', '工单', '开发', '应用组装', '非功能测试', '安全测试', '用户测试', '投产'];
       stages.forEach(stg => {
         opts.push({ value: `${stg}-未开始`, label: `${stg} - 未开始` });
       });
@@ -1064,7 +1071,7 @@ export default function Overview() {
       (res || []).forEach(item => {
         const stg = item.extra?.stage;
         const statusVal = item.attr_value;
-        if (stg === '需求' || stg === '开发' || stg === '投产') {
+        if (stg === '需求' || stg === '工单' || stg === '开发' || stg === '投产') {
           opts.push({ value: `${stg}-${statusVal}`, label: `${stg} - ${statusVal}` });
         } else if (stg === '测试') {
           opts.push({ value: `应用组装-${statusVal}`, label: `应用组装 - ${statusVal}` });
@@ -1082,6 +1089,7 @@ export default function Overview() {
   const systemOptions = systems.map(s => ({ value: s.sys_code, label: `${s.sys_code} - ${s.sys_name}` }));
   const stageOptions = [
     { value: '需求', label: '需求' },
+    { value: '工单', label: '工单' },
     { value: '开发', label: '开发' },
     { value: '应用组装', label: '应用组装' },
     { value: '非功能测试', label: '非功能测试' },
@@ -1091,8 +1099,8 @@ export default function Overview() {
   ];
 
   const filterConfigs = [
-    { field: 'req_code', label: '需求/问题编号', type: 'input', isPrimary: true, op: 'like', placeholder: '需求/问题编号检索' },
-    { field: 'content', label: '需求内容', type: 'input', isPrimary: true, op: 'like', placeholder: '需求标题或概述检索' },
+    { field: 'req_code', label: '需求/工单/问题编号', type: 'input', isPrimary: true, op: 'like', placeholder: '需求/工单/问题编号检索' },
+    { field: 'content', label: '需求/工单内容', type: 'input', isPrimary: true, op: 'like', placeholder: '需求标题、工单概述或问题概述检索' },
     { field: 'org', label: '实施机构', type: 'select', isPrimary: true, op: 'in', options: orgOptions },
     { field: 'release_point_id', label: '计划投产点', type: 'select', op: 'in', options: pointOptions },
     { field: 'stage', label: '任务阶段', type: 'select', op: 'in', options: stageOptions },
@@ -1126,7 +1134,11 @@ export default function Overview() {
   };
   useEffect(load, [JSON.stringify(releasePointIds), JSON.stringify(filterQuery)]);
 
-  // 加载概览详情：需求走 5 列详情；问题走两列详情（问题 + 投产）
+  const toggleGroup = (org) => {
+    setCollapsedGroups((prev) => ({ ...prev, [org]: !prev[org] }));
+  };
+
+  // 加载概览详情：需求/工单走 5 列详情；问题走两列详情（问题 + 投产）
   const loadDetail = async (card) => {
     setDetailLoading(true);
     try {
@@ -1135,7 +1147,7 @@ export default function Overview() {
         setDetail({ entityType: 'issue', ...d });
       } else {
         const d = await apiGet(`/overview/${card.code}/detail`);
-        setDetail({ entityType: 'requirement', ...d });
+        setDetail({ entityType: d.entityType || card.entityType || 'requirement', ...d });
       }
     } finally { setDetailLoading(false); }
   };
@@ -1146,14 +1158,16 @@ export default function Overview() {
   // 编辑保存后：刷新详情 + 概览
   const onEditorSaved = () => { if (detailCard) loadDetail(detailCard); load(); };
 
-  // 投产卡片点击：已发起投产 -> 查看投产审批详情；未发起 -> 弹出投产申请新增并默认选中该实体
+  // 投产卡片点击：已发起投产 -> 查看投产审批详情；未发起 -> 需求/工单可发起投产申请
   const openReleaseCard = () => {
     if (!detail) return;
     const code = detail.entityType === 'issue' ? detail.issue.issue_code : detail.requirement.req_code;
     if (detail.release) {
       setEditor({ type: 'release', reqCode: code });
     } else if (detail.entityType === 'issue') {
-      setApplyEditor({ reqCode: code, releasePointId: detail.issue.release_point_id, entityType: 'issue' });
+      message.warning('问题不再支持发起投产申请');
+    } else if (detail.entityType === 'ticket') {
+      setApplyEditor({ reqCode: code, releasePointId: detail.requirement.release_point_id, entityType: 'ticket' });
     } else {
       setApplyEditor({ reqCode: code, releasePointId: detail.requirement.release_point_id, entityType: 'requirement' });
     }
@@ -1180,54 +1194,69 @@ export default function Overview() {
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
           <Spin size="large" />
         </div>
-      ) : groups.length === 0 ? <Empty description="当前投产窗口暂无需求" style={{ marginTop: 24 }} /> : groups.map((g) => (
-        <Card
-          key={g.org} variant="borderless" style={{ marginBottom: 20 }} styles={{ body: { padding: 16 } }}
-          title={(
-            <Space>
-              <span style={{ fontWeight: 700 }}>{g.org}</span>
-              {(() => {
-                const reqN = g.cards.filter((c) => c.entityType !== 'issue').length;
-                const issueN = g.cards.filter((c) => c.entityType === 'issue').length;
-                return (
-                  <>
-                    {reqN > 0 && <Tag className="tag-type" style={{ borderRadius: 2 }}>{reqN} 项需求</Tag>}
-                    {issueN > 0 && <Tag className="tag-org" style={{ borderRadius: 2 }}>{issueN} 项问题</Tag>}
-                  </>
-                );
-              })()}
-            </Space>
-          )}
-        >
-          <Row gutter={[16, 16]}>
-            {g.cards.map((c) => (
-              <Col key={`${c.entityType}:${c.code}`} xs={24} xl={12}>
-                <div className="ov-req-card clickable" onClick={() => openDetail(c)}>
-                  {/* 顶部：左=编号，右=当前状态标签 */}
-                  <div className="ov-req-head">
-                    <span className="code-pill">{c.code}</span>
-                    <StatusBadge status={c.currentStage} />
-                  </div>
+      ) : groups.length === 0 ? <Empty description="当前投产窗口暂无需求/工单" style={{ marginTop: 24 }} /> : groups.map((g) => {
+        const collapsed = !!collapsedGroups[g.org];
+        const reqN = g.cards.filter((c) => c.entityType === 'requirement').length;
+        const ticketN = g.cards.filter((c) => c.entityType === 'ticket').length;
+        const issueN = g.cards.filter((c) => c.entityType === 'issue').length;
+        return (
+          <Card
+            key={g.org}
+            variant="borderless"
+            style={{ marginBottom: collapsed ? 10 : 20 }}
+            styles={{ body: collapsed ? { padding: 0, display: 'none' } : { padding: 16 } }}
+            title={(
+              <Space>
+                <span style={{ fontWeight: 700 }}>{g.org}</span>
+                {reqN > 0 && <Tag className="tag-type" style={{ borderRadius: 2 }}>{reqN} 项需求</Tag>}
+                {ticketN > 0 && <Tag className="tag-type" style={{ borderRadius: 2 }}>{ticketN} 项工单</Tag>}
+                {issueN > 0 && <Tag className="tag-org" style={{ borderRadius: 2 }}>{issueN} 项问题</Tag>}
+              </Space>
+            )}
+            extra={(
+              <Tooltip title={collapsed ? '展开分组' : '折叠分组'}>
+                <Button
+                  type="text"
+                  size="small"
+                  icon={collapsed ? <DownOutlined /> : <UpOutlined />}
+                  onClick={() => toggleGroup(g.org)}
+                  aria-label={collapsed ? '展开分组' : '折叠分组'}
+                />
+              </Tooltip>
+            )}
+          >
+            {!collapsed && (
+              <Row gutter={[16, 16]}>
+                {g.cards.map((c) => (
+                  <Col key={`${c.entityType}:${c.code}`} xs={24} xl={12}>
+                    <div className="ov-req-card clickable" onClick={() => openDetail(c)}>
+                      {/* 顶部：左=编号，右=当前状态标签 */}
+                      <div className="ov-req-head">
+                        <span className="code-pill">{c.code}</span>
+                        <StatusBadge status={c.currentStage} />
+                      </div>
 
-                  {/* 需求标题（编号下方，纯文本不加框） */}
-                  <div style={{ fontWeight: 600, fontSize: 15, margin: '8px 0 6px' }}>{c.title}</div>
+                      {/* 标题/概述（编号下方，纯文本不加框） */}
+                      <div style={{ fontWeight: 600, fontSize: 15, margin: '8px 0 6px' }}>{c.title}</div>
 
-                  {/* 系统名称 + 所属机构（标签） */}
-                  <Space size={6} wrap style={{ marginBottom: 12 }}>
-                    <Tag className="status-tag tag-system" style={{ borderRadius: 2, margin: 0 }}>{c.systemName}</Tag>
-                    <Tag className="status-tag tag-org" style={{ borderRadius: 2, margin: 0 }}>{c.systemOrg}</Tag>
-                  </Space>
+                      {/* 系统名称 + 所属机构（标签） */}
+                      <Space size={6} wrap style={{ marginBottom: 12 }}>
+                        <Tag className="status-tag tag-system" style={{ borderRadius: 2, margin: 0 }}>{c.systemName}</Tag>
+                        <Tag className="status-tag tag-org" style={{ borderRadius: 2, margin: 0 }}>{c.systemOrg}</Tag>
+                      </Space>
 
-                  {/* 进度条 + 各阶段状态标签 */}
-                  <div style={{ overflowX: 'auto', paddingBottom: 2 }}>
-                    <ChainBar nodes={c.nodes} />
-                  </div>
-                </div>
-              </Col>
-            ))}
-          </Row>
-        </Card>
-      ))}
+                      {/* 进度条 + 各阶段状态标签 */}
+                      <div style={{ overflowX: 'auto', paddingBottom: 2 }}>
+                        <ChainBar nodes={c.nodes} />
+                      </div>
+                    </div>
+                  </Col>
+                ))}
+              </Row>
+            )}
+          </Card>
+        );
+      })}
 
       {/* 全生命周期详情（宽屏5列看板式，窄屏自动切换为页签式以避免横向滚动） */}
       <Modal open={detailOpen} width={isTabMode ? "86%" : "96%"} footer={null} onCancel={() => setDetailOpen(false)} style={{ top: 20, maxWidth: isTabMode ? '1000px' : '1700px' }}
@@ -1279,9 +1308,9 @@ export default function Overview() {
           isTabMode ? (
             <Tabs
               items={[
-                { key: 'req', label: '需求', children: <ReqDetailCard req={detail.requirement} onEdit={() => setEditor({ type: 'requirement', id: detail.requirement.id })} /> },
+                { key: 'req', label: detail.entityType === 'ticket' ? '工单' : '需求', children: <ReqDetailCard req={detail.requirement} entityType={detail.entityType} onEdit={() => setEditor({ type: detail.entityType === 'ticket' ? 'ticket' : 'requirement', id: detail.requirement.id })} /> },
                 { key: 'dev', label: '开发', children: <TaskGrid items={detail.dev} attachFields={DEV_ATTACH} onEdit={(t) => setEditor({ type: 'dev', id: t.id })} emptyText="点击承接开发" onIntake={() => setDevIntakeReq(detail.requirement)} hasIntakePermission={can('dev', 'dev.intake')} /> },
-                { key: 'sit', label: '应用组装测试', children: <TaskGrid items={detail.sit} attachFields={TEST_ATTACH} onEdit={(t) => setEditor({ type: 'test', id: t.id })} emptyText="点击承接测试" onIntake={() => setTestIntakeReq({ req: detail.requirement, testType: 'SIT' })} hasIntakePermission={can('test', 'test.intake')} /> },
+                { key: 'sit', label: '应用组装测试', children: <TaskGrid items={detail.sit} attachFields={SIT_ATTACH} onEdit={(t) => setEditor({ type: 'test', id: t.id })} emptyText="点击承接测试" onIntake={() => setTestIntakeReq({ req: detail.requirement, testType: 'SIT' })} hasIntakePermission={can('test', 'test.intake')} /> },
                 ...(detail.nft.length ? [{ key: 'nft', label: '非功能测试', children: <TaskGrid items={detail.nft} attachFields={TEST_ATTACH} onEdit={(t) => setEditor({ type: 'test', id: t.id })} /> }] : []),
                 ...(detail.sec.length ? [{ key: 'sec', label: '安全测试', children: <TaskGrid items={detail.sec} attachFields={TEST_ATTACH} onEdit={(t) => setEditor({ type: 'test', id: t.id })} /> }] : []),
                 { key: 'uat', label: '用户测试', children: <TaskGrid items={detail.uat} attachFields={TEST_ATTACH} onEdit={(t) => setEditor({ type: 'test', id: t.id })} emptyText="点击承接测试" onIntake={() => setTestIntakeReq({ req: detail.requirement, testType: 'UAT' })} hasIntakePermission={can('test', 'test.intake')} /> },
@@ -1290,12 +1319,12 @@ export default function Overview() {
             />
           ) : (
             <div className="lc-columns-container">
-              {/* 第一列：需求 */}
+              {/* 第一列：需求/工单 */}
               <div className="lc-column">
                 <div className="lc-column-header">
-                  <span>需求</span>
+                  <span>{detail.entityType === 'ticket' ? '工单' : '需求'}</span>
                 </div>
-                <ReqDetailCard req={detail.requirement} onEdit={() => setEditor({ type: 'requirement', id: detail.requirement.id })} />
+                <ReqDetailCard req={detail.requirement} entityType={detail.entityType} onEdit={() => setEditor({ type: detail.entityType === 'ticket' ? 'ticket' : 'requirement', id: detail.requirement.id })} />
               </div>
 
               {/* 第二列：开发 */}
@@ -1312,7 +1341,7 @@ export default function Overview() {
                 <div className="lc-column-header">
                   <span>应用组装测试</span>
                 </div>
-                <TaskGrid items={detail.sit} attachFields={TEST_ATTACH} onEdit={(t) => setEditor({ type: 'test', id: t.id })} emptyText="点击承接测试" onIntake={() => setTestIntakeReq({ req: detail.requirement, testType: 'SIT' })} hasIntakePermission={can('test', 'test.intake')} />
+                <TaskGrid items={detail.sit} attachFields={SIT_ATTACH} onEdit={(t) => setEditor({ type: 'test', id: t.id })} emptyText="点击承接测试" onIntake={() => setTestIntakeReq({ req: detail.requirement, testType: 'SIT' })} hasIntakePermission={can('test', 'test.intake')} />
 
                 {detail.nft.length > 0 && (
                   <>
@@ -1358,6 +1387,9 @@ export default function Overview() {
       <RequirementEditor open={editor?.type === 'requirement'} reqId={editor?.id}
         defaultReleasePointId={releasePointIds.length === 1 ? releasePointIds[0] : undefined}
         onClose={() => setEditor(null)} onSaved={onEditorSaved} />
+      <TicketEditor open={editor?.type === 'ticket'} reqId={editor?.id}
+        defaultReleasePointId={releasePointIds.length === 1 ? releasePointIds[0] : undefined}
+        onClose={() => setEditor(null)} onSaved={onEditorSaved} />
       <TaskEditor open={editor?.type === 'dev' || editor?.type === 'test'} kind={editor?.type === 'test' ? 'test' : 'dev'}
         taskId={(editor?.type === 'dev' || editor?.type === 'test') ? editor?.id : null}
         onClose={() => setEditor(null)} onSaved={onEditorSaved} />
@@ -1365,12 +1397,12 @@ export default function Overview() {
         onClose={() => setEditor(null)} onChanged={onEditorSaved} />
       {/* 问题只读详情（概览「问题列」点击打开） */}
       <IssueDetail open={!!issueDetailId} issueId={issueDetailId} onClose={() => setIssueDetailId(null)} />
-      {/* 未发起投产的需求：弹出投产申请新增并默认选中该需求 */}
+      {/* 未发起投产的需求/工单：弹出投产申请新增并默认选中该实体 */}
       <ReleaseApplyEditor
         open={!!applyEditor}
         defaultReqCodes={applyEditor?.entityType === 'requirement' ? [applyEditor.reqCode] : undefined}
-        defaultIssueCodes={applyEditor?.entityType === 'issue' ? [applyEditor.reqCode] : undefined}
-        defaultType={applyEditor?.entityType === 'issue' ? 'issue' : 'req'}
+        defaultTicketCodes={applyEditor?.entityType === 'ticket' ? [applyEditor.reqCode] : undefined}
+        defaultType={applyEditor?.entityType === 'ticket' ? 'ticket' : 'req'}
         defaultReleasePointId={applyEditor?.releasePointId}
         onClose={() => setApplyEditor(null)}
         onSaved={() => { setApplyEditor(null); onEditorSaved(); }}

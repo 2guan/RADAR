@@ -13,6 +13,7 @@ import { windowIds, inClause } from '../../lib/window.js';
 import { ok, notFound } from '../../lib/http.js';
 import { exportXlsx } from '../../lib/excel.js';
 import { formatAttachments } from '../../lib/resolver.js';
+import { getWorkItem } from '../../lib/work-items.js';
 
 /** 计算一组任务的节点状态（含单一代表状态 status，供阶段标签展示） */
 function nodeState(tasks) {
@@ -28,8 +29,7 @@ function nodeState(tasks) {
  * 取需求实施机构逻辑：
  * 1. 第一优先级：取需求关联的主责系统的第一个开发任务的开发实施方（impl_org）。
  * 2. 第二优先级：取系统的第一个主责系统对应的所属机构（org）。
- * 3. 第三优先级：取需求提出部门（propose_dept）。
- * 4. 第四优先级：默认兜底值 "未分配机构"。
+ * 3. 第三优先级：默认兜底值 "未分配机构"。
  */
 export function reqOrg(req, sysMap, devMap) {
   const main = req.main_systems ? JSON.parse(req.main_systems) : [];
@@ -50,9 +50,8 @@ export function reqOrg(req, sysMap, devMap) {
     if (org) return org;
   }
 
-  // 第三优先级：取需求提出部门
-  // 第四优先级：默认兜底值 "未分配机构"
-  return req.propose_dept || '未分配机构';
+  // 不按提出部门分组；没有明确实施机构时统一归入未分配。
+  return '未分配机构';
 }
 
 /** 系统编号转名称（标签展示用；sysMap 预载） */
@@ -99,8 +98,8 @@ function entityArtifacts(code) {
   });
 }
 
-/** 构建单需求链路概要（dev/test/rt 状态均由预载 Map 提供，免逐需求查询） */
-function buildChain(req, devMap, testMap, rtMap) {
+/** 构建单需求/工单链路概要（dev/test/rt 状态均由预载 Map 提供，免逐条查询） */
+function buildChain(req, devMap, testMap, rtMap, firstLabel = '需求') {
   const dev = devMap[req.req_code] || [];
   const t = testMap[req.req_code] || {};
   const sit = t.SIT || [];
@@ -110,9 +109,9 @@ function buildChain(req, devMap, testMap, rtMap) {
   const rtStatus = rtMap[req.req_code];
   const rt = rtStatus ? { status: rtStatus } : null;
 
-  // 阶段顺序：需求 / 开发 / 应用组装 / 非功能测试(按需) / 安全测试(按需) / 用户测试 / 投产
+  // 阶段顺序：需求/工单 / 开发 / 应用组装 / 非功能测试(按需) / 安全测试(按需) / 用户测试 / 投产
   const nodes = [
-    { key: '需求', label: '需求', ...nodeState([{ status: req.status }]) },
+    { key: firstLabel, label: firstLabel, ...nodeState([{ status: req.status }]) },
     { key: '开发', label: '开发', ...nodeState(dev) },
     { key: 'SIT', label: '应用组装', ...nodeState(sit) },
   ];
@@ -258,19 +257,27 @@ export default async function overviewRoutes(fastify) {
     }
     
     let sql = 'SELECT * FROM requirement';
+    let ticketSql = 'SELECT * FROM ticket';
     const params = [];
+    const ticketParams = [];
     
     if (targetReleasePointIds) {
       if (targetReleasePointIds.length) {
         sql += ` WHERE release_point_id IN (${targetReleasePointIds.map(() => '?').join(',')})`;
         params.push(...targetReleasePointIds);
+        ticketSql += ` WHERE release_point_id IN (${targetReleasePointIds.map(() => '?').join(',')})`;
+        ticketParams.push(...targetReleasePointIds);
       }
     } else {
       const win = inClause('release_point_id', windowIds(body));
       if (win.where) { sql += ` WHERE ${win.where}`; params.push(...win.params); }
+      if (win.where) { ticketSql += ` WHERE ${win.where}`; ticketParams.push(...win.params); }
     }
     sql += ' ORDER BY id DESC';
-    const reqs = all(sql, ...params);
+    ticketSql += ' ORDER BY id DESC';
+    const reqs = all(sql, ...params).map((r) => ({ ...r, entityType: 'requirement', firstLabel: '需求' }));
+    const tickets = all(ticketSql, ...ticketParams).map((t) => ({ ...t, req_code: t.ticket_code, entityType: 'ticket', firstLabel: '工单' }));
+    const workItems = [...reqs, ...tickets];
  
     // 关联状态与系统主数据一次性载入并分桶，替代逐需求 N+1 查询
     const sysMap = {};
@@ -292,9 +299,9 @@ export default async function overviewRoutes(fastify) {
     }
  
     const groups = {};
-    for (const r of reqs) {
+    for (const r of workItems) {
       const org = reqOrg(r, sysMap, devMap);
-      const chain = buildChain(r, devMap, testMap, rtMap);
+      const chain = buildChain(r, devMap, testMap, rtMap, r.firstLabel);
       const mainSystems = r.main_systems ? JSON.parse(r.main_systems) : [];
       const collabDevSystems = r.collab_dev_systems ? JSON.parse(r.collab_dev_systems) : [];
       const collabTestSystems = r.collab_test_systems ? JSON.parse(r.collab_test_systems) : [];
@@ -303,10 +310,10 @@ export default async function overviewRoutes(fastify) {
       // 1. 实施机构
       if (orgsFilter && !orgsFilter.includes(org)) continue;
       
-      // 2. 需求编号
+      // 2. 需求/工单编号
       if (reqCodeFilter && !r.req_code.toLowerCase().includes(reqCodeFilter)) continue;
       
-      // 3. 需求内容
+      // 3. 需求/工单内容
       if (contentFilter) {
         const titleMatch = r.title && r.title.toLowerCase().includes(contentFilter);
         const summaryMatch = r.summary && r.summary.toLowerCase().includes(contentFilter);
@@ -344,7 +351,7 @@ export default async function overviewRoutes(fastify) {
       }
  
       const card = {
-        entityType: 'requirement',
+        entityType: r.entityType,
         code: r.req_code,
         req_code: r.req_code,
         title: r.title,
@@ -367,11 +374,11 @@ export default async function overviewRoutes(fastify) {
     return ok({ list });
   });
 
-  // 单需求 5 层全生命周期详情
+  // 单需求/工单 5 层全生命周期详情
   fastify.get('/overview/:reqCode/detail', { preHandler: fastify.requirePerm('overview', 'view') }, async (request) => {
     const reqCode = request.params.reqCode;
-    const req = get('SELECT * FROM requirement WHERE req_code = ?', reqCode);
-    if (!req) throw notFound('需求不存在');
+    const req = getWorkItem(reqCode);
+    if (!req || !['requirement', 'ticket'].includes(req.entity_type)) throw notFound('需求/工单不存在');
 
     const attachOf = (type, id) => listByEntity(type, id);
     // 任务：附加 附件 + 负责人解析 + 实施系统解析
@@ -398,24 +405,20 @@ export default async function overviewRoutes(fastify) {
       artifacts: entityArtifacts(reqCode),
     } : null;
 
-    // 需求：解析人员、主责系统与协同改造系统
-    const mainCodes = req.main_systems ? JSON.parse(req.main_systems) : [];
-    const collabCodes = req.collab_dev_systems ? JSON.parse(req.collab_dev_systems) : [];
+    // 需求/工单：解析人员、主责系统与协同改造系统
+    const mainCodes = req.main_systems || [];
+    const collabCodes = req.collab_dev_systems || [];
     const rp = req.release_point_id ? get('SELECT release_date FROM release_point WHERE id = ?', req.release_point_id) : null;
     const proposerNames = (() => {
       if (!req.proposer) return [];
-      try {
-        const parsed = JSON.parse(req.proposer);
-        return Array.isArray(parsed) ? parsed : [req.proposer];
-      } catch {
-        return [req.proposer];
-      }
+      return Array.isArray(req.proposer) ? req.proposer : [req.proposer];
     })();
 
     const requirement = {
       ...req,
+      req_type: req.entity_type === 'ticket' ? req.ticket_type : req.req_type,
       release_date: rp ? rp.release_date : null,
-      attachments: attachOf('requirement', req.id),
+      attachments: attachOf(req.entity_type, req.id),
       proposerInfo: proposerNames.map(resolvePerson).filter(Boolean),
       ynOwnerInfo: resolvePerson(req.yn_owner),
       jkOwnerInfo: resolvePerson(req.jk_owner),
@@ -423,7 +426,7 @@ export default async function overviewRoutes(fastify) {
       collabDevSystemsInfo: collabCodes.map(resolveSystem),
     };
 
-    return ok({ requirement, dev, sit, nft, sec, uat, release: releaseDetail });
+    return ok({ entityType: req.entity_type, requirement, dev, sit, nft, sec, uat, release: releaseDetail });
   });
 
   // 问题两列概览详情（问题 + 投产）：供版本概览中问题卡片点开
@@ -462,21 +465,21 @@ export default async function overviewRoutes(fastify) {
     return ok({ issue: issueOut, release: releaseDetail });
   });
 
-  // 需求全流程变更历史
+  // 需求/工单全流程变更历史
   fastify.get('/overview/:reqCode/audit', { preHandler: fastify.requirePerm('overview', 'view') }, async (request) => {
     const reqCode = request.params.reqCode;
-    const req = get('SELECT id FROM requirement WHERE req_code = ?', reqCode);
-    if (!req) throw notFound('需求不存在');
+    const req = getWorkItem(reqCode);
+    if (!req || !['requirement', 'ticket'].includes(req.entity_type)) throw notFound('需求/工单不存在');
 
     const rows = all(
       `SELECT id, entity_type, entity_code, action, operator, field, old_value, new_value, created_at
        FROM audit_log
-       WHERE (entity_type = 'requirement' AND entity_id = ?)
+       WHERE (entity_type = ? AND entity_id = ?)
           OR (entity_type = 'dev' AND entity_id IN (SELECT id FROM dev_task WHERE req_code = ?))
           OR (entity_type = 'test' AND entity_id IN (SELECT id FROM test_task WHERE req_code = ?))
           OR (entity_type = 'release' AND entity_id IN (SELECT id FROM release_task WHERE req_code = ?))
        ORDER BY id DESC`,
-      req.id, reqCode, reqCode, reqCode
+      req.entity_type, req.id, reqCode, reqCode, reqCode
     );
     return ok(rows);
   });
@@ -520,19 +523,27 @@ export default async function overviewRoutes(fastify) {
     }
     
     let sql = 'SELECT * FROM requirement';
+    let ticketSql = 'SELECT * FROM ticket';
     const params = [];
+    const ticketParams = [];
     
     if (targetReleasePointIds) {
       if (targetReleasePointIds.length) {
         sql += ` WHERE release_point_id IN (${targetReleasePointIds.map(() => '?').join(',')})`;
         params.push(...targetReleasePointIds);
+        ticketSql += ` WHERE release_point_id IN (${targetReleasePointIds.map(() => '?').join(',')})`;
+        ticketParams.push(...targetReleasePointIds);
       }
     } else {
       const win = inClause('release_point_id', windowIds(body));
       if (win.where) { sql += ` WHERE ${win.where}`; params.push(...win.params); }
+      if (win.where) { ticketSql += ` WHERE ${win.where}`; ticketParams.push(...win.params); }
     }
     sql += ' ORDER BY id DESC';
-    const reqs = all(sql, ...params);
+    ticketSql += ' ORDER BY id DESC';
+    const reqs = all(sql, ...params).map((r) => ({ ...r, entityType: 'requirement', firstLabel: '需求' }));
+    const tickets = all(ticketSql, ...ticketParams).map((t) => ({ ...t, req_code: t.ticket_code, req_type: t.ticket_type, entityType: 'ticket', firstLabel: '工单' }));
+    const workItems = [...reqs, ...tickets];
  
     const sysMap = {};
     for (const s of all('SELECT sys_code, sys_name, org FROM system')) {
@@ -556,7 +567,7 @@ export default async function overviewRoutes(fastify) {
     for (const rp of rps) rpMap[rp.id] = rp.release_date;
 
     const filteredReqs = [];
-    for (const r of reqs) {
+    for (const r of workItems) {
       const org = reqOrg(r, sysMap, devMap);
       
       const testBucket = testMap[r.req_code] || {};
@@ -564,7 +575,8 @@ export default async function overviewRoutes(fastify) {
         r,
         devMap,
         Object.fromEntries(Object.entries(testBucket).map(([k, v]) => [k, v.map(t => ({ status: t.status }))])),
-        Object.fromEntries(Object.entries(rtMap).map(([k, v]) => [k, v.status]))
+        Object.fromEntries(Object.entries(rtMap).map(([k, v]) => [k, v.status])),
+        r.firstLabel
       );
 
       const mainSystems = r.main_systems ? JSON.parse(r.main_systems) : [];
@@ -573,9 +585,9 @@ export default async function overviewRoutes(fastify) {
       
       // 1. 实施机构
       if (orgsFilter && !orgsFilter.includes(org)) continue;
-      // 2. 需求编号
+      // 2. 需求/工单编号
       if (reqCodeFilter && !r.req_code.toLowerCase().includes(reqCodeFilter)) continue;
-      // 3. 需求内容
+      // 3. 需求/工单内容
       if (contentFilter) {
         const titleMatch = r.title && r.title.toLowerCase().includes(contentFilter);
         const summaryMatch = r.summary && r.summary.toLowerCase().includes(contentFilter);
@@ -611,20 +623,24 @@ export default async function overviewRoutes(fastify) {
       filteredReqs.push(r);
     }
 
-    // 2. 将筛选出来的需求按开发任务行展开
+    // 2. 将筛选出来的需求/工单按开发任务行展开
     const wideRows = [];
     for (const r of filteredReqs) {
       const devTasks = devMap[r.req_code] || [];
       const testBucket = testMap[r.req_code] || {};
       const rtRow = rtMap[r.req_code];
 
-      // 提取需求层级的基础信息
+      // 提取需求/工单层级的基础信息
       const reqMainSys = r.main_systems ? JSON.parse(r.main_systems) : [];
       const reqCollabDev = r.collab_dev_systems ? JSON.parse(r.collab_dev_systems) : [];
       const reqCollabTest = r.collab_test_systems ? JSON.parse(r.collab_test_systems) : [];
 
-      const reqAttaches = all("SELECT * FROM attachment WHERE entity_type = 'requirement' AND entity_id = ?", r.id);
-      const reqSpecFormatted = formatAttachments(reqAttaches, '需求说明书');
+      const reqAttaches = r.entityType === 'requirement'
+        ? all("SELECT * FROM attachment WHERE entity_type = 'requirement' AND entity_id = ?", r.id)
+        : [];
+      const reqSpecFormatted = r.entityType === 'requirement'
+        ? formatAttachments(reqAttaches, '需求说明书')
+        : '';
 
       const proposerArray = (() => {
         if (!r.proposer) return [];
@@ -637,11 +653,13 @@ export default async function overviewRoutes(fastify) {
       })();
 
       const reqInfo = {
+        entity_label: r.entityType === 'ticket' ? '工单' : '需求',
         req_code: r.req_code,
         req_title: r.title,
         req_summary: r.summary,
         req_status: r.status,
         req_type: r.req_type,
+        is_accounting: r.is_accounting || '否',
         propose_dept: r.propose_dept,
         proposer: proposerArray.join(', '),
         yn_owner: r.yn_owner,
@@ -654,7 +672,7 @@ export default async function overviewRoutes(fastify) {
         req_spec: reqSpecFormatted,
       };
 
-      // 投产与会签信息（同一需求共享）
+      // 投产与会签信息（同一需求/工单共享）
       let releaseInfo = {
         release_status: rtRow?.status || '未发起',
         release_owner: rtRow?.owner || '',
@@ -822,15 +840,17 @@ export default async function overviewRoutes(fastify) {
 
     const cols = [
       // 需求信息
-      { key: 'req_code', title: '需求编号' },
-      { key: 'req_title', title: '需求标题' },
-      { key: 'req_summary', title: '需求概述' },
-      { key: 'req_status', title: '需求状态' },
-      { key: 'req_type', title: '需求类型' },
+      { key: 'entity_label', title: '类型' },
+      { key: 'req_code', title: '需求/工单编号' },
+      { key: 'req_title', title: '需求标题/工单概述' },
+      { key: 'req_summary', title: '需求概述/工单详情' },
+      { key: 'req_status', title: '需求/工单状态' },
+      { key: 'req_type', title: '需求/工单类型' },
+      { key: 'is_accounting', title: '是否涉账' },
       { key: 'propose_dept', title: '提出部门' },
       { key: 'proposer', title: '提出人' },
-      { key: 'yn_owner', title: '云南农信业务负责人' },
-      { key: 'jk_owner', title: '建信金科业务负责人' },
+      { key: 'yn_owner', title: '云南农信负责人' },
+      { key: 'jk_owner', title: '建信金科负责人' },
       { key: 'propose_time', title: '提出时间' },
       { key: 'release_date', title: '计划投产点' },
       { key: 'main_systems', title: '主责系统' },

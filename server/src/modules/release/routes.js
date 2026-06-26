@@ -1,11 +1,11 @@
 /**
  * 文件：modules/release/routes.js
- * 用途：投产审批模块接口。审批对象为「投产申请」中所选择的需求/问题（逐条展开），
+ * 用途：投产审批模块接口。审批对象为「投产申请」中所选择的需求/工单/问题（逐条展开），
  *       提供列表、详情（含评审会签、投产信息、关联制品情况）、负责人/状态/评审状态更新、会签签署。
  * 作者：hengguan
- * 说明：投产任务（release_task）以实体编号（req_code 列，存需求编号或问题编号）为唯一键，entity_type 区分类型；
+ * 说明：投产任务（release_task）以实体编号（req_code 列，存需求编号、工单编号或问题编号）为唯一键，entity_type 区分类型；
  *       首次打开详情时惰性创建投产任务与会签项（不再有「UAT 终态方可发起」的限制）。
- *       「各系统投产登记」改为「关联制品情况」：读取引用了该需求/问题的投产申请制品信息。
+ *       「各系统投产登记」改为「关联制品情况」：读取引用了该需求/工单/问题的投产申请制品信息。
  */
 
 import { get, all, run, tx } from '../../db/index.js';
@@ -15,6 +15,7 @@ import { ok, notFound, badRequest, forbidden } from '../../lib/http.js';
 import { exportXlsx } from '../../lib/excel.js';
 import { signatureDataUrl } from '../../lib/signature.js';
 import { buildReleaseWordDoc } from '../../lib/release-word.js';
+import { getWorkItem } from '../../lib/work-items.js';
 
 /** 读取被打标为"会签角色"的角色列表 */
 function signoffRoles() {
@@ -51,9 +52,10 @@ function recomputeReviewStatus(releaseTaskId) {
   return next;
 }
 
-/** 判定实体类型：需求 / 问题 / 未知 */
+/** 判定实体类型：需求 / 工单 / 问题 / 未知 */
 function classifyEntity(code) {
-  if (get('SELECT 1 FROM requirement WHERE req_code = ?', code)) return 'requirement';
+  const item = getWorkItem(code);
+  if (item) return item.entity_type;
   if (get('SELECT 1 FROM issue WHERE issue_code = ?', code)) return 'issue';
   return 'unknown';
 }
@@ -78,7 +80,7 @@ function ensureReleaseTask(code, entityType, operatorName) {
   });
 }
 
-/** 读取引用了该需求/问题编号的投产申请制品信息（关联制品情况） */
+/** 读取引用了该需求/工单/问题编号的投产申请制品信息（关联制品情况） */
 function entityArtifacts(code, sysMap) {
   const rows = all(
     `SELECT ra.* FROM release_apply ra
@@ -102,7 +104,7 @@ function entityArtifacts(code, sysMap) {
 }
 
 /**
- * 计算投产审批清单：从投产申请的 ref_codes 展开为逐条需求/问题，附投产任务/评审/会签进度。
+ * 计算投产审批清单：从投产申请的 ref_codes 展开为逐条需求/工单/问题，附投产任务/评审/会签进度。
  * @returns {Array} 完整行集合（未分页）
  */
 function computeEntities(windowIdList) {
@@ -114,7 +116,7 @@ function computeEntities(windowIdList) {
     applies = all('SELECT id, ref_codes, release_point_id, change_code, impl_org FROM release_apply');
   }
 
-  const codeMap = new Map(); // code -> { applyPointId, implOrg, changeCode }
+  const codeMap = new Map(); // code -> { applyPointId, implOrg, changeCode, changeCodes }
   for (const ap of applies) {
     let refs = [];
     try { refs = ap.ref_codes ? JSON.parse(ap.ref_codes) : []; } catch { refs = []; }
@@ -123,11 +125,19 @@ function computeEntities(windowIdList) {
       const cur = codeMap.get(code);
       if (!cur) {
         // 首次记录：投产点取首个申请；实施机构暂以该申请填充（后续遇更小申请编号再覆盖）
-        codeMap.set(code, { applyPointId: ap.release_point_id, implOrg: ap.impl_org || null, changeCode: ap.change_code || '' });
-      } else if (ap.change_code && (!cur.changeCode || String(ap.change_code) < String(cur.changeCode))) {
-        // 实施机构取「申请编号最小」的投产申请
-        cur.implOrg = ap.impl_org || null;
-        cur.changeCode = ap.change_code;
+        codeMap.set(code, {
+          applyPointId: ap.release_point_id,
+          implOrg: ap.impl_org || null,
+          changeCode: ap.change_code || '',
+          changeCodes: ap.change_code ? [ap.change_code] : [],
+        });
+      } else {
+        if (ap.change_code && !cur.changeCodes.includes(ap.change_code)) cur.changeCodes.push(ap.change_code);
+        if (ap.change_code && (!cur.changeCode || String(ap.change_code) < String(cur.changeCode))) {
+          // 实施机构取「申请编号最小」的投产申请
+          cur.implOrg = ap.impl_org || null;
+          cur.changeCode = ap.change_code;
+        }
       }
     }
   }
@@ -141,11 +151,11 @@ function computeEntities(windowIdList) {
 
   const list = [];
   for (const [code, info] of codeMap) {
-    const req = get('SELECT req_code, title, status, release_point_id FROM requirement WHERE req_code = ?', code);
-    const issue = req ? null : get('SELECT issue_code, summary, status FROM issue WHERE issue_code = ?', code);
-    const type = req ? 'requirement' : (issue ? 'issue' : 'unknown');
-    const title = req ? req.title : (issue ? issue.summary : '');
-    const pointId = req ? req.release_point_id : info.applyPointId;
+    const item = getWorkItem(code);
+    const issue = item ? null : get('SELECT issue_code, summary, status FROM issue WHERE issue_code = ?', code);
+    const type = item ? item.entity_type : (issue ? 'issue' : 'unknown');
+    const title = item ? item.title : (issue ? issue.summary : '');
+    const pointId = item ? item.release_point_id : info.applyPointId;
     const releaseDate = rpMap[pointId] || null;
 
     const rt = get('SELECT * FROM release_task WHERE req_code = ?', code);
@@ -155,6 +165,7 @@ function computeEntities(windowIdList) {
     list.push({
       entity_type: type,
       code,
+      change_codes: [...(info.changeCodes || [])].sort((a, b) => String(a).localeCompare(String(b))),
       title,
       impl_org: info.implOrg || null,
       release_point_id: pointId || null,
@@ -184,6 +195,9 @@ function applyFilters(rows, filters) {
     if (f.field === 'code') {
       const kw = String(f.value).toLowerCase();
       out = out.filter((r) => String(r.code).toLowerCase().includes(kw));
+    } else if (f.field === 'change_code') {
+      const kw = String(f.value).toLowerCase();
+      out = out.filter((r) => (r.change_codes || []).some((code) => String(code).toLowerCase().includes(kw)));
     } else if (f.field === 'content') {
       const kw = String(f.value).toLowerCase();
       out = out.filter((r) => String(r.title || '').toLowerCase().includes(kw));
@@ -205,7 +219,7 @@ function applyFilters(rows, filters) {
 }
 
 export default async function releaseRoutes(fastify) {
-  // 列表：投产申请所选需求/问题逐条展开
+  // 列表：投产申请所选需求/工单/问题逐条展开
   fastify.post('/release/list', { preHandler: fastify.requirePerm('release', 'view') }, async (request) => {
     const body = request.body || {};
     const all0 = computeEntities(windowIds(body));
@@ -218,7 +232,7 @@ export default async function releaseRoutes(fastify) {
     return ok({ list, total: filtered.length, page, pageSize });
   });
 
-  // 详情：首次打开惰性创建投产任务；返回实体信息（需求或问题）+ 会签 + 关联制品
+  // 详情：首次打开惰性创建投产任务；返回实体信息（需求/工单或问题）+ 会签 + 关联制品
   fastify.get('/release/:code', { preHandler: fastify.requirePerm('release', 'view') }, async (request) => {
     const code = request.params.code;
     const entityType = classifyEntity(code);
@@ -238,13 +252,15 @@ export default async function releaseRoutes(fastify) {
     let entity = { type: entityType, code };
     let taskStatuses = null;
 
-    if (entityType === 'requirement') {
-      const req = get('SELECT * FROM requirement WHERE req_code = ?', code);
+    if (entityType === 'requirement' || entityType === 'ticket') {
+      const req = getWorkItem(code);
       entity = {
-        type: 'requirement', code,
+        type: entityType, code,
         title: req?.title || code,
         summary: req?.summary || '',
         status: req?.status || null,
+        yn_owner: req?.yn_owner || null,
+        jk_owner: req?.jk_owner || null,
         release_date: rpMap[req?.release_point_id] || null,
       };
       // 阶段任务：返回任务标识(id/编号/系统/状态)，供详情页点击状态标签直达对应任务弹窗
@@ -360,10 +376,10 @@ export default async function releaseRoutes(fastify) {
     let devTasksFull = [];
     let testTasksFull = [];
 
-    if (entityType === 'requirement') {
-      const req = get('SELECT * FROM requirement WHERE req_code = ?', code);
+    if (entityType === 'requirement' || entityType === 'ticket') {
+      const req = getWorkItem(code);
       entity = {
-        type: 'requirement', code,
+        type: entityType, code,
         title: req?.title || code,
         summary: req?.summary || '',
         status: req?.status || null,
@@ -411,9 +427,10 @@ export default async function releaseRoutes(fastify) {
 
     const cols = [
       { key: 'impl_org', title: '实施机构' },
-      { key: 'code', title: '需求/问题编号' },
+      { key: 'change_codes_text', title: '变更编号' },
+      { key: 'code', title: '需求/问题/工单编号' },
       { key: 'entity_label', title: '类型' },
-      { key: 'title', title: '需求标题/问题概述' },
+      { key: 'title', title: '需求标题/工单概述/问题概述' },
       { key: 'release_date', title: '计划投产点' },
       { key: 'release_status', title: '投产状态' },
       { key: 'review_status', title: '评审状态' },
@@ -422,8 +439,9 @@ export default async function releaseRoutes(fastify) {
 
     const mapped = rows.map((r) => ({
       impl_org: r.impl_org || '',
+      change_codes_text: (r.change_codes || []).join('\n'),
       code: r.code,
-      entity_label: r.entity_type === 'requirement' ? '需求' : (r.entity_type === 'issue' ? '问题' : '其他'),
+      entity_label: r.entity_type === 'requirement' ? '需求' : (r.entity_type === 'ticket' ? '工单' : (r.entity_type === 'issue' ? '问题' : '其他')),
       title: r.title,
       release_date: r.release_date || '',
       release_status: r.release_status,

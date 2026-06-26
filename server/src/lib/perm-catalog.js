@@ -16,9 +16,16 @@ export const PERM_CATALOG = [
     ],
   },
   {
+    key: 'ticket', label: '工单分析',
+    actions: [
+      { key: 'view', label: '查看' }, { key: 'create', label: '新增' }, { key: 'edit', label: '编辑' },
+      { key: 'delete', label: '删除' }, { key: 'import', label: '导入' }, { key: 'export', label: '导出' },
+    ],
+  },
+  {
     key: 'issue', label: '问题管理',
     actions: [
-      { key: 'view', label: '查看' }, { key: 'sync', label: '同步' },
+      { key: 'view', label: '查看' }, { key: 'sync', label: '同步' }, { key: 'delete', label: '清空' },
     ],
   },
   {

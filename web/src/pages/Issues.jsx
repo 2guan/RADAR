@@ -4,18 +4,18 @@
  *       提供「同步问题」（拉取概述列表）与「同步问题详情」（后台逐条慢速更新明细）两个同步按钮。
  *       后台同步通过轮询 /issues/sync-detail-status 实时展示进度和最后完成时间。
  * 作者：hengguan
- * 说明：列表仅显示 问题编号/状态/详细分类/所属系统/问题概述；无新增/编辑/删除能力。
+ * 说明：列表显示 问题编号/工单编号/状态/详细分类/所属系统/问题概述；无新增/编辑能力。
  */
 
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Card, Button, Space, message, Modal } from 'antd';
-import { SyncOutlined, CloudSyncOutlined, LoadingOutlined, CheckCircleOutlined } from '@ant-design/icons';
+import { SyncOutlined, CloudSyncOutlined, LoadingOutlined, CheckCircleOutlined, DeleteOutlined } from '@ant-design/icons';
 import DataTable from '../components/DataTable.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
 import FilterPanel from '../components/FilterPanel.jsx';
 import Can from '../components/Can.jsx';
 import IssueDetail from '../components/editors/IssueDetail.jsx';
-import { apiGet, apiPost } from '../api/client.js';
+import { apiDelete, apiGet, apiPost } from '../api/client.js';
 
 export default function Issues() {
   const tableRef = useRef();
@@ -23,6 +23,7 @@ export default function Issues() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [filterQuery, setFilterQuery] = useState([]);
   const [syncing, setSyncing] = useState(false);
+  const [clearing, setClearing] = useState(false);
   // 后台同步详情状态（轮询自服务端）
   const [bgStatus, setBgStatus] = useState(null); // { running, total, done, failed, lastFinishTime }
   const pollTimerRef = useRef(null);
@@ -31,6 +32,7 @@ export default function Issues() {
   const [statuses, setStatuses] = useState([]);
   const [classifications, setClassifications] = useState([]);
   const [systems, setSystems] = useState([]);
+  const [systemNameMap, setSystemNameMap] = useState({});
 
   // 同步后用于刷新选项（详细分类/系统直接取自当前问题库去重）
   const loadOptions = () => {
@@ -59,6 +61,9 @@ export default function Issues() {
 
   useEffect(() => {
     loadOptions();
+    apiGet('/systems/all').then((list) => {
+      setSystemNameMap(Object.fromEntries((list || []).map((s) => [s.sys_code, s.sys_name])));
+    }).catch(() => {});
     // 页面加载时拉取一次状态（恢复页面时同步可能仍在进行）
     apiGet('/issues/sync-detail-status').then((s) => {
       setBgStatus(s);
@@ -124,19 +129,57 @@ export default function Issues() {
     });
   };
 
+  const onClearIssues = () => {
+    if (bgStatus?.running) { message.warning('后台同步正在进行中，请等待完成后再清空'); return; }
+    Modal.confirm({
+      title: '清空全部问题数据',
+      content: '该操作将删除问题管理表中的全部问题记录，且不可撤销。确认清空？',
+      okText: '确认清空',
+      cancelText: '取消',
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        setClearing(true);
+        try {
+          const r = await apiDelete('/issues');
+          message.success(`已清空问题数据${Number.isFinite(r?.deleted) ? `：${r.deleted} 条` : ''}`);
+          setDetailOpen(false);
+          setDetailId(null);
+          setBgStatus(null);
+          tableRef.current?.reload();
+          loadOptions();
+        } finally {
+          setClearing(false);
+        }
+      },
+    });
+  };
+
   const columns = [
     {
-      title: '问题编号', dataIndex: 'issue_code', key: 'issue_code', sorter: true, defaultSortOrder: 'descend',
-      width: 150,
-      render: (val) => (
-        <span style={{ fontFamily: 'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace', fontWeight: 500 }}>
-          {val}
-        </span>
+      title: '问题编号', dataIndex: 'issue_code', key: 'issue_code', sorter: true, align: 'center',
+      width: 170,
+      render: (val, row) => (
+        <div style={{ lineHeight: '20px', textAlign: 'center' }}>
+          <div style={{ fontFamily: 'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace', fontWeight: 500 }}>
+            {val}
+          </div>
+          {row.work_order_no && (
+            <div
+              title={row.work_order_no}
+              style={{ color: 'var(--radar-text-secondary)', fontSize: 12, fontFamily: 'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+            >
+              {row.work_order_no}
+            </div>
+          )}
+        </div>
       ),
     },
     { title: '状态', dataIndex: 'status', key: 'status', align: 'center', width: 100, render: (s) => <StatusBadge status={s} /> },
     { title: '详细分类', dataIndex: 'detailed_classification', key: 'detailed_classification', width: 140, ellipsis: true },
-    { title: '所属系统', dataIndex: 'system', key: 'system', width: 200, ellipsis: true },
+    {
+      title: '所属系统', dataIndex: 'system', key: 'system', width: 200, ellipsis: true,
+      render: (v) => systemNameMap[v] || v || '—',
+    },
     {
       title: '问题概述', dataIndex: 'summary', key: 'summary',
       render: (v) => (
@@ -185,6 +228,9 @@ export default function Issues() {
           <Can module="issue" action="sync">
             <Button icon={<CloudSyncOutlined />} disabled={bgStatus?.running} onClick={onSyncDetail}>同步问题详情</Button>
           </Can>
+          <Can module="issue" action="delete">
+            <Button danger icon={<DeleteOutlined />} loading={clearing} disabled={bgStatus?.running} onClick={onClearIssues}>清空</Button>
+          </Can>
           {bgStatusText}
         </Space>
       }
@@ -204,12 +250,19 @@ export default function Issues() {
         mobileCard={(item) => (
           <Space direction="vertical" size={4} style={{ width: '100%' }}>
             <Space style={{ justifyContent: 'space-between', width: '100%' }}>
-              <strong style={{ fontFamily: 'SFMono-Regular, Consolas, monospace' }}>{item.issue_code}</strong>
+              <div style={{ minWidth: 0 }}>
+                <strong style={{ display: 'block', fontFamily: 'SFMono-Regular, Consolas, monospace' }}>{item.issue_code}</strong>
+                {item.work_order_no && (
+                  <span style={{ display: 'block', color: 'var(--radar-text-secondary)', fontSize: 12, fontFamily: 'SFMono-Regular, Consolas, monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {item.work_order_no}
+                  </span>
+                )}
+              </div>
               <StatusBadge status={item.status} />
             </Space>
             <div>{item.summary}</div>
             <div style={{ fontSize: 11, color: 'var(--radar-text-secondary)' }}>
-              {[item.detailed_classification, item.system].filter(Boolean).join(' · ')}
+              {[item.detailed_classification, systemNameMap[item.system] || item.system].filter(Boolean).join(' · ')}
             </div>
           </Space>
         )}

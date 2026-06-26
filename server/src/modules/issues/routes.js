@@ -1,6 +1,6 @@
 /**
  * 文件：modules/issues/routes.js
- * 用途：问题管理模块接口（只读展示 + 外部同步）。提供问题列表、问题详情，
+ * 用途：问题管理模块接口（只读展示 + 外部同步 + 清空）。提供问题列表、问题详情，
  *       以及「同步问题」（拉取概述列表）与「同步问题详情」（后台逐条慢速更新明细）两个同步端点。
  * 作者：hengguan
  * 说明：数据来源为外部 PAMS 系统，本平台不提供新增/编辑/删除；以 issue_code 为同步主键做 upsert。
@@ -16,7 +16,8 @@ import { fetchIssueOverview, fetchIssueDetail } from '../../lib/pams.js';
 // 列表查询可排序/筛选的列白名单
 const COLUMNS = [
   'id', 'issue_code', 'status', 'category', 'detailed_classification', 'system', 'module',
-  'business_group', 'urgency', 'round', 'summary', 'create_time', 'plan_resolve_time', 'synced_at',
+  'business_group', 'urgency', 'round', 'summary', 'details', 'work_order_no',
+  'create_time', 'plan_resolve_time', 'synced_at',
 ];
 // 关键字模糊检索列
 const SEARCH = ['issue_code', 'summary', 'system', 'detailed_classification'];
@@ -55,12 +56,18 @@ function toBit(v) {
   return v === true || v === 1 || v === '1' ? 1 : 0;
 }
 
-// 概述同步：外部字段 → 本地列（仅 5 个列表字段）
+function hasOwn(obj, key) {
+  return Object.prototype.hasOwnProperty.call(obj, key);
+}
+
+// 概述同步：外部字段 → 本地列（列表接口已包含工单编号与问题详情）
 const OVERVIEW_MAP = {
   status: 'status',
   detailed_classification: 'detailed_classification',
   system: 'system',
   summary: 'summary',
+  work_order_no: 'work_order_no',
+  details: 'details',
 };
 
 // 明细同步：外部字段 → 本地列（全字段）
@@ -142,6 +149,25 @@ export default async function issueRoutes(fastify) {
     return ok(result);
   });
 
+  // 清空全部问题数据
+  fastify.delete('/issues', { preHandler: fastify.requirePerm('issue', 'delete') }, async () => {
+    if (bgState.running) throw badRequest('后台同步正在进行中，请等待完成后再清空');
+    const before = get('SELECT COUNT(*) AS c FROM issue')?.c ?? 0;
+    tx(() => {
+      run('DELETE FROM issue');
+      run("DELETE FROM sqlite_sequence WHERE name = 'issue'");
+    });
+    Object.assign(bgState, {
+      running: false,
+      total: 0,
+      done: 0,
+      failed: 0,
+      startTime: null,
+      lastFinishTime: null,
+    });
+    return ok({ deleted: before }, '已清空问题数据');
+  });
+
   // 详情
   fastify.get('/issues/:id', { preHandler: fastify.requirePerm('issue', 'view') }, async (request) => {
     const row = get('SELECT * FROM issue WHERE id = ?', request.params.id);
@@ -149,7 +175,7 @@ export default async function issueRoutes(fastify) {
     return ok(decode(row));
   });
 
-  // 同步问题：拉取外部概述列表，按 issue_code upsert（仅更新列表展示字段）
+  // 同步问题：拉取外部概述列表，按 issue_code upsert
   fastify.post('/issues/sync', { preHandler: fastify.requirePerm('issue', 'sync') }, async () => {
     const list = await fetchIssueOverview();
     let inserted = 0;
@@ -161,19 +187,26 @@ export default async function issueRoutes(fastify) {
         const code = (item.issue_id || '').trim();
         if (!code) { failed.push({ issue_id: item.issue_id, error: '缺少 issue_id' }); continue; }
         const exists = get('SELECT id FROM issue WHERE issue_code = ?', code);
-        const cols = Object.values(OVERVIEW_MAP);
-        const vals = Object.keys(OVERVIEW_MAP).map((k) => item[k] ?? null);
+        const pairs = Object.entries(OVERVIEW_MAP).filter(([k]) => hasOwn(item, k));
+        const cols = pairs.map(([, col]) => col);
+        const vals = pairs.map(([k]) => item[k] ?? null);
         if (exists) {
-          run(
-            `UPDATE issue SET ${cols.map((c) => `${c}=?`).join(',')}, updated_at=datetime('now','localtime') WHERE issue_code=?`,
-            ...vals, code,
-          );
+          if (cols.length) {
+            run(
+              `UPDATE issue SET ${cols.map((c) => `${c}=?`).join(',')}, updated_at=datetime('now','localtime') WHERE issue_code=?`,
+              ...vals, code,
+            );
+          }
           updated++;
         } else {
-          run(
-            `INSERT INTO issue (issue_code, ${cols.join(',')}) VALUES (?, ${cols.map(() => '?').join(',')})`,
-            code, ...vals,
-          );
+          if (cols.length) {
+            run(
+              `INSERT INTO issue (issue_code, ${cols.join(',')}) VALUES (?, ${cols.map(() => '?').join(',')})`,
+              code, ...vals,
+            );
+          } else {
+            run('INSERT INTO issue (issue_code) VALUES (?)', code);
+          }
           inserted++;
         }
       }

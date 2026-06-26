@@ -3,7 +3,7 @@
  * 用途：投产申请（版本变更申请）模块接口。变更申请 CRUD（全字段可改并留痕）、变更编号生成、
  *       默认按当前投产窗口过滤、导入导出。评审状态由所关联需求的投产审批评审状态派生（取最弱）。
  * 作者：hengguan
- * 说明：ref_codes（问题/需求编号）以 JSON 数组入库；change_system 存系统编号；制品类型/摆渡状态取自字典。
+ * 说明：ref_codes（需求/工单编号）以 JSON 数组入库；change_system 存系统编号；制品类型/摆渡状态取自字典。
  */
 
 import { get, run, tx, all } from '../../db/index.js';
@@ -28,7 +28,7 @@ const WRITABLE = [
 const LABELS = {
   change_code: '变更编号', change_content: '变更内容', impact_scope: '影响范围', change_system: '变更系统',
   impl_org: '实施机构', delivery_units: '交付制品',
-  ref_codes: '问题/需求编号', out_dept: '变更负责部门（输出口径）', deploy_dept: '变更负责部门（部署口径）',
+  ref_codes: '关联需求/工单', out_dept: '变更负责部门（输出口径）', deploy_dept: '变更负责部门（部署口径）',
   release_point_id: '计划投产点',
 };
 
@@ -77,8 +77,8 @@ function pick(body) {
 }
 
 /**
- * 由关联的需求/问题编号派生评审状态：从投产审批表（release_task）取各需求的评审状态，取最弱。
- * 仅需求编号在投产审批表中有记录；问题编号无评审状态。无任何匹配则返回 null。
+ * 由关联的需求/工单编号派生评审状态：从投产审批表（release_task）取评审状态，取最弱。
+ * 无任何匹配则返回 null。
  */
 function deriveReviewStatus(refCodes) {
   if (!Array.isArray(refCodes) || !refCodes.length) return null;
@@ -97,7 +97,8 @@ function deriveReviewStatus(refCodes) {
 function yearMonthOf(releasePointId) {
   if (releasePointId) {
     const rp = get('SELECT release_date FROM release_point WHERE id = ?', releasePointId);
-    if (rp?.release_date) return String(rp.release_date).slice(0, 6);
+    const releaseDate = String(rp?.release_date || '').trim();
+    if (/^\d{8}$/.test(releaseDate)) return releaseDate.slice(0, 6);
   }
   return new Date().toISOString().slice(0, 7).replace('-', '');
 }
@@ -193,7 +194,8 @@ export default async function releaseApplyRoutes(fastify) {
     if (!body.change_content) throw badRequest('变更内容必填');
 
     const picked = pick(body);
-    const reviewStatus = deriveReviewStatus(Array.isArray(body.ref_codes) ? body.ref_codes : []);
+    const refCodes = Array.isArray(body.ref_codes) ? body.ref_codes : [];
+    const reviewStatus = deriveReviewStatus(refCodes);
     const data = encodeField(picked);
 
     const result = tx(() => {
@@ -306,7 +308,7 @@ export default async function releaseApplyRoutes(fastify) {
       { key: 'change_system', title: '变更系统' },
       { key: 'impl_org', title: '实施机构' },
       { key: 'delivery_units', title: '交付制品（制品类型/交付单元/新版本号/摆渡状态）' },
-      { key: 'ref_codes', title: '问题/需求编号' },
+      { key: 'ref_codes', title: '关联需求/工单' },
       { key: 'review_status', title: '评审状态' },
       { key: 'out_dept', title: '变更负责部门（输出口径）' },
       { key: 'deploy_dept', title: '变更负责部门（部署口径）' },
@@ -348,7 +350,7 @@ export default async function releaseApplyRoutes(fastify) {
     { key: 'artifact_type', title: '制品类型' },
     { key: 'delivery_unit', title: '交付单元名称' },
     { key: 'new_version', title: '新版本号' },
-    { key: 'ref_codes', title: '问题/需求编号' },
+    { key: 'ref_codes', title: '关联需求/工单' },
     { key: 'out_dept', title: '变更负责部门（输出口径）' },
     { key: 'deploy_dept', title: '变更负责部门（部署口径）' },
     { key: 'ferry_status', title: '摆渡状态' },
