@@ -118,7 +118,7 @@ export default async function dashboardRoutes(fastify) {
       terminal: applyRows.filter((r) => {
         let units = [];
         try { units = r.delivery_units ? JSON.parse(r.delivery_units) : []; } catch { units = []; }
-        return units.length > 0 && units.every((u) => (u.ferry_status || '未摆渡') === '已摆渡');
+        return units.length > 0 && units.every((u) => u.ferry_status === '已摆渡');
       }).length,
     };
 

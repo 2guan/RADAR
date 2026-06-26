@@ -142,7 +142,6 @@ export default function Requirements() {
       ),
     },
     { title: '需求类型', dataIndex: 'req_type', key: 'req_type' },
-    { title: '是否涉账', dataIndex: 'is_accounting', key: 'is_accounting', width: 90, render: (v) => v || '否' },
     {
       title: '提出人',
       dataIndex: 'proposer',

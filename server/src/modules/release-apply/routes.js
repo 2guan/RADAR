@@ -13,6 +13,8 @@ import { auditCreate, auditUpdate, auditDelete } from '../../lib/audit.js';
 import { exportXlsx, parseXlsx } from '../../lib/excel.js';
 import { windowIds, inClause } from '../../lib/window.js';
 import { ok, notFound, badRequest } from '../../lib/http.js';
+import { statusTypeForReleaseApply, validateRequiredFields } from '../../lib/required-fields.js';
+import { defaultDictAttr } from '../../lib/status.js';
 
 // 列表查询可排序/筛选的列白名单（不含派生 review_status）
 const COLUMNS = [
@@ -35,15 +37,16 @@ const LABELS = {
 // 交付制品分组字段
 const UNIT_KEYS = ['artifact_type', 'delivery_unit', 'new_version', 'ferry_status'];
 
-/** 规整交付制品数组：仅保留组内字段，过滤全空组，摆渡状态缺省为未摆渡 */
+/** 规整交付制品数组：仅保留组内字段，过滤全空组，摆渡状态取字典默认值 */
 function normalizeUnits(units) {
   if (!Array.isArray(units)) return [];
+  const defaultFerryStatus = defaultDictAttr('ferry_status', '未摆渡');
   return units
     .map((u) => ({
       artifact_type: u?.artifact_type ?? null,
       delivery_unit: u?.delivery_unit ?? null,
       new_version: u?.new_version ?? null,
-      ferry_status: u?.ferry_status || '未摆渡',
+      ferry_status: u?.ferry_status || defaultFerryStatus,
     }))
     .filter((u) => u.artifact_type || u.delivery_unit || u.new_version);
 }
@@ -191,11 +194,16 @@ export default async function releaseApplyRoutes(fastify) {
   // 新增
   fastify.post('/release-apply', { preHandler: fastify.requirePerm('release_apply', 'create') }, async (request) => {
     const body = request.body || {};
-    if (!body.change_content) throw badRequest('变更内容必填');
 
     const picked = pick(body);
+    if (picked.change_content === undefined) picked.change_content = '';
     const refCodes = Array.isArray(body.ref_codes) ? body.ref_codes : [];
     const reviewStatus = deriveReviewStatus(refCodes);
+    validateRequiredFields('release_apply', statusTypeForReleaseApply(reviewStatus), {
+      ...picked,
+      change_code: body.change_code || '__AUTO__',
+      ref_codes: refCodes,
+    });
     const data = encodeField(picked);
 
     const result = tx(() => {
@@ -245,6 +253,11 @@ export default async function releaseApplyRoutes(fastify) {
       ? (Array.isArray(picked.ref_codes) ? picked.ref_codes : [])
       : (old.ref_codes ? JSON.parse(old.ref_codes) : []);
     data.review_status = deriveReviewStatus(newRefs);
+    validateRequiredFields('release_apply', statusTypeForReleaseApply(data.review_status), {
+      ...decode(old),
+      ...picked,
+      ref_codes: newRefs,
+    });
 
     const keys = Object.keys(data);
     if (keys.length) {
@@ -387,7 +400,7 @@ export default async function releaseApplyRoutes(fastify) {
           // 导入按单组交付制品处理（多组请在页面维护）
           const units = JSON.stringify(normalizeUnits([{
             artifact_type: r.artifact_type || null, delivery_unit: r.delivery_unit || null,
-            new_version: r.new_version || null, ferry_status: r.ferry_status || '未摆渡',
+            new_version: r.new_version || null, ferry_status: r.ferry_status || null,
           }]));
           let code = String(r.change_code || '').trim();
           const exists = code ? get('SELECT * FROM release_apply WHERE change_code = ?', code) : null;

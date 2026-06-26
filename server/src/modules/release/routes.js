@@ -16,6 +16,7 @@ import { exportXlsx } from '../../lib/excel.js';
 import { signatureDataUrl } from '../../lib/signature.js';
 import { buildReleaseWordDoc } from '../../lib/release-word.js';
 import { getWorkItem } from '../../lib/work-items.js';
+import { defaultDictAttr } from '../../lib/status.js';
 
 /** 读取被打标为"会签角色"的角色列表 */
 function signoffRoles() {
@@ -67,9 +68,11 @@ function ensureReleaseTask(code, entityType, operatorName) {
   let rt = get('SELECT * FROM release_task WHERE req_code = ?', code);
   if (rt) return rt;
   return tx(() => {
+    const releaseStatus = defaultDictAttr('release_status', '待投产');
+    const reviewStatus = defaultDictAttr('review_status', '待评审');
     const res = run(
       `INSERT INTO release_task (req_code, entity_type, status, review_status, registrar, register_time) VALUES (?,?,?,?,?,?)`,
-      code, entityType || 'unknown', '待投产', '待评审', operatorName || null, new Date().toISOString().slice(0, 10),
+      code, entityType || 'unknown', releaseStatus, reviewStatus, operatorName || null, new Date().toISOString().slice(0, 10),
     );
     const rtId = res.lastInsertRowid;
     for (const role of signoffRoles()) {
@@ -108,6 +111,8 @@ function entityArtifacts(code, sysMap) {
  * @returns {Array} 完整行集合（未分页）
  */
 function computeEntities(windowIdList) {
+  const defaultReleaseStatus = defaultDictAttr('release_status', '待投产');
+  const defaultReviewStatus = defaultDictAttr('review_status', '待评审');
   let applies;
   if (windowIdList.length) {
     const ph = windowIdList.map(() => '?').join(',');
@@ -159,7 +164,7 @@ function computeEntities(windowIdList) {
     const releaseDate = rpMap[pointId] || null;
 
     const rt = get('SELECT * FROM release_task WHERE req_code = ?', code);
-    // 未发起时按默认基线展示：投产状态=待投产、评审状态=待评审、会签进度=签0/角色数
+    // 未发起时按默认基线展示：投产/评审状态取字典默认值，会签进度=签0/角色数
     const summary = rt ? signoffSummary(rt.id) : { total: signoffRoleCount, signed: 0, rejected: 0 };
 
     list.push({
@@ -170,8 +175,8 @@ function computeEntities(windowIdList) {
       impl_org: info.implOrg || null,
       release_point_id: pointId || null,
       release_date: releaseDate,
-      release_status: rt?.status || '待投产',
-      review_status: rt?.review_status || '待评审',
+      release_status: rt?.status || defaultReleaseStatus,
+      review_status: rt?.review_status || defaultReviewStatus,
       signoff: summary,
       initiated: !!rt,
     });

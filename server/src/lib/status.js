@@ -22,3 +22,33 @@ export function isTerminalStatus(statusAttr) {
     return false;
   }
 }
+
+/**
+ * 按阶段与状态类型读取默认流程状态。优先取字典中排序最靠前的项。
+ */
+export function defaultProcessStatus(stage, stateType = 'initial', fallback = null) {
+  const row = get(
+    `SELECT attr_value FROM dict_item
+      WHERE category = ?
+        AND json_extract(extra, '$.stage') = ?
+        AND json_extract(extra, '$.stateType') = ?
+      ORDER BY sort, id
+      LIMIT 1`,
+    'process_status', stage, stateType,
+  );
+  return row?.attr_value || fallback;
+}
+
+/**
+ * 读取普通字典的默认值。约定取排序最靠前的项，作为新增/导入时的兜底值。
+ */
+export function defaultDictAttr(category, fallback = null) {
+  const row = get(
+    `SELECT attr_value FROM dict_item
+      WHERE category = ?
+      ORDER BY sort, id
+      LIMIT 1`,
+    category,
+  );
+  return row?.attr_value || fallback;
+}

@@ -277,7 +277,7 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, onC
               {u.artifact_type && <Tag className="status-tag tag-system" style={{ margin: 0, borderRadius: 2 }}>{u.artifact_type}</Tag>}
               {u.new_version && <span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', fontSize: 11, color: 'var(--radar-ink)' }}>{u.new_version}</span>}
               {u.delivery_unit && <span title={u.delivery_unit} style={{ fontSize: 11, color: 'var(--radar-text-secondary)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.delivery_unit}</span>}
-              <span style={{ marginLeft: 'auto' }}><StatusBadge status={u.ferry_status || '未摆渡'} /></span>
+              <span style={{ marginLeft: 'auto' }}><StatusBadge status={u.ferry_status} /></span>
             </div>
           ))}
         </div>

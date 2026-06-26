@@ -12,13 +12,14 @@ import { Form, Input, Row, Col, Button, Select, Tabs, Tag, Space, message, Toolt
 import { HistoryOutlined, CloseOutlined, ThunderboltOutlined, PlusOutlined, MinusCircleOutlined } from '@ant-design/icons';
 import DictSelect from '../DictSelect.jsx';
 import SystemSelect from '../SystemSelect.jsx';
-import StatusBadge from '../StatusBadge.jsx';
+import StatusBadge, { getStatusType } from '../StatusBadge.jsx';
 import HistoryDrawer from '../HistoryDrawer.jsx';
 import CodeLink from '../CodeLink.jsx';
 import EditorShell from './EditorShell.jsx';
 import { apiGet, apiPost, apiPut } from '../../api/client.js';
 import { useAppStore } from '../../stores/app.js';
 import { useResponsive } from '../../hooks/useResponsive.js';
+import { useRequiredFields } from '../../hooks/useRequiredFields.js';
 
 export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId, defaultReleasePointId, defaultReqCodes, defaultTicketCodes, defaultType = 'req', onClose, onSaved }) {
   const [form] = Form.useForm();
@@ -33,6 +34,7 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
   // 既有申请（按 id 或变更编号加载）即为编辑/查看态；其余为新增
   const isEdit = !!applyId || !!code || mode === 'page';
   const readonly = isEdit ? !can('release_apply', 'edit') : !can('release_apply', 'create');
+  const required = useRequiredFields('release_apply', current?.review_status ? getStatusType(current.review_status) : 'initial', readonly);
 
   // 自动生成变更编号并填充
   const autoGenCode = (pointId) => {
@@ -80,7 +82,7 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
       setRefTab(defaultType === 'ticket' ? 'ticket' : 'req');
       form.resetFields();
       form.setFieldsValue({
-        delivery_units: [{ artifact_type: undefined, delivery_unit: undefined, new_version: undefined, ferry_status: '未摆渡' }],
+        delivery_units: [{ artifact_type: undefined, delivery_unit: undefined, new_version: undefined }],
         release_point_id: defaultReleasePointId,
       });
       autoGenCode(defaultReleasePointId);
@@ -189,7 +191,7 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
   };
 
   const save = async () => {
-    if (!readonly && selReqs.length + selTickets.length === 0) {
+    if (required.isRequired('ref_codes') && selReqs.length + selTickets.length === 0) {
       message.error('请至少关联 1 个需求或工单');
       return;
     }
@@ -347,10 +349,10 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
 
             <div className="form-section-card">
               <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>变更内容</div>
-              <Form.Item name="change_content" label="变更内容" rules={[{ required: !readonly, message: '请输入变更内容' }]} style={{ marginBottom: 8 }}>
+              <Form.Item name="change_content" label="变更内容" rules={required.rules('change_content', '变更内容', { message: '请输入变更内容' })} style={{ marginBottom: 8 }}>
                 <Input.TextArea rows={4} placeholder="详细描述本次变更内容" style={{ fontSize: 12 }} readOnly={readonly} />
               </Form.Item>
-              <Form.Item name="impact_scope" label="影响范围" style={{ marginBottom: 0 }}>
+              <Form.Item name="impact_scope" label="影响范围" rules={required.rules('impact_scope', '影响范围')} style={{ marginBottom: 0 }}>
                 <Input.TextArea rows={3} placeholder="描述本次变更的影响范围（非必填）" style={{ fontSize: 12 }} readOnly={readonly} />
               </Form.Item>
             </div>
@@ -363,7 +365,11 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
               <Row gutter={8}>
                 <Col span={12}>
                   <Form.Item name="change_code" label="变更编号"
-                    rules={[{ pattern: /^\S+$/, message: '编号不能包含空格' }, { validator: (_, val) => checkCodeUnique(val) }]}
+                    rules={[
+                      ...required.rules('change_code', '变更编号', { message: '请填写变更编号' }),
+                      { pattern: /^\S+$/, message: '编号不能包含空格' },
+                      { validator: (_, val) => checkCodeUnique(val) },
+                    ]}
                     validateTrigger={['onBlur', 'onChange']} style={{ marginBottom: 8 }}>
                     <Input placeholder="手填或点击「生成」" size="small" readOnly={readonly || isEdit}
                       style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', letterSpacing: '0.3px' }}
@@ -376,7 +382,7 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item name="release_point_id" label="计划投产点" rules={[{ required: !readonly, message: '请选择计划投产点' }]} style={{ marginBottom: (multiReqDiffer || pointMismatch) ? 2 : 8 }}>
+                  <Form.Item name="release_point_id" label="计划投产点" rules={required.rules('release_point_id', '计划投产点', { action: '请选择' })} style={{ marginBottom: (multiReqDiffer || pointMismatch) ? 2 : 8 }}>
                     <Select placeholder="选择计划投产点" size="small" allowClear showSearch optionFilterProp="label"
                       style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined}
                       options={points.map((p) => ({ value: p.id, label: `${p.release_date}${p.version_type ? ' · ' + p.version_type : ''}` }))} />
@@ -391,7 +397,7 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
                 </Col>
               </Row>
 
-              <Form.Item name="change_system" label="变更系统" rules={[{ required: !readonly, message: '请选择变更系统' }]} style={{ marginBottom: 4 }}>
+              <Form.Item name="change_system" label="变更系统" rules={required.rules('change_system', '变更系统', { action: '请选择' })} style={{ marginBottom: 4 }}>
                 <SystemSelect single size="small" placeholder="输入系统编号或名称检索"
                   style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} />
               </Form.Item>
@@ -407,18 +413,18 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
                 </div>
               )}
 
-              <Form.Item name="impl_org" label="实施机构" style={{ marginBottom: 8 }}>
+              <Form.Item name="impl_org" label="实施机构" rules={required.rules('impl_org', '实施机构', { action: '请选择' })} style={{ marginBottom: 8 }}>
                 <DictSelect category="org" size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} />
               </Form.Item>
 
               <Row gutter={8}>
                 <Col span={12}>
-                  <Form.Item name="out_dept" label="变更负责部门（输出口径）" style={{ marginBottom: 0 }}>
+                  <Form.Item name="out_dept" label="变更负责部门（输出口径）" rules={required.rules('out_dept', '变更负责部门（输出口径）', { action: '请选择' })} style={{ marginBottom: 0 }}>
                     <DictSelect category="org" size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} />
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item name="deploy_dept" label="变更负责部门（部署口径）" style={{ marginBottom: 0 }}>
+                  <Form.Item name="deploy_dept" label="变更负责部门（部署口径）" rules={required.rules('deploy_dept', '变更负责部门（部署口径）', { action: '请选择' })} style={{ marginBottom: 0 }}>
                     <DictSelect category="org" size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} />
                   </Form.Item>
                 </Col>
@@ -439,18 +445,18 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
                 {fields.map((field, idx) => (
                   <div key={field.key} style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap', paddingBottom: idx < fields.length - 1 ? 8 : 0, borderBottom: idx < fields.length - 1 ? '1px dashed var(--radar-border)' : 'none' }}>
                     <div style={{ width: 18, textAlign: 'center', fontSize: 11, fontWeight: 600, color: 'var(--radar-text-secondary)', paddingBottom: 6, flexShrink: 0 }}>{idx + 1}</div>
-                    <Form.Item name={[field.name, 'artifact_type']} label={idx === 0 ? '制品类型' : undefined} rules={[{ required: !readonly, message: '请选择制品类型' }]} style={{ marginBottom: 0, flex: '1 1 130px', minWidth: 120 }}>
+                    <Form.Item name={[field.name, 'artifact_type']} label={idx === 0 ? '制品类型' : undefined} rules={required.rules('delivery_units.artifact_type', '制品类型', { action: '请选择' })} style={{ marginBottom: 0, flex: '1 1 130px', minWidth: 120 }}>
                       <DictSelect category="artifact_type" size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} />
                     </Form.Item>
-                    <Form.Item name={[field.name, 'delivery_unit']} label={idx === 0 ? '交付单元名称（介质库路径/文件名）' : undefined} rules={[{ required: !readonly, message: '请填写交付单元名称' }]} style={{ marginBottom: 0, flex: '2 1 220px', minWidth: 180 }}>
+                    <Form.Item name={[field.name, 'delivery_unit']} label={idx === 0 ? '交付单元名称（介质库路径/文件名）' : undefined} rules={required.rules('delivery_units.delivery_unit', '交付单元名称')} style={{ marginBottom: 0, flex: '2 1 220px', minWidth: 180 }}>
                       <Input size="small" placeholder="介质库路径 / 文件名" readOnly={readonly} />
                     </Form.Item>
-                    <Form.Item name={[field.name, 'new_version']} label={idx === 0 ? '新版本号' : undefined} rules={[{ required: !readonly, message: '请填写新版本号' }]} style={{ marginBottom: 0, flex: '1 1 110px', minWidth: 100 }}>
+                    <Form.Item name={[field.name, 'new_version']} label={idx === 0 ? '新版本号' : undefined} rules={required.rules('delivery_units.new_version', '新版本号')} style={{ marginBottom: 0, flex: '1 1 110px', minWidth: 100 }}>
                       <Input size="small" placeholder="如 V1.2.0" readOnly={readonly} />
                     </Form.Item>
-                    {/* 摆渡状态：仅编辑时显示；新增默认「未摆渡」（由后端默认值写入） */}
+                    {/* 摆渡状态：仅编辑时显示；新增由后端按字典默认值写入 */}
                     {isEdit && (
-                      <Form.Item name={[field.name, 'ferry_status']} label={idx === 0 ? '摆渡状态' : undefined} style={{ marginBottom: 0, flex: '1 1 120px', minWidth: 110 }}>
+                      <Form.Item name={[field.name, 'ferry_status']} label={idx === 0 ? '摆渡状态' : undefined} rules={required.rules('delivery_units.ferry_status', '摆渡状态', { action: '请选择' })} style={{ marginBottom: 0, flex: '1 1 120px', minWidth: 110 }}>
                         <DictSelect category="ferry_status" size="small" allowClear={false} style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} />
                       </Form.Item>
                     )}
@@ -461,7 +467,7 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
                 ))}
                 {!readonly && (
                   <Button type="dashed" size="small" icon={<PlusOutlined />} block style={{ marginTop: 2 }}
-                    onClick={() => add({ artifact_type: undefined, delivery_unit: undefined, new_version: undefined, ferry_status: '未摆渡' })}>
+                    onClick={() => add({ artifact_type: undefined, delivery_unit: undefined, new_version: undefined })}>
                     添加交付制品
                   </Button>
                 )}

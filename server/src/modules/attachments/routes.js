@@ -10,6 +10,7 @@ import path from 'node:path';
 import { config } from '../../config.js';
 import { get, run } from '../../db/index.js';
 import { saveFile, savePath, listByEntity, removeAttachment } from '../../lib/attachment.js';
+import { assertAttachmentInputAllowed } from '../../lib/required-fields.js';
 import { ok, badRequest, notFound } from '../../lib/http.js';
 
 function getEntityCode(entityType, entityId) {
@@ -53,6 +54,7 @@ export default async function attachmentRoutes(fastify) {
     const entityId = data.fields?.entityId?.value;
     const fieldKey = data.fields?.fieldKey?.value;
     if (!entityType || !entityId || !fieldKey) throw badRequest('实体信息缺失');
+    assertAttachmentInputAllowed(entityType, Number(entityId), fieldKey, 'file');
     const buffer = await data.toBuffer();
     const rec = saveFile({
       entityType, entityId: Number(entityId), fieldKey,
@@ -70,6 +72,7 @@ export default async function attachmentRoutes(fastify) {
   fastify.post('/attachments/path', { preHandler: fastify.authenticate }, async (request) => {
     const { entityType, entityId, fieldKey, pathText } = request.body || {};
     if (!entityType || !entityId || !fieldKey) throw badRequest('实体信息缺失');
+    assertAttachmentInputAllowed(entityType, Number(entityId), fieldKey, 'path');
     const rec = savePath({
       entityType, entityId: Number(entityId), fieldKey, pathText, uploader: request.currentUser?.name,
     });

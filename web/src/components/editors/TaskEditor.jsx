@@ -23,6 +23,7 @@ import StatusBadge, { getStatusType, statusSelectWidth } from '../StatusBadge.js
 import { apiGet, apiPut } from '../../api/client.js';
 import { useAppStore } from '../../stores/app.js';
 import { useResponsive } from '../../hooks/useResponsive.js';
+import { useRequiredFields } from '../../hooks/useRequiredFields.js';
 
 const CFG = {
   dev: {
@@ -36,6 +37,12 @@ const CFG = {
     statusLabel: '测试状态', ownerLabel: '测试负责人', orgLabel: '测试实施方',
   },
 };
+
+function attachmentModeText(mode) {
+  if (mode === 'path') return '路径';
+  if (mode === 'file') return '上传文档';
+  return '附件或路径';
+}
 
 export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', taskId, onClose, onSaved }) {
   const cfg = CFG[kind];
@@ -51,6 +58,7 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
   const { can } = useAppStore();
   const { isMobile } = useResponsive();
   const readonly = !can(cfg.entity, 'edit');
+  const required = useRequiredFields(cfg.entity, getStatusType(statusValue), readonly);
   const linkStyle = { color: 'var(--radar-primary)', cursor: 'pointer' };
   const attachFields = kind === 'test' && current?.test_type === 'SIT'
     ? [...cfg.attachFields, '测试覆盖设计文档']
@@ -174,12 +182,12 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
             <div className="form-section-card">
               <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>基本信息</div>
 
-              <Form.Item name="task_name" label="任务名称" style={{ marginBottom: 8 }}>
+              <Form.Item name="task_name" label="任务名称" rules={required.rules('task_name', '任务名称', { message: '请输入任务名称' })} style={{ marginBottom: 8 }}>
                 <Input placeholder="请输入任务名称" size="small" readOnly={readonly} />
               </Form.Item>
 
               {kind === 'dev' && (
-                <Form.Item name="content" label="开发内容概述" style={{ marginBottom: 8 }}>
+                <Form.Item name="content" label="开发内容概述" rules={required.rules('content', '开发内容概述')} style={{ marginBottom: 8 }}>
                   <Input.TextArea rows={2} placeholder="简要描述开发内容" style={{ fontSize: 12 }} readOnly={readonly} />
                 </Form.Item>
               )}
@@ -187,17 +195,17 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
               {/* 负责人/实施系统/实施方：手机端各占一行（充满），PC 端双栏不变；测试详情手机端隐藏「实施机构」 */}
               <Row gutter={8}>
                 <Col span={isMobile ? 24 : 12}>
-                  <Form.Item name="owner" label={cfg.ownerLabel} style={{ marginBottom: 8 }}>
+                  <Form.Item name="owner" label={cfg.ownerLabel} rules={required.rules('owner', cfg.ownerLabel, { action: '请选择' })} style={{ marginBottom: 8 }}>
                     <PersonPicker style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} size="small" placeholder="选择负责人" />
                   </Form.Item>
                 </Col>
                 <Col span={isMobile ? 24 : 12}>
-                  <Form.Item name="impl_system" label="实施系统" style={{ marginBottom: 8 }}>
+                  <Form.Item name="impl_system" label="实施系统" rules={required.rules('impl_system', '实施系统', { action: '请选择' })} style={{ marginBottom: 8 }}>
                     <SystemSelect single size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择实施系统" />
                   </Form.Item>
                 </Col>
                 <Col span={isMobile ? 24 : 12}>
-                  <Form.Item name="impl_org" label={cfg.orgLabel} style={{ marginBottom: (kind === 'test' && !isMobile) ? 8 : 0 }}>
+                  <Form.Item name="impl_org" label={cfg.orgLabel} rules={required.rules('impl_org', cfg.orgLabel, { action: '请选择' })} style={{ marginBottom: (kind === 'test' && !isMobile) ? 8 : 0 }}>
                     <DictSelect category="org" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} size="small" />
                   </Form.Item>
                 </Col>
@@ -207,7 +215,7 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
                     <Form.Item name="impl_agency" hidden><Input /></Form.Item>
                   ) : (
                     <Col span={12}>
-                      <Form.Item name="impl_agency" label="实施机构" style={{ marginBottom: 0 }}>
+                      <Form.Item name="impl_agency" label="实施机构" rules={required.rules('impl_agency', '实施机构', { action: '请选择' })} style={{ marginBottom: 0 }}>
                         <DictSelect category="org" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} size="small" />
                       </Form.Item>
                     </Col>
@@ -219,27 +227,30 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
             <div className="form-section-card">
               <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>排期<span style={{ fontWeight: 400, color: 'var(--radar-text-secondary)', marginLeft: 6, fontSize: 11 }}>（终态必填）</span></div>
               <Row gutter={8}>
-                <Col span={12}><Form.Item name="plan_start" label="计划开始" style={{ marginBottom: 8 }}><DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" /></Form.Item></Col>
-                <Col span={12}><Form.Item name="plan_end" label="计划结束" style={{ marginBottom: 8 }}><DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" /></Form.Item></Col>
-                <Col span={12}><Form.Item name="actual_start" label="实际开始" style={{ marginBottom: 0 }}><DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" /></Form.Item></Col>
-                <Col span={12}><Form.Item name="actual_end" label="实际结束" style={{ marginBottom: 0 }}><DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" /></Form.Item></Col>
+                <Col span={12}><Form.Item name="plan_start" label="计划开始" rules={required.rules('plan_start', '计划开始', { action: '请选择' })} style={{ marginBottom: 8 }}><DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" /></Form.Item></Col>
+                <Col span={12}><Form.Item name="plan_end" label="计划结束" rules={required.rules('plan_end', '计划结束', { action: '请选择' })} style={{ marginBottom: 8 }}><DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" /></Form.Item></Col>
+                <Col span={12}><Form.Item name="actual_start" label="实际开始" rules={required.rules('actual_start', '实际开始', { action: '请选择' })} style={{ marginBottom: 0 }}><DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" /></Form.Item></Col>
+                <Col span={12}><Form.Item name="actual_end" label="实际结束" rules={required.rules('actual_end', '实际结束', { action: '请选择' })} style={{ marginBottom: 0 }}><DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" /></Form.Item></Col>
               </Row>
             </div>
           </Col>
 
           {/* ── 右栏：阶段附件 ── */}
           <Col xs={24} md={10}>
-            {attachFields.map((f) => (
-              <div className="form-section-card" key={f} style={{ marginBottom: 12 }}>
-                <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>
-                  {f}
-                  <span style={{ fontWeight: 400, color: 'var(--radar-text-secondary)', marginLeft: 6, fontSize: 11 }}>
-                    （附件或路径）
-                  </span>
+            {attachFields.map((f) => {
+              const mode = required.attachmentMode(f);
+              return (
+                <div className="form-section-card" key={f} style={{ marginBottom: 12 }}>
+                  <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>
+                    {f}
+                    <span style={{ fontWeight: 400, color: 'var(--radar-text-secondary)', marginLeft: 6, fontSize: 11 }}>
+                      （{attachmentModeText(mode)}）
+                    </span>
+                  </div>
+                  <AttachmentField entityType={cfg.entity} entityId={current?.id} fieldKey={f} readOnly={readonly} inputMode={mode} />
                 </div>
-                <AttachmentField entityType={cfg.entity} entityId={current?.id} fieldKey={f} readOnly={readonly} />
-              </div>
-            ))}
+              );
+            })}
           </Col>
         </Row>
       </Form>

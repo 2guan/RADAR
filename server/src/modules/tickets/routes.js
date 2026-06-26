@@ -8,7 +8,9 @@
 
 import { get, run, tx, all } from '../../db/index.js';
 import { listQuery } from '../../lib/query.js';
-import { isTerminalStatus } from '../../lib/status.js';
+import { genTicketCode } from '../../lib/code-gen.js';
+import { defaultProcessStatus, isTerminalStatus } from '../../lib/status.js';
+import { statusTypeForProcessStatus, validateRequiredFields } from '../../lib/required-fields.js';
 import { auditCreate, auditUpdate, auditDelete } from '../../lib/audit.js';
 import { exportXlsx, parseXlsx } from '../../lib/excel.js';
 import { windowIds, inClause } from '../../lib/window.js';
@@ -303,24 +305,30 @@ export default async function ticketRoutes(fastify) {
   // 新增
   fastify.post('/tickets', { preHandler: fastify.requirePerm('ticket', 'create') }, async (request) => {
     const body = request.body || {};
-    if (!body.title) throw badRequest('工单概述必填');
     const manualCode = String(body.ticket_code || '').trim();
-    if (!manualCode) throw badRequest('工单编号必填');
-    if (!body.release_point_id) throw badRequest('计划投产点必填');
-    const rp = get('SELECT * FROM release_point WHERE id = ?', body.release_point_id);
-    if (!rp) throw badRequest('投产点不存在');
+    const rp = body.release_point_id ? get('SELECT * FROM release_point WHERE id = ?', body.release_point_id) : null;
+    if (body.release_point_id && !rp) throw badRequest('投产点不存在');
+    const initialStatus = defaultProcessStatus('工单', 'initial', '工单登记');
+
+    validateRequiredFields('ticket', statusTypeForProcessStatus(body.status || initialStatus), {
+      ...body,
+      ticket_code: manualCode || '__AUTO__',
+      status: body.status || initialStatus,
+    });
 
     const data = encodeField(pick(body));
+    if (data.title === undefined) data.title = '';
     delete data.ticket_code;
     delete data.status;
     // 手动编号在同一 BEGIN IMMEDIATE 事务内校验唯一性，防止并发重复提交。
     const { id, reqCode } = tx(() => {
-      const code = manualCode;
+      let code = manualCode;
+      if (!code) code = genTicketCode(rp?.release_date);
       if (get('SELECT id FROM ticket WHERE ticket_code = ?', code)) throw badRequest('工单编号已存在，请更换');
       const fields = ['ticket_code', 'status', 'registrar', 'register_time', ...Object.keys(data)];
       const values = [
         code,
-        body.status || '工单登记',
+        body.status || initialStatus,
         request.currentUser?.name,
         new Date().toISOString().slice(0, 10),
         ...Object.keys(data).map((k) => data[k]),
@@ -354,6 +362,7 @@ export default async function ticketRoutes(fastify) {
     // 终态校验：用提交后的状态与主责系统
     const newStatus = picked.status ?? old.status;
     const newMain = picked.main_systems ?? (old.main_systems ? JSON.parse(old.main_systems) : []);
+    validateRequiredFields('ticket', statusTypeForProcessStatus(newStatus), { ...decode(old), ...picked, status: newStatus });
     validateTerminal(newStatus, newMain);
 
     const data = encodeField(picked);
@@ -503,7 +512,7 @@ export default async function ticketRoutes(fastify) {
           if (!rpId) throw new Error(`计划投产点投产日期 [${r.release_date}] 不存在`);
 
           // 兼容性字典转换
-          const status = resolveDictAttr('process_status', r.status) || '工单登记';
+          const status = resolveDictAttr('process_status', r.status) || defaultProcessStatus('工单', 'initial', '工单登记');
           const reqType = resolveDictAttr('ticket_type', r.ticket_type);
           const isAccounting = ['是', '否'].includes(String(r.is_accounting || '').trim())
             ? String(r.is_accounting).trim()

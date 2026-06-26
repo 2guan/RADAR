@@ -10,9 +10,11 @@ import { Upload, Button, Input, Space, List, Tag, Popconfirm, message, Modal } f
 import { UploadOutlined, LinkOutlined, DownloadOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons';
 import { apiGet, apiPost, apiDelete, rawClient, TOKEN_KEY } from '../api/client.js';
 
-export default function AttachmentField({ entityType, entityId, fieldKey, readOnly }) {
+export default function AttachmentField({ entityType, entityId, fieldKey, readOnly, inputMode = 'both' }) {
   const [list, setList] = useState([]);
   const [pathText, setPathText] = useState('');
+  const allowFile = inputMode !== 'path';
+  const allowPath = inputMode !== 'file';
 
   // 弹窗编辑路径状态
   const [editOpen, setEditOpen] = useState(false);
@@ -146,17 +148,23 @@ export default function AttachmentField({ entityType, entityId, fieldKey, readOn
       )}
       {!readOnly && (
         <div style={{ display: 'flex', width: '100%', marginTop: 8 }}>
-          <Upload customRequest={customUpload} showUploadList={false} style={{ flexShrink: 0 }}>
-            <Button size="small" icon={<UploadOutlined style={{ fontSize: 11 }} />} style={{ fontSize: 11, borderTopLeftRadius: 2, borderBottomLeftRadius: 2, borderTopRightRadius: 0, borderBottomRightRadius: 0, height: 24 }}>上传文件</Button>
-          </Upload>
-          <Button size="small" onClick={addPath} style={{ flexShrink: 0, fontSize: 11, borderRadius: 0, height: 24, borderLeft: 0 }}>添加路径</Button>
-          <Input
-            placeholder="填写文件路径，如 \\\\server\\share\\file.docx"
-            value={pathText} onChange={(e) => setPathText(e.target.value)} onPressEnter={addPath}
-            prefix={<LinkOutlined style={{ fontSize: 11, color: 'var(--radar-text-secondary)' }} />}
-            size="small"
-            style={{ flex: 1, fontSize: 11, borderTopRightRadius: 2, borderBottomRightRadius: 2, borderTopLeftRadius: 0, borderBottomLeftRadius: 0, height: 24, borderLeft: 0 }}
-          />
+          {allowFile && (
+            <Upload customRequest={customUpload} showUploadList={false} style={{ flexShrink: 0 }}>
+              <Button size="small" icon={<UploadOutlined style={{ fontSize: 11 }} />} style={{ fontSize: 11, borderTopLeftRadius: 2, borderBottomLeftRadius: 2, borderTopRightRadius: allowPath ? 0 : 2, borderBottomRightRadius: allowPath ? 0 : 2, height: 24 }}>上传文件</Button>
+            </Upload>
+          )}
+          {allowPath && (
+            <>
+              <Button size="small" onClick={addPath} style={{ flexShrink: 0, fontSize: 11, borderTopLeftRadius: allowFile ? 0 : 2, borderBottomLeftRadius: allowFile ? 0 : 2, borderTopRightRadius: 0, borderBottomRightRadius: 0, height: 24, borderLeft: allowFile ? 0 : undefined }}>添加路径</Button>
+              <Input
+                placeholder="填写文件路径，如 \\\\server\\share\\file.docx"
+                value={pathText} onChange={(e) => setPathText(e.target.value)} onPressEnter={addPath}
+                prefix={<LinkOutlined style={{ fontSize: 11, color: 'var(--radar-text-secondary)' }} />}
+                size="small"
+                style={{ flex: 1, fontSize: 11, borderTopRightRadius: 2, borderBottomRightRadius: 2, borderTopLeftRadius: 0, borderBottomLeftRadius: 0, height: 24, borderLeft: 0 }}
+              />
+            </>
+          )}
         </div>
       )}
 

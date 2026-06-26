@@ -3,15 +3,16 @@
  * 用途：需求分析模块接口。需求 CRUD（全字段可改并留痕）、编号生成、终态业务校验、
  *       默认按当前投产窗口过滤、导入导出。
  * 作者：hengguan
- * 说明：JSON 数组字段（主责/协同系统）入库前序列化；终态时校验主责系统与需求说明书附件。
+ * 说明：JSON 数组字段（主责/协同系统）入库前序列化；终态时校验主责系统。
  */
 
 import { get, run, tx, all } from '../../db/index.js';
 import { listQuery } from '../../lib/query.js';
 import { genRequirementCode } from '../../lib/code-gen.js';
-import { isTerminalStatus } from '../../lib/status.js';
+import { defaultProcessStatus, isTerminalStatus } from '../../lib/status.js';
+import { statusTypeForProcessStatus, validateRequiredFields } from '../../lib/required-fields.js';
 import { auditCreate, auditUpdate, auditDelete } from '../../lib/audit.js';
-import { listByEntity, countByFields } from '../../lib/attachment.js';
+import { listByEntity } from '../../lib/attachment.js';
 import { exportXlsx, parseXlsx } from '../../lib/excel.js';
 import { windowIds, inClause } from '../../lib/window.js';
 import { ok, notFound, badRequest } from '../../lib/http.js';
@@ -113,8 +114,6 @@ function validateTerminal(reqId, statusAttr, mainSystems) {
   if (!Array.isArray(mainSystems) || mainSystems.length === 0) {
     throw badRequest('分析完成（终态）时，主责系统至少填写 1 个');
   }
-  const cnt = countByFields('requirement', reqId, ['需求说明书']);
-  if (cnt === 0) throw badRequest('分析完成（终态）时，需求说明书附件或路径至少填写 1 个');
 }
 
 export default async function requirementRoutes(fastify) {
@@ -285,23 +284,29 @@ export default async function requirementRoutes(fastify) {
   // 新增
   fastify.post('/requirements', { preHandler: fastify.requirePerm('requirement', 'create') }, async (request) => {
     const body = request.body || {};
-    if (!body.title) throw badRequest('需求标题必填');
-    if (!body.release_point_id) throw badRequest('计划投产点必填');
-    const rp = get('SELECT * FROM release_point WHERE id = ?', body.release_point_id);
-    if (!rp) throw badRequest('投产点不存在');
+    const rp = body.release_point_id ? get('SELECT * FROM release_point WHERE id = ?', body.release_point_id) : null;
+    if (body.release_point_id && !rp) throw badRequest('投产点不存在');
+    const initialStatus = defaultProcessStatus('需求', 'initial', '需求登记');
+
+    validateRequiredFields('requirement', statusTypeForProcessStatus(body.status || initialStatus), {
+      ...body,
+      req_code: body.req_code || '__AUTO__',
+      status: body.status || initialStatus,
+    });
 
     const data = encodeField(pick(body));
+    if (data.title === undefined) data.title = '';
     // 编号生成与 INSERT 在同一 BEGIN IMMEDIATE 事务内，防止并发提交时编号冲突；
     // 若前端传来的编号已被抢占，自动重新生成而非报错。
     const { id, reqCode } = tx(() => {
       let code = (body.req_code || '').trim();
       if (!code || get('SELECT id FROM requirement WHERE req_code = ?', code)) {
-        code = genRequirementCode(rp.release_date);
+        code = genRequirementCode(rp?.release_date);
       }
       const fields = ['req_code', 'status', 'registrar', 'register_time', ...Object.keys(data)];
       const values = [
         code,
-        body.status || '需求登记',
+        body.status || initialStatus,
         request.currentUser?.name,
         new Date().toISOString().slice(0, 10),
         ...Object.keys(data).map((k) => data[k]),
@@ -335,6 +340,7 @@ export default async function requirementRoutes(fastify) {
     // 终态校验：用提交后的状态与主责系统
     const newStatus = picked.status ?? old.status;
     const newMain = picked.main_systems ?? (old.main_systems ? JSON.parse(old.main_systems) : []);
+    validateRequiredFields('requirement', statusTypeForProcessStatus(newStatus), { ...decode(old), ...picked, status: newStatus });
     validateTerminal(id, newStatus, newMain);
 
     const data = encodeField(picked);
@@ -496,7 +502,7 @@ export default async function requirementRoutes(fastify) {
           if (!rpId) throw new Error(`计划投产点投产日期 [${r.release_date}] 不存在`);
 
           // 兼容性字典转换
-          const status = resolveDictAttr('process_status', r.status) || '需求登记';
+          const status = resolveDictAttr('process_status', r.status) || defaultProcessStatus('需求', 'initial', '需求登记');
           const reqType = resolveDictAttr('req_type', r.req_type);
           const isAccounting = ['是', '否'].includes(String(r.is_accounting || '').trim())
             ? String(r.is_accounting).trim()

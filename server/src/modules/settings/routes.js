@@ -8,6 +8,11 @@
 
 import { all, get, run, tx } from '../../db/index.js';
 import { ok } from '../../lib/http.js';
+import {
+  REQUIRED_FIELDS_CONFIG_KEY,
+  normalizeRequiredFieldConfig,
+  requiredFieldCatalogPayload,
+} from '../../lib/required-fields.js';
 
 // 允许写入的配置键白名单
 const WRITABLE_KEYS = new Set([
@@ -15,6 +20,7 @@ const WRITABLE_KEYS = new Set([
   'code.requirement', 'code.dev', 'code.test.SIT', 'code.test.UAT', 'code.test.NFT', 'code.test.SEC',
   'code.release_apply',
   'release.signoffRoles', 'appearance.preset',
+  REQUIRED_FIELDS_CONFIG_KEY,
   'security.password.complexity', 'security.password.minLength', 'security.password.expireDays',
   'security.lockout.enabled', 'security.lockout.maxAttempts', 'security.lockout.durationMinutes',
 ]);
@@ -43,6 +49,22 @@ export default async function settingsRoutes(fastify) {
   fastify.get('/settings/app-config', { preHandler: fastify.requirePerm('settings', 'view') }, async () => {
     const rows = all('SELECT key, value, remark FROM app_config ORDER BY key');
     return ok(rows);
+  });
+
+  // 必填项配置：业务表单也需要读取，因此只要求登录，不要求系统设置权限
+  fastify.get('/settings/required-fields', { preHandler: fastify.authenticate }, async () => ok(requiredFieldCatalogPayload()));
+
+  // 保存必填项配置
+  fastify.put('/settings/required-fields', { preHandler: fastify.requirePerm('settings', 'edit') }, async (request) => {
+    const config = normalizeRequiredFieldConfig(request.body?.config || {});
+    run(
+      `INSERT INTO app_config (key, value, remark) VALUES (?,?,?)
+       ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=datetime('now','localtime')`,
+      REQUIRED_FIELDS_CONFIG_KEY,
+      JSON.stringify(config),
+      '字段必填项配置（JSON）',
+    );
+    return ok(config, '配置已保存');
   });
 
   // 批量保存配置

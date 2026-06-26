@@ -9,10 +9,11 @@
 import { get, all, run, tx } from '../../db/index.js';
 import { listQuery } from '../../lib/query.js';
 import { genDevCode } from '../../lib/code-gen.js';
-import { isTerminalStatus } from '../../lib/status.js';
+import { defaultProcessStatus, isTerminalStatus } from '../../lib/status.js';
+import { statusTypeForProcessStatus, validateRequiredFields } from '../../lib/required-fields.js';
 import { calcDeviation } from '../../lib/deviation.js';
 import { auditCreate, auditUpdate, auditDelete } from '../../lib/audit.js';
-import { listByEntity, countByFields } from '../../lib/attachment.js';
+import { listByEntity } from '../../lib/attachment.js';
 import { windowIds, inClause } from '../../lib/window.js';
 import { ok, notFound, badRequest } from '../../lib/http.js';
 import { exportXlsx, parseXlsx } from '../../lib/excel.js';
@@ -49,16 +50,12 @@ const LABELS = {
 };
 // 本阶段附件字段
 const ATTACH_FIELDS = ['概要设计', '详细设计', '代码走查', '单元测试报告', '影响性分析文档'];
-const REQUIRED_TERMINAL_ATTACH_FIELD = '影响性分析文档';
 
-/** 终态校验：附件≥1，计划/实际起止时间必填 */
+/** 终态校验：计划/实际起止时间必填 */
 function validateTerminal(id, status, row) {
   if (!isTerminalStatus(status)) return;
   if (!row.plan_start || !row.plan_end || !row.actual_start || !row.actual_end) {
     throw badRequest('开发完成（终态）时，计划/实际的开始与结束时间均必填');
-  }
-  if (countByFields('dev', id, [REQUIRED_TERMINAL_ATTACH_FIELD]) === 0) {
-    throw badRequest('开发完成（终态）时，影响性分析文档附件或路径必填');
   }
 }
 
@@ -282,6 +279,7 @@ export default async function devTaskRoutes(fastify) {
 
     const created = tx(() => {
       const out = [];
+      const initialStatus = defaultProcessStatus('开发', 'initial', '开发承接');
       for (const sysCode of targets) {
         const sys = get('SELECT * FROM system WHERE sys_code = ?', sysCode);
         const taskCode = genDevCode(reqCode);
@@ -289,7 +287,7 @@ export default async function devTaskRoutes(fastify) {
         const res = run(
           `INSERT INTO dev_task (req_code, task_code, task_name, status, impl_system, impl_org, registrar, register_time)
            VALUES (?,?,?,?,?,?,?,?)`,
-          reqCode, taskCode, taskName, '开发承接', sysCode, sys?.org || null,
+          reqCode, taskCode, taskName, initialStatus, sysCode, sys?.org || null,
           request.currentUser?.name, new Date().toISOString().slice(0, 10),
         );
         auditCreate('dev', res.lastInsertRowid, taskCode, request.currentUser?.name);
@@ -310,6 +308,7 @@ export default async function devTaskRoutes(fastify) {
     for (const k of WRITABLE) if (body[k] !== undefined) data[k] = body[k];
 
     const merged = { ...old, ...data };
+    validateRequiredFields('dev', statusTypeForProcessStatus(merged.status), merged);
     validateTerminal(id, merged.status, merged);
     // 重算偏差率
     data.deviation_rate = calcDeviation(merged.plan_start, merged.plan_end, merged.actual_end);
@@ -439,7 +438,7 @@ export default async function devTaskRoutes(fastify) {
           if (!req) throw new Error(`关联需求/工单编号 [${r.req_code}] 不存在`);
 
           // 兼容性字典/系统转换
-          const status = resolveDictAttr('process_status', r.status) || '开发承接';
+          const status = resolveDictAttr('process_status', r.status) || defaultProcessStatus('开发', 'initial', '开发承接');
           const implOrg = resolveDictAttr('org', r.impl_org);
           const implSystem = resolveSystemCode(r.impl_system);
 

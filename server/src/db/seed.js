@@ -9,6 +9,7 @@
 import { db, get, run, tx, all } from './index.js';
 import { hashPassword } from '../lib/password.js';
 import { config } from '../config.js';
+import { DEFAULT_REQUIRED_FIELD_CONFIG, REQUIRED_FIELDS_CONFIG_KEY } from '../lib/required-fields.js';
 
 // 角色定义（角色标识、名称、是否内置、是否会签角色）
 // 会签角色（signoff:1）：安全/架构/机构/项目/测试/配置负责人——投产评审会签由这 6 个角色完成。
@@ -209,6 +210,7 @@ const APP_CONFIG = [
   ['code.release_apply', '{版本年月}-10bg{序号}', '投产申请变更编号规则'],
   ['release.signoffRoles', '["安全负责人","架构负责人","机构负责人","项目负责人","测试负责人","配置负责人"]', '投产评审会签角色（JSON 数组）'],
   ['appearance.preset', 'sky', '外观主题预设（默认清新蓝）'],
+  [REQUIRED_FIELDS_CONFIG_KEY, JSON.stringify(DEFAULT_REQUIRED_FIELD_CONFIG), '字段必填项配置（JSON）'],
   ['security.password.complexity', 'true', '启用密码复杂度校验'],
   ['security.password.minLength', '8', '密码最小长度'],
   ['security.password.expireDays', '90', '密码有效期（天）'],

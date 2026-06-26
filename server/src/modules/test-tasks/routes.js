@@ -9,10 +9,11 @@
 import { get, all, run, tx } from '../../db/index.js';
 import { listQuery } from '../../lib/query.js';
 import { genTestCode } from '../../lib/code-gen.js';
-import { isTerminalStatus } from '../../lib/status.js';
+import { defaultProcessStatus, isTerminalStatus } from '../../lib/status.js';
+import { statusTypeForProcessStatus, validateRequiredFields } from '../../lib/required-fields.js';
 import { calcDeviation } from '../../lib/deviation.js';
 import { auditCreate, auditUpdate, auditDelete } from '../../lib/audit.js';
-import { listByEntity, countByFields } from '../../lib/attachment.js';
+import { listByEntity } from '../../lib/attachment.js';
 import { windowIds, inClause } from '../../lib/window.js';
 import { ok, notFound, badRequest } from '../../lib/http.js';
 import { exportXlsx, parseXlsx } from '../../lib/excel.js';
@@ -50,18 +51,11 @@ const LABELS = {
   actual_start: '实际开始时间', actual_end: '实际结束时间',
 };
 const ATTACH_FIELDS = ['测试方案', '测试报告'];
-const SIT_REQUIRED_TERMINAL_ATTACH_FIELD = '测试覆盖设计文档';
 
 function validateTerminal(id, status, row) {
   if (!isTerminalStatus(status)) return;
   if (!row.plan_start || !row.plan_end || !row.actual_start || !row.actual_end) {
     throw badRequest('测试完成（终态）时，计划/实际的开始与结束时间均必填');
-  }
-  if (countByFields('test', id, ATTACH_FIELDS) === 0) {
-    throw badRequest('测试完成（终态）时，本阶段附件或路径至少填写 1 个');
-  }
-  if (row.test_type === 'SIT' && countByFields('test', id, [SIT_REQUIRED_TERMINAL_ATTACH_FIELD]) === 0) {
-    throw badRequest('应用组装测试完成（终态）时，测试覆盖设计文档附件或路径必填');
   }
 }
 
@@ -341,13 +335,14 @@ export default async function testTaskRoutes(fastify) {
 
     const created = tx(() => {
       const out = [];
+      const initialStatus = defaultProcessStatus('测试', 'initial', '测试承接');
       for (const t of targets) {
         const sys = t.sysCode ? get('SELECT * FROM system WHERE sys_code = ?', t.sysCode) : null;
         const taskCode = genTestCode(testType, reqCode);
         const res = run(
           `INSERT INTO test_task (req_code, task_code, task_name, test_type, status, impl_system, impl_org, registrar, register_time)
            VALUES (?,?,?,?,?,?,?,?,?)`,
-          reqCode, taskCode, t.taskName, testType, '测试承接', t.sysCode || null, sys?.org || null,
+          reqCode, taskCode, t.taskName, testType, initialStatus, t.sysCode || null, sys?.org || null,
           request.currentUser?.name, new Date().toISOString().slice(0, 10),
         );
         auditCreate('test', res.lastInsertRowid, taskCode, request.currentUser?.name);
@@ -368,6 +363,7 @@ export default async function testTaskRoutes(fastify) {
     for (const k of WRITABLE) if (body[k] !== undefined) data[k] = body[k];
 
     const merged = { ...old, ...data };
+    validateRequiredFields('test', statusTypeForProcessStatus(merged.status), merged);
     validateTerminal(id, merged.status, merged);
     data.deviation_rate = calcDeviation(merged.plan_start, merged.plan_end, merged.actual_end);
 
@@ -515,7 +511,7 @@ export default async function testTaskRoutes(fastify) {
           }
 
           // 兼容性字典/系统转换
-          const status = resolveDictAttr('process_status', r.status) || '测试承接';
+          const status = resolveDictAttr('process_status', r.status) || defaultProcessStatus('测试', 'initial', '测试承接');
           const implOrg = resolveDictAttr('org', r.impl_org);
           const implAgency = resolveDictAttr('org', r.impl_agency);
           const implSystem = resolveSystemCode(r.impl_system);

@@ -142,7 +142,6 @@ export default function Tickets() {
       ),
     },
     { title: '工单类型', dataIndex: 'ticket_type', key: 'ticket_type' },
-    { title: '是否涉账', dataIndex: 'is_accounting', key: 'is_accounting', width: 90, render: (v) => v || '否' },
     {
       title: '提出人',
       dataIndex: 'proposer',

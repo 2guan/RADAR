@@ -20,6 +20,8 @@ import { getStatusType, statusSelectWidth } from '../StatusBadge.jsx';
 import { apiGet, apiPost, apiPut } from '../../api/client.js';
 import { useAppStore } from '../../stores/app.js';
 import { useResponsive } from '../../hooks/useResponsive.js';
+import { useRequiredFields } from '../../hooks/useRequiredFields.js';
+import { useDefaultProcessStatus } from '../../hooks/useDefaultProcessStatus.js';
 
 // ─── 模块级系统列表缓存（与 SystemSelect 共用同一接口，但单独维护以供下方组件使用） ───
 let _sysCache = null;
@@ -193,6 +195,8 @@ export default function TicketEditor({ open, mode = 'modal', code, reqId, defaul
   // 既有需求（按 id 或编号加载）即为编辑/查看态；其余为新增
   const isEdit = !!reqId || !!code || mode === 'page';
   const readonly = isEdit ? !can('ticket', 'edit') : !can('ticket', 'create');
+  const required = useRequiredFields('ticket', getStatusType(statusValue), readonly);
+  const initialStatus = useDefaultProcessStatus('工单', 'initial', '工单登记');
   // 已关联开发/测试任务时，工单编号锁定不可改
   const codeLocked = !!current?.has_tasks;
 
@@ -291,9 +295,9 @@ export default function TicketEditor({ open, mode = 'modal', code, reqId, defaul
     } else {
       setCurrent(null);
       form.resetFields();
-      form.setFieldsValue({ status: '工单登记', ticket_type: '工单急迫需求', is_accounting: '否', release_point_id: defaultReleasePointId });
+      form.setFieldsValue({ status: initialStatus, ticket_type: '工单急迫需求', is_accounting: '否', release_point_id: defaultReleasePointId });
     }
-  }, [open, reqId, code, mode]);
+  }, [open, reqId, code, mode, initialStatus]);
 
   const save = async () => {
     const v = await form.validateFields();
@@ -415,7 +419,7 @@ export default function TicketEditor({ open, mode = 'modal', code, reqId, defaul
                     )}
                     style={{ marginBottom: 8 }}
                     rules={[
-                      { required: !readonly, message: '请填写工单编号' },
+                      ...required.rules('ticket_code', '工单编号', { message: '请填写工单编号' }),
                       { pattern: /^\S+$/, message: '编号不能包含空格' },
                       { validator: (_, val) => checkCodeUnique(val) },
                     ]}
@@ -435,13 +439,13 @@ export default function TicketEditor({ open, mode = 'modal', code, reqId, defaul
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item name="ticket_type" label="工单类型" rules={[{ required: !readonly, message: '请选择工单类型' }]} style={{ marginBottom: 8 }}>
+                  <Form.Item name="ticket_type" label="工单类型" rules={required.rules('ticket_type', '工单类型', { action: '请选择' })} style={{ marginBottom: 8 }}>
                     <DictSelect category="ticket_type" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} size="small" />
                   </Form.Item>
                 </Col>
                 {/* 计划投产点 + 提出时间 */}
                 <Col span={12}>
-                  <Form.Item name="release_point_id" label="计划投产点" rules={[{ required: !readonly, message: '请选择计划投产点' }]} style={{ marginBottom: 8 }}>
+                  <Form.Item name="release_point_id" label="计划投产点" rules={required.rules('release_point_id', '计划投产点', { action: '请选择' })} style={{ marginBottom: 8 }}>
                     <Select
                       placeholder="选择计划投产点"
                       size="small"
@@ -457,18 +461,18 @@ export default function TicketEditor({ open, mode = 'modal', code, reqId, defaul
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item name="propose_time" label="提出时间" rules={[{ required: !readonly, message: '请选择提出时间' }]} style={{ marginBottom: 8 }}>
+                  <Form.Item name="propose_time" label="提出时间" rules={required.rules('propose_time', '提出时间', { action: '请选择' })} style={{ marginBottom: 8 }}>
                     <DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" />
                   </Form.Item>
                 </Col>
                 {/* 关联问题/工单编号 + 是否涉账 */}
                 <Col span={12}>
-                  <Form.Item name="issue_no" label="关联问题/工单编号" style={{ marginBottom: 8 }}>
+                  <Form.Item name="issue_no" label="关联问题/工单编号" rules={required.rules('issue_no', '关联问题/工单编号')} style={{ marginBottom: 8 }}>
                     <Input placeholder="手动输入关联问题/工单编号（选填）" size="small" readOnly={readonly} />
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item name="is_accounting" label="是否涉账" initialValue="否" rules={[{ required: !readonly, message: '请选择是否涉账' }]} style={{ marginBottom: 8 }}>
+                  <Form.Item name="is_accounting" label="是否涉账" initialValue="否" rules={required.rules('is_accounting', '是否涉账', { action: '请选择' })} style={{ marginBottom: 8 }}>
                     <Select
                       size="small"
                       options={[{ value: '否', label: '否' }, { value: '是', label: '是' }]}
@@ -480,10 +484,10 @@ export default function TicketEditor({ open, mode = 'modal', code, reqId, defaul
               </Row>
 
               {/* 工单概述 */}
-              <Form.Item name="title" label="工单概述" rules={[{ required: !readonly, message: '请输入工单概述' }]} style={{ marginBottom: 8 }}>
+              <Form.Item name="title" label="工单概述" rules={required.rules('title', '工单概述', { message: '请输入工单概述' })} style={{ marginBottom: 8 }}>
                 <Input placeholder="请输入工单概述" size="small" readOnly={readonly} />
               </Form.Item>
-              <Form.Item name="summary" label="工单详情" rules={[{ required: !readonly, message: '请填写工单详情' }, { max: 2000, message: '不超过 2000 字' }]} style={{ marginBottom: 18 }}>
+              <Form.Item name="summary" label="工单详情" rules={required.rules('summary', '工单详情', { message: '请填写工单详情', extraRules: [{ max: 2000, message: '不超过 2000 字' }] })} style={{ marginBottom: 18 }}>
                 <Input.TextArea rows={7} placeholder="描述该工单的核心背景与业务诉求（2000字以内）" showCount={!readonly} maxLength={2000} style={{ fontSize: 12 }} readOnly={readonly} />
               </Form.Item>
             </div>
@@ -498,17 +502,17 @@ export default function TicketEditor({ open, mode = 'modal', code, reqId, defaul
               <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>涉及系统</div>
 
               {/* 主责系统：标题右侧选择框，单选（再选自动替换），已选展示在下方 */}
-              <Form.Item name="main_systems" rules={[{ required: !readonly, type: 'array', min: 1, message: '请选择主责系统' }]}>
+              <Form.Item name="main_systems" rules={required.rules('main_systems', '主责系统', { action: '请选择', type: 'array', min: 1 })}>
                 <SystemPickerField title="主责系统" single placeholder="主责系统检索" readonly={readonly} />
               </Form.Item>
 
               {/* 协同改造系统：标题右侧选择框，可多选，已选展示在下方 */}
-              <Form.Item name="collab_dev_systems" noStyle>
+              <Form.Item name="collab_dev_systems" rules={required.rules('collab_dev_systems', '协同改造系统', { action: '请选择', type: 'array', min: 1 })}>
                 <SystemPickerField title="协同改造系统" placeholder="协同改造系统检索" readonly={readonly} />
               </Form.Item>
 
               {/* 协同测试系统：标题右侧选择框，可多选，已选展示在下方 */}
-              <Form.Item name="collab_test_systems" noStyle>
+              <Form.Item name="collab_test_systems" rules={required.rules('collab_test_systems', '协同测试系统', { action: '请选择', type: 'array', min: 1 })}>
                 <SystemPickerField title="协同测试系统" placeholder="协同测试系统检索" readonly={readonly} />
               </Form.Item>
             </div>
@@ -519,20 +523,20 @@ export default function TicketEditor({ open, mode = 'modal', code, reqId, defaul
               <Row gutter={8}>
                 {/* 提出部门 + 提出人：手机端各占一行（充满），PC 端双栏 */}
                 <Col span={isMobile ? 24 : 12}>
-                  <Form.Item name="propose_dept" label="提出部门" rules={[{ required: !readonly, message: '请选择提出部门' }]} style={{ marginBottom: 8 }}>
+                  <Form.Item name="propose_dept" label="提出部门" rules={required.rules('propose_dept', '提出部门', { action: '请选择' })} style={{ marginBottom: 8 }}>
                     <DictSelect category="req_dept" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} size="small" />
                   </Form.Item>
                 </Col>
                 <Col span={isMobile ? 24 : 12}>
-                  <Form.Item name="proposer" label="提出人" rules={[{ required: !readonly, type: 'array', message: '请选择提出人' }]} style={{ marginBottom: 8 }}>
+                  <Form.Item name="proposer" label="提出人" rules={required.rules('proposer', '提出人', { action: '请选择', type: 'array', min: 1 })} style={{ marginBottom: 8 }}>
                     <PersonPickerField readonly={readonly} placeholder="选择提出人" />
                   </Form.Item>
                 </Col>
               </Row>
-              <Form.Item name="yn_owner" label="云南农信工单负责人" style={{ marginBottom: 8 }}>
+              <Form.Item name="yn_owner" label="云南农信工单负责人" rules={required.rules('yn_owner', '云南农信工单负责人', { action: '请选择' })} style={{ marginBottom: 8 }}>
                 <PersonPicker style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择云南农信工单负责人" size="small" />
               </Form.Item>
-              <Form.Item name="jk_owner" label="建信金科工单负责人" style={{ marginBottom: 0 }}>
+              <Form.Item name="jk_owner" label="建信金科工单负责人" rules={required.rules('jk_owner', '建信金科工单负责人', { action: '请选择' })} style={{ marginBottom: 0 }}>
                 <PersonPicker style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择建信金科工单负责人" size="small" />
               </Form.Item>
             </div>
