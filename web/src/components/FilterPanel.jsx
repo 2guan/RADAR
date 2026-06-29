@@ -64,6 +64,8 @@ export default function FilterPanel({ configs, onChange, actions }) {
     const val = localValues[c.field];
     
     if (c.type === 'select') {
+      const optionFilterProp = c.optionFilterProp
+        || ((c.options || []).some((option) => option.searchLabel) ? 'searchLabel' : 'label');
       return (
         <Select
           key={c.field}
@@ -71,7 +73,7 @@ export default function FilterPanel({ configs, onChange, actions }) {
           maxTagCount="responsive"
           allowClear
           showSearch
-          optionFilterProp="label"
+          optionFilterProp={optionFilterProp}
           placeholder={c.placeholder || c.label}
           options={c.options || []}
           value={val || []}

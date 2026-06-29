@@ -18,6 +18,7 @@ import { useResponsive } from '../hooks/useResponsive.js';
 import { MENU } from '../router/menu.js';
 import { apiGet, apiPost } from '../api/client.js';
 import ThemeSwitcher from '../components/ThemeSwitcher.jsx';
+import { makeReleasePointOptions, releasePointFilter } from '../components/ReleasePointText.jsx';
 
 const { Header, Sider, Content } = Layout;
 
@@ -172,16 +173,14 @@ export default function MainLayout() {
       size="small"
       maxTagCount="responsive"
       showSearch
-      filterOption={(input, option) => option.label.toLowerCase().includes(input.toLowerCase())}
+      optionFilterProp="searchLabel"
+      filterOption={releasePointFilter}
       style={isMobile ? { width: 170, minWidth: 0, maxWidth: '50vw', fontSize: 12 } : { minWidth: 260, fontSize: 12 }}
       className="radar-rp-select"
       classNames={{ popup: { root: 'radar-rp-select-dropdown' } }}
       suffixIcon={<DownOutlined style={{ color: token.colorPrimary }} />}
       onChange={(ids) => setReleasePointIds(ids)}
-      options={points.map((p) => ({
-        value: p.id,
-        label: isMobile ? p.release_date : `${p.release_date}${p.version_type ? ' · ' + p.version_type : ''}`,
-      }))}
+      options={makeReleasePointOptions(points, { includeVersionType: !isMobile })}
     />
   );
 

@@ -26,6 +26,7 @@ import FilterPanel from '../components/FilterPanel.jsx';
 import { useAppStore } from '../stores/app.js';
 import { exportXlsx } from '../utils/io.js';
 import Can from '../components/Can.jsx';
+import { makeReleasePointOptions, ReleasePointText } from '../components/ReleasePointText.jsx';
 
 const TEST_ATTACH = ['测试方案', '测试报告'];
 const SIT_ATTACH = ['测试方案', '测试覆盖设计文档', '测试报告'];
@@ -183,7 +184,7 @@ function ReqDetailCard({ req, entityType = 'requirement', onEdit }) {
         <Tag className="tag-type" style={{ borderRadius: 2, margin: 0, fontSize: 10 }}>{req.req_type || '—'}</Tag>
         <Tag className="tag-org" style={{ borderRadius: 2, margin: 0, fontSize: 10 }}>涉账：{req.is_accounting || '否'}</Tag>
         <span style={{ color: 'var(--radar-text-secondary)' }}>{req.propose_time || '—'}</span>
-        <span style={{ color: 'var(--radar-text-secondary)' }}>计划投产点：{req.release_date || '—'}</span>
+        <span style={{ color: 'var(--radar-text-secondary)' }}>计划投产点：<ReleasePointText value={req.release_date} /></span>
       </div>
       <div className="lc-text" style={{ marginBottom: 8, color: 'var(--radar-ink)' }}>
         {req.summary || '—'}
@@ -338,7 +339,7 @@ function IssueDetailCard({ issue, onEdit }) {
         <span style={{ color: 'var(--radar-ink)' }}>{issue.systemInfo?.sys_name || issue.system || '—'}</span>
       </Field>
       <Field label="计划投产点" col>
-        <span style={{ color: 'var(--radar-ink)' }}>{issue.release_date || '—'}</span>
+        <ReleasePointText value={issue.release_date} style={{ color: 'var(--radar-ink)' }} />
       </Field>
 
       {issue.handler_name && (
@@ -364,7 +365,7 @@ function IntakeReqCard({ requirement }) {
           <Radio checked />
         </Space>
         <div style={{ fontWeight: 600, fontSize: 13 }}>{r.title}</div>
-        <div style={{ fontSize: 11, color: 'var(--radar-text-secondary)' }}>计划投产点：{r.release_date || '—'}</div>
+        <div style={{ fontSize: 11, color: 'var(--radar-text-secondary)' }}>计划投产点：<ReleasePointText value={r.release_date} /></div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
           {(r.mainSystemsInfo || []).map((sys) => (
             <Tag key={sys.sys_code} className="status-tag tag-system" style={{ borderRadius: 2, margin: 0, fontSize: 10 }}>{sys.sys_name || sys.sys_code}</Tag>
@@ -496,7 +497,7 @@ function DevIntakeModal({ open, requirement, onClose, onSaved }) {
       ),
     },
     { title: '需求标题', dataIndex: 'title', key: 'title', width: 280, ellipsis: true },
-    { title: '计划投产点', dataIndex: 'release_date', key: 'release_date', width: 140 },
+    { title: '计划投产点', dataIndex: 'release_date', key: 'release_date', width: 140, render: (val) => <ReleasePointText value={val} /> },
     {
       title: '主责系统',
       dataIndex: 'mainSystemsInfo',
@@ -748,7 +749,7 @@ function TestIntakeModal({ open, requirement, testType, onClose, onSaved }) {
       ),
     },
     { title: '需求标题', dataIndex: 'title', key: 'title', width: 280, ellipsis: true },
-    { title: '计划投产点', dataIndex: 'release_date', key: 'release_date', width: 140 },
+    { title: '计划投产点', dataIndex: 'release_date', key: 'release_date', width: 140, render: (val) => <ReleasePointText value={val} /> },
     {
       title: '主责系统',
       dataIndex: 'mainSystemsInfo',
@@ -1084,7 +1085,7 @@ export default function Overview() {
     }).catch(() => {});
   }, []);
 
-  const pointOptions = points.map(p => ({ value: p.id, label: p.release_date }));
+  const pointOptions = makeReleasePointOptions(points);
   const orgOptions = orgs.map(o => ({ value: o.attr_value, label: o.display_value }));
   const systemOptions = systems.map(s => ({ value: s.sys_code, label: `${s.sys_code} - ${s.sys_name}` }));
   const stageOptions = [

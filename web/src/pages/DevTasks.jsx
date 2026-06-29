@@ -21,6 +21,7 @@ import { useResponsive } from '../hooks/useResponsive.js';
 import ResizableTitle from '../components/ResizableTitle.jsx';
 import { exportXlsx } from '../utils/io.js';
 import ImportModal from '../components/ImportModal.jsx';
+import { makeReleasePointOptions, ReleasePointText } from '../components/ReleasePointText.jsx';
 
 export default function DevTasks() {
   const tableRef = useRef();
@@ -62,7 +63,7 @@ export default function DevTasks() {
   }, []);
 
   // 映射选择项为标准的 value/label 结构
-  const pointOptions = points.map(p => ({ value: p.id, label: p.release_date }));
+  const pointOptions = makeReleasePointOptions(points);
   const orgOptions = orgs.map(o => ({ value: o.attr_value, label: o.display_value }));
   const statusOptions = statuses.map(s => ({ value: s.attr_value, label: s.display_value }));
   const userOptions = users.map(u => ({ value: u.name, label: `${u.name} (${u.phone})` }));
@@ -188,11 +189,7 @@ export default function DevTasks() {
       title: '计划投产点',
       dataIndex: 'release_date',
       key: 'release_date',
-      render: (val) => (
-        <span style={{ fontFamily: 'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace' }}>
-          {val || '—'}
-        </span>
-      ),
+      render: (val) => <ReleasePointText value={val} />,
     },
     {
       title: '任务编号',
@@ -242,11 +239,7 @@ export default function DevTasks() {
       dataIndex: 'release_date',
       key: 'release_date',
       width: 100,
-      render: (val) => (
-        <span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace' }}>
-          {val || '—'}
-        </span>
-      ),
+      render: (val) => <ReleasePointText value={val} />,
     },
     {
       title: '类型',
@@ -421,7 +414,7 @@ export default function DevTasks() {
             <div>{item.task_name}</div>
             {item.release_date && (
               <div style={{ fontSize: '11px', color: 'var(--radar-text-secondary)' }}>
-                计划投产点：{item.release_date}
+                计划投产点：<ReleasePointText value={item.release_date} />
               </div>
             )}
             <Space size="small">
@@ -489,7 +482,7 @@ export default function DevTasks() {
                         </Space>
                         <div style={{ fontWeight: 600, fontSize: 13 }}>{r.title}</div>
                         <div style={{ fontSize: 11, color: 'var(--radar-text-secondary)' }}>
-                          计划投产点：{r.release_date || '—'}
+                          计划投产点：<ReleasePointText value={r.release_date} />
                         </div>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
                           {(r.main_systems_names || []).map((name) => (

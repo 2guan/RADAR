@@ -21,6 +21,7 @@ import TicketEditor from './TicketEditor.jsx';
 import StatusBadge, { getStatusType, statusSelectWidth } from '../StatusBadge.jsx';
 import DictSelect from '../DictSelect.jsx';
 import PersonPicker from '../PersonPicker.jsx';
+import { ReleasePointText } from '../ReleasePointText.jsx';
 import { apiGet, apiPost, apiPut, apiDelete, rawClient } from '../../api/client.js';
 import { useAppStore } from '../../stores/app.js';
 
@@ -368,7 +369,7 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, onC
                       </div>
                       <div>
                         <span style={{ fontSize: 11, color: 'var(--radar-text-secondary)' }}>计划投产点：</span>
-                        <span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', color: 'var(--radar-ink)', fontSize: 11 }}>{entity.release_date || '—'}</span>
+                        <ReleasePointText value={entity.release_date} style={{ color: 'var(--radar-ink)', fontSize: 11 }} />
                       </div>
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--radar-ink)', background: 'var(--radar-bg)', padding: '6px 10px', borderRadius: 2, maxHeight: 80, overflowY: 'auto', border: '1px solid var(--radar-border)', whiteSpace: 'pre-wrap', lineHeight: '16px' }}>
@@ -398,7 +399,7 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, onC
                       </div>
                       <div>
                         <span style={{ fontSize: 11, color: 'var(--radar-text-secondary)' }}>计划投产点：</span>
-                        <span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', color: 'var(--radar-ink)', fontSize: 11 }}>{entity.release_date || '—'}</span>
+                        <ReleasePointText value={entity.release_date} style={{ color: 'var(--radar-ink)', fontSize: 11 }} />
                       </div>
                     </div>
                     <div>

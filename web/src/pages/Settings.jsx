@@ -22,6 +22,7 @@ import DictSelect from '../components/DictSelect.jsx';
 import { MENU } from '../router/menu.js';
 import { PRESETS } from '../theme/presets.js';
 import { apiPost, apiGet } from '../api/client.js';
+import { makeReleasePointOptions, ReleasePointText } from '../components/ReleasePointText.jsx';
 
 const PENDING_RELEASE_DATE = '投产点待定';
 const RELEASE_DATE_RE = /^\d{8}$/;
@@ -158,7 +159,7 @@ function ReleasePointManager() {
     apiGet('/release-points/all').then(res => setPoints(res || [])).catch(() => {});
   }, []);
 
-  const pointOptions = points.map(p => ({ value: p.release_date, label: p.release_date }));
+  const pointOptions = makeReleasePointOptions(points, { valueKey: 'release_date' });
 
   const filterConfigs = [
     { field: 'release_date', label: '投产日期', type: 'select', op: 'eq', isPrimary: true, options: pointOptions, placeholder: '投产日期检索' },
@@ -171,7 +172,7 @@ function ReleasePointManager() {
       io={{ enabled: true }}
       filterConfigs={filterConfigs}
       columns={[
-        { title: '投产日期', dataIndex: 'release_date', width: 140, sorter: true },
+        { title: '投产日期', dataIndex: 'release_date', width: 140, sorter: true, render: (v) => <ReleasePointText value={v} /> },
         { title: '版本类型', dataIndex: 'version_type', width: 120 },
         { title: '默认', dataIndex: 'is_default', width: 90, render: (v) => (v ? <Tag color="green">默认</Tag> : '—') },
         { title: '备注', dataIndex: 'remark' },

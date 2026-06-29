@@ -14,6 +14,7 @@ import {
 import { PlusOutlined, DeleteOutlined, CodeOutlined, CopyOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import ColorPickerField from './ColorPickerField.jsx';
+import { ReleasePointOptionLabel } from '../ReleasePointText.jsx';
 
 // 支持次维度（堆叠/横轴/透视）的图表类型
 const X_TYPES = ['stacked_bar', 'stacked_bar_horizontal', 'line', 'area', 'table'];
@@ -68,12 +69,19 @@ export default function ChartEditor({ open, onClose, onSave, initialData, scope,
   // 维度取值选项（下拉/标签）
   const optionsOf = (dim) => meta.getOptions(dim);
   const isDate = (dim) => meta.dimMeta(dim)?.isDate;
+  const optionText = (option) => String(option?.searchLabel ?? option?.label ?? '');
+  const filterValueOption = (input, option) => optionText(option).toLowerCase().includes(input.toLowerCase());
+  const renderValueOption = (option) => {
+    const data = option?.data || {};
+    if (!data.releaseDate) return option?.label;
+    return <ReleasePointOptionLabel releaseDate={data.releaseDate} versionType={data.versionType} includeVersionType />;
+  };
 
   // 一键加载预设：用某维度的全部选项生成分组
   const loadPresets = (dim, field) => {
     const opts = optionsOf(dim);
     if (!opts.length) { message.info('该维度无可加载的预设（时间/自由文本维度请手动添加）'); return; }
-    form.setFieldValue(field, opts.map((o) => ({ label: o.label, values: [o.value] })));
+    form.setFieldValue(field, opts.map((o) => ({ label: o.searchLabel || o.label, values: [o.value] })));
     message.success(`已加载 ${opts.length} 条预设`);
   };
 
@@ -169,7 +177,7 @@ export default function ChartEditor({ open, onClose, onSave, initialData, scope,
               </div>
               <Form.Item {...rest} name={[n, 'values']} rules={[{ required: true, message: '请选择包含的值' }]} style={{ marginBottom: 0 }}>
                 <Select mode="tags" size="small" placeholder="包含的原始值" options={optionsOf(dim)} maxTagCount="responsive" showSearch
-                  filterOption={(i, o) => String(o?.label ?? '').toLowerCase().includes(i.toLowerCase())} />
+                  optionFilterProp="searchLabel" optionRender={renderValueOption} filterOption={filterValueOption} />
               </Form.Item>
             </Card>
           ))}
@@ -249,7 +257,7 @@ export default function ChartEditor({ open, onClose, onSave, initialData, scope,
                       return (
                         <Form.Item {...rest} name={[n, 'val']} rules={[{ required: true, message: '值' }]} style={{ width: 260, marginBottom: 0 }}>
                           <Select mode="multiple" options={optionsOf(dim)} placeholder="一个或多个值" allowClear showSearch maxTagCount="responsive"
-                            filterOption={(i, o) => String(o?.label ?? '').toLowerCase().includes(i.toLowerCase())} />
+                            optionFilterProp="searchLabel" optionRender={renderValueOption} filterOption={filterValueOption} />
                         </Form.Item>
                       );
                     }}

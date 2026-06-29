@@ -17,6 +17,7 @@ import FilterPanel from '../components/FilterPanel.jsx';
 import { apiPost, apiGet } from '../api/client.js';
 import { useAppStore } from '../stores/app.js';
 import { exportXlsx } from '../utils/io.js';
+import { ReleasePointText } from '../components/ReleasePointText.jsx';
 
 export default function Release() {
   const tableRef = useRef();
@@ -24,13 +25,11 @@ export default function Release() {
   const [detailCode, setDetailCode] = useState(null);
   const [filterQuery, setFilterQuery] = useState([]);
 
-  const [points, setPoints] = useState([]);
   const [statuses, setStatuses] = useState([]);
   const [reviews, setReviews] = useState([]);
   const [orgs, setOrgs] = useState([]);
 
   useEffect(() => {
-    apiGet('/release-points/all').then(setPoints).catch(() => {});
     apiGet('/dict/by-category/release_status').then((res) => {
       setStatuses([{ attr_value: '未发起', display_value: '未发起' }, ...(res || [])]);
     }).catch(() => {});
@@ -38,7 +37,6 @@ export default function Release() {
     apiGet('/dict/by-category/org').then(setOrgs).catch(() => {});
   }, []);
 
-  const pointOptions = points.map((p) => ({ value: p.id, label: p.release_date }));
   const statusOptions = statuses.map((s) => ({ value: s.attr_value, label: s.display_value }));
   const reviewOptions = reviews.map((s) => ({ value: s.attr_value, label: s.display_value }));
   const orgOptions = orgs.map((o) => ({ value: o.attr_value, label: o.display_value }));
@@ -91,7 +89,7 @@ export default function Release() {
     },
     {
       title: '计划投产点', dataIndex: 'release_date', key: 'release_date', width: 120,
-      render: (val) => <span style={monoStyle}>{val || '—'}</span>,
+      render: (val) => <ReleasePointText value={val} />,
     },
     {
       title: '实施机构', dataIndex: 'impl_org', key: 'impl_org', width: 110, ellipsis: true,
@@ -169,7 +167,7 @@ export default function Release() {
               <div style={{ fontSize: '11px', color: 'var(--radar-text-secondary)' }}>实施机构：{r.impl_org}</div>
             )}
             {r.release_date && (
-              <div style={{ fontSize: '11px', color: 'var(--radar-text-secondary)' }}>计划投产点：{r.release_date}</div>
+              <div style={{ fontSize: '11px', color: 'var(--radar-text-secondary)' }}>计划投产点：<ReleasePointText value={r.release_date} /></div>
             )}
           </Space>
         )}

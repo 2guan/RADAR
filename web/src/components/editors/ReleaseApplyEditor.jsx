@@ -20,6 +20,7 @@ import { apiGet, apiPost, apiPut } from '../../api/client.js';
 import { useAppStore } from '../../stores/app.js';
 import { useResponsive } from '../../hooks/useResponsive.js';
 import { useRequiredFields } from '../../hooks/useRequiredFields.js';
+import { makeReleasePointOptions, ReleasePointText } from '../ReleasePointText.jsx';
 
 export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId, defaultReleasePointId, defaultReqCodes, defaultTicketCodes, defaultType = 'req', onClose, onSaved }) {
   const [form] = Form.useForm();
@@ -125,10 +126,16 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
     return [...set];
   })();
 
-  const reqOptions = reqs.map((r) => ({ value: r.req_code, label: `${r.req_code}　${r.title}` }));
+  const reqOptions = reqs.map((r) => ({ value: r.req_code, label: `${r.req_code}　${r.title}`, searchLabel: `${r.req_code}　${r.title}` }));
   const ticketOptions = tickets.map((t) => ({
     value: t.ticket_code,
-    label: `${t.ticket_code}　${t.title}${t.release_date ? `　${t.release_date}` : ''}`,
+    label: (
+      <span>
+        {t.ticket_code}　{t.title}
+        {t.release_date ? <>　<ReleasePointText value={t.release_date} /></> : null}
+      </span>
+    ),
+    searchLabel: `${t.ticket_code}　${t.title}${t.release_date ? `　${t.release_date}` : ''}`,
   }));
   // ── 计划投产点与所选需求/工单的一致性校验（仅提示，不阻断提交） ──
   const selectedReqObjs = selReqs.map((c) => reqs.find((r) => r.req_code === c)).filter(Boolean);
@@ -323,7 +330,7 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
                       children: (
                         <Select
                           mode="multiple" value={selReqs} onChange={onSelReqsChange} options={reqOptions}
-                          size="small" showSearch allowClear={false} optionFilterProp="label" placeholder="按需求编号或标题检索"
+                          size="small" showSearch allowClear={false} optionFilterProp="searchLabel" placeholder="按需求编号或标题检索"
                           style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} maxTagCount={0}
                           tabIndex={readonly ? -1 : undefined}
                         />
@@ -334,7 +341,7 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
                       children: (
                         <Select
                           mode="multiple" value={selTickets} onChange={onSelTicketsChange} options={ticketOptions}
-                          size="small" showSearch allowClear={false} optionFilterProp="label" placeholder="按工单编号或概述检索"
+                          size="small" showSearch allowClear={false} optionFilterProp="searchLabel" placeholder="按工单编号或概述检索"
                           style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} maxTagCount={0}
                           tabIndex={readonly ? -1 : undefined}
                         />
@@ -383,9 +390,9 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
                 </Col>
                 <Col span={12}>
                   <Form.Item name="release_point_id" label="计划投产点" rules={required.rules('release_point_id', '计划投产点', { action: '请选择' })} style={{ marginBottom: (multiReqDiffer || pointMismatch) ? 2 : 8 }}>
-                    <Select placeholder="选择计划投产点" size="small" allowClear showSearch optionFilterProp="label"
+                    <Select placeholder="选择计划投产点" size="small" allowClear showSearch optionFilterProp="searchLabel"
                       style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined}
-                      options={points.map((p) => ({ value: p.id, label: `${p.release_date}${p.version_type ? ' · ' + p.version_type : ''}` }))} />
+                      options={makeReleasePointOptions(points, { includeVersionType: true })} />
                   </Form.Item>
                   {/* 投产点一致性提示（仅提示，不阻断保存） */}
                   {multiReqDiffer && (

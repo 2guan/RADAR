@@ -46,7 +46,7 @@ async function fetchMeta() {
   const rpList = rps.map((p) => {
     const label = `${p.release_date}${p.version_type ? ' ' + p.version_type : ''}`;
     rpLabel[String(p.id)] = label;
-    return { value: String(p.id), label };
+    return { value: String(p.id), label, searchLabel: label, releaseDate: p.release_date, versionType: p.version_type };
   });
 
   const stageList = [

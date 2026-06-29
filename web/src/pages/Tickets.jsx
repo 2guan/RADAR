@@ -21,6 +21,7 @@ import { apiPost, apiDelete, apiGet } from '../api/client.js';
 import { exportXlsx, downloadGet } from '../utils/io.js';
 import { useAppStore } from '../stores/app.js';
 import ImportModal from '../components/ImportModal.jsx';
+import { makeReleasePointOptions, ReleasePointText } from '../components/ReleasePointText.jsx';
 
 export default function Tickets() {
   const tableRef = useRef();
@@ -54,7 +55,7 @@ export default function Tickets() {
     apiGet('/systems/all').then(setSystems).catch(() => {});
   }, []);
 
-  const pointOptions = points.map(p => ({ value: p.id, label: p.release_date }));
+  const pointOptions = makeReleasePointOptions(points);
   const orgOptions = orgs.map(o => ({ value: o.attr_value, label: o.display_value }));
   const reqDeptOptions = reqDepts.map(d => ({ value: d.attr_value, label: d.display_value }));
   const statusOptions = statuses.map(s => ({ value: s.attr_value, label: s.display_value }));
@@ -102,11 +103,7 @@ export default function Tickets() {
       title: '计划投产点',
       dataIndex: 'release_date',
       key: 'release_date',
-      render: (val) => (
-        <span style={{ fontFamily: 'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace' }}>
-          {val || '—'}
-        </span>
-      ),
+      render: (val) => <ReleasePointText value={val} />,
     },
     {
       title: '工单编号',
@@ -239,7 +236,7 @@ export default function Tickets() {
             <div>{item.title}</div>
             {item.release_date && (
               <div style={{ fontSize: '11px', color: 'var(--radar-text-secondary)' }}>
-                计划投产点：{item.release_date}
+                计划投产点：<ReleasePointText value={item.release_date} />
               </div>
             )}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>

@@ -22,6 +22,7 @@ import { useAppStore } from '../../stores/app.js';
 import { useResponsive } from '../../hooks/useResponsive.js';
 import { useRequiredFields } from '../../hooks/useRequiredFields.js';
 import { useDefaultProcessStatus } from '../../hooks/useDefaultProcessStatus.js';
+import { makeReleasePointOptions } from '../ReleasePointText.jsx';
 
 // ─── 模块级系统列表缓存（与 SystemSelect 共用同一接口，但单独维护以供下方组件使用） ───
 let _sysCache = null;
@@ -452,11 +453,8 @@ export default function TicketEditor({ open, mode = 'modal', code, reqId, defaul
                       style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }}
                       tabIndex={readonly ? -1 : undefined}
                       showSearch
-                      optionFilterProp="label"
-                      options={points.map((p) => ({
-                        value: p.id,
-                        label: `${p.release_date}${p.version_type ? ' · ' + p.version_type : ''}`,
-                      }))}
+                      optionFilterProp="searchLabel"
+                      options={makeReleasePointOptions(points, { includeVersionType: true })}
                     />
                   </Form.Item>
                 </Col>
