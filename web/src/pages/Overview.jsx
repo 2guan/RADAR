@@ -27,6 +27,7 @@ import { useAppStore } from '../stores/app.js';
 import { exportXlsx } from '../utils/io.js';
 import Can from '../components/Can.jsx';
 import { makeReleasePointOptions, ReleasePointText } from '../components/ReleasePointText.jsx';
+import { formatBeijingDateTime } from '../utils/time.js';
 
 const TEST_ATTACH = ['测试方案', '测试报告'];
 const SIT_ATTACH = ['测试方案', '测试覆盖设计文档', '测试报告'];
@@ -1066,7 +1067,7 @@ function RequirementHistoryModal({ open, onClose, reqCode }) {
                     {actionTag(r.action)}
                     <Typography.Text strong style={{ marginLeft: 4 }}>{r.field || '记录'}</Typography.Text>
                     <Typography.Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
-                      {r.operator || '—'} · {r.created_at}
+                      {r.operator || '—'} · {formatBeijingDateTime(r.created_at)}
                     </Typography.Text>
                   </div>
                   {r.action === 'update' && (

@@ -9,6 +9,7 @@
 import React, { useEffect, useState } from 'react';
 import { Modal, Timeline, Tag, Empty, Spin, Typography } from 'antd';
 import { apiGet } from '../api/client.js';
+import { formatBeijingDateTime } from '../utils/time.js';
 
 export default function HistoryDrawer({ open, onClose, entityType, entityId }) {
   const [list, setList] = useState([]);
@@ -48,7 +49,7 @@ export default function HistoryDrawer({ open, onClose, entityType, entityId }) {
                     {actionTag(r.action)}
                     <Typography.Text strong>{r.field || '记录'}</Typography.Text>
                     <Typography.Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
-                      {r.operator || '—'} · {r.created_at}
+                      {r.operator || '—'} · {formatBeijingDateTime(r.created_at)}
                     </Typography.Text>
                   </div>
                   {r.action === 'update' && (
