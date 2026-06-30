@@ -15,11 +15,14 @@ import {
   SOURCES, DIMENSIONS, CHART_TYPES, buildContext, aggregate, extract, matchFilters, isValidDim, testTypeOf,
 } from '../../lib/chart-dims.js';
 
-/** 取所选投产窗口下的需求编号集合；ids 为空返回 null（=全部，不过滤） */
-function reqCodesInWindow(ids) {
+/** 取所选投产窗口下的需求/工单编号集合；ids 为空返回 null（=全部，不过滤） */
+function workItemCodesInWindow(ids) {
   if (!ids?.length) return null;
   const sub = inClause('release_point_id', ids);
-  return all(`SELECT req_code FROM requirement WHERE ${sub.where}`, ...sub.params).map((r) => r.req_code);
+  return [
+    ...all(`SELECT req_code AS code FROM requirement WHERE ${sub.where}`, ...sub.params).map((r) => r.code),
+    ...all(`SELECT ticket_code AS code FROM ticket WHERE ${sub.where}`, ...sub.params).map((r) => r.code),
+  ];
 }
 
 /** 计数终态记录 */
@@ -32,6 +35,7 @@ function loadRows(source, codes) {
   let rows;
   switch (source) {
     case 'requirement': rows = all('SELECT * FROM requirement'); break;
+    case 'ticket': rows = all('SELECT *, ticket_code AS req_code FROM ticket'); break;
     case 'dev': rows = all('SELECT * FROM dev_task'); break;
     case 'sit': case 'uat': case 'nft': case 'sec':
       rows = all('SELECT * FROM test_task WHERE test_type = ?', testTypeOf(source)); break;
@@ -40,13 +44,14 @@ function loadRows(source, codes) {
                   JOIN release_task rt ON rt.id = rs.release_task_id`); break;
     case 'all': {
       const requirement = loadRows('requirement', null).map((r) => ({ ...r, _source: 'requirement' }));
+      const ticket = loadRows('ticket', null).map((r) => ({ ...r, _source: 'ticket' }));
       const dev = loadRows('dev', null).map((r) => ({ ...r, _source: 'dev' }));
       const sit = loadRows('sit', null).map((r) => ({ ...r, _source: 'sit' }));
       const uat = loadRows('uat', null).map((r) => ({ ...r, _source: 'uat' }));
       const nft = loadRows('nft', null).map((r) => ({ ...r, _source: 'nft' }));
       const sec = loadRows('sec', null).map((r) => ({ ...r, _source: 'sec' }));
       const releaseSystem = loadRows('releaseSystem', null).map((r) => ({ ...r, _source: 'releaseSystem' }));
-      rows = [...requirement, ...dev, ...sit, ...uat, ...nft, ...sec, ...releaseSystem];
+      rows = [...requirement, ...ticket, ...dev, ...sit, ...uat, ...nft, ...sec, ...releaseSystem];
       break;
     }
     default: throw badRequest('未知数据源');
@@ -54,7 +59,7 @@ function loadRows(source, codes) {
   if (!codes) return rows;
   if (!codes.length) return [];
   const set = new Set(codes);
-  return rows.filter((r) => set.has(r.req_code));
+  return rows.filter((r) => set.has(r.req_code || r.ticket_code));
 }
 
 /** 钻取：把一条记录投影成列表展示行 */
@@ -62,7 +67,7 @@ function projectRecord(source, row, ctx) {
   const realSource = source === 'all' ? row._source : source;
   const sysName = (code) => ctx.sysMap[code]?.name || code;
   const systems = extract(realSource, 'system', row, ctx).map(sysName).join('、');
-  if (realSource === 'requirement') {
+  if (realSource === 'requirement' || realSource === 'ticket') {
     const proposerNames = (() => {
       if (!row.proposer) return '';
       try {
@@ -72,7 +77,8 @@ function projectRecord(source, row, ctx) {
         return row.proposer;
       }
     })();
-    return { req_code: row.req_code, code: row.req_code, name: row.title, status: row.status, system: systems, org: extract(realSource, 'org', row, ctx).join('、'), owner: proposerNames };
+    const code = realSource === 'ticket' ? row.ticket_code : row.req_code;
+    return { req_code: code, code, name: row.title, status: row.status, system: systems, org: extract(realSource, 'org', row, ctx).join('、'), owner: proposerNames };
   }
   if (realSource === 'releaseSystem') {
     return { req_code: row.req_code, code: row.system_code, name: sysName(row.system_code), status: row.status, system: systems, org: row.impl_org || '', owner: '' };
@@ -87,10 +93,10 @@ function canManageSystem(fastify, request) {
 }
 
 export default async function dashboardRoutes(fastify) {
-  // 5 原子指标卡（每项返回 总数 total 与 终态完成数 terminal）
+  // 原子指标卡（每项返回 总数 total 与 终态计数 terminal）
   fastify.get('/dashboard/metrics', { preHandler: fastify.requirePerm('dashboard', 'view') }, async (request) => {
     const winIds = windowIds(request.query);
-    const codes = reqCodesInWindow(winIds);
+    const codes = workItemCodesInWindow(winIds);
     const inWindow = (table, extraWhere = '') => {
       if (!codes) return all(`SELECT status FROM ${table} ${extraWhere ? 'WHERE ' + extraWhere : ''}`);
       if (!codes.length) return [];
@@ -102,6 +108,10 @@ export default async function dashboardRoutes(fastify) {
     const reqRows = codes
       ? (codes.length ? all(`SELECT status FROM requirement WHERE req_code IN (${codes.map(() => '?').join(',')})`, ...codes) : [])
       : all('SELECT status FROM requirement');
+
+    const ticketRows = codes
+      ? (codes.length ? all(`SELECT status FROM ticket WHERE ticket_code IN (${codes.map(() => '?').join(',')})`, ...codes) : [])
+      : all('SELECT status FROM ticket');
 
     // 投产申请（变更单）：按所选投产点过滤（窗口为空=全部）
     let applyRows;
@@ -122,28 +132,13 @@ export default async function dashboardRoutes(fastify) {
       }).length,
     };
 
-    // 投产问题：上述变更单关联的「问题」数（去重）；完成=问题状态终态（已解决/待验证）
-    const refSet = new Set();
-    for (const r of applyRows) {
-      let refs = [];
-      try { refs = r.ref_codes ? JSON.parse(r.ref_codes) : []; } catch { refs = []; }
-      for (const c of refs) if (c) refSet.add(c);
-    }
-    let issueRows = [];
-    if (refSet.size) {
-      const arr = [...refSet];
-      issueRows = all(`SELECT status FROM issue WHERE issue_code IN (${arr.map(() => '?').join(',')})`, ...arr);
-    }
-    const ISSUE_TERMINAL = new Set(['已解决', '待验证']);
-    const issue = { total: issueRows.length, terminal: issueRows.filter((r) => ISSUE_TERMINAL.has(r.status)).length };
-
     const dev = inWindow('dev_task');
     const sit = inWindow('test_task', "test_type='SIT'");
     const uat = inWindow('test_task', "test_type='UAT'");
 
     return ok({
       requirement: { total: reqRows.length, terminal: countTerminal(reqRows) },
-      issue,
+      ticket: { total: ticketRows.length, terminal: countTerminal(ticketRows) },
       dev: { total: dev.length, terminal: countTerminal(dev) },
       sit: { total: sit.length, terminal: countTerminal(sit) },
       uat: { total: uat.length, terminal: countTerminal(uat) },
@@ -174,7 +169,7 @@ export default async function dashboardRoutes(fastify) {
     if (!isValidDim(source, dimension)) throw badRequest('非法的统计维度');
     const xDim = xAxisDimension && isValidDim(source, xAxisDimension) ? xAxisDimension : undefined;
 
-    const codes = reqCodesInWindow(windowIds(request.body));
+    const codes = workItemCodesInWindow(windowIds(request.body));
     const ctx = buildContext();
     const rows = loadRows(source, codes);
     const data = aggregate({ source, dimension, xAxisDimension: xDim, filters, groups, xAxisGroups, rows, ctx });
@@ -185,7 +180,7 @@ export default async function dashboardRoutes(fastify) {
   // 取代「每张图表各发一次请求 + 各自整表扫描」的放大开销（仪表盘打开瞬时返回）。
   fastify.post('/dashboard/chart-data-batch', { preHandler: fastify.requirePerm('dashboard', 'view') }, async (request) => {
     const { charts = [] } = request.body || {};
-    const codes = reqCodesInWindow(windowIds(request.body));
+    const codes = workItemCodesInWindow(windowIds(request.body));
     const ctx = buildContext();
     const rowsCache = new Map(); // source → 该窗口下的记录集（同源复用）
     const loadOnce = (source) => {
@@ -215,7 +210,7 @@ export default async function dashboardRoutes(fastify) {
   fastify.post('/dashboard/chart-drilldown', { preHandler: fastify.requirePerm('dashboard', 'view') }, async (request) => {
     const { source = 'requirement', filters } = request.body || {};
     if (!SOURCES[source]) throw badRequest('未知数据源');
-    const codes = reqCodesInWindow(windowIds(request.body));
+    const codes = workItemCodesInWindow(windowIds(request.body));
     const ctx = buildContext();
     const rows = loadRows(source, codes);
     // 复用聚合的过滤规则筛出明细

@@ -114,19 +114,17 @@ export default function Users() {
   // 删除人员，确认后调用 API 并在成功后刷新表格数据
   const onDelete = async (row) => { await apiDelete(`/users/${row.id}`); message.success('已删除'); tableRef.current?.reload(); };
 
-  /**
-   * 重置密码：弹窗确认输入新密码，默认值为 Radar@2026!
-   */
+  /** 重置密码：必须输入新密码 */
   const resetPwd = (row) => {
-    let pwd = 'Radar@2026!';
+    let pwd = '';
     const minLen = platform['security.password.minLength'] ? Number(platform['security.password.minLength']) : 8;
     const complexityEnabled = platform['security.password.complexity'] !== 'false';
     Modal.confirm({
       title: `重置 ${row.name} 的密码`,
       content: (
         <div>
-          <div style={{ marginBottom: 8 }}>初始密码：</div>
-          <Input defaultValue="Radar@2026!" onChange={(e) => { pwd = e.target.value; }} placeholder="新密码" />
+          <div style={{ marginBottom: 8 }}>新密码：</div>
+          <Input.Password onChange={(e) => { pwd = e.target.value; }} placeholder="请输入新密码" />
           <div style={{ fontSize: 12, color: 'var(--radar-text-secondary)', marginTop: 4 }}>
             长度需不少于 {minLen} 位{complexityEnabled ? '，且需包含大小写字母、数字及特殊字符' : ''}。
           </div>
@@ -286,11 +284,11 @@ export default function Users() {
             <Form.Item
               name="password"
               label="初始密码"
-              extra={`留空默认 Radar@2026!`}
               rules={[
+                { required: true, message: '请输入初始密码' },
                 {
                   validator: (_, value) => {
-                    if (!value) return Promise.resolve();
+                    if (!value) return Promise.reject(new Error('请输入初始密码'));
                     const minLen = platform['security.password.minLength'] ? Number(platform['security.password.minLength']) : 8;
                     if (value.length < minLen) {
                       return Promise.reject(new Error(`密码长度不能小于 ${minLen} 位`));
@@ -306,7 +304,7 @@ export default function Users() {
                 }
               ]}
             >
-              <Input.Password placeholder="默认 Radar@2026!" />
+              <Input.Password placeholder="请输入初始密码" />
             </Form.Item>
           )}
           <Form.Item name="status" label="状态">

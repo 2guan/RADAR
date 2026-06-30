@@ -7,20 +7,31 @@
 
 import { get } from '../db/index.js';
 
-/**
- * 判断给定状态属性值是否为终态。
- * @param {string} statusAttr 状态属性值（中文）
- * @returns {boolean}
- */
-export function isTerminalStatus(statusAttr) {
+function isTerminalDictAttr(category, statusAttr) {
   if (!statusAttr) return false;
-  const row = get('SELECT extra FROM dict_item WHERE category = ? AND attr_value = ?', 'process_status', statusAttr);
+  const row = get('SELECT extra FROM dict_item WHERE category = ? AND attr_value = ?', category, statusAttr);
   if (!row?.extra) return false;
   try {
     return !!JSON.parse(row.extra).isTerminal;
   } catch {
     return false;
   }
+}
+
+/**
+ * 判断给定状态属性值是否为终态。
+ * @param {string} statusAttr 状态属性值（中文）
+ * @returns {boolean}
+ */
+export function isTerminalStatus(statusAttr) {
+  return isTerminalDictAttr('process_status', statusAttr);
+}
+
+/**
+ * 判断 PAMS 问题状态是否为终态，终态标识来自 issue_status.extra.isTerminal。
+ */
+export function isIssueTerminalStatus(statusAttr) {
+  return isTerminalDictAttr('issue_status', statusAttr);
 }
 
 /**

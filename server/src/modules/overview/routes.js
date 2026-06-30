@@ -7,7 +7,7 @@
  */
 
 import { get, all } from '../../db/index.js';
-import { isTerminalStatus } from '../../lib/status.js';
+import { isIssueTerminalStatus, isTerminalStatus } from '../../lib/status.js';
 import { listByEntity } from '../../lib/attachment.js';
 import { windowIds, inClause } from '../../lib/window.js';
 import { ok, notFound } from '../../lib/http.js';
@@ -129,14 +129,11 @@ function buildChain(req, devMap, testMap, rtMap, firstLabel = '需求') {
   return { nodes, currentStage: `${current.label}-${current.status || '未开始'}` };
 }
 
-// 问题状态的终态集合：待验证 / 已解决 视为已完成（进度条显示终态）
-const ISSUE_TERMINAL_STATUS = new Set(['待验证', '已解决']);
-
-/** 问题状态节点：待验证/已解决 视为终态(done)，其余有状态为 doing，无状态为 pending */
+/** 问题状态节点：终态由 issue_status 字典标记，其余有状态为 doing，无状态为 pending */
 function issueStatusNode(status) {
   if (!status) return { key: '问题', label: '问题状态', state: 'pending', text: null, status: null };
   const base = nodeState([{ status }]);
-  if (ISSUE_TERMINAL_STATUS.has(status)) base.state = 'done';
+  if (isIssueTerminalStatus(status)) base.state = 'done';
   return { key: '问题', label: '问题状态', ...base };
 }
 

@@ -8,12 +8,11 @@
  */
 
 import { randomBytes, createHash } from 'node:crypto';
+import { config } from '../config.js';
 
 // 验证码存储（生产环境建议替换为 Redis）
 const store = new Map();
 
-const CAPTCHA_EXPIRES_MS = 5 * 60 * 1000;
-const MAX_ATTEMPTS = 3;
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 // 每分钟清理过期验证码
@@ -22,11 +21,11 @@ const CLEANUP_INTERVAL = setInterval(() => {
   for (const [key, val] of store) {
     if (now > val.expiresAt) store.delete(key);
   }
-}, 60 * 1000);
+}, config.captcha.cleanupIntervalMs);
 if (CLEANUP_INTERVAL.unref) CLEANUP_INTERVAL.unref();
 
 function generateCode(length) {
-  const len = length || 4;
+  const len = length || config.captcha.codeLength;
   let code = '';
   const bytes = randomBytes(len);
   for (let i = 0; i < len; i++) {
@@ -55,10 +54,10 @@ function generateCaptchaSvg(code) {
 }
 
 export function createCaptcha() {
-  const code = generateCode(4);
+  const code = generateCode(config.captcha.codeLength);
   const token = randomBytes(16).toString('hex');
   const hash = createHash('sha256').update(code.toUpperCase()).digest('hex');
-  store.set(token, { hash, expiresAt: Date.now() + CAPTCHA_EXPIRES_MS, attempts: 0 });
+  store.set(token, { hash, expiresAt: Date.now() + config.captcha.expiresMs, attempts: 0 });
   return { token, svg: generateCaptchaSvg(code) };
 }
 
@@ -67,7 +66,7 @@ export function verifyCaptcha(token, answer) {
   const record = store.get(token);
   if (!record) return false;
   if (Date.now() > record.expiresAt) { store.delete(token); return false; }
-  if (record.attempts >= MAX_ATTEMPTS) { store.delete(token); return false; }
+  if (record.attempts >= config.captcha.maxAttempts) { store.delete(token); return false; }
   record.attempts++;
   const normalizedAnswer = String(answer).toUpperCase().trim();
   const answerHash = createHash('sha256').update(normalizedAnswer).digest('hex');

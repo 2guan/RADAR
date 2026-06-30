@@ -29,12 +29,9 @@ COPY --from=web-builder /build/web/dist ./web/dist
 RUN mkdir -p /app/data /app/attachments
 
 ENV NODE_ENV=production
-ENV PORT=3000
-ENV DB_FILE=/app/data/radar.db
-ENV ATTACHMENT_DIR=/app/attachments
-ENV WEB_DIST=/app/web/dist
 
-EXPOSE 3000
+ARG APP_PORT=3000
+EXPOSE ${APP_PORT}
 
 # 启动后端（自动迁移 + 种子 + 提供前端）
 CMD ["node", "server/src/server.js"]

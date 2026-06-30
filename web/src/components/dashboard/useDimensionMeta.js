@@ -10,7 +10,7 @@ import { useEffect, useState } from 'react';
 import { apiGet } from '../../api/client.js';
 
 // 需要预载的字典分类（覆盖所有 dict:* optionSource）
-const DICT_CATS = ['process_status', 'req_type', 'org', 'sector'];
+const DICT_CATS = ['process_status', 'req_type', 'ticket_type', 'org', 'sector'];
 
 // 会话级缓存：元数据基本不变，缓存后再次进入仪表盘瞬时就绪，避免重复往返。
 // 缓存 Promise（而非结果）以合并并发首载；失败时清空以便重试。
@@ -51,6 +51,7 @@ async function fetchMeta() {
 
   const stageList = [
     { value: '需求', label: '需求' },
+    { value: '工单', label: '工单' },
     { value: '开发', label: '开发' },
     { value: '应用组装', label: '应用组装' },
     { value: '非功能测试', label: '非功能测试' },
@@ -62,14 +63,14 @@ async function fetchMeta() {
 
   const processStatusRows = dictArr.find(([c]) => c === 'process_status')?.[1] || [];
   const taskStatusList = [];
-  const stages = ['需求', '开发', '应用组装', '非功能测试', '安全测试', '用户测试', '投产'];
+  const stages = ['需求', '工单', '开发', '应用组装', '非功能测试', '安全测试', '用户测试', '投产'];
   stages.forEach((stg) => {
     taskStatusList.push({ value: `${stg}-未开始`, label: `${stg} - 未开始` });
   });
   processStatusRows.forEach((item) => {
     const stg = item.extra?.stage;
     const statusVal = item.attr_value;
-    if (stg === '需求' || stg === '开发' || stg === '投产') {
+    if (stg === '需求' || stg === '工单' || stg === '开发' || stg === '投产') {
       taskStatusList.push({ value: `${stg}-${statusVal}`, label: `${stg} - ${statusVal}` });
     } else if (stg === '测试') {
       taskStatusList.push({ value: `应用组装-${statusVal}`, label: `应用组装 - ${statusVal}` });

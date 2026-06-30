@@ -1,6 +1,6 @@
 /**
  * 文件：pages/Dashboard.jsx
- * 用途：效能仪表盘。顶置 5 原子指标卡（终态计数）+ 「系统图表」「我的图表」两分区的
+ * 用途：效能仪表盘。顶置原子指标卡（终态计数）+ 「系统图表」「我的图表」两分区的
  *       自定义分析图表（多维度组合/分组归并/局部过滤/透视/钻取，颜色与布局可配）。
  * 作者：hengguan
  * 说明：投产度量大屏和多维图表展示面板，汇总需求开发时效、投产通过率及任务分布等度量指标。
@@ -11,7 +11,7 @@ import {
   Card, Row, Col, Progress, Button, Empty, message, Modal, Table, Grid, Spin, List,
 } from 'antd';
 import {
-  FileTextOutlined, CodeOutlined, ExperimentOutlined, UserOutlined, RocketOutlined, PlusOutlined, BugOutlined,
+  FileTextOutlined, CodeOutlined, ExperimentOutlined, UserOutlined, RocketOutlined, PlusOutlined,
 } from '@ant-design/icons';
 import { apiGet, apiPost, apiPut, apiDelete } from '../api/client.js';
 import { useAppStore } from '../stores/app.js';
@@ -112,7 +112,7 @@ export default function Dashboard() {
 
   const cards = [
     { key: 'requirement', title: '业务需求', icon: <FileTextOutlined />, color: activeColors.statusInitial },
-    { key: 'issue', title: '投产问题', icon: <BugOutlined />, color: activeColors.statusInProgress },
+    { key: 'ticket', title: '生产工单', icon: <FileTextOutlined />, color: activeColors.statusInProgress },
     { key: 'dev', title: '开发任务', icon: <CodeOutlined />, color: activeColors.primaryDeep },
     { key: 'sit', title: 'SIT测试任务', icon: <ExperimentOutlined />, color: activeColors.highlight },
     { key: 'uat', title: 'UAT测试任务', icon: <UserOutlined />, color: activeColors.accent },
@@ -161,7 +161,7 @@ export default function Dashboard() {
     // overflowX:hidden 吸收各 Row 栅格槽（gutter 16 → 负 -8 外边距）造成的 8px 横向溢出，
     // 消除仪表盘底部的横向滚动条；根容器高度自适应，不会引入纵向滚动条。
     <div style={{ overflowX: 'hidden' }}>
-      {/* 6 原子指标卡 */}
+      {/* 原子指标卡 */}
       <Row gutter={[16, 16]} wrap>
         {cards.map((c) => {
           const m = metrics[c.key] || { total: 0, terminal: 0 };

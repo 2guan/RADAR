@@ -51,9 +51,6 @@ function normalizeUnits(units) {
     .filter((u) => u.artifact_type || u.delivery_unit || u.new_version);
 }
 
-// 评审状态强弱排序（数值越小越弱）：评审拒绝 < 评审撤销 < 待评审 < 应急审批 < 评审同意
-const REVIEW_RANK = { '评审拒绝': 0, '评审撤销': 1, '待评审': 2, '应急审批': 3, '评审同意': 4 };
-
 /** 把 JSON 字符串字段解析为数组返回给前端 */
 function decode(row) {
   if (!row) return row;
@@ -79,6 +76,18 @@ function pick(body) {
   return out;
 }
 
+/** 读取评审状态强弱排序，数值越小越弱；来自 review_status.extra.rank。 */
+function reviewRankOf(status) {
+  const row = get('SELECT sort, extra FROM dict_item WHERE category = ? AND attr_value = ?', 'review_status', status);
+  if (!row) return Number.POSITIVE_INFINITY;
+  try {
+    const rank = JSON.parse(row.extra || '{}').rank;
+    const n = Number(rank);
+    if (Number.isFinite(n)) return n;
+  } catch {}
+  return Number.isFinite(row.sort) ? row.sort : Number.POSITIVE_INFINITY;
+}
+
 /**
  * 由关联的需求/工单编号派生评审状态：从投产审批表（release_task）取评审状态，取最弱。
  * 无任何匹配则返回 null。
@@ -90,7 +99,7 @@ function deriveReviewStatus(refCodes) {
   for (const code of refCodes) {
     const rt = get('SELECT review_status FROM release_task WHERE req_code = ?', code);
     if (!rt || !rt.review_status) continue;
-    const rank = REVIEW_RANK[rt.review_status] ?? 2;
+    const rank = reviewRankOf(rt.review_status);
     if (rank < weakestRank) { weakestRank = rank; weakest = rt.review_status; }
   }
   return weakest;

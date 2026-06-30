@@ -17,6 +17,9 @@ import { badRequest } from './http.js';
  * @returns {Promise<any>} 接口的 data 字段
  */
 async function pamsFetch(path, opts = {}) {
+  if (!config.pams.baseUrl || !config.pams.apiKey) {
+    throw badRequest('PAMS 接口未配置');
+  }
   const { method = 'GET', body } = opts;
   const url = `${config.pams.baseUrl}${path}`;
   let resp;

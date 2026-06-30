@@ -53,7 +53,7 @@ export async function buildApp() {
   await app.register(compress, {
     global: true,
     encodings: ['gzip', 'deflate'],
-    threshold: 1024, // 小于 1KB 不压缩，避免负收益
+    threshold: config.security.compressionThreshold,
   });
 
   // ---- 安全与基础插件 ----
@@ -65,7 +65,7 @@ export async function buildApp() {
         scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", "data:", "blob:"],
-        connectSrc: ["'self'", "https://aiguan.xyz"],
+        connectSrc: config.security.cspConnectSrc,
         fontSrc: ["'self'", "data:"],
         objectSrc: ["'none'"],
         frameAncestors: ["'self'"],
@@ -74,24 +74,19 @@ export async function buildApp() {
     },
   });
   // CORS：优先从环境变量读取允许的来源（逗号分隔），开发环境退回到本地端口
-  const corsOrigins = process.env.CORS_ORIGINS
-    ? process.env.CORS_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean)
-    : config.isProd
-      ? []
-      : ['http://127.0.0.1:3000', 'http://localhost:3000', 'http://127.0.0.1:5173', 'http://localhost:5173'];
   await app.register(cors, {
-    origin: corsOrigins.length ? corsOrigins : false,
+    origin: config.corsOrigins.length ? config.corsOrigins : false,
     credentials: true,
   });
   await app.register(rateLimit, {
-    max: 600,            // 单 IP 每窗口最多请求数
-    timeWindow: '1 minute',
+    max: config.security.rateLimitMax,
+    timeWindow: config.security.rateLimitWindow,
   });
  await app.register(multipart, {
    limits: { fileSize: config.upload.maxFileSize },
  });
   // ---- API 请求体大小限制：JSON/表单类请求限制 1MB，文件上传走 multipart 独立限制 ----
-  const API_BODY_LIMIT = 1024 * 1024;
+  const API_BODY_LIMIT = config.security.apiBodyLimit;
 
   // ---- 鉴权插件 ----
   await app.register(authPlugin);
@@ -123,11 +118,11 @@ export async function buildApp() {
         const isExempt = exemptPaths.some((p) => path === p || path.startsWith(p + '/'));
         if (!isExempt && !exemptPaths.some((p) => path.startsWith(p))) {
           const requestedBy = request.headers['x-requested-by'];
-          if (config.isProd && requestedBy !== 'RADAR') {
+          if (config.isProd && requestedBy !== config.security.csrfHeaderValue) {
             return reply.code(403).send({ code: 403, data: null, message: 'CSRF 校验失败' });
           }
           // 开发环境也校验（不强制，但会记录警告）
-          if (!requestedBy || requestedBy !== 'RADAR') {
+          if (!requestedBy || requestedBy !== config.security.csrfHeaderValue) {
             request.log.warn({ path, method: request.method }, 'Missing X-Requested-By header (CSRF)');
           }
         }

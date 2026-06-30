@@ -161,7 +161,8 @@ export default async function userRoutes(fastify) {
     if (!name) throw badRequest('姓名不能为空或仅含无效字符');
     if (get('SELECT id FROM user WHERE phone = ?', phone)) throw badRequest('手机号已存在');
 
-    const finalPwd = password || 'Radar@2026!';
+    const finalPwd = String(password || '').trim();
+    if (!finalPwd) throw badRequest('初始密码必填');
     if (!validatePasswordComplexity(finalPwd)) {
       const minLength = getSecurityConfig()['security.password.minLength'];
       throw badRequest(`密码不符合复杂度要求（长度不能小于 ${minLength} 位，且必须包含大小写字母、数字和特殊字符）`);
@@ -200,7 +201,8 @@ export default async function userRoutes(fastify) {
   fastify.post('/users/:id/reset-password', { preHandler: fastify.requirePerm('user', 'edit') }, async (request) => {
     const id = request.params.id;
     if (!get('SELECT id FROM user WHERE id = ?', id)) throw notFound();
-    const pwd = request.body?.password || 'Radar@2026!';
+    const pwd = String(request.body?.password || '').trim();
+    if (!pwd) throw badRequest('新密码必填');
     if (!validatePasswordComplexity(pwd)) {
       const minLength = getSecurityConfig()['security.password.minLength'];
       throw badRequest(`密码不符合复杂度要求（长度不能小于 ${minLength} 位，且必须包含大小写字母、数字和特殊字符）`);
@@ -357,7 +359,8 @@ export default async function userRoutes(fastify) {
 
           } else {
             // insert 新建
-            const initPwd = String(r.password || '').trim() || 'Radar@2026!';
+            const initPwd = String(r.password || '').trim();
+            if (!initPwd) throw new Error('初始密码不能为空');
             if (!validatePasswordComplexity(initPwd)) {
               const minLength = getSecurityConfig()['security.password.minLength'];
               throw new Error(`密码不符合复杂度要求（长度不能小于 ${minLength} 位，且必须包含大小写字母、数字和特殊字符）`);

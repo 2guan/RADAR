@@ -1,71 +1,124 @@
 /**
  * 文件：config.js
  * 用途：集中管理后端运行时配置（端口、JWT 密钥、数据库与附件路径等），
- *       全部从环境变量读取并提供合理默认值，便于本地开发与 Docker 部署切换。
+ *       从环境变量/.env 读取，便于本地开发与 Docker 部署切换。
  * 作者：hengguan
- * 说明：所有路径默认指向仓库根目录下的 data/ 与 attachments/（与 docker-compose 挂载一致）。
  */
 
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { randomBytes } from 'node:crypto';
+import { loadEnvFile } from './lib/env.js';
 
-// 计算仓库根目录（server/src/config.js -> 上溯三层到仓库根）
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
+loadEnvFile(path.join(REPO_ROOT, '.env'));
 
-/**
- * 读取整数型环境变量，非法时回退默认值。
- */
+const isProd = process.env.NODE_ENV === 'production';
+
 function intEnv(name, fallback) {
   const v = parseInt(process.env[name] ?? '', 10);
   return Number.isFinite(v) ? v : fallback;
 }
 
+function strEnv(name, fallback = '') {
+  const value = process.env[name];
+  return value === undefined || value === '' ? fallback : value;
+}
+
+function requiredProdEnv(name) {
+  const value = process.env[name];
+  if (isProd && !value) {
+    throw new Error(`生产环境必须配置 ${name}`);
+  }
+  return value || '';
+}
+
+function pathEnv(name, fallback) {
+  const value = strEnv(name, fallback);
+  return path.isAbsolute(value) ? value : path.resolve(REPO_ROOT, value);
+}
+
+function listEnv(name, fallback) {
+  const value = process.env[name];
+  if (!value) return fallback;
+  return value.split(',').map((s) => s.trim()).filter(Boolean);
+}
+
+function cspListEnv(name, fallback) {
+  return listEnv(name, fallback).map((item) => item === 'self' ? "'self'" : item);
+}
+
+function originOf(url) {
+  try {
+    return url ? new URL(url).origin : null;
+  } catch {
+    return null;
+  }
+}
+
+const pamsBaseUrl = strEnv('PAMS_BASE_URL');
+const pamsOrigin = originOf(pamsBaseUrl);
+
 export const config = {
-  // 服务监听端口与地址
   port: intEnv('PORT', 3000),
-  host: process.env.HOST || '0.0.0.0',
+  host: strEnv('HOST', '0.0.0.0'),
+  isProd,
 
-  // 运行环境
-  isProd: process.env.NODE_ENV === 'production',
-
-  // JWT 配置（生产环境务必通过环境变量覆盖密钥）
   jwt: {
-    secret: process.env.JWT_SECRET || 'radar-dev-secret-change-me-in-production',
-    expiresIn: process.env.JWT_EXPIRES_IN || '12h',
+    secret: requiredProdEnv('JWT_SECRET') || randomBytes(32).toString('hex'),
+    expiresIn: strEnv('JWT_EXPIRES_IN', '12h'),
   },
 
-  // 数据库文件路径（挂载目录）
-  dbFile: process.env.DB_FILE || path.join(REPO_ROOT, 'data', 'radar.db'),
+  dbFile: pathEnv('DB_FILE', path.join('data', 'radar.db')),
+  attachmentDir: pathEnv('ATTACHMENT_DIR', 'attachments'),
+  webDist: pathEnv('WEB_DIST', path.join('web', 'dist')),
 
-  // 附件存储根目录（挂载目录）
-  attachmentDir: process.env.ATTACHMENT_DIR || path.join(REPO_ROOT, 'attachments'),
-
-  // 前端静态资源目录（生产模式下由 Fastify 提供）
-  webDist: process.env.WEB_DIST || path.join(REPO_ROOT, 'web', 'dist'),
-
-  // 附件上传限制
   upload: {
-    maxFileSize: intEnv('MAX_FILE_SIZE', 50 * 1024 * 1024), // 默认 50MB
-    // 允许的扩展名白名单（小写，含点）
-    allowedExt: [
+    maxFileSize: intEnv('MAX_FILE_SIZE', 50 * 1024 * 1024),
+    allowedExt: listEnv('UPLOAD_ALLOWED_EXTENSIONS', [
       '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.md',
       '.csv', '.zip', '.rar', '.7z', '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg',
-    ],
+    ]).map((ext) => ext.startsWith('.') ? ext.toLowerCase() : `.${ext.toLowerCase()}`),
   },
 
-  // 外部 PAMS 问题管理系统（问题清单/明细同步源）
   pams: {
-    baseUrl: process.env.PAMS_BASE_URL || 'https://aiguan.xyz',
-    apiKey: process.env.PAMS_API_KEY || 'pams-openclaw-a9b4f7e2d1c5',
+    baseUrl: pamsBaseUrl,
+    apiKey: strEnv('PAMS_API_KEY'),
     timeout: intEnv('PAMS_TIMEOUT', 20000),
   },
 
-  // 初始超级管理员账号
   superAdmin: {
-    phone: process.env.ADMIN_PHONE || 'admin',
-    name: '超级管理员',
-    password: process.env.ADMIN_PASSWORD || 'Admin@2026',
+    phone: strEnv('ADMIN_PHONE', 'admin'),
+    name: strEnv('ADMIN_NAME', '超级管理员'),
+    password: strEnv('ADMIN_PASSWORD'),
+  },
+
+  corsOrigins: listEnv('CORS_ORIGINS', isProd ? [] : [
+    'http://127.0.0.1:3000',
+    'http://localhost:3000',
+    'http://127.0.0.1:5173',
+    'http://localhost:5173',
+  ]),
+
+  security: {
+    csrfHeaderValue: strEnv('CSRF_HEADER_VALUE', 'RADAR'),
+    apiBodyLimit: intEnv('API_BODY_LIMIT', 1024 * 1024),
+    rateLimitMax: intEnv('RATE_LIMIT_MAX', 600),
+    rateLimitWindow: strEnv('RATE_LIMIT_WINDOW', '1 minute'),
+    compressionThreshold: intEnv('COMPRESSION_THRESHOLD', 1024),
+    cspConnectSrc: cspListEnv('CSP_CONNECT_SRC', pamsOrigin ? ["'self'", pamsOrigin] : ["'self'"]),
+  },
+
+  captcha: {
+    expiresMs: intEnv('CAPTCHA_EXPIRES_MS', 5 * 60 * 1000),
+    maxAttempts: intEnv('CAPTCHA_MAX_ATTEMPTS', 3),
+    codeLength: intEnv('CAPTCHA_CODE_LENGTH', 4),
+    cleanupIntervalMs: intEnv('CAPTCHA_CLEANUP_INTERVAL_MS', 60 * 1000),
+  },
+
+  signature: {
+    maxBytes: intEnv('SIGNATURE_MAX_BYTES', 2 * 1024 * 1024),
   },
 
   REPO_ROOT,

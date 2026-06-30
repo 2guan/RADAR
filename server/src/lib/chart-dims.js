@@ -17,6 +17,7 @@ import { isTerminalStatus } from './status.js';
 export const DIMENSIONS = {
   status: { label: '状态', optionSource: 'dict:process_status', isDate: false },
   req_type: { label: '需求类型', optionSource: 'dict:req_type', isDate: false },
+  ticket_type: { label: '工单类型', optionSource: 'dict:ticket_type', isDate: false },
   propose_dept: { label: '提出部门', optionSource: 'dict:org', isDate: false },
   org: { label: '实施机构', optionSource: 'dict:org', isDate: false },
   sector: { label: '业务板块', optionSource: 'dict:sector', isDate: false },
@@ -46,6 +47,10 @@ export const SOURCES = {
   requirement: {
     label: '业务需求',
     dims: ['status', 'req_type', 'propose_dept', 'org', 'sector', 'system', 'release_point', 'propose_time_day', 'stage', 'task_status'],
+  },
+  ticket: {
+    label: '生产工单',
+    dims: ['status', 'ticket_type', 'propose_dept', 'org', 'sector', 'system', 'release_point', 'propose_time_day', 'stage', 'task_status'],
   },
   dev: {
     label: '开发任务',
@@ -85,20 +90,22 @@ function nodeState(tasks) {
   return { state: allTerminal ? 'done' : 'doing', text, status };
 }
 
-/** 构建单需求链路概要 */
+/** 构建单需求/工单链路概要 */
 function buildChain(req, devMap = {}, testMap = {}, rtMap = {}) {
-  const dev = devMap[req.req_code] || [];
-  const t = testMap[req.req_code] || {};
+  const code = req.req_code || req.ticket_code;
+  const firstLabel = req.ticket_code ? '工单' : '需求';
+  const dev = devMap[code] || [];
+  const t = testMap[code] || {};
   const sit = t.SIT || [];
   const nft = t.NFT || [];
   const sec = t.SEC || [];
   const uat = t.UAT || [];
-  const rtStatus = rtMap[req.req_code];
+  const rtStatus = rtMap[code];
   const rt = rtStatus ? { status: rtStatus } : null;
 
-  // 阶段顺序：需求 / 开发 / 应用组装 / 非功能测试(按需) / 安全测试(按需) / 用户测试 / 投产
+  // 阶段顺序：需求/工单 / 开发 / 应用组装 / 非功能测试(按需) / 安全测试(按需) / 用户测试 / 投产
   const nodes = [
-    { key: '需求', label: '需求', ...nodeState([{ status: req.status }]) },
+    { key: firstLabel, label: firstLabel, ...nodeState([{ status: req.status }]) },
     { key: '开发', label: '开发', ...nodeState(dev) },
     { key: 'SIT', label: '应用组装', ...nodeState(sit) },
   ];
@@ -140,7 +147,7 @@ export function buildContext() {
 
 /** 取一条记录涉及的系统编号数组（随源不同字段） */
 function systemCodes(source, row) {
-  if (source === 'requirement') {
+  if (source === 'requirement' || source === 'ticket') {
     try { const a = JSON.parse(row.main_systems || '[]'); return Array.isArray(a) ? a.filter(Boolean) : []; }
     catch { return []; }
   }
@@ -160,6 +167,7 @@ export function extract(source, dim, row, ctx) {
   switch (dim) {
     case 'status': return [row.status || '未知'];
     case 'req_type': return [row.req_type || '未分类'];
+    case 'ticket_type': return [row.ticket_type || '未分类'];
     case 'propose_dept': return [row.propose_dept || '未分配'];
     case 'owner': return [row.owner || '未分配'];
     case 'release_point': return [row.release_point_id != null ? String(row.release_point_id) : '未分配'];
@@ -168,7 +176,7 @@ export function extract(source, dim, row, ctx) {
       return codes.length ? uniq(codes) : ['未指定'];
     }
     case 'org': {
-      if (realSource === 'requirement') {
+      if (realSource === 'requirement' || realSource === 'ticket') {
         const orgs = uniq(systemCodes(realSource, row).map((c) => sysMap[c]?.org).filter(Boolean));
         if (orgs.length) return orgs;
         return [row.propose_dept || '未分配'];
@@ -182,7 +190,7 @@ export function extract(source, dim, row, ctx) {
       return sectors.length ? sectors : ['未分类'];
     }
     case 'stage': {
-      if (realSource !== 'requirement') return ['未知'];
+      if (realSource !== 'requirement' && realSource !== 'ticket') return ['未知'];
       const chain = buildChain(row, ctx.devMap, ctx.testMap, ctx.rtMap);
       let current = chain.nodes.find((n) => n.state === 'doing');
       if (!current) {
@@ -192,7 +200,7 @@ export function extract(source, dim, row, ctx) {
       return [current.label || '需求'];
     }
     case 'task_status': {
-      if (realSource !== 'requirement') return ['未知'];
+      if (realSource !== 'requirement' && realSource !== 'ticket') return ['未知'];
       const chain = buildChain(row, ctx.devMap, ctx.testMap, ctx.rtMap);
       let current = chain.nodes.find((n) => n.state === 'doing');
       if (!current) {

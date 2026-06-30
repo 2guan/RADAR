@@ -12,7 +12,6 @@ import { config } from '../config.js';
 import { badRequest } from './http.js';
 
 const SIG_SUBDIR = 'signatures';
-const MAX_BYTES = 2 * 1024 * 1024; // 签名图片上限 2MB
 
 /** 解析 data:image/(png|jpeg);base64,xxx，返回 { ext, buffer } */
 export function decodeSignatureDataUrl(dataUrl) {
@@ -21,7 +20,7 @@ export function decodeSignatureDataUrl(dataUrl) {
   const ext = m[1].toLowerCase().startsWith('png') ? 'png' : 'jpg';
   const buffer = Buffer.from(m[2], 'base64');
   if (!buffer.length) throw badRequest('签名内容为空');
-  if (buffer.length > MAX_BYTES) throw badRequest('签名图片过大（上限 2MB）');
+  if (buffer.length > config.signature.maxBytes) throw badRequest(`签名图片过大（上限 ${Math.round(config.signature.maxBytes / 1024 / 1024)}MB）`);
   return { ext, buffer };
 }
 

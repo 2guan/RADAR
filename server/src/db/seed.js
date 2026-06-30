@@ -96,8 +96,16 @@ const TICKET_TYPE = [
   ['工单阻塞问题', 2],
   ['延后承诺需求', 3],
 ];
-// 评审状态（投产评审会签）：待评审为默认，评审同意/拒绝自动推导，评审撤销/应急审批手动设置
-const REVIEW_STATUS = [['待评审', 1], ['评审同意', 2], ['评审拒绝', 3], ['评审撤销', 4], ['应急审批', 5]];
+// 评审状态（投产评审会签）：sort 控制默认值，extra.rank 控制取最弱评审状态的排序
+const REVIEW_STATUS = [
+  ['待评审', 1, 2],
+  ['评审同意', 2, 4],
+  ['评审拒绝', 3, 0],
+  ['评审撤销', 4, 1],
+  ['应急审批', 5, 3],
+];
+// 问题状态：PAMS 同步状态中标记终态的项
+const ISSUE_STATUS = [['已解决', 1, true], ['待验证', 2, true]];
 // 制品类型（投产申请）：镜像制品 / 二进制制品 / 介质库文件 / 无制品
 const ARTIFACT_TYPE = [['镜像制品', 1], ['二进制制品', 2], ['介质库文件', 3], ['无制品', 4]];
 // 摆渡状态（投产申请）：未摆渡（默认）/ 待发送 / 已摆渡 / 摆渡失败
@@ -239,7 +247,7 @@ function seedDict(category, attrValue, displayValue, sort, extra) {
     });
   } else {
     exists = get(
-      'SELECT id FROM dict_item WHERE category = ? AND attr_value = ?',
+      'SELECT id, extra FROM dict_item WHERE category = ? AND attr_value = ?',
       category, attrValue,
     );
   }
@@ -248,6 +256,13 @@ function seedDict(category, attrValue, displayValue, sort, extra) {
       'INSERT INTO dict_item (category, attr_value, display_value, sort, extra) VALUES (?,?,?,?,?)',
       category, attrValue, displayValue, sort, extra ? JSON.stringify(extra) : null,
     );
+  } else if (extra) {
+    let existingExtra = {};
+    try { existingExtra = exists.extra ? JSON.parse(exists.extra) : {}; } catch {}
+    const nextExtra = { ...extra, ...existingExtra };
+    if (JSON.stringify(nextExtra) !== JSON.stringify(existingExtra)) {
+      run('UPDATE dict_item SET extra=?, updated_at=datetime(\'now\',\'localtime\') WHERE id=?', JSON.stringify(nextExtra), exists.id);
+    }
   }
 }
 
@@ -284,7 +299,8 @@ export function runSeed() {
     for (const [attr, sort] of RELEASE_STATUS) seedDict('release_status', attr, attr, sort);
     for (const [attr, sort] of REQ_TYPE) seedDict('req_type', attr, attr, sort);
     for (const [attr, sort] of TICKET_TYPE) seedDict('ticket_type', attr, attr, sort);
-    for (const [attr, sort] of REVIEW_STATUS) seedDict('review_status', attr, attr, sort);
+    for (const [attr, sort, rank] of REVIEW_STATUS) seedDict('review_status', attr, attr, sort, { rank });
+    for (const [attr, sort, isTerminal] of ISSUE_STATUS) seedDict('issue_status', attr, attr, sort, { isTerminal });
     for (const [attr, sort] of ARTIFACT_TYPE) seedDict('artifact_type', attr, attr, sort);
     for (const [attr, sort] of FERRY_STATUS) seedDict('ferry_status', attr, attr, sort);
     for (const [attr, disp, sort] of ORGS) seedDict('org', attr, disp, sort);
@@ -351,6 +367,9 @@ export function runSeed() {
 
     // 6) 超级管理员用户
     if (!get('SELECT id FROM user WHERE phone = ?', config.superAdmin.phone)) {
+      if (!config.superAdmin.password) {
+        throw new Error('首次初始化超级管理员前必须配置 ADMIN_PASSWORD');
+      }
       const res = run(
         'INSERT INTO user (phone, name, org, password_hash, status, is_super, password_changed_at) VALUES (?,?,?,?,?,1,datetime(\'now\',\'localtime\'))',
         config.superAdmin.phone,

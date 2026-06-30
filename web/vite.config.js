@@ -4,20 +4,27 @@
  * 作者：hengguan
  */
 
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
-export default defineConfig({
-  plugins: [react()],
-  server: {
-    port: 5173,
-    proxy: {
-      // 开发模式下将 /api 代理到后端，避免跨域
-      '/api': { target: 'http://localhost:3000', changeOrigin: true },
+function intEnv(value, fallback) {
+  const parsed = parseInt(value || '', 10);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '');
+  return {
+    plugins: [react()],
+    server: {
+      port: intEnv(env.VITE_DEV_PORT, 5173),
+      proxy: {
+        '/api': { target: env.VITE_API_PROXY_TARGET || 'http://localhost:3000', changeOrigin: true },
+      },
     },
-  },
-  build: {
-    outDir: 'dist',
-    chunkSizeWarningLimit: 1500,
-  },
+    build: {
+      outDir: 'dist',
+      chunkSizeWarningLimit: intEnv(env.VITE_CHUNK_SIZE_WARNING_LIMIT, 1500),
+    },
+  };
 });
