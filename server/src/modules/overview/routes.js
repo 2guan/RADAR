@@ -470,10 +470,13 @@ export default async function overviewRoutes(fastify) {
     const rows = await all(
       `SELECT id, entity_type, entity_code, action, operator, field, old_value, new_value, created_at
        FROM audit_log
-       WHERE (entity_type = ? AND entity_id = ?)
+       WHERE (
+          (entity_type = ? AND entity_id = ?)
           OR (entity_type = 'dev' AND entity_id IN (SELECT id FROM dev_task WHERE req_code = ?))
           OR (entity_type = 'test' AND entity_id IN (SELECT id FROM test_task WHERE req_code = ?))
           OR (entity_type = 'release' AND entity_id IN (SELECT id FROM release_task WHERE req_code = ?))
+       )
+         AND NOT (entity_type = 'release' AND (COALESCE(field, '') LIKE '会签-%-签署人' OR COALESCE(field, '') LIKE '会签-%-签署时间'))
        ORDER BY id DESC`,
       req.entity_type, req.id, reqCode, reqCode, reqCode
     );

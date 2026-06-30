@@ -346,13 +346,8 @@ export default async function releaseRoutes(fastify) {
       `UPDATE release_signoff SET result=?, conclusion=?, signature_path=?, signer_user_id=?, signer_name=?, sign_time=datetime('now','localtime'), updated_at=datetime('now','localtime') WHERE id=?`,
       result, conclusion || null, signaturePath, request.currentUser?.id, request.currentUser?.name, id,
     );
-    const updatedSignoff = await get('SELECT signer_name, sign_time FROM release_signoff WHERE id = ?', id);
     await auditUpdate('release', so.release_task_id, so.role_name, request.currentUser?.name,
       { r: so.result }, { r: result }, { r: `会签-${so.role_name}` });
-    await auditUpdate('release', so.release_task_id, so.role_name, request.currentUser?.name,
-      { signer_name: so.signer_name, sign_time: so.sign_time },
-      { signer_name: updatedSignoff?.signer_name, sign_time: updatedSignoff?.sign_time },
-      { signer_name: `会签-${so.role_name}-签署人`, sign_time: `会签-${so.role_name}-签署时间` });
 
     const beforeReview = (await get('SELECT review_status FROM release_task WHERE id = ?', so.release_task_id))?.review_status;
     const afterReview = await recomputeReviewStatus(so.release_task_id);

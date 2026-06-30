@@ -14,7 +14,11 @@ export default async function auditRoutes(fastify) {
     if (!entityType || !entityId) throw badRequest('参数缺失');
     const rows = await all(
       `SELECT id, action, operator, field, old_value, new_value, created_at
-         FROM audit_log WHERE entity_type = ? AND entity_id = ? ORDER BY id DESC`,
+         FROM audit_log
+        WHERE entity_type = ?
+          AND entity_id = ?
+          AND NOT (entity_type = 'release' AND (COALESCE(field, '') LIKE '会签-%-签署人' OR COALESCE(field, '') LIKE '会签-%-签署时间'))
+        ORDER BY id DESC`,
       entityType, Number(entityId),
     );
     return ok(rows);
