@@ -63,11 +63,37 @@ TDSQL 到 TDSQL 直连迁移使用源库和目标库参数：
 ```bash
 --truncate   # 迁移前清空目标表
 --dry-run    # 只统计源数据行数，不写入目标库
+--no-init-target # 不自动初始化 TDSQL 目标库；默认会自动初始化空目标库
+```
+
+环境变量除了 `TDSQL_*` 外，也兼容服务器常见的 MySQL 命名：
+
+```env
+MYSQL_HOST=target.example.com
+MYSQL_PORT=3306
+MYSQL_DB=radar
+MYSQL_USER=radar_app
+MYSQL_PASSWORD=target-password
 ```
 
 ## 方式一：SQLite 迁移到 TDSQL
 
 适用场景：本地 SQLite 文件数据库切换到 TDSQL MySQL 兼容版。
+目标 TDSQL 数据库只需要先创建空库；迁移脚本会自动执行 TDSQL 初始化建表，并写入 `_migrations` 记录。
+
+服务器上使用 `.env` 中的 `DB_FILE` 与 `TDSQL_*`/`MYSQL_*` 配置直接迁移：
+
+```bash
+cd /path/to/RADAR/server
+npm run migrate:tdsql
+```
+
+先试运行统计源 SQLite 行数，不写入 TDSQL：
+
+```bash
+cd /path/to/RADAR/server
+npm run migrate:tdsql -- --dry-run
+```
 
 ```bash
 npm run migrate:tdsql -- \

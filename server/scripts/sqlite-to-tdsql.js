@@ -15,6 +15,8 @@
  *
  * TDSQL 连接参数优先读取命令行，其次读取 .env：
  *   TDSQL_HOST/TDSQL_PORT/TDSQL_USER/TDSQL_PASSWORD/TDSQL_DATABASE/TDSQL_SSL
+ * 同时兼容 MySQL 习惯命名：
+ *   MYSQL_HOST/MYSQL_PORT/MYSQL_USER/MYSQL_PASSWORD/MYSQL_DB/MYSQL_SSL
  */
 
 import fs from 'node:fs';
@@ -28,6 +30,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER_ROOT = path.resolve(__dirname, '..');
 const REPO_ROOT = path.resolve(SERVER_ROOT, '..');
 const SQLITE_MIGRATIONS_DIR = path.join(SERVER_ROOT, 'src', 'db', 'migrations');
+const TDSQL_MIGRATIONS_DIR = path.join(SQLITE_MIGRATIONS_DIR, 'tdsql');
 loadEnvFile(path.join(REPO_ROOT, '.env'));
 
 const DIRECTIONS = new Set(['sqlite-to-tdsql', 'tdsql-to-sqlite', 'tdsql-to-tdsql']);
@@ -83,6 +86,8 @@ function parseArgs(argv) {
     const arg = argv[i];
     if (arg === '--truncate') { out.truncate = true; continue; }
     if (arg === '--dry-run') { out.dryRun = true; continue; }
+    if (arg === '--init-target') { out.initTarget = true; continue; }
+    if (arg === '--no-init-target') { out.initTarget = false; continue; }
     if (arg.startsWith('--')) {
       const [rawKey, inline] = arg.slice(2).split('=');
       const key = rawKey.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
@@ -139,8 +144,16 @@ function argValue(args, prefix, name) {
 
 /** 读取带前缀的环境变量，例如 SOURCE_TDSQL_HOST/TARGET_TDSQL_HOST。 */
 function envValue(prefix, name) {
-  if (!prefix) return process.env[`TDSQL_${name}`];
-  return process.env[`${prefix.toUpperCase()}_TDSQL_${name}`];
+  // 迁移脚本面向 TDSQL MySQL 兼容版，同时兼容用户在服务器上常见的 MYSQL_* 命名。
+  const names = name === 'DATABASE' ? ['DATABASE', 'DB'] : [name];
+  const brands = ['TDSQL', 'MYSQL'];
+  for (const brand of brands) {
+    for (const n of names) {
+      const key = prefix ? `${prefix.toUpperCase()}_${brand}_${n}` : `${brand}_${n}`;
+      if (process.env[key] !== undefined) return process.env[key];
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -149,8 +162,8 @@ function envValue(prefix, name) {
  * target 配置默认不回退，避免 TDSQL->TDSQL 时误把目标库解析成源库。
  */
 function tdsqlConfig(args, prefix = '', allowGenericFallback = true) {
-  const fallback = (name) => (allowGenericFallback ? (args[name] || process.env[`TDSQL_${name.toUpperCase()}`]) : undefined);
-  const fallbackNullish = (name) => (allowGenericFallback ? (args[name] ?? process.env[`TDSQL_${name.toUpperCase()}`]) : undefined);
+  const fallback = (name) => (allowGenericFallback ? (args[name] || envValue('', name.toUpperCase())) : undefined);
+  const fallbackNullish = (name) => (allowGenericFallback ? (args[name] ?? envValue('', name.toUpperCase())) : undefined);
   return {
     host: argValue(args, prefix, 'host') || envValue(prefix, 'HOST') || fallback('host') || '127.0.0.1',
     port: intValue(argValue(args, prefix, 'port') || envValue(prefix, 'PORT') || fallback('port'), 3306),
@@ -204,6 +217,52 @@ async function mysqlColumns(conn, table) {
 async function mysqlTables(conn) {
   const [rows] = await conn.query('SHOW TABLES');
   return new Set(rows.map((r) => Object.values(r)[0]));
+}
+
+/** 判断目标 TDSQL 中是否已经存在 RADAR 业务表。 */
+function hasBusinessTables(tables) {
+  return TABLE_ORDER.some((table) => tables.has(table));
+}
+
+/** 目标 TDSQL 为空库时自动建表，让 SQLite -> TDSQL 可以直接执行。 */
+async function ensureTdsqlSchema(conn, { dryRun = false } = {}) {
+  const existingTables = await mysqlTables(conn);
+  if (dryRun) {
+    if (!hasBusinessTables(existingTables)) {
+      console.log('[迁移] dry-run：目标 TDSQL 为空库，实际执行时将先初始化表结构');
+    }
+    return;
+  }
+
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS _migrations (
+      name        VARCHAR(255) PRIMARY KEY,
+      applied_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  `);
+
+  const [appliedRows] = await conn.query('SELECT name FROM _migrations');
+  const applied = new Set(appliedRows.map((r) => r.name));
+  const files = fs.readdirSync(TDSQL_MIGRATIONS_DIR)
+    .filter((f) => f.endsWith('.sql'))
+    .sort();
+
+  for (const file of files) {
+    if (applied.has(file)) continue;
+
+    const tables = await mysqlTables(conn);
+    if (hasBusinessTables(tables)) {
+      // 目标库已有业务表但缺少迁移记录时，补记迁移，避免后续服务启动重复执行初始化 DDL。
+      console.log(`[迁移] TDSQL 目标库已存在业务表，补记结构迁移：${file}`);
+      if (!dryRun) await conn.execute('INSERT INTO _migrations (name) VALUES (?)', [file]);
+      continue;
+    }
+
+    const sql = fs.readFileSync(path.join(TDSQL_MIGRATIONS_DIR, file), 'utf8');
+    await conn.query(sql);
+    await conn.execute('INSERT INTO _migrations (name) VALUES (?)', [file]);
+    console.log(`[迁移] TDSQL 已初始化结构：${file}`);
+  }
 }
 
 /** 读取 SQLite 文件中的业务表清单。 */
@@ -274,10 +333,11 @@ function resetSqliteAutoIncrement(db, table) {
 
 /** 迁移单表：SQLite 源表 -> TDSQL 目标表。 */
 async function migrateSqliteTableToTdsql({ sqlite, conn, table, dryRun }) {
-  const targetColumns = await mysqlColumns(conn, table);
   const rows = sqlite.prepare(`SELECT * FROM ${sqliteIdent(table)}`).all();
   if (!rows.length) return { table, rows: 0 };
+  if (dryRun) return { table, rows: rows.length, dryRun: true };
 
+  const targetColumns = await mysqlColumns(conn, table);
   const columns = Object.keys(rows[0]).filter((col) => targetColumns.has(col));
   if (!columns.length) return { table, rows: 0, skipped: true };
 
@@ -287,8 +347,6 @@ async function migrateSqliteTableToTdsql({ sqlite, conn, table, dryRun }) {
     ON DUPLICATE KEY UPDATE
       ${columns.filter((c) => c !== 'id').map((c) => `${ident(c)} = VALUES(${ident(c)})`).join(', ') || `${ident(columns[0])} = ${ident(columns[0])}`}
   `;
-
-  if (dryRun) return { table, rows: rows.length, dryRun: true };
 
   for (const row of rows) {
     const values = columns.map((col) => normalizeJsonForTdsql(table, col, row[col]));
@@ -371,13 +429,23 @@ async function migrateSqliteToTdsql(args, sqlitePath, config) {
   if (!fs.existsSync(sqlitePath)) throw new Error(`SQLite 文件不存在：${sqlitePath}`);
   const conn = await mysql.createConnection(config);
   const sqlite = new DatabaseSync(sqlitePath, { readOnly: true });
+  const initTarget = args.initTarget ?? true;
+  if (initTarget) await ensureTdsqlSchema(conn, { dryRun: args.dryRun });
   const sourceTables = sqliteTables(sqlite);
   const targetTables = await mysqlTables(conn);
-  const tables = TABLE_ORDER.filter((table) => sourceTables.has(table) && targetTables.has(table));
+  const targetHasBusiness = hasBusinessTables(targetTables);
+  const tables = TABLE_ORDER.filter((table) => (
+    sourceTables.has(table)
+    && (targetTables.has(table) || (args.dryRun && initTarget && !targetHasBusiness))
+  ));
+  if (!tables.length) {
+    throw new Error('没有找到可迁移的业务表：请确认 SQLite 源库路径正确，或目标 TDSQL 已初始化表结构');
+  }
 
   console.log(`[迁移] 方向：SQLite -> TDSQL`);
   console.log(`[迁移] SQLite 源：${sqlitePath}`);
   console.log(`[迁移] TDSQL 目标：${config.host}:${config.port}/${config.database}`);
+  console.log(`[迁移] 目标库自动初始化：${initTarget ? '开启' : '关闭'}`);
   if (args.dryRun) console.log('[迁移] dry-run：仅统计，不写入目标库');
 
   try {
@@ -451,6 +519,8 @@ async function migrateTdsqlToTdsql(args, sourceConfig, targetConfig) {
 
   const sourceConn = await mysql.createConnection(sourceConfig);
   const targetConn = await mysql.createConnection(targetConfig);
+  const initTarget = args.initTarget ?? true;
+  if (initTarget) await ensureTdsqlSchema(targetConn, { dryRun: args.dryRun });
   const sourceTables = await mysqlTables(sourceConn);
   const targetTables = await mysqlTables(targetConn);
   const tables = TABLE_ORDER.filter((table) => sourceTables.has(table) && targetTables.has(table));
@@ -458,6 +528,7 @@ async function migrateTdsqlToTdsql(args, sourceConfig, targetConfig) {
   console.log(`[迁移] 方向：TDSQL -> TDSQL`);
   console.log(`[迁移] TDSQL 源：${tdsqlLabel(sourceConfig)}`);
   console.log(`[迁移] TDSQL 目标：${tdsqlLabel(targetConfig)}`);
+  console.log(`[迁移] 目标库自动初始化：${initTarget ? '开启' : '关闭'}`);
   if (args.dryRun) console.log('[迁移] dry-run：仅统计，不写入目标库');
 
   try {

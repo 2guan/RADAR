@@ -329,11 +329,18 @@ TDSQL_SSL=false
 
 #### 从 SQLite 迁移到 TDSQL
 
-先确保 TDSQL 空库已创建，并用 `DB_CLIENT=tdsql` 启动过一次服务或手动执行迁移，让表结构存在。然后运行：
+先确保 TDSQL 空库已创建。迁移脚本会自动初始化空目标库的表结构，并写入 `_migrations` 记录；如果目标库已经有表，也会复用现有结构。然后运行：
 
 ```bash
 cd server
 npm run migrate:tdsql -- --sqlite ../data/radar.db
+```
+
+如果服务器 `.env` 已配置 `DB_FILE` 和 `TDSQL_*`，也可以直接执行：
+
+```bash
+cd server
+npm run migrate:tdsql
 ```
 
 如需清空目标库后重新导入：
