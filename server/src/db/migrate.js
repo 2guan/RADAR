@@ -9,44 +9,58 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { db } from './index.js';
+import { all, exec, run, tx, dbClient } from './index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const MIGRATIONS_DIR = path.join(__dirname, 'migrations');
+const MIGRATIONS_ROOT = path.join(__dirname, 'migrations');
+
+function migrationsDir() {
+  const clientDir = path.join(MIGRATIONS_ROOT, dbClient);
+  return fs.existsSync(clientDir) ? clientDir : MIGRATIONS_ROOT;
+}
 
 /**
  * 执行全部未应用的迁移。
  */
-export function runMigrations() {
+export async function runMigrations() {
   // 迁移记录表
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS _migrations (
-      name        TEXT PRIMARY KEY,
-      applied_at  TEXT NOT NULL DEFAULT (datetime('now','localtime'))
-    );
-  `);
+  if (dbClient === 'sqlite') {
+    await exec(`
+      CREATE TABLE IF NOT EXISTS _migrations (
+        name        TEXT PRIMARY KEY,
+        applied_at  TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+      );
+    `);
+  } else {
+    await exec(`
+      CREATE TABLE IF NOT EXISTS _migrations (
+        name        VARCHAR(255) PRIMARY KEY,
+        applied_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+  }
 
   const applied = new Set(
-    db.prepare('SELECT name FROM _migrations').all().map((r) => r.name),
+    (await all('SELECT name FROM _migrations')).map((r) => r.name),
   );
 
+  const dir = migrationsDir();
   const files = fs
-    .readdirSync(MIGRATIONS_DIR)
+    .readdirSync(dir)
     .filter((f) => f.endsWith('.sql'))
     .sort();
 
   for (const file of files) {
     if (applied.has(file)) continue;
-    const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, file), 'utf8');
+    const sql = fs.readFileSync(path.join(dir, file), 'utf8');
     // 每个迁移文件整体在一个事务中执行
-    db.exec('BEGIN');
     try {
-      db.exec(sql);
-      db.prepare('INSERT INTO _migrations (name) VALUES (?)').run(file);
-      db.exec('COMMIT');
+      await tx(async () => {
+        await exec(sql);
+        await run('INSERT INTO _migrations (name) VALUES (?)', file);
+      });
       console.log(`[迁移] 已应用：${file}`);
     } catch (err) {
-      db.exec('ROLLBACK');
       console.error(`[迁移] 失败：${file}`, err);
       throw err;
     }

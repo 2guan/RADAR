@@ -25,13 +25,13 @@ export default async function authRoutes(fastify) {
    * 读取或创建 login_fail_tracker 记录。
    * 已存在的用户会同步数据库中已有的 login_fail_count（迁移兼容）。
    */
-  function getTracker(phone) {
-    let tracker = get('SELECT * FROM login_fail_tracker WHERE phone = ?', phone);
+  async function getTracker(phone) {
+    let tracker = await get('SELECT * FROM login_fail_tracker WHERE phone = ?', phone);
     if (!tracker) {
-      const existingUser = get('SELECT login_fail_count, lockout_until FROM user WHERE phone = ?', phone);
+      const existingUser = await get('SELECT login_fail_count, lockout_until FROM user WHERE phone = ?', phone);
       const failCount = existingUser?.login_fail_count || 0;
       const lockoutUntil = existingUser?.lockout_until || null;
-      run('INSERT INTO login_fail_tracker (phone, fail_count, lockout_until) VALUES (?, ?, ?)', phone, failCount, lockoutUntil);
+      await run('INSERT INTO login_fail_tracker (phone, fail_count, lockout_until) VALUES (?, ?, ?)', phone, failCount, lockoutUntil);
       tracker = { phone, fail_count: failCount, lockout_until: lockoutUntil };
     }
     return tracker;
@@ -61,13 +61,13 @@ export default async function authRoutes(fastify) {
     },
   }, async (request, reply) => {
     const { phone, password, captchaToken, captchaAnswer } = request.body;
-    const configSettings = getSecurityConfig();
+    const configSettings = await getSecurityConfig();
     const lockoutEnabled = configSettings['security.lockout.enabled'];
     const maxAttempts = configSettings['security.lockout.maxAttempts'];
     const durationMinutes = configSettings['security.lockout.durationMinutes'];
 
     // 1. 获取/创建统一失败追踪记录
-    const tracker = getTracker(phone);
+    const tracker = await getTracker(phone);
 
     // 2. 检查是否处于锁定状态（统一从 login_fail_tracker 读取）
     if (lockoutEnabled && tracker.lockout_until) {
@@ -78,7 +78,7 @@ export default async function authRoutes(fastify) {
         return reply.code(400).send({ code: 400, data: null, message: `账号已被锁定，请于 ${minutesLeft} 分钟后重试` });
       }
       // 锁定已过期，清空
-      run('UPDATE login_fail_tracker SET fail_count = 0, lockout_until = NULL WHERE phone = ?', phone);
+      await run('UPDATE login_fail_tracker SET fail_count = 0, lockout_until = NULL WHERE phone = ?', phone);
       tracker.fail_count = 0;
       tracker.lockout_until = null;
     }
@@ -96,7 +96,7 @@ export default async function authRoutes(fastify) {
     }
 
     // 4. 查询用户
-    const user = get('SELECT * FROM user WHERE phone = ?', phone);
+    const user = await get('SELECT * FROM user WHERE phone = ?', phone);
 
     // 5. 校验密码（用户不存在或密码错误统一处理，防止用户枚举）
     if (!user || !verifyPassword(password, user?.password_hash)) {
@@ -105,20 +105,20 @@ export default async function authRoutes(fastify) {
       if (lockoutEnabled && newFailCount >= maxAttempts) {
         const lockoutUntil = new Date(Date.now() + durationMinutes * 60 * 1000).toISOString();
         // 更新 tracker
-        run("UPDATE login_fail_tracker SET fail_count = ?, lockout_until = ?, last_attempt_at = datetime('now','localtime') WHERE phone = ?",
+        await run("UPDATE login_fail_tracker SET fail_count = ?, lockout_until = ?, last_attempt_at = datetime('now','localtime') WHERE phone = ?",
             newFailCount, lockoutUntil, phone);
         // 若用户存在，同步更新 user 表（后台解锁功能依赖 user.login_fail_count）
         if (user) {
-          run('UPDATE user SET login_fail_count = ?, lockout_until = ? WHERE id = ?', newFailCount, lockoutUntil, user.id);
+          await run('UPDATE user SET login_fail_count = ?, lockout_until = ? WHERE id = ?', newFailCount, lockoutUntil, user.id);
         }
         return reply.code(400).send({ code: 400, data: null, message: '登录过于频繁，请稍后再试' });
       }
 
       // 更新 tracker
-      run("UPDATE login_fail_tracker SET fail_count = ?, last_attempt_at = datetime('now','localtime') WHERE phone = ?",
+      await run("UPDATE login_fail_tracker SET fail_count = ?, last_attempt_at = datetime('now','localtime') WHERE phone = ?",
           newFailCount, phone);
       if (user) {
-        run('UPDATE user SET login_fail_count = ? WHERE id = ?', newFailCount, user.id);
+        await run('UPDATE user SET login_fail_count = ? WHERE id = ?', newFailCount, user.id);
       }
 
       const attemptsLeft = maxAttempts - newFailCount;
@@ -134,7 +134,7 @@ export default async function authRoutes(fastify) {
     // 6. 检查用户状态（仍返回通用错误，防止状态枚举）
     if (user.status !== '启用') {
       const newFailCount = tracker.fail_count + 1;
-      run('UPDATE login_fail_tracker SET fail_count = ? WHERE phone = ?', newFailCount, phone);
+      await run('UPDATE login_fail_tracker SET fail_count = ? WHERE phone = ?', newFailCount, phone);
       return reply.code(401).send({
         code: 401,
         data: null,
@@ -143,8 +143,8 @@ export default async function authRoutes(fastify) {
     }
 
     // 7. 登录成功——清空所有失败记录
-    run('DELETE FROM login_fail_tracker WHERE phone = ?', phone);
-    run('UPDATE user SET login_fail_count = 0, lockout_until = NULL WHERE id = ?', user.id);
+    await run('DELETE FROM login_fail_tracker WHERE phone = ?', phone);
+    await run('UPDATE user SET login_fail_count = 0, lockout_until = NULL WHERE id = ?', user.id);
 
     const token = await fastify.jwt.sign({ id: user.id, phone: user.phone });
     const expired = isPasswordExpired(user);
@@ -154,7 +154,7 @@ export default async function authRoutes(fastify) {
   // 当前用户信息 + 权限
   fastify.get('/auth/me', { preHandler: fastify.authenticate }, async (request) => {
     const u = request.currentUser;
-    const roles = all(
+    const roles = await all(
       `SELECT r.code, r.name, r.default_home, r.default_theme
          FROM role r JOIN user_role ur ON ur.role_id = r.id
         WHERE ur.user_id = ?`,
@@ -165,7 +165,7 @@ export default async function authRoutes(fastify) {
       ? ['*']
       : [...fastify.loadUserPermissions(u.id)];
 
-    const userDetail = get('SELECT created_at, password_changed_at FROM user WHERE id = ?', u.id);
+    const userDetail = await get('SELECT created_at, password_changed_at FROM user WHERE id = ?', u.id);
     const expired = isPasswordExpired(userDetail);
 
     return ok({
@@ -192,7 +192,7 @@ export default async function authRoutes(fastify) {
     if (!oldPassword || !newPassword) throw badRequest('明文密码不能为空');
 
     // 验证旧密码
-    const user = get('SELECT * FROM user WHERE id = ?', u.id);
+    const user = await get('SELECT * FROM user WHERE id = ?', u.id);
     if (!user || !verifyPassword(oldPassword, user.password_hash)) {
       throw badRequest('旧密码错误');
     }
@@ -204,13 +204,13 @@ export default async function authRoutes(fastify) {
 
     // 验证复杂度
     if (!validatePasswordComplexity(newPassword)) {
-      const configSettings = getSecurityConfig();
+      const configSettings = await getSecurityConfig();
       const minLength = configSettings['security.password.minLength'];
       throw badRequest(`新密码不符合复杂度要求（长度不能小于 ${minLength} 位，且必须包含大小写字母、数字和特殊字符）`);
     }
 
     // 更新密码，更新 password_changed_at 并重置错误计数
-    run(
+    await run(
       "UPDATE user SET password_hash=?, updated_at=datetime('now','localtime'), password_changed_at=datetime('now','localtime'), login_fail_count=0, lockout_until=NULL WHERE id=?",
       hashPassword(newPassword),
       u.id

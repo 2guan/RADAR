@@ -29,6 +29,7 @@ COPY --from=web-builder /build/web/dist ./web/dist
 RUN mkdir -p /app/data /app/attachments
 
 ENV NODE_ENV=production
+ENV DB_CLIENT=sqlite
 
 ARG APP_PORT=3000
 EXPOSE ${APP_PORT}

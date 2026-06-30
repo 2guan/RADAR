@@ -13,8 +13,8 @@ import { buildApp } from './app.js';
 
 async function main() {
   // 1) 数据库迁移与初始化
-  runMigrations();
-  runSeed();
+  await runMigrations();
+  await runSeed();
 
   // 2) 构建并启动应用
   const app = await buildApp();

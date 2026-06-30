@@ -32,10 +32,10 @@ const PUBLIC_KEYS = [
 ];
 
 /** 读取若干键为对象 */
-function readKeys(keys) {
+async function readKeys(keys) {
   const out = {};
   for (const k of keys) {
-    const row = get('SELECT value FROM app_config WHERE key = ?', k);
+    const row = await get('SELECT value FROM app_config WHERE key = ?', k);
     out[k] = row?.value ?? null;
   }
   return out;
@@ -43,21 +43,21 @@ function readKeys(keys) {
 
 export default async function settingsRoutes(fastify) {
   // 公开配置（登录页/网页标题用，无需鉴权）
-  fastify.get('/settings/public', async () => ok(readKeys(PUBLIC_KEYS)));
+  fastify.get('/settings/public', async () => ok(await readKeys(PUBLIC_KEYS)));
 
   // 全部配置
   fastify.get('/settings/app-config', { preHandler: fastify.requirePerm('settings', 'view') }, async () => {
-    const rows = all('SELECT key, value, remark FROM app_config ORDER BY key');
+    const rows = await all('SELECT key, value, remark FROM app_config ORDER BY key');
     return ok(rows);
   });
 
   // 必填项配置：业务表单也需要读取，因此只要求登录，不要求系统设置权限
-  fastify.get('/settings/required-fields', { preHandler: fastify.authenticate }, async () => ok(requiredFieldCatalogPayload()));
+  fastify.get('/settings/required-fields', { preHandler: fastify.authenticate }, async () => ok(await requiredFieldCatalogPayload()));
 
   // 保存必填项配置
   fastify.put('/settings/required-fields', { preHandler: fastify.requirePerm('settings', 'edit') }, async (request) => {
     const config = normalizeRequiredFieldConfig(request.body?.config || {});
-    run(
+    await run(
       `INSERT INTO app_config (key, value, remark) VALUES (?,?,?)
        ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=datetime('now','localtime')`,
       REQUIRED_FIELDS_CONFIG_KEY,
@@ -70,10 +70,10 @@ export default async function settingsRoutes(fastify) {
   // 批量保存配置
   fastify.put('/settings/app-config', { preHandler: fastify.requirePerm('settings', 'edit') }, async (request) => {
     const items = request.body?.items || {};
-    tx(() => {
+    await tx(async () => {
       for (const [key, value] of Object.entries(items)) {
         if (!WRITABLE_KEYS.has(key)) continue;
-        run(
+        await run(
           `INSERT INTO app_config (key, value) VALUES (?,?)
            ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=datetime('now','localtime')`,
           key, value,

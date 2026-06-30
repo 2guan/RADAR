@@ -26,7 +26,7 @@ export function checkExt(filename) {
  * 保存上传文件到磁盘并登记。
  * @returns {object} 附件记录
  */
-export function saveFile({ entityType, entityId, fieldKey, filename, buffer, uploader }) {
+export async function saveFile({ entityType, entityId, fieldKey, filename, buffer, uploader }) {
   checkExt(filename);
   const d = new Date();
   const subDir = path.join(entityType, `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}`);
@@ -38,39 +38,39 @@ export function saveFile({ entityType, entityId, fieldKey, filename, buffer, upl
   const relPath = path.join(subDir, storedName);
   fs.writeFileSync(path.join(config.attachmentDir, relPath), buffer);
 
-  const res = run(
+  const res = await run(
     `INSERT INTO attachment (entity_type, entity_id, field_key, kind, filename, stored_path, size, uploader)
      VALUES (?,?,?, 'file', ?,?,?,?)`,
     entityType, entityId, fieldKey, safeName, relPath, buffer.length, uploader,
   );
-  return get('SELECT * FROM attachment WHERE id = ?', res.lastInsertRowid);
+  return await get('SELECT * FROM attachment WHERE id = ?', res.lastInsertRowid);
 }
 
 /**
  * 登记一条"路径型"附件。
  */
-export function savePath({ entityType, entityId, fieldKey, pathText, uploader }) {
+export async function savePath({ entityType, entityId, fieldKey, pathText, uploader }) {
   if (!pathText) throw badRequest('路径不能为空');
-  const res = run(
+  const res = await run(
     `INSERT INTO attachment (entity_type, entity_id, field_key, kind, path_text, uploader)
      VALUES (?,?,?, 'path', ?, ?)`,
     entityType, entityId, fieldKey, pathText, uploader,
   );
-  return get('SELECT * FROM attachment WHERE id = ?', res.lastInsertRowid);
+  return await get('SELECT * FROM attachment WHERE id = ?', res.lastInsertRowid);
 }
 
 /** 读取某实体的全部附件 */
-export function listByEntity(entityType, entityId) {
-  return all(
+export async function listByEntity(entityType, entityId) {
+  return await all(
     'SELECT * FROM attachment WHERE entity_type = ? AND entity_id = ? ORDER BY field_key, id',
     entityType, entityId,
   );
 }
 
 /** 统计某实体在指定字段集合下的附件数量（用于终态校验） */
-export function countByFields(entityType, entityId, fieldKeys) {
+export async function countByFields(entityType, entityId, fieldKeys) {
   if (!fieldKeys?.length) return 0;
-  const row = get(
+  const row = await get(
     `SELECT COUNT(*) AS c FROM attachment WHERE entity_type = ? AND entity_id = ? AND field_key IN (${fieldKeys.map(() => '?').join(',')})`,
     entityType, entityId, ...fieldKeys,
   );
@@ -78,12 +78,12 @@ export function countByFields(entityType, entityId, fieldKeys) {
 }
 
 /** 删除一条附件（同时删除磁盘文件） */
-export function removeAttachment(id) {
-  const a = get('SELECT * FROM attachment WHERE id = ?', id);
+export async function removeAttachment(id) {
+  const a = await get('SELECT * FROM attachment WHERE id = ?', id);
   if (!a) return;
   if (a.kind === 'file' && a.stored_path) {
     const abs = path.join(config.attachmentDir, a.stored_path);
     if (fs.existsSync(abs)) { try { fs.unlinkSync(abs); } catch { /* 忽略磁盘删除异常 */ } }
   }
-  run('DELETE FROM attachment WHERE id = ?', id);
+  await run('DELETE FROM attachment WHERE id = ?', id);
 }

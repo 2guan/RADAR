@@ -16,8 +16,8 @@ import { isPasswordExpired } from '../lib/password.js';
 /**
  * 查询用户的全部已授予权限集合（"module:action" 字符串集）。
  */
-function loadUserPermissions(userId) {
-  const rows = all(
+async function loadUserPermissions(userId) {
+  const rows = await all(
     `SELECT DISTINCT p.module_key, p.action_key
        FROM permission p
        JOIN user_role ur ON ur.role_id = p.role_id
@@ -44,7 +44,7 @@ async function authPlugin(fastify) {
       throw unauthorized();
     }
     const userId = request.user?.id;
-    const u = get('SELECT id, phone, name, org, status, is_super, password_changed_at, created_at FROM user WHERE id = ?', userId);
+    const u = await get('SELECT id, phone, name, org, status, is_super, password_changed_at, created_at FROM user WHERE id = ?', userId);
     if (!u || u.status !== '启用') throw unauthorized('账号不存在或已停用');
     request.currentUser = u;
 
@@ -65,7 +65,7 @@ async function authPlugin(fastify) {
   fastify.decorate('requirePerm', (moduleKey, actionKey) => async (request) => {
     await fastify.authenticate(request);
     if (request.currentUser.is_super) return; // 超管放行
-    const perms = loadUserPermissions(request.currentUser.id);
+    const perms = await loadUserPermissions(request.currentUser.id);
     if (!perms.has(`${moduleKey}:${actionKey}`)) {
       throw forbidden(`无【${moduleKey}/${actionKey}】操作权限`);
     }

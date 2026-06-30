@@ -39,14 +39,14 @@ export function registerCrud(fastify, cfg) {
   // 列表（POST 以承载复杂筛选体）
   if (!skipList) {
     fastify.post(`${prefix}/list`, { preHandler: fastify.requirePerm(module, 'view') }, async (request) => {
-      const result = listQuery({ table, columns, searchColumns, query: request.body || {} });
+      const result = await listQuery({ table, columns, searchColumns, query: request.body || {} });
       return ok(result);
     });
   }
 
   // 详情
   fastify.get(`${prefix}/:id`, { preHandler: fastify.requirePerm(module, 'view') }, async (request) => {
-    const row = get(`SELECT * FROM ${table} WHERE id = ?`, request.params.id);
+    const row = await get(`SELECT * FROM ${table} WHERE id = ?`, request.params.id);
     if (!row) throw notFound();
     return ok(row);
   });
@@ -54,46 +54,46 @@ export function registerCrud(fastify, cfg) {
   // 新增
   fastify.post(prefix, { preHandler: fastify.requirePerm(module, 'create') }, async (request) => {
     let data = pick(request.body || {}, writable);
-    if (beforeWrite) data = beforeWrite(data, { isCreate: true, request });
+    if (beforeWrite) data = await beforeWrite(data, { isCreate: true, request });
     const keys = Object.keys(data);
     if (!keys.length) throw badRequest('无有效字段');
-    const res = run(
+    const res = await run(
       `INSERT INTO ${table} (${keys.join(',')}) VALUES (${keys.map(() => '?').join(',')})`,
       ...keys.map((k) => data[k]),
     );
     const id = res.lastInsertRowid;
-    auditCreate(entityType, id, String(data[codeField] ?? id), request.currentUser?.name);
-    if (afterWrite) afterWrite({ id, isCreate: true, request, data });
+    await auditCreate(entityType, id, String(data[codeField] ?? id), request.currentUser?.name);
+    if (afterWrite) await afterWrite({ id, isCreate: true, request, data });
     return ok({ id });
   });
 
   // 修改
   fastify.put(`${prefix}/:id`, { preHandler: fastify.requirePerm(module, 'edit') }, async (request) => {
     const id = request.params.id;
-    const old = get(`SELECT * FROM ${table} WHERE id = ?`, id);
+    const old = await get(`SELECT * FROM ${table} WHERE id = ?`, id);
     if (!old) throw notFound();
     let data = pick(request.body || {}, writable);
-    if (beforeWrite) data = beforeWrite(data, { isCreate: false, request, old });
+    if (beforeWrite) data = await beforeWrite(data, { isCreate: false, request, old });
     const keys = Object.keys(data);
     if (keys.length) {
-      run(
+      await run(
         `UPDATE ${table} SET ${keys.map((k) => `${k} = ?`).join(',')}, updated_at = datetime('now','localtime') WHERE id = ?`,
         ...keys.map((k) => data[k]), id,
       );
-      auditUpdate(entityType, id, String(old[codeField] ?? id), request.currentUser?.name, old, data, fieldLabels);
+      await auditUpdate(entityType, id, String(old[codeField] ?? id), request.currentUser?.name, old, data, fieldLabels);
     }
-    if (afterWrite) afterWrite({ id, isCreate: false, request, data, old });
+    if (afterWrite) await afterWrite({ id, isCreate: false, request, data, old });
     return ok({ id });
   });
 
   // 删除
   fastify.delete(`${prefix}/:id`, { preHandler: fastify.requirePerm(module, 'delete') }, async (request) => {
     const id = request.params.id;
-    const row = get(`SELECT * FROM ${table} WHERE id = ?`, id);
+    const row = await get(`SELECT * FROM ${table} WHERE id = ?`, id);
     if (!row) throw notFound();
-    if (beforeDelete) beforeDelete(row, request);
-    run(`DELETE FROM ${table} WHERE id = ?`, id);
-    auditDelete(entityType, id, String(row[codeField] ?? id), request.currentUser?.name);
+    if (beforeDelete) await beforeDelete(row, request);
+    await run(`DELETE FROM ${table} WHERE id = ?`, id);
+    await auditDelete(entityType, id, String(row[codeField] ?? id), request.currentUser?.name);
     return ok(null, '删除成功');
   });
 }

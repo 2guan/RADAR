@@ -13,25 +13,25 @@ import { saveFile, savePath, listByEntity, removeAttachment } from '../../lib/at
 import { assertAttachmentInputAllowed } from '../../lib/required-fields.js';
 import { ok, badRequest, notFound } from '../../lib/http.js';
 
-function getEntityCode(entityType, entityId) {
+async function getEntityCode(entityType, entityId) {
   if (entityType === 'requirement') {
-    const row = get('SELECT req_code FROM requirement WHERE id = ?', entityId);
+    const row = await get('SELECT req_code FROM requirement WHERE id = ?', entityId);
     return row?.req_code || null;
   }
   if (entityType === 'dev') {
-    const row = get('SELECT task_code FROM dev_task WHERE id = ?', entityId);
+    const row = await get('SELECT task_code FROM dev_task WHERE id = ?', entityId);
     return row?.task_code || null;
   }
   if (entityType === 'test') {
-    const row = get('SELECT task_code FROM test_task WHERE id = ?', entityId);
+    const row = await get('SELECT task_code FROM test_task WHERE id = ?', entityId);
     return row?.task_code || null;
   }
   return null;
 }
 
-function logAttachmentChange({ entityType, entityId, fieldKey, action, operator, oldValue, newValue }) {
-  const entityCode = getEntityCode(entityType, entityId);
-  run(
+async function logAttachmentChange({ entityType, entityId, fieldKey, action, operator, oldValue, newValue }) {
+  const entityCode = await getEntityCode(entityType, entityId);
+  await run(
     `INSERT INTO audit_log (entity_type, entity_id, entity_code, action, operator, field, old_value, new_value)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     entityType, entityId, entityCode, action, operator, fieldKey, oldValue, newValue
@@ -43,7 +43,7 @@ export default async function attachmentRoutes(fastify) {
   fastify.get('/attachments', { preHandler: fastify.authenticate }, async (request) => {
     const { entityType, entityId } = request.query;
     if (!entityType || !entityId) throw badRequest('参数缺失');
-    return ok(listByEntity(entityType, Number(entityId)));
+    return ok(await listByEntity(entityType, Number(entityId)));
   });
 
   // 上传文件
@@ -54,13 +54,13 @@ export default async function attachmentRoutes(fastify) {
     const entityId = data.fields?.entityId?.value;
     const fieldKey = data.fields?.fieldKey?.value;
     if (!entityType || !entityId || !fieldKey) throw badRequest('实体信息缺失');
-    assertAttachmentInputAllowed(entityType, Number(entityId), fieldKey, 'file');
+    await assertAttachmentInputAllowed(entityType, Number(entityId), fieldKey, 'file');
     const buffer = await data.toBuffer();
-    const rec = saveFile({
+    const rec = await saveFile({
       entityType, entityId: Number(entityId), fieldKey,
       filename: data.filename, buffer, uploader: request.currentUser?.name,
     });
-    logAttachmentChange({
+    await logAttachmentChange({
       entityType, entityId: Number(entityId), fieldKey,
       action: 'update', operator: request.currentUser?.name,
       oldValue: null, newValue: `[文件] ${rec.filename}`
@@ -72,11 +72,11 @@ export default async function attachmentRoutes(fastify) {
   fastify.post('/attachments/path', { preHandler: fastify.authenticate }, async (request) => {
     const { entityType, entityId, fieldKey, pathText } = request.body || {};
     if (!entityType || !entityId || !fieldKey) throw badRequest('实体信息缺失');
-    assertAttachmentInputAllowed(entityType, Number(entityId), fieldKey, 'path');
-    const rec = savePath({
+    await assertAttachmentInputAllowed(entityType, Number(entityId), fieldKey, 'path');
+    const rec = await savePath({
       entityType, entityId: Number(entityId), fieldKey, pathText, uploader: request.currentUser?.name,
     });
-    logAttachmentChange({
+    await logAttachmentChange({
       entityType, entityId: Number(entityId), fieldKey,
       action: 'update', operator: request.currentUser?.name,
       oldValue: null, newValue: `[路径] ${rec.path_text}`
@@ -86,7 +86,7 @@ export default async function attachmentRoutes(fastify) {
 
   // 下载
   fastify.get('/attachments/:id/download', { preHandler: fastify.authenticate }, async (request, reply) => {
-    const a = get('SELECT * FROM attachment WHERE id = ?', request.params.id);
+    const a = await get('SELECT * FROM attachment WHERE id = ?', request.params.id);
     if (!a || a.kind !== 'file') throw notFound('文件不存在');
     const abs = path.join(config.attachmentDir, a.stored_path);
     if (!fs.existsSync(abs)) throw notFound('文件已丢失');
@@ -98,11 +98,11 @@ export default async function attachmentRoutes(fastify) {
   fastify.post('/attachments/edit-path', { preHandler: fastify.authenticate }, async (request) => {
     const { id, pathText } = request.body || {};
     if (!id || !pathText) throw badRequest('参数缺失');
-    const old = get('SELECT * FROM attachment WHERE id = ?', id);
+    const old = await get('SELECT * FROM attachment WHERE id = ?', id);
     if (!old) throw notFound('记录不存在');
     if (old.kind !== 'path') throw badRequest('只能修改路径型附件');
-    run('UPDATE attachment SET path_text = ? WHERE id = ?', pathText, id);
-    logAttachmentChange({
+    await run('UPDATE attachment SET path_text = ? WHERE id = ?', pathText, id);
+    await logAttachmentChange({
       entityType: old.entity_type, entityId: old.entity_id, fieldKey: old.field_key,
       action: 'update', operator: request.currentUser?.name,
       oldValue: `[路径] ${old.path_text}`, newValue: `[路径] ${pathText.trim()}`
@@ -113,15 +113,15 @@ export default async function attachmentRoutes(fastify) {
   // 删除
   fastify.delete('/attachments/:id', { preHandler: fastify.authenticate }, async (request) => {
     const id = Number(request.params.id);
-    const a = get('SELECT * FROM attachment WHERE id = ?', id);
+    const a = await get('SELECT * FROM attachment WHERE id = ?', id);
     if (a) {
-      logAttachmentChange({
+      await logAttachmentChange({
         entityType: a.entity_type, entityId: a.entity_id, fieldKey: a.field_key,
         action: 'update', operator: request.currentUser?.name,
         oldValue: a.kind === 'file' ? `[文件] ${a.filename}` : `[路径] ${a.path_text}`,
         newValue: '已删除'
       });
-      removeAttachment(id);
+      await removeAttachment(id);
     }
     return ok(null, '已删除');
   });

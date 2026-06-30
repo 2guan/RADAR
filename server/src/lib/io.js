@@ -34,7 +34,7 @@ export function registerIO(fastify, cfg) {
 
   // 导出（支持当前筛选；pageSize=0 全量）
   fastify.post(`${prefix}/export`, { preHandler: fastify.requirePerm(module, 'export') }, async (request, reply) => {
-    const rows = list({ ...(request.body || {}), pageSize: 0 });
+    const rows = await list({ ...(request.body || {}), pageSize: 0 });
     const buf = await exportXlsx(columns, rows, name);
     reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     reply.header('Content-Disposition', `attachment; filename=${encodeURIComponent(name)}.xlsx`);
@@ -54,11 +54,11 @@ export function registerIO(fastify, cfg) {
     const details = [];
     const ctx = { operator: request.currentUser?.name };
 
-    const apply = () => {
+    const apply = async () => {
       for (const row of rows) {
         const rowNum = row.__rowNum__;
         try {
-          const res = upsert(row, mode, ctx);
+          const res = await upsert(row, mode, ctx);
           let action, changes;
           if (typeof res === 'object' && res !== null) {
             action = res.action;
@@ -117,7 +117,7 @@ export function registerIO(fastify, cfg) {
 
     if (mode === 'rollback') {
       try {
-        tx(apply);
+        await tx(apply);
       } catch (err) {
         for (const item of details) {
           if (item.status === 'success') {
@@ -128,7 +128,7 @@ export function registerIO(fastify, cfg) {
         stat.updated = 0;
       }
     } else {
-      apply();
+      await apply();
     }
 
     return ok({ stat, details }, '导入完成');

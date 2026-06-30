@@ -9,8 +9,8 @@
 import { get, all } from '../db/index.js';
 
 /** 读取编号规则模板 */
-function template(key, fallback) {
-  const row = get('SELECT value FROM app_config WHERE key = ?', key);
+async function template(key, fallback) {
+  const row = await get('SELECT value FROM app_config WHERE key = ?', key);
   return row?.value || fallback;
 }
 
@@ -20,8 +20,8 @@ function template(key, fallback) {
  * @param {string} column 编号列
  * @param {string} prefix 前缀（含末尾下划线）
  */
-function nextSeq(table, column, prefix) {
-  const rows = all(`SELECT ${column} AS code FROM ${table} WHERE ${column} LIKE ?`, `${prefix}%`);
+async function nextSeq(table, column, prefix) {
+  const rows = await all(`SELECT ${column} AS code FROM ${table} WHERE ${column} LIKE ?`, `${prefix}%`);
   let max = 0;
   for (const r of rows) {
     const tail = String(r.code).slice(prefix.length);
@@ -46,11 +46,11 @@ function normalizeReleaseWindow(releaseWindow) {
  * 生成需求编号。RC_{投产窗口}_{序号}
  * @param {string} releaseWindow 投产窗口（YYYYMMDD）
  */
-export function genRequirementCode(releaseWindow) {
+export async function genRequirementCode(releaseWindow) {
   const window = normalizeReleaseWindow(releaseWindow);
-  const tpl = template('code.requirement', 'RC_{投产窗口}_{序号}');
+  const tpl = await template('code.requirement', 'RC_{投产窗口}_{序号}');
   const prefix = tpl.replace('{投产窗口}', window).replace('{序号}', '');
-  const seq = nextSeq('requirement', 'req_code', prefix);
+  const seq = await nextSeq('requirement', 'req_code', prefix);
   return tpl.replace('{投产窗口}', window).replace('{序号}', seq);
 }
 
@@ -58,21 +58,21 @@ export function genRequirementCode(releaseWindow) {
  * 生成工单编号。TK_{投产窗口}_{序号}
  * @param {string} releaseWindow 投产窗口（YYYYMMDD）
  */
-export function genTicketCode(releaseWindow) {
+export async function genTicketCode(releaseWindow) {
   const window = normalizeReleaseWindow(releaseWindow);
-  const tpl = template('code.ticket', 'TK_{投产窗口}_{序号}');
+  const tpl = await template('code.ticket', 'TK_{投产窗口}_{序号}');
   const prefix = tpl.replace('{投产窗口}', window).replace('{序号}', '');
-  const seq = nextSeq('ticket', 'ticket_code', prefix);
+  const seq = await nextSeq('ticket', 'ticket_code', prefix);
   return tpl.replace('{投产窗口}', window).replace('{序号}', seq);
 }
 
 /**
  * 生成开发任务编号。RW_{需求编号}_{序号}
  */
-export function genDevCode(reqCode) {
-  const tpl = template('code.dev', 'RW_{需求编号}_{序号}');
+export async function genDevCode(reqCode) {
+  const tpl = await template('code.dev', 'RW_{需求编号}_{序号}');
   const prefix = tpl.replace('{需求编号}', reqCode).replace('{序号}', '');
-  const seq = nextSeq('dev_task', 'task_code', prefix);
+  const seq = await nextSeq('dev_task', 'task_code', prefix);
   return tpl.replace('{需求编号}', reqCode).replace('{序号}', seq);
 }
 
@@ -80,10 +80,10 @@ export function genDevCode(reqCode) {
  * 生成测试任务编号。{类型}_{需求编号}_{序号}
  * @param {string} testType SIT/UAT/NFT/SEC
  */
-export function genTestCode(testType, reqCode) {
-  const tpl = template(`code.test.${testType}`, `${testType}_{需求编号}_{序号}`);
+export async function genTestCode(testType, reqCode) {
+  const tpl = await template(`code.test.${testType}`, `${testType}_{需求编号}_{序号}`);
   const prefix = tpl.replace('{需求编号}', reqCode).replace('{序号}', '');
-  const seq = nextSeq('test_task', 'task_code', prefix);
+  const seq = await nextSeq('test_task', 'task_code', prefix);
   return tpl.replace('{需求编号}', reqCode).replace('{序号}', seq);
 }
 
@@ -91,9 +91,9 @@ export function genTestCode(testType, reqCode) {
  * 生成投产申请变更编号。{版本年月}-10bg{序号}
  * @param {string} yearMonth 版本年月（YYYYMM）
  */
-export function genReleaseApplyCode(yearMonth) {
-  const tpl = template('code.release_apply', '{版本年月}-10bg{序号}');
+export async function genReleaseApplyCode(yearMonth) {
+  const tpl = await template('code.release_apply', '{版本年月}-10bg{序号}');
   const prefix = tpl.replace('{版本年月}', yearMonth).replace('{序号}', '');
-  const seq = nextSeq('release_apply', 'change_code', prefix);
+  const seq = await nextSeq('release_apply', 'change_code', prefix);
   return tpl.replace('{版本年月}', yearMonth).replace('{序号}', seq);
 }

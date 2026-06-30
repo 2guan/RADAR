@@ -6,7 +6,7 @@
  * 说明：JSON 数组字段（主责/协同系统）入库前序列化；终态时校验主责系统。
  */
 
-import { get, run, tx, all } from '../../db/index.js';
+import { get, run, tx, all, dialect } from '../../db/index.js';
 import { listQuery } from '../../lib/query.js';
 import { genTicketCode } from '../../lib/code-gen.js';
 import { defaultProcessStatus, isTerminalStatus } from '../../lib/status.js';
@@ -15,6 +15,7 @@ import { auditCreate, auditUpdate, auditDelete } from '../../lib/audit.js';
 import { exportXlsx, parseXlsx } from '../../lib/excel.js';
 import { windowIds, inClause } from '../../lib/window.js';
 import { ok, notFound, badRequest } from '../../lib/http.js';
+import { parseJsonArray, parseJsonObject } from '../../lib/json.js';
 import {
   resolveDictAttr,
   resolveSystemCode,
@@ -67,18 +68,7 @@ const LABELS = {
 function decode(row) {
   if (!row) return row;
   const out = { ...row };
-  for (const f of JSON_FIELDS) {
-    if (row[f]) {
-      try {
-        const parsed = JSON.parse(row[f]);
-        out[f] = Array.isArray(parsed) ? parsed : [parsed];
-      } catch {
-        out[f] = [row[f]];
-      }
-    } else {
-      out[f] = [];
-    }
-  }
+  for (const f of JSON_FIELDS) out[f] = parseJsonArray(row[f]);
   return out;
 }
 
@@ -99,10 +89,10 @@ function pick(body) {
 }
 
 /** 统计需求（按编号）已关联的开发/测试任务数量 */
-function linkedTaskCount(ticketCode) {
+async function linkedTaskCount(ticketCode) {
   if (!ticketCode) return 0;
-  const d = get('SELECT COUNT(*) AS c FROM dev_task WHERE req_code = ?', ticketCode);
-  const t = get('SELECT COUNT(*) AS c FROM test_task WHERE req_code = ?', ticketCode);
+  const d = await get('SELECT COUNT(*) AS c FROM dev_task WHERE req_code = ?', ticketCode);
+  const t = await get('SELECT COUNT(*) AS c FROM test_task WHERE req_code = ?', ticketCode);
   return (d?.c || 0) + (t?.c || 0);
 }
 
@@ -148,13 +138,13 @@ export default async function ticketRoutes(fastify) {
               (
                 SELECT impl_org FROM dev_task 
                 WHERE dev_task.req_code = ticket.ticket_code
-                  AND dev_task.impl_system IN (SELECT value FROM json_each(ticket.main_systems))
+                  AND ${dialect.jsonArrayContains('ticket.main_systems', 'dev_task.impl_system')}
                   AND dev_task.impl_org IS NOT NULL AND dev_task.impl_org != ''
                 ORDER BY id ASC LIMIT 1
               ),
               (
                 SELECT org FROM system 
-                WHERE sys_code = (SELECT value FROM json_each(ticket.main_systems) LIMIT 1)
+                WHERE sys_code = ${dialect.jsonExtract('ticket.main_systems', '$[0]')}
                   AND org IS NOT NULL AND org != ''
               ),
               ticket.propose_dept,
@@ -175,7 +165,7 @@ export default async function ticketRoutes(fastify) {
         const codes = Array.isArray(f.value) ? f.value : [f.value];
         if (codes.length) {
           const placeholders = codes.map(() => '?').join(',');
-          wh.push(`EXISTS (SELECT 1 FROM json_each(ticket.main_systems) WHERE value IN (${placeholders}))`);
+          wh.push(dialect.jsonArrayOverlaps('ticket.main_systems', placeholders));
           params.push(...codes);
         }
       } else if (f.field === 'collab_systems') {
@@ -183,8 +173,8 @@ export default async function ticketRoutes(fastify) {
         if (codes.length) {
           const placeholders = codes.map(() => '?').join(',');
           wh.push(`(
-            EXISTS (SELECT 1 FROM json_each(ticket.collab_dev_systems) WHERE value IN (${placeholders})) OR
-            EXISTS (SELECT 1 FROM json_each(ticket.collab_test_systems) WHERE value IN (${placeholders}))
+            ${dialect.jsonArrayOverlaps('ticket.collab_dev_systems', placeholders)} OR
+            ${dialect.jsonArrayOverlaps('ticket.collab_test_systems', placeholders)}
           )`);
           params.push(...codes, ...codes);
         }
@@ -196,19 +186,19 @@ export default async function ticketRoutes(fastify) {
     const newBody = { ...body, filters: normalFilters };
     const baseWhere = wh.join(' AND ');
     
-    const result = listQuery({
+    const result = await listQuery({
       table: 'ticket', columns: COLUMNS, searchColumns: SEARCH,
       query: newBody, baseWhere, baseParams: params,
     });
 
     // 投产点与系统为主数据（量小），整表载入做编号→名称映射
-    const rps = all('SELECT id, release_date FROM release_point');
+    const rps = await all('SELECT id, release_date FROM release_point');
     const rpMap = {};
     for (const rp of rps) {
       rpMap[rp.id] = rp.release_date;
     }
 
-    const systems = all('SELECT sys_code, sys_name FROM system');
+    const systems = await all('SELECT sys_code, sys_name FROM system');
     const sysMap = {};
     for (const s of systems) {
       sysMap[s.sys_code] = s.sys_name;
@@ -220,23 +210,23 @@ export default async function ticketRoutes(fastify) {
     const rtMap = {};
     if (pageCodes.length) {
       const ph = pageCodes.map(() => '?').join(',');
-      for (const r of all(`SELECT DISTINCT req_code FROM dev_task WHERE req_code IN (${ph})`, ...pageCodes)) {
+      for (const r of await all(`SELECT DISTINCT req_code FROM dev_task WHERE req_code IN (${ph})`, ...pageCodes)) {
         linkedCodes.add(r.req_code);
       }
-      for (const r of all(`SELECT DISTINCT req_code FROM test_task WHERE req_code IN (${ph})`, ...pageCodes)) {
+      for (const r of await all(`SELECT DISTINCT req_code FROM test_task WHERE req_code IN (${ph})`, ...pageCodes)) {
         linkedCodes.add(r.req_code);
       }
-      for (const rt of all(`SELECT req_code, status FROM release_task WHERE req_code IN (${ph})`, ...pageCodes)) {
+      for (const rt of await all(`SELECT req_code, status FROM release_task WHERE req_code IN (${ph})`, ...pageCodes)) {
         rtMap[rt.req_code] = rt.status;
       }
     }
 
     // 从流程状态配置中获取“投产”阶段的状态类型配置，避免硬编码
-    const processItems = all("SELECT attr_value, extra FROM dict_item WHERE category = 'process_status'");
+    const processItems = await all("SELECT attr_value, extra FROM dict_item WHERE category = 'process_status'");
     const processStatusMap = {};
     for (const item of processItems) {
       try {
-        const extra = JSON.parse(item.extra);
+        const extra = parseJsonObject(item.extra);
         if (extra.stage === '投产') {
           processStatusMap[item.attr_value] = extra.stateType; // 'final' / 'in-progress'
         }
@@ -270,7 +260,7 @@ export default async function ticketRoutes(fastify) {
     const q = String(request.query?.q || '').trim();
     if (!q) return ok([]);
     const like = `%${q}%`;
-    const rows = all(
+    const rows = await all(
       `SELECT issue_code, work_order_no, detailed_classification, category, summary, details, system
          FROM issue
         WHERE issue_code LIKE ? OR work_order_no LIKE ?
@@ -290,27 +280,27 @@ export default async function ticketRoutes(fastify) {
 
   // 详情
   fastify.get('/tickets/:id', { preHandler: fastify.requirePerm('ticket', 'view') }, async (request) => {
-    const row = get('SELECT * FROM ticket WHERE id = ?', request.params.id);
+    const row = await get('SELECT * FROM ticket WHERE id = ?', request.params.id);
     if (!row) throw notFound();
-    return ok({ ...decode(row), has_tasks: linkedTaskCount(row.ticket_code) > 0 });
+    return ok({ ...decode(row), has_tasks: await linkedTaskCount(row.ticket_code) > 0 });
   });
 
   // 按工单编号查询（供详情单页通过 URL 编号直达）
   fastify.get('/tickets/by-code/:code', { preHandler: fastify.requirePerm('ticket', 'view') }, async (request) => {
-    const row = get('SELECT * FROM ticket WHERE ticket_code = ?', request.params.code);
+    const row = await get('SELECT * FROM ticket WHERE ticket_code = ?', request.params.code);
     if (!row) throw notFound();
-    return ok({ ...decode(row), has_tasks: linkedTaskCount(row.ticket_code) > 0 });
+    return ok({ ...decode(row), has_tasks: await linkedTaskCount(row.ticket_code) > 0 });
   });
 
   // 新增
   fastify.post('/tickets', { preHandler: fastify.requirePerm('ticket', 'create') }, async (request) => {
     const body = request.body || {};
     const manualCode = String(body.ticket_code || '').trim();
-    const rp = body.release_point_id ? get('SELECT * FROM release_point WHERE id = ?', body.release_point_id) : null;
+    const rp = body.release_point_id ? await get('SELECT * FROM release_point WHERE id = ?', body.release_point_id) : null;
     if (body.release_point_id && !rp) throw badRequest('投产点不存在');
-    const initialStatus = defaultProcessStatus('工单', 'initial', '工单登记');
+    const initialStatus = await defaultProcessStatus('工单', 'initial', '工单登记');
 
-    validateRequiredFields('ticket', statusTypeForProcessStatus(body.status || initialStatus), {
+    await validateRequiredFields('ticket', await statusTypeForProcessStatus(body.status || initialStatus), {
       ...body,
       ticket_code: manualCode || '__AUTO__',
       status: body.status || initialStatus,
@@ -321,10 +311,10 @@ export default async function ticketRoutes(fastify) {
     delete data.ticket_code;
     delete data.status;
     // 手动编号在同一 BEGIN IMMEDIATE 事务内校验唯一性，防止并发重复提交。
-    const { id, reqCode } = tx(() => {
+    const { id, reqCode } = await tx(async () => {
       let code = manualCode;
-      if (!code) code = genTicketCode(rp?.release_date);
-      if (get('SELECT id FROM ticket WHERE ticket_code = ?', code)) throw badRequest('工单编号已存在，请更换');
+      if (!code) code = await genTicketCode(rp?.release_date);
+      if (await get('SELECT id FROM ticket WHERE ticket_code = ?', code)) throw badRequest('工单编号已存在，请更换');
       const fields = ['ticket_code', 'status', 'registrar', 'register_time', ...Object.keys(data)];
       const values = [
         code,
@@ -333,20 +323,20 @@ export default async function ticketRoutes(fastify) {
         new Date().toISOString().slice(0, 10),
         ...Object.keys(data).map((k) => data[k]),
       ];
-      const res = run(
+      const res = await run(
         `INSERT INTO ticket (${fields.join(',')}) VALUES (${fields.map(() => '?').join(',')})`,
         ...values,
       );
       return { id: res.lastInsertRowid, reqCode: code };
     });
-    auditCreate('ticket', id, reqCode, request.currentUser?.name);
+    await auditCreate('ticket', id, reqCode, request.currentUser?.name);
     return ok({ id, ticket_code: reqCode });
   });
 
   // 修改（终态校验 + 留痕）
   fastify.put('/tickets/:id', { preHandler: fastify.requirePerm('ticket', 'edit') }, async (request) => {
     const id = request.params.id;
-    const old = get('SELECT * FROM ticket WHERE id = ?', id);
+    const old = await get('SELECT * FROM ticket WHERE id = ?', id);
     if (!old) throw notFound();
     const body = request.body || {};
     const picked = pick(body);
@@ -354,28 +344,28 @@ export default async function ticketRoutes(fastify) {
     // 如果提交了新编号，校验唯一性（排除自身）
     if (picked.ticket_code && picked.ticket_code !== old.ticket_code) {
       // 已关联开发/测试任务的需求，编号不可修改
-      if (linkedTaskCount(old.ticket_code) > 0) throw badRequest('该工单已关联开发/测试任务，工单编号不可修改');
-      const dup = get('SELECT id FROM ticket WHERE ticket_code = ? AND id != ?', picked.ticket_code, id);
+      if (await linkedTaskCount(old.ticket_code) > 0) throw badRequest('该工单已关联开发/测试任务，工单编号不可修改');
+      const dup = await get('SELECT id FROM ticket WHERE ticket_code = ? AND id != ?', picked.ticket_code, id);
       if (dup) throw badRequest('工单编号已存在，请更换');
     }
 
     // 终态校验：用提交后的状态与主责系统
     const newStatus = picked.status ?? old.status;
-    const newMain = picked.main_systems ?? (old.main_systems ? JSON.parse(old.main_systems) : []);
-    validateRequiredFields('ticket', statusTypeForProcessStatus(newStatus), { ...decode(old), ...picked, status: newStatus });
+    const newMain = picked.main_systems ?? parseJsonArray(old.main_systems);
+    await validateRequiredFields('ticket', await statusTypeForProcessStatus(newStatus), { ...decode(old), ...picked, status: newStatus });
     validateTerminal(newStatus, newMain);
 
     const data = encodeField(picked);
     const keys = Object.keys(data);
     if (keys.length) {
-      run(
+      await run(
         `UPDATE ticket SET ${keys.map((k) => `${k}=?`).join(',')}, updated_at=datetime('now','localtime') WHERE id=?`,
         ...keys.map((k) => data[k]), id,
       );
       // 留痕：数组字段比较用解码后的可读值
       const oldReadable = decode(old);
       const newReadable = { ...picked };
-      auditUpdate('ticket', id, old.ticket_code, request.currentUser?.name, oldReadable, newReadable, LABELS);
+      await auditUpdate('ticket', id, old.ticket_code, request.currentUser?.name, oldReadable, newReadable, LABELS);
     }
     return ok({ id });
   });
@@ -385,20 +375,20 @@ export default async function ticketRoutes(fastify) {
     const { code, excludeId } = request.query;
     if (!code) return ok({ exists: false });
     const row = excludeId
-      ? get('SELECT id FROM ticket WHERE ticket_code = ? AND id != ?', code, excludeId)
-      : get('SELECT id FROM ticket WHERE ticket_code = ?', code);
+      ? await get('SELECT id FROM ticket WHERE ticket_code = ? AND id != ?', code, excludeId)
+      : await get('SELECT id FROM ticket WHERE ticket_code = ?', code);
     return ok({ exists: !!row });
   });
 
   // 删除
   fastify.delete('/tickets/:id', { preHandler: fastify.requirePerm('ticket', 'delete') }, async (request) => {
     const id = request.params.id;
-    const row = get('SELECT * FROM ticket WHERE id = ?', id);
+    const row = await get('SELECT * FROM ticket WHERE id = ?', id);
     if (!row) throw notFound();
     // 已关联开发/测试任务的需求不可删除
-    if (linkedTaskCount(row.ticket_code) > 0) throw badRequest('该工单已关联开发/测试任务，无法删除');
-    run('DELETE FROM ticket WHERE id = ?', id);
-    auditDelete('ticket', id, row.ticket_code, request.currentUser?.name);
+    if (await linkedTaskCount(row.ticket_code) > 0) throw badRequest('该工单已关联开发/测试任务，无法删除');
+    await run('DELETE FROM ticket WHERE id = ?', id);
+    await auditDelete('ticket', id, row.ticket_code, request.currentUser?.name);
     return ok(null, '删除成功');
   });
 
@@ -406,16 +396,16 @@ export default async function ticketRoutes(fastify) {
   fastify.post('/tickets/export', { preHandler: fastify.requirePerm('ticket', 'export') }, async (request, reply) => {
     const body = request.body || {};
     const { where: baseWhere, params: baseParams } = inClause('release_point_id', windowIds(body));
-    const result = listQuery({
+    const result = await listQuery({
       table: 'ticket', columns: COLUMNS, searchColumns: SEARCH,
       query: { ...body, pageSize: 0 }, baseWhere, baseParams,
     });
 
-    const systems = all('SELECT sys_code, sys_name FROM system');
+    const systems = await all('SELECT sys_code, sys_name FROM system');
     const sysMap = {};
     for (const s of systems) sysMap[s.sys_code] = s.sys_name;
 
-    const rps = all('SELECT id, release_date FROM release_point');
+    const rps = await all('SELECT id, release_date FROM release_point');
     const rpMap = {};
     for (const rp of rps) rpMap[rp.id] = rp.release_date;
 
@@ -441,18 +431,10 @@ export default async function ticketRoutes(fastify) {
     ];
 
     const mappedList = result.list.map(row => {
-      const main = row.main_systems ? JSON.parse(row.main_systems) : [];
-      const collabDev = row.collab_dev_systems ? JSON.parse(row.collab_dev_systems) : [];
-      const collabTest = row.collab_test_systems ? JSON.parse(row.collab_test_systems) : [];
-      const proposerArray = (() => {
-        if (!row.proposer) return [];
-        try {
-          const parsed = JSON.parse(row.proposer);
-          return Array.isArray(parsed) ? parsed : [row.proposer];
-        } catch {
-          return [row.proposer];
-        }
-      })();
+      const main = parseJsonArray(row.main_systems);
+      const collabDev = parseJsonArray(row.collab_dev_systems);
+      const collabTest = parseJsonArray(row.collab_test_systems);
+      const proposerArray = parseJsonArray(row.proposer);
 
       return {
         ...row,
@@ -491,15 +473,15 @@ export default async function ticketRoutes(fastify) {
     const details = [];
 
     // 载入投产点和系统映射用于变化展示及解析
-    const rps = all('SELECT id, release_date FROM release_point');
+    const rps = await all('SELECT id, release_date FROM release_point');
     const rpMap = {};
     for (const rp of rps) rpMap[rp.id] = rp.release_date;
 
-    const systems = all('SELECT sys_code, sys_name FROM system');
+    const systems = await all('SELECT sys_code, sys_name FROM system');
     const sysMap = {};
     for (const s of systems) sysMap[s.sys_code] = s.sys_name;
 
-    const apply = () => {
+    const apply = async () => {
       for (const r of rows) {
         const rowNum = r.__rowNum__;
         try {
@@ -508,21 +490,21 @@ export default async function ticketRoutes(fastify) {
           if (!r.release_date) throw new Error('计划投产点不能为空');
 
           // 解析计划投产点
-          const rpId = resolveReleasePoint(r.release_date);
+          const rpId = await resolveReleasePoint(r.release_date);
           if (!rpId) throw new Error(`计划投产点投产日期 [${r.release_date}] 不存在`);
 
           // 兼容性字典转换
-          const status = resolveDictAttr('process_status', r.status) || defaultProcessStatus('工单', 'initial', '工单登记');
-          const reqType = resolveDictAttr('ticket_type', r.ticket_type);
+          const status = await resolveDictAttr('process_status', r.status) || await defaultProcessStatus('工单', 'initial', '工单登记');
+          const reqType = await resolveDictAttr('ticket_type', r.ticket_type);
           const isAccounting = ['是', '否'].includes(String(r.is_accounting || '').trim())
             ? String(r.is_accounting).trim()
             : '否';
-          const proposeDept = resolveDictAttr('org', r.propose_dept);
+          const proposeDept = await resolveDictAttr('org', r.propose_dept);
 
           // 兼容性系统转换
-          const mainSystems = resolveSystemCodes(r.main_systems);
-          const collabDevSystems = resolveSystemCodes(r.collab_dev_systems);
-          const collabTestSystems = resolveSystemCodes(r.collab_test_systems);
+          const mainSystems = await resolveSystemCodes(r.main_systems);
+          const collabDevSystems = await resolveSystemCodes(r.collab_dev_systems);
+          const collabTestSystems = await resolveSystemCodes(r.collab_test_systems);
 
           const proposerArray = r.proposer
             ? String(r.proposer).split(/[，,]/).map(s => s.trim()).filter(Boolean)
@@ -530,7 +512,7 @@ export default async function ticketRoutes(fastify) {
           const proposerJson = JSON.stringify(proposerArray);
 
           let code = String(r.ticket_code || '').trim();
-          const exists = code ? get('SELECT * FROM ticket WHERE ticket_code = ?', code) : null;
+          const exists = code ? await get('SELECT * FROM ticket WHERE ticket_code = ?', code) : null;
 
           if (exists) {
             if (mode === 'skip') {
@@ -557,13 +539,7 @@ export default async function ticketRoutes(fastify) {
             };
 
             const oldProposers = (() => {
-              if (!exists.proposer) return '';
-              try {
-                const parsed = JSON.parse(exists.proposer);
-                return Array.isArray(parsed) ? parsed.join(', ') : exists.proposer;
-              } catch {
-                return exists.proposer;
-              }
+              return parseJsonArray(exists.proposer).join(', ');
             })();
             const newProposers = proposerArray.join(', ');
 
@@ -585,13 +561,13 @@ export default async function ticketRoutes(fastify) {
             compareAndPush('release_point_id', '计划投产点', oldRpDate, newRpDate);
 
             // 系统比较
-            const decodeSystems = (jsonStr) => (jsonStr ? JSON.parse(jsonStr) : []).map(c => sysMap[c] || c).join(', ');
+            const decodeSystems = (jsonStr) => parseJsonArray(jsonStr).map(c => sysMap[c] || c).join(', ');
             compareAndPush('main_systems', '主责系统', decodeSystems(exists.main_systems), decodeSystems(mainSystems));
             compareAndPush('collab_dev_systems', '协同改造系统', decodeSystems(exists.collab_dev_systems), decodeSystems(collabDevSystems));
             compareAndPush('collab_test_systems', '协同测试系统', decodeSystems(exists.collab_test_systems), decodeSystems(collabTestSystems));
 
             if (changes.length > 0) {
-              run(
+              await run(
                 `UPDATE ticket SET 
                    title=?, summary=?, status=?, ticket_type=?, is_accounting=?, propose_dept=?, proposer=?, yn_owner=?, jk_owner=?, 
                    propose_time=?, release_point_id=?, main_systems=?, collab_dev_systems=?, collab_test_systems=?, 
@@ -602,7 +578,7 @@ export default async function ticketRoutes(fastify) {
                 r.yn_owner || null, r.jk_owner || null, r.propose_time || null, rpId,
                 mainSystems, collabDevSystems, collabTestSystems, r.issue_no || null, exists.id
               );
-              auditUpdate('ticket', exists.id, code, request.currentUser?.name, exists, {
+              await auditUpdate('ticket', exists.id, code, request.currentUser?.name, exists, {
                 title: r.title, summary: r.summary || null, status, ticket_type: reqType || null, is_accounting: isAccounting,
                 propose_dept: proposeDept || null, proposer: proposerJson, yn_owner: r.yn_owner || null,
                 jk_owner: r.jk_owner || null, propose_time: r.propose_time || null, release_point_id: rpId,
@@ -623,7 +599,7 @@ export default async function ticketRoutes(fastify) {
 
           } else {
             // insert 新建
-            const res = run(
+            const res = await run(
               `INSERT INTO ticket 
                  (ticket_code, title, summary, status, ticket_type, is_accounting, propose_dept, proposer, yn_owner, jk_owner, 
                   propose_time, release_point_id, main_systems, collab_dev_systems, collab_test_systems, registrar, register_time, issue_no)
@@ -633,7 +609,7 @@ export default async function ticketRoutes(fastify) {
               mainSystems, collabDevSystems, collabTestSystems, request.currentUser?.name, new Date().toISOString().slice(0, 10),
               r.issue_no || null
             );
-            auditCreate('ticket', res.lastInsertRowid, code, request.currentUser?.name);
+            await auditCreate('ticket', res.lastInsertRowid, code, request.currentUser?.name);
             stat.inserted++;
             details.push({
               key: code,
@@ -661,7 +637,7 @@ export default async function ticketRoutes(fastify) {
 
     if (mode === 'rollback') {
       try {
-        tx(apply);
+        await tx(apply);
       } catch (err) {
         // tx 发生回滚后，将成功导入/更新的项修正为 skip 状态
         for (const item of details) {
@@ -674,7 +650,7 @@ export default async function ticketRoutes(fastify) {
         stat.updated = 0;
       }
     } else {
-      apply();
+      await apply();
     }
 
     return ok({ stat, details }, '导入完成');

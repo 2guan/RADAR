@@ -33,18 +33,18 @@ const IMPORT_COLUMNS = [
 ];
 
 /** 兼容性解析单个角色标识或名称 */
-function resolveRoleCode(text) {
+async function resolveRoleCode(text) {
   if (!text) return null;
   const val = String(text).trim();
-  const row = get('SELECT code FROM role WHERE LOWER(code) = LOWER(?) OR LOWER(name) = LOWER(?)', val, val);
+  const row = await get('SELECT code FROM role WHERE LOWER(code) = LOWER(?) OR LOWER(name) = LOWER(?)', val, val);
   return row ? row.code : val;
 }
 
 /** 兼容性解析多个角色（多标识/多名称） */
-function resolveRoleCodes(text) {
+async function resolveRoleCodes(text) {
   if (!text) return [];
   const parts = String(text).split(/[、,，;\s|]+/).map(p => p.trim()).filter(Boolean);
-  return parts.map(p => resolveRoleCode(p) || p);
+  return Promise.all(parts.map(async (p) => await resolveRoleCode(p) || p));
 }
 
 /** 统一的人员查询过滤条件构建器 */
@@ -84,19 +84,19 @@ function buildUserListQuery(body) {
 }
 
 /** 查询用户的角色名数组 */
-function rolesOfUser(userId) {
-  return all(
+async function rolesOfUser(userId) {
+  return await all(
     `SELECT r.id, r.code, r.name FROM role r JOIN user_role ur ON ur.role_id = r.id WHERE ur.user_id = ?`,
     userId,
   );
 }
 
 /** 设置用户角色（按角色标识数组） */
-function setUserRoles(userId, roleCodes) {
-  run('DELETE FROM user_role WHERE user_id = ?', userId);
+async function setUserRoles(userId, roleCodes) {
+  await run('DELETE FROM user_role WHERE user_id = ?', userId);
   for (const code of roleCodes || []) {
-    const role = get('SELECT id FROM role WHERE code = ?', code);
-    if (role) run('INSERT OR IGNORE INTO user_role (user_id, role_id) VALUES (?,?)', userId, role.id);
+    const role = await get('SELECT id FROM role WHERE code = ?', code);
+    if (role) await run('INSERT OR IGNORE INTO user_role (user_id, role_id) VALUES (?,?)', userId, role.id);
   }
 }
 
@@ -105,7 +105,7 @@ export default async function userRoutes(fastify) {
   fastify.post('/users/list', { preHandler: fastify.requirePerm('user', 'view') }, async (request) => {
     const { query, baseWhere, baseParams } = buildUserListQuery(request.body || {});
     
-    const result = listQuery({
+    const result = await listQuery({
       table: 'user',
       columns: ['id', 'phone', 'name', 'org', 'status', 'created_at'],
       searchColumns: ['phone', 'name', 'org'],
@@ -114,7 +114,7 @@ export default async function userRoutes(fastify) {
       baseParams,
       select: 'id, phone, name, org, status, is_super, created_at, login_fail_count, lockout_until',
     });
-    result.list = result.list.map((u) => ({ ...u, roles: rolesOfUser(u.id) }));
+    result.list = await Promise.all(result.list.map(async (u) => ({ ...u, roles: await rolesOfUser(u.id) })));
     return ok(result);
   });
 
@@ -122,31 +122,31 @@ export default async function userRoutes(fastify) {
   fastify.get('/users/search', { preHandler: fastify.authenticate }, async (request) => {
     const kw = String(request.query.keyword || '').trim();
     const rows = kw
-      ? all('SELECT id, name, phone, org FROM user WHERE status=\'启用\' AND (name LIKE ? OR phone LIKE ?) ORDER BY name LIMIT 30', `%${kw}%`, `%${kw}%`)
-      : all('SELECT id, name, phone, org FROM user WHERE status=\'启用\' ORDER BY name LIMIT 30');
+      ? await all('SELECT id, name, phone, org FROM user WHERE status=\'启用\' AND (name LIKE ? OR phone LIKE ?) ORDER BY name LIMIT 30', `%${kw}%`, `%${kw}%`)
+      : await all('SELECT id, name, phone, org FROM user WHERE status=\'启用\' ORDER BY name LIMIT 30');
     return ok(rows);
   });
 
   // 获取所有启用的人员（不限流，任意登录用户，供下拉列表选择）
   fastify.get('/users/active', { preHandler: fastify.authenticate }, async () => {
-    const rows = all('SELECT id, name, phone, org FROM user WHERE status=\'启用\' ORDER BY name');
+    const rows = await all('SELECT id, name, phone, org FROM user WHERE status=\'启用\' ORDER BY name');
     return ok(rows);
   });
 
   // 详情
   fastify.get('/users/:id', { preHandler: fastify.requirePerm('user', 'view') }, async (request) => {
-    const u = get('SELECT id, phone, name, org, status, is_super, login_fail_count, lockout_until FROM user WHERE id = ?', request.params.id);
+    const u = await get('SELECT id, phone, name, org, status, is_super, login_fail_count, lockout_until FROM user WHERE id = ?', request.params.id);
     if (!u) throw notFound();
-    return ok({ ...u, roles: rolesOfUser(u.id) });
+    return ok({ ...u, roles: await rolesOfUser(u.id) });
   });
 
   // 解锁用户（重置登录失败计数与锁定时间）
   fastify.post('/users/:id/unlock', { preHandler: fastify.requirePerm('user', 'edit') }, async (request) => {
     const id = request.params.id;
-    const u = get('SELECT id, name, login_fail_count, lockout_until FROM user WHERE id = ?', id);
+    const u = await get('SELECT id, name, login_fail_count, lockout_until FROM user WHERE id = ?', id);
     if (!u) throw notFound();
     if (!u.lockout_until && !u.login_fail_count) throw badRequest('该账号未被锁定，无需解锁');
-    run(
+    await run(
       "UPDATE user SET login_fail_count = 0, lockout_until = NULL, updated_at = datetime('now','localtime') WHERE id = ?",
       id
     );
@@ -159,21 +159,21 @@ export default async function userRoutes(fastify) {
     if (!phone || !name) throw badRequest('手机号与姓名必填');
     name = sanitizeText(name);
     if (!name) throw badRequest('姓名不能为空或仅含无效字符');
-    if (get('SELECT id FROM user WHERE phone = ?', phone)) throw badRequest('手机号已存在');
+    if (await get('SELECT id FROM user WHERE phone = ?', phone)) throw badRequest('手机号已存在');
 
     const finalPwd = String(password || '').trim();
     if (!finalPwd) throw badRequest('初始密码必填');
     if (!validatePasswordComplexity(finalPwd)) {
-      const minLength = getSecurityConfig()['security.password.minLength'];
+      const minLength = (await getSecurityConfig())['security.password.minLength'];
       throw badRequest(`密码不符合复杂度要求（长度不能小于 ${minLength} 位，且必须包含大小写字母、数字和特殊字符）`);
     }
 
-    const id = tx(() => {
-      const res = run(
+    const id = await tx(async () => {
+      const res = await run(
         'INSERT INTO user (phone, name, org, password_hash, status, password_changed_at) VALUES (?,?,?,?,?,datetime(\'now\',\'localtime\'))',
         phone, name, org || null, hashPassword(finalPwd), '启用',
       );
-      setUserRoles(res.lastInsertRowid, roles);
+      await setUserRoles(res.lastInsertRowid, roles);
       return res.lastInsertRowid;
     });
     return ok({ id });
@@ -182,17 +182,17 @@ export default async function userRoutes(fastify) {
   // 修改
   fastify.put('/users/:id', { preHandler: fastify.requirePerm('user', 'edit') }, async (request) => {
     const id = request.params.id;
-    const old = get('SELECT * FROM user WHERE id = ?', id);
+    const old = await get('SELECT * FROM user WHERE id = ?', id);
     if (!old) throw notFound();
     const { name: rawName, org, status, roles } = request.body || {};
     const name = rawName !== undefined ? sanitizeText(rawName) : undefined;
-    tx(() => {
-      run(
+    await tx(async () => {
+      await run(
         `UPDATE user SET name=?, org=?, status=?, updated_at=datetime('now','localtime') WHERE id=?`,
         name ?? old.name, org ?? old.org, status ?? old.status, id,
       );
       // 角色可自由编辑（含超级管理员）；超管权限源于 is_super 标识，与角色无关，不会因改角色而丢失
-      if (roles !== undefined) setUserRoles(id, roles);
+      if (roles !== undefined) await setUserRoles(id, roles);
     });
     return ok({ id });
   });
@@ -200,31 +200,31 @@ export default async function userRoutes(fastify) {
   // 重置密码
   fastify.post('/users/:id/reset-password', { preHandler: fastify.requirePerm('user', 'edit') }, async (request) => {
     const id = request.params.id;
-    if (!get('SELECT id FROM user WHERE id = ?', id)) throw notFound();
+    if (!await get('SELECT id FROM user WHERE id = ?', id)) throw notFound();
     const pwd = String(request.body?.password || '').trim();
     if (!pwd) throw badRequest('新密码必填');
     if (!validatePasswordComplexity(pwd)) {
-      const minLength = getSecurityConfig()['security.password.minLength'];
+      const minLength = (await getSecurityConfig())['security.password.minLength'];
       throw badRequest(`密码不符合复杂度要求（长度不能小于 ${minLength} 位，且必须包含大小写字母、数字和特殊字符）`);
     }
-    run(`UPDATE user SET password_hash=?, updated_at=datetime('now','localtime'), password_changed_at=datetime('now','localtime') WHERE id=?`, hashPassword(pwd), id);
+    await run(`UPDATE user SET password_hash=?, updated_at=datetime('now','localtime'), password_changed_at=datetime('now','localtime') WHERE id=?`, hashPassword(pwd), id);
     return ok(null, '密码已重置');
   });
 
   // 删除
   fastify.delete('/users/:id', { preHandler: fastify.requirePerm('user', 'delete') }, async (request) => {
     const id = request.params.id;
-    const u = get('SELECT * FROM user WHERE id = ?', id);
+    const u = await get('SELECT * FROM user WHERE id = ?', id);
     if (!u) throw notFound();
     if (u.is_super) throw badRequest('超级管理员不可删除');
-    run('DELETE FROM user WHERE id = ?', id);
+    await run('DELETE FROM user WHERE id = ?', id);
     return ok(null, '删除成功');
   });
 
   // 导出
   fastify.post('/users/export', { preHandler: fastify.requirePerm('user', 'export') }, async (request, reply) => {
     const { query, baseWhere, baseParams } = buildUserListQuery(request.body || {});
-    const result = listQuery({
+    const result = await listQuery({
       table: 'user',
       columns: ['id', 'phone', 'name', 'org', 'status'],
       searchColumns: ['phone', 'name', 'org'],
@@ -234,15 +234,15 @@ export default async function userRoutes(fastify) {
       select: 'id, phone, name, org, status',
     });
 
-    const orgsAll = all("SELECT attr_value, display_value FROM dict_item WHERE category = 'org'");
+    const orgsAll = await all("SELECT attr_value, display_value FROM dict_item WHERE category = 'org'");
     const orgMap = {};
     for (const o of orgsAll) orgMap[o.attr_value] = o.display_value;
 
-    const rows = result.list.map((u) => ({
+    const rows = await Promise.all(result.list.map(async (u) => ({
       ...u,
       org: orgMap[u.org] || u.org || '',
-      roles: rolesOfUser(u.id).map((r) => r.name).join('、'),
-    }));
+      roles: (await rolesOfUser(u.id)).map((r) => r.name).join('、'),
+    })));
     const buf = await exportXlsx(EXPORT_COLUMNS, rows, '人员清单');
     reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     reply.header('Content-Disposition', 'attachment; filename=users.xlsx');
@@ -270,17 +270,17 @@ export default async function userRoutes(fastify) {
     const details = [];
 
     // 载入机构和角色映射用于变化展示及解析
-    const orgsAll = all("SELECT attr_value, display_value FROM dict_item WHERE category = 'org'");
+    const orgsAll = await all("SELECT attr_value, display_value FROM dict_item WHERE category = 'org'");
     const orgMap = {};
     for (const o of orgsAll) orgMap[o.attr_value] = o.display_value;
 
-    const rolesAll = all('SELECT code, name FROM role');
+    const rolesAll = await all('SELECT code, name FROM role');
     const roleNameMap = {};
     for (const r of rolesAll) {
       roleNameMap[r.code] = r.name;
     }
 
-    const apply = () => {
+    const apply = async () => {
       for (const r of rows) {
         const rowNum = r.__rowNum__;
         try {
@@ -291,10 +291,10 @@ export default async function userRoutes(fastify) {
           if (!phone) throw new Error('手机号不能为空');
 
           // 兼容性字典转换
-          const resolvedOrg = resolveDictAttr('org', r.org);
-          const resolvedStatus = resolveDictAttr('user_status', r.status) || '启用';
+          const resolvedOrg = await resolveDictAttr('org', r.org);
+          const resolvedStatus = await resolveDictAttr('user_status', r.status) || '启用';
 
-          const exists = get('SELECT * FROM user WHERE phone = ?', phone);
+          const exists = await get('SELECT * FROM user WHERE phone = ?', phone);
 
           if (exists) {
             if (mode === 'skip') {
@@ -329,8 +329,8 @@ export default async function userRoutes(fastify) {
             compareAndPush('status', '状态', exists.status || '启用', resolvedStatus || '启用');
 
             // 角色比对
-            const oldRoles = rolesOfUser(exists.id).map(r => r.name).join('、');
-            const resolvedRoleCodes = resolveRoleCodes(r.roles);
+            const oldRoles = (await rolesOfUser(exists.id)).map(r => r.name).join('、');
+            const resolvedRoleCodes = await resolveRoleCodes(r.roles);
             const hasRolesInput = r.roles !== undefined && String(r.roles).trim() !== '';
             if (hasRolesInput) {
               const newRoleNames = resolvedRoleCodes.map(code => roleNameMap[code] || code).join('、');
@@ -338,12 +338,12 @@ export default async function userRoutes(fastify) {
             }
 
             if (changes.length > 0) {
-              run(
+              await run(
                 `UPDATE user SET name=?, org=?, status=?, updated_at=datetime('now','localtime') WHERE id=?`,
                 r.name, resolvedOrg || null, resolvedStatus, exists.id
               );
               if (hasRolesInput) {
-                setUserRoles(exists.id, resolvedRoleCodes);
+                await setUserRoles(exists.id, resolvedRoleCodes);
               }
             }
 
@@ -362,16 +362,16 @@ export default async function userRoutes(fastify) {
             const initPwd = String(r.password || '').trim();
             if (!initPwd) throw new Error('初始密码不能为空');
             if (!validatePasswordComplexity(initPwd)) {
-              const minLength = getSecurityConfig()['security.password.minLength'];
+              const minLength = (await getSecurityConfig())['security.password.minLength'];
               throw new Error(`密码不符合复杂度要求（长度不能小于 ${minLength} 位，且必须包含大小写字母、数字和特殊字符）`);
             }
-            const res = run(
+            const res = await run(
               'INSERT INTO user (phone, name, org, password_hash, status, password_changed_at) VALUES (?,?,?,?,?,datetime(\'now\',\'localtime\'))',
               phone, r.name, resolvedOrg || null, hashPassword(initPwd), resolvedStatus
             );
-            const resolvedRoleCodes = resolveRoleCodes(r.roles);
+            const resolvedRoleCodes = await resolveRoleCodes(r.roles);
             if (resolvedRoleCodes.length) {
-              setUserRoles(res.lastInsertRowid, resolvedRoleCodes);
+              await setUserRoles(res.lastInsertRowid, resolvedRoleCodes);
             }
             stat.inserted++;
             details.push({
@@ -400,7 +400,7 @@ export default async function userRoutes(fastify) {
 
     if (mode === 'rollback') {
       try {
-        tx(apply);
+        await tx(apply);
       } catch (err) {
         for (const item of details) {
           if (item.status === 'success') {
@@ -411,7 +411,7 @@ export default async function userRoutes(fastify) {
         stat.updated = 0;
       }
     } else {
-      apply();
+      await apply();
     }
 
     return ok({ stat, details }, '导入完成');

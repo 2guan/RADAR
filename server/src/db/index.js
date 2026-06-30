@@ -1,85 +1,72 @@
 /**
  * 文件：db/index.js
- * 用途：基于 Node 原生 node:sqlite 建立数据库连接（单例），并提供一组轻量 DAO 辅助方法。
- *       所有 SQL 均使用预编译参数化语句，杜绝 SQL 注入。
+ * 用途：统一数据库访问入口。通过 DB_CLIENT 在 SQLite 与 TDSQL(MySQL 兼容版) 之间切换，
+ *       对业务层暴露 get/all/run/exec/tx 等轻量 DAO 方法。
  * 作者：hengguan
- * 说明：启用 WAL 日志模式与外键约束；导出 db 实例及常用查询封装（get/all/run/tx）。
+ * 说明：业务模块只依赖本文件导出的统一接口，避免在路由和工具函数里判断底层数据库。
+ *       新增数据库类型时优先扩展 provider 与 dialect，而不是改动业务 SQL 调用点。
  */
 
-import { DatabaseSync } from 'node:sqlite';
-import fs from 'node:fs';
-import path from 'node:path';
 import { config } from '../config.js';
+import { createSqliteProvider } from './providers/sqlite.js';
+import { createTdsqlProvider } from './providers/tdsql.js';
 
-// 确保数据库所在目录存在
-fs.mkdirSync(path.dirname(config.dbFile), { recursive: true });
-
-// 建立连接（同步 API）
-export const db = new DatabaseSync(config.dbFile);
-
-// 基础 PRAGMA：WAL 提升并发读性能；外键约束保证关联完整性
-db.exec('PRAGMA journal_mode = WAL;');
-db.exec('PRAGMA foreign_keys = ON;');
-db.exec('PRAGMA busy_timeout = 5000;');
-// 读性能 PRAGMA：WAL 下 NORMAL 同步级别安全且少 fsync；排序/临时表走内存；
-// 加大页缓存(~16MB)与内存映射(256MB)，显著降低整表扫描与重复查询的磁盘开销
-db.exec('PRAGMA synchronous = NORMAL;');
-db.exec('PRAGMA temp_store = MEMORY;');
-db.exec('PRAGMA cache_size = -16000;');
-db.exec('PRAGMA mmap_size = 268435456;');
-
-/**
- * 预编译语句缓存：同一 SQL 仅编译一次后复用，避免热点路径（列表枚举/N+1）反复 prepare。
- * 缓存以 SQL 文本为键；语句可携不同参数多次执行，线程模型为同步单连接，安全。
- */
-const stmtCache = new Map();
-function prepare(sql) {
-  let stmt = stmtCache.get(sql);
-  if (!stmt) {
-    stmt = db.prepare(sql);
-    stmtCache.set(sql, stmt);
+function createProvider() {
+  // 根据 .env 中的 DB_CLIENT 创建实际 provider；mysql 作为 tdsql 的兼容别名保留。
+  switch (config.db.client) {
+    case 'sqlite':
+      return createSqliteProvider(config);
+    case 'tdsql':
+    case 'mysql':
+      return createTdsqlProvider(config);
+    default:
+      throw new Error(`不支持的 DB_CLIENT：${config.db.client}`);
   }
-  return stmt;
 }
 
-/**
- * 查询单行。
- * @param {string} sql 含 ? 占位符的 SQL
- * @param  {...any} params 绑定参数
- * @returns {object|undefined}
- */
-export function get(sql, ...params) {
-  return prepare(sql).get(...params);
+const provider = createProvider();
+
+// raw 仅提供给少数底层工具使用；常规业务代码应使用 get/all/run/exec/tx。
+export const db = provider.raw;
+export const dbClient = provider.client;
+export const dialect = provider.dialect;
+
+export function isSqlite() {
+  // 便于迁移和少数兼容逻辑判断 SQLite 行为。
+  return provider.client === 'sqlite';
 }
 
-/**
- * 查询多行。
- * @returns {object[]}
- */
-export function all(sql, ...params) {
-  return prepare(sql).all(...params);
+export function isTdsql() {
+  // TDSQL 使用 MySQL 兼容协议，provider.client 统一归一为 tdsql。
+  return provider.client === 'tdsql';
 }
 
-/**
- * 执行写操作（INSERT/UPDATE/DELETE），返回 { changes, lastInsertRowid }。
- */
-export function run(sql, ...params) {
-  return prepare(sql).run(...params);
+export async function get(sql, ...params) {
+  // 查询单行记录，provider 负责参数占位符、保留字和返回格式兼容。
+  return provider.get(sql, params);
 }
 
-/**
- * 事务包装：传入的回调在事务中执行，抛错自动回滚。
- * @param {Function} fn 事务体，无参数
- * @returns {any} 回调返回值
- */
-export function tx(fn) {
-  db.exec('BEGIN IMMEDIATE');
-  try {
-    const result = fn();
-    db.exec('COMMIT');
-    return result;
-  } catch (err) {
-    db.exec('ROLLBACK');
-    throw err;
-  }
+export async function all(sql, ...params) {
+  // 查询多行记录，返回数组；SQLite 与 TDSQL 在这里保持同一调用形态。
+  return provider.all(sql, params);
+}
+
+export async function run(sql, ...params) {
+  // 执行写入语句，返回 changes/lastInsertRowid 等统一结果字段。
+  return provider.run(sql, params);
+}
+
+export async function exec(sql) {
+  // 执行批量 SQL，主要用于迁移、初始化和测试准备。
+  return provider.exec(sql);
+}
+
+export async function tx(fn) {
+  // 统一事务入口：SQLite 与 TDSQL 的 BEGIN/COMMIT/ROLLBACK 由 provider 处理。
+  return provider.tx(fn);
+}
+
+export async function closeDb() {
+  // 测试或进程退出时释放底层连接/连接池。
+  return provider.close();
 }

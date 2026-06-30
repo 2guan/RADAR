@@ -16,6 +16,7 @@ import { config } from '../config.js';
 import { runMigrations } from './migrate.js';
 import { runSeed } from './seed.js';
 import { hashPassword } from '../lib/password.js';
+import { parseJsonArray } from '../lib/json.js';
 import { calcDeviation } from '../lib/deviation.js';
 import {
   genRequirementCode, genDevCode, genTestCode, genReleaseApplyCode, genTicketCode,
@@ -133,42 +134,42 @@ const DEV_ACTIONS = ['接口改造', '数据迁移', '规则配置', '页面重�
 const IMPL_ORGS = ['上海事业群', '北京事业群', '成都事业群', '深圳事业群', '武汉事业群', '厦门事业群', '大数据中心', '交付事业部', '基础技术中心'];
 
 // 清空业务/人员数据（保留字典/系统/角色/权限/超级管理员）
-function wipe() {
+async function wipe() {
   const tables = [
     'release_signoff', 'release_system', 'release_task', 'release_apply',
     'test_task', 'dev_task', 'requirement', 'ticket', 'issue',
     'attachment', 'audit_log', 'saved_filter', 'dashboard_chart',
   ];
-  for (const t of tables) run(`DELETE FROM ${t}`);
+  for (const t of tables) await run(`DELETE FROM ${t}`);
   // 删除除引导超管(admin)外的全部人员（含名单内的超管薛潇，保证可重复执行；user_role 随级联删除）
-  run('DELETE FROM user WHERE phone <> ?', config.superAdmin.phone);
+  await run('DELETE FROM user WHERE phone <> ?', config.superAdmin.phone);
   // release_point 被需求/投产申请引用，需在其后清空
-  run('DELETE FROM release_point');
+  await run('DELETE FROM release_point');
 }
 
-export function runMock() {
-  runMigrations();
-  runSeed();
+export async function runMock() {
+  await runMigrations();
+  await runSeed();
 
-  tx(() => {
-    wipe();
+  await tx(async () => {
+    await wipe();
 
     // ----------------------------------------------------------------------
     // 1) 用户（导入真实名单 USERS；密码统一 Radar@2026；「超级管理员」角色以 is_super=1 建号）
     // ----------------------------------------------------------------------
     const pwd = hashPassword('Radar@2026');
     const roleId = {};
-    for (const r of all('SELECT id, code FROM role')) roleId[r.code] = r.id;
+    for (const r of await all('SELECT id, code FROM role')) roleId[r.code] = r.id;
     const usersByRole = {}; // roleCode -> [name]
     for (const [phone, name, code, org] of USERS) {
       if (!roleId[code]) throw new Error(`角色不存在：${code}（手机号 ${phone}）`);
       const isSuper = code === '超级管理员' ? 1 : 0;
-      const res = run(
+      const res = await run(
         `INSERT INTO user (phone, name, org, password_hash, status, is_super, password_changed_at)
          VALUES (?,?,?,?,?,?,datetime('now','localtime'))`,
         phone, name, org, pwd, '启用', isSuper,
       );
-      run('INSERT INTO user_role (user_id, role_id) VALUES (?,?)', res.lastInsertRowid, roleId[code]);
+      await run('INSERT INTO user_role (user_id, role_id) VALUES (?,?)', res.lastInsertRowid, roleId[code]);
       (usersByRole[code] ||= []).push(name);
     }
     // 按角色取一名人员；该角色无人时回退到任意可用人员，保证字段不为空
@@ -184,21 +185,21 @@ export function runMock() {
     const rpIds = [];
     for (let i = 0; i < RELEASE_POINTS.length; i++) {
       const [date, vt, def, arch] = RELEASE_POINTS[i];
-      const res = run(
+      const res = await run(
         `INSERT INTO release_point (release_date, version_type, remark, is_default, is_archived)
          VALUES (?,?,?,?,?)`,
         date, vt, `${date.slice(0, 4)}年${date.slice(4, 6)}月投产窗口`, def, arch,
       );
       rpIds.push({ id: res.lastInsertRowid, date });
     }
-    run(
+    await run(
       `INSERT INTO release_point (release_date, version_type, remark, is_default, is_archived)
        VALUES (?,?,?,?,?)`,
       '投产点待定', '常规版本', '系统内置投产点', 0, 0,
     );
 
     // 系统主数据
-    const systems = all('SELECT sys_code, sys_name, org, sector FROM system');
+    const systems = await all('SELECT sys_code, sys_name, org, sector FROM system');
     const sysByCode = {};
     for (const s of systems) sysByCode[s.sys_code] = s;
     const sysCodes = systems.map((s) => s.sys_code);
@@ -234,12 +235,12 @@ export function runMock() {
       const main = pickN(sysCodes, 1 + Math.floor(rng() * 2));
       const collabDev = rng() < 0.3 ? pickN(sysCodes.filter((c) => !main.includes(c)), 1) : [];
       const collabTest = rng() < 0.25 ? pickN(sysCodes.filter((c) => !main.includes(c)), 1) : [];
-      const code = genRequirementCode(spec.rp.date);
+      const code = await genRequirementCode(spec.rp.date);
       const topic = pick(REQ_TOPICS);
       const reqStatus = REQ_DONE.has(spec.profile) ? '分析完成'
         : (spec.profile === 'analysis' ? '需求分析' : '需求登记');
       const proposeTime = shift(ymd(spec.rp.date), -60 - Math.floor(rng() * 60));
-      const res = run(
+      const res = await run(
         `INSERT INTO requirement
            (req_code, title, summary, status, req_type, propose_dept, proposer, yn_owner, jk_owner,
             propose_time, main_systems, collab_dev_systems, collab_test_systems, release_point_id, registrar, register_time)
@@ -255,10 +256,10 @@ export function runMock() {
         spec.rp.id, pickUser('农信业务'), shift(proposeTime, 2),
       );
       const reqId = res.lastInsertRowid;
-      auditCreate('requirement', reqId, code, '系统初始化');
+      await auditCreate('requirement', reqId, code, '系统初始化');
       // 终态需求：需求说明书附件（路径）
       if (reqStatus === '分析完成') {
-        run(`INSERT INTO attachment (entity_type, entity_id, field_key, kind, path_text, uploader)
+        await run(`INSERT INTO attachment (entity_type, entity_id, field_key, kind, path_text, uploader)
              VALUES ('requirement', ?, '需求说明书', 'path', ?, ?)`,
           reqId, `\\\\nas\\需求\\${code}\\需求说明书.docx`, pickUser('农信业务'));
       }
@@ -269,7 +270,7 @@ export function runMock() {
     // 4) 开发任务（≥200）
     // ----------------------------------------------------------------------
     /** 创建一条开发任务 */
-    function makeDev(req, status, idx) {
+    async function makeDev(req, status, idx) {
       const impl = req.main[idx % req.main.length];
       const sys = sysByCode[impl];
       const window = ymd(req.rp.date);
@@ -279,8 +280,8 @@ export function runMock() {
       // 完成的任务带实际起止与偏差率；进行中的仅有实际开始
       const actualStart = shift(planStart, Math.floor(rng() * 4));
       const actualEnd = isDone ? shift(planEnd, Math.floor(rng() * 9) - 3) : null;
-      const code = genDevCode(req.code);
-      const res = run(
+      const code = await genDevCode(req.code);
+      const res = await run(
         `INSERT INTO dev_task
            (req_code, task_code, task_name, content, status, owner, impl_system, impl_org,
             plan_start, plan_end, actual_start, actual_end, deviation_rate, registrar, register_time)
@@ -293,9 +294,9 @@ export function runMock() {
         pickUser('金科开发'), shift(planStart, -3),
       );
       const devId = res.lastInsertRowid;
-      auditCreate('dev', devId, code, '系统初始化');
+      await auditCreate('dev', devId, code, '系统初始化');
       if (isDone) {
-        run(`INSERT INTO attachment (entity_type, entity_id, field_key, kind, path_text, uploader)
+        await run(`INSERT INTO attachment (entity_type, entity_id, field_key, kind, path_text, uploader)
              VALUES ('dev', ?, ?, 'path', ?, ?)`,
           devId, pick(['概要设计', '详细设计', '代码走查', '单元测试报告']),
           `\\\\nas\\开发\\${code}\\设计文档.docx`, pickUser('金科开发'));
@@ -309,11 +310,11 @@ export function runMock() {
       if (['released', 'approving', 'advanced', 'nftsec', 'sit'].includes(p)) {
         // 开发完成：2~3 个开发任务
         const n = 2 + (rng() < 0.5 ? 1 : 0);
-        for (let i = 0; i < n; i++) makeDev(req, '开发完成', i);
+        for (let i = 0; i < n; i++) await makeDev(req, '开发完成', i);
       } else if (p === 'dev') {
         // 开发进行中：1~2 个任务，状态随机分布在开发中各阶段
         const n = 1 + (rng() < 0.6 ? 1 : 0);
-        for (let i = 0; i < n; i++) makeDev(req, pick(DEV_INPROGRESS), i);
+        for (let i = 0; i < n; i++) await makeDev(req, pick(DEV_INPROGRESS), i);
       }
       // analysis / register：暂无开发任务
     }
@@ -323,7 +324,7 @@ export function runMock() {
     // ----------------------------------------------------------------------
     const TEST_INPROGRESS = ['测试方案', '测试实施', '测试报告'];
     /** 创建一条测试任务 */
-    function makeTest(req, testType, status) {
+    async function makeTest(req, testType, status) {
       const impl = req.main[0];
       const sys = sysByCode[impl];
       const window = ymd(req.rp.date);
@@ -332,10 +333,10 @@ export function runMock() {
       const planEnd = shift(window, -5);
       const actualStart = shift(planStart, Math.floor(rng() * 3));
       const actualEnd = isDone ? shift(planEnd, Math.floor(rng() * 7) - 2) : null;
-      const code = genTestCode(testType, req.code);
+      const code = await genTestCode(testType, req.code);
       const ownerRole = testType === 'UAT' ? (rng() < 0.5 ? '农信业务' : '金科业务')
         : (rng() < 0.5 ? '金科测试' : '农信测试');
-      const res = run(
+      const res = await run(
         `INSERT INTO test_task
            (req_code, task_code, task_name, test_type, status, owner, impl_system, impl_org, impl_agency,
             plan_start, plan_end, actual_start, actual_end, deviation_rate, registrar, register_time)
@@ -347,9 +348,9 @@ export function runMock() {
         pickUser('测试负责人'), shift(planStart, -2),
       );
       const testId = res.lastInsertRowid;
-      auditCreate('test', testId, code, '系统初始化');
+      await auditCreate('test', testId, code, '系统初始化');
       if (isDone) {
-        run(`INSERT INTO attachment (entity_type, entity_id, field_key, kind, path_text, uploader)
+        await run(`INSERT INTO attachment (entity_type, entity_id, field_key, kind, path_text, uploader)
              VALUES ('test', ?, ?, 'path', ?, ?)`,
           testId, pick(['测试方案', '测试报告']), `\\\\nas\\测试\\${code}\\测试报告.docx`, pickUser('金科测试'));
       }
@@ -359,55 +360,56 @@ export function runMock() {
     for (const req of reqs) {
       const p = req.spec.profile;
       if (['released', 'approving', 'advanced', 'nftsec'].includes(p)) {
-        makeTest(req, 'SIT', '测试完成');             // 应用组装测试完成
+        await makeTest(req, 'SIT', '测试完成');             // 应用组装测试完成
       } else if (p === 'sit') {
-        makeTest(req, 'SIT', pick(TEST_INPROGRESS));  // SIT 进行中
+        await makeTest(req, 'SIT', pick(TEST_INPROGRESS));  // SIT 进行中
       }
       // UAT：投产审批相关 + 部分 advanced 需求
       if (['released', 'approving'].includes(p)) {
-        makeTest(req, 'UAT', '测试完成');
+        await makeTest(req, 'UAT', '测试完成');
       } else if (p === 'advanced' && rng() < 0.3) {
-        makeTest(req, 'UAT', pick([...TEST_INPROGRESS, '测试完成']));
+        await makeTest(req, 'UAT', pick([...TEST_INPROGRESS, '测试完成']));
       }
       // NFT/SEC：10% 需求，部分完成部分进行中
       if (p === 'nftsec') {
-        makeTest(req, 'NFT', rng() < 0.5 ? '测试完成' : pick(TEST_INPROGRESS));
-        makeTest(req, 'SEC', rng() < 0.5 ? '测试完成' : pick(TEST_INPROGRESS));
+        await makeTest(req, 'NFT', rng() < 0.5 ? '测试完成' : pick(TEST_INPROGRESS));
+        await makeTest(req, 'SEC', rng() < 0.5 ? '测试完成' : pick(TEST_INPROGRESS));
       }
     }
 
     // ----------------------------------------------------------------------
     // 6) 投产审批（会签）—— 22 个需求覆盖全部评审状态
     // ----------------------------------------------------------------------
-    const signRoles = all('SELECT id, name FROM role WHERE is_signoff_role = 1 ORDER BY id');
+    const signRoles = await all('SELECT id, name FROM role WHERE is_signoff_role = 1 ORDER BY id');
     /** 创建投产任务 + 6 个会签项；signedPlan 决定每个会签项结果 */
-    function makeReleaseTask(code, entityType, relStatus, reviewStatus, signResults, signedDate) {
-      const res = run(
+    async function makeReleaseTask(code, entityType, relStatus, reviewStatus, signResults, signedDate) {
+      const res = await run(
         `INSERT INTO release_task (req_code, entity_type, status, review_status, owner, registrar, register_time)
          VALUES (?,?,?,?,?,?,?)`,
         code, entityType, relStatus, reviewStatus, pickUser(rng() < 0.5 ? '金科运维' : '农信运维'),
         pickUser('项目负责人'), signedDate,
       );
       const rtId = res.lastInsertRowid;
-      auditCreate('release', rtId, code, '系统初始化');
-      signRoles.forEach((role, i) => {
+      await auditCreate('release', rtId, code, '系统初始化');
+      for (const [i, role] of signRoles.entries()) {
         const result = signResults[i] || '未签署';
         const signer = result === '未签署' ? null : pickUser(role.name);
         const signed = result !== '未签署';
-        run(
+        const signerUser = signed ? await get('SELECT id FROM user WHERE name = ?', signer) : null;
+        await run(
           `INSERT INTO release_signoff
              (release_task_id, role_id, role_name, signer_user_id, signer_name, result, conclusion, sign_time)
            VALUES (?,?,?,?,?,?,?,?)`,
           rtId, role.id, role.name,
-          signed ? (get('SELECT id FROM user WHERE name = ?', signer)?.id || null) : null,
+          signerUser?.id || null,
           signed ? signer : null, result,
           result === '已驳回' ? '存在投产风险，需补充回退方案' : (result === '已签署' ? '同意投产' : null),
           signed ? `${signedDate} 10:00:00` : null,
         );
         if (signed) {
-          auditUpdate('release', rtId, role.name, signer, { r: '未签署' }, { r: result }, { r: `会签-${role.name}` });
+          await auditUpdate('release', rtId, role.name, signer, { r: '未签署' }, { r: result }, { r: `会签-${role.name}` });
         }
-      });
+      }
       return rtId;
     }
 
@@ -420,7 +422,7 @@ export function runMock() {
       if (req.spec.profile === 'released') {
         // 评审同意：前 8 个已投产(已上线)，后 2 个评审通过待投产
         const relStatus = ai < 8 ? '已投产' : '待投产';
-        makeReleaseTask(req.code, 'requirement', relStatus, '评审同意', allSigned, signedDate);
+        await makeReleaseTask(req.code, 'requirement', relStatus, '评审同意', allSigned, signedDate);
       } else {
         // approving 12 个：5 待评审 / 3 评审拒绝 / 2 应急审批 / 2 评审撤销
         const k = approvalReqs.filter((r) => r.spec.profile === 'released').length; // 偏移
@@ -439,7 +441,7 @@ export function runMock() {
           reviewStatus = '评审撤销'; // 手动状态
           results = signRoles.map(() => '未签署');
         }
-        makeReleaseTask(req.code, 'requirement', '待投产', reviewStatus, results, signedDate);
+        await makeReleaseTask(req.code, 'requirement', '待投产', reviewStatus, results, signedDate);
       }
       ai++;
     }
@@ -466,7 +468,7 @@ export function runMock() {
       const issue = REAL_ISSUES[i];
       const isSolved = ['已解决', '待验证'].includes(issue.status);
       const createDate = shift('2026-06-01', i);
-      run(
+      await run(
         `INSERT INTO issue
            (issue_code, round, urgency, handling_method, business_group, module, system, work_order_no,
             create_time, plan_resolve_time, status, category, detailed_classification, summary, details,
@@ -516,11 +518,11 @@ export function runMock() {
 
     for (const tspec of TICKET_SPECS) {
       const linkedIssue = REAL_ISSUES[tspec.issueIdx];
-      const code = genTicketCode(tspec.rp.date);
+      const code = await genTicketCode(tspec.rp.date);
       const tStatus = TICKET_STATUS[tspec.profile];
       const main = pickN(sysCodes, 1);
       const proposeTime = shift(ymd(tspec.rp.date), -40 - Math.floor(rng() * 20));
-      run(
+      await run(
         `INSERT INTO ticket
            (ticket_code, title, summary, status, ticket_type, is_accounting,
             propose_dept, proposer, yn_owner, jk_owner, propose_time,
@@ -538,20 +540,20 @@ export function runMock() {
         tspec.rp.id, linkedIssue.code,
         pickUser('农信业务'), shift(proposeTime, 1),
       );
-      const ticketId = get('SELECT id FROM ticket WHERE ticket_code = ?', code).id;
-      auditCreate('ticket', ticketId, code, '系统初始化');
+      const ticketId = (await get('SELECT id FROM ticket WHERE ticket_code = ?', code)).id;
+      await auditCreate('ticket', ticketId, code, '系统初始化');
 
       // 开发任务（released/sit/dev 各有）
       if (['released', 'sit', 'dev'].includes(tspec.profile)) {
         const devStatus = tspec.profile === 'dev' ? pick(['开发设计', '开发实施', '单元测试']) : '开发完成';
-        const devCode = genDevCode(code);
+        const devCode = await genDevCode(code);
         const window = ymd(tspec.rp.date);
         const planStart = shift(window, -40);
         const planEnd = shift(window, -18);
         const actualStart = shift(planStart, Math.floor(rng() * 3));
         const actualEnd = devStatus === '开发完成' ? shift(planEnd, Math.floor(rng() * 6) - 2) : null;
         const sys = sysByCode[main[0]];
-        run(
+        await run(
           `INSERT INTO dev_task
              (req_code, task_code, task_name, content, status, owner, impl_system, impl_org,
               plan_start, plan_end, actual_start, actual_end, deviation_rate, registrar, register_time)
@@ -570,14 +572,14 @@ export function runMock() {
       // 测试任务（released/sit）
       if (['released', 'sit'].includes(tspec.profile)) {
         const testStatus = tspec.profile === 'released' ? '测试完成' : pick(['测试方案', '测试实施']);
-        const testCode = genTestCode('SIT', code);
+        const testCode = await genTestCode('SIT', code);
         const window = ymd(tspec.rp.date);
         const planStart = shift(window, -16);
         const planEnd = shift(window, -4);
         const actualStart = shift(planStart, Math.floor(rng() * 3));
         const actualEnd = testStatus === '测试完成' ? shift(planEnd, Math.floor(rng() * 5) - 1) : null;
         const sys = sysByCode[main[0]];
-        run(
+        await run(
           `INSERT INTO test_task
              (req_code, task_code, task_name, test_type, status, owner, impl_system, impl_org, impl_agency,
               plan_start, plan_end, actual_start, actual_end, deviation_rate, registrar, register_time)
@@ -595,7 +597,7 @@ export function runMock() {
 
       // 投产审批（released）
       if (tspec.profile === 'released') {
-        makeReleaseTask(code, 'ticket', '已投产', '评审同意', allSigned, shift(ymd(tspec.rp.date), -3));
+        await makeReleaseTask(code, 'ticket', '已投产', '评审同意', allSigned, shift(ymd(tspec.rp.date), -3));
       }
     }
 
@@ -606,10 +608,10 @@ export function runMock() {
     const FERRY = ['未摆渡', '待发送', '已摆渡', '摆渡失败'];
     /** 评审状态派生（取最弱）——与 release-apply 路由一致 */
     const REVIEW_RANK = { 评审拒绝: 0, 评审撤销: 1, 待评审: 2, 应急审批: 3, 评审同意: 4 };
-    function deriveReview(refCodes) {
+    async function deriveReview(refCodes) {
       let weakest = null; let weakestRank = Infinity;
       for (const c of refCodes) {
-        const rt = get('SELECT review_status FROM release_task WHERE req_code = ?', c);
+        const rt = await get('SELECT review_status FROM release_task WHERE req_code = ?', c);
         if (!rt?.review_status) continue;
         const rank = REVIEW_RANK[rt.review_status] ?? 2;
         if (rank < weakestRank) { weakestRank = rank; weakest = rt.review_status; }
@@ -631,11 +633,11 @@ export function runMock() {
       }
       return out;
     }
-    function makeApply(refCodes, rp, changeSys) {
-      const code = genReleaseApplyCode(rp.date.slice(0, 6));
-      const review = deriveReview(refCodes);
+    async function makeApply(refCodes, rp, changeSys) {
+      const code = await genReleaseApplyCode(rp.date.slice(0, 6));
+      const review = await deriveReview(refCodes);
       const sys = sysByCode[changeSys];
-      run(
+      await run(
         `INSERT INTO release_apply
            (change_code, change_content, impact_scope, change_system, impl_org, delivery_units,
             ref_codes, review_status, out_dept, deploy_dept, release_point_id, registrar, register_time)
@@ -647,16 +649,16 @@ export function runMock() {
         JSON.stringify(refCodes), review,
         '建信金科', sys.org, rp.id, pickUser('配置负责人'), ymd(shift(ymd(rp.date), -2)),
       );
-      const id = get('SELECT id FROM release_apply WHERE change_code = ?', code).id;
-      auditCreate('release_apply', id, code, '系统初始化');
+      const id = (await get('SELECT id FROM release_apply WHERE change_code = ?', code)).id;
+      await auditCreate('release_apply', id, code, '系统初始化');
     }
 
     // 22 个投产审批需求各一个投产申请；关联问题编号（循环复用 ISSUE_CODES）
-    approvalReqs.forEach((req, idx) => {
+    for (const [idx, req] of approvalReqs.entries()) {
       const refs = [req.code];
       refs.push(ISSUE_CODES[idx % ISSUE_CODES.length]);
-      makeApply(refs, req.rp, req.main[0]);
-    });
+      await makeApply(refs, req.rp, req.main[0]);
+    }
     // 另增 6 个仅含问题/或问题+advanced 需求的投产申请，丰富关联关系
     const advancedReqs = reqs.filter((r) => r.spec.profile === 'advanced');
     for (let i = 0; i < 6; i++) {
@@ -664,31 +666,40 @@ export function runMock() {
       const req = advancedReqs[i];
       const refs = req ? [req.code, issue] : [issue];
       const rp = req ? req.rp : rpIds[5];
-      makeApply(refs, rp, req ? req.main[0] : pick(sysCodes));
+      await makeApply(refs, rp, req ? req.main[0] : pick(sysCodes));
     }
 
     // ----------------------------------------------------------------------
     // 输出统计
     // ----------------------------------------------------------------------
+    const issueSet = new Set((await all('SELECT issue_code FROM issue')).map((r) => r.issue_code));
+    const applyRows = await all('SELECT ref_codes FROM release_apply');
+    const issueApplyCount = applyRows.filter((r) => {
+      try {
+        const refs = parseJsonArray(r.ref_codes);
+        return Array.isArray(refs) && refs.some((code) => issueSet.has(code));
+      } catch {
+        return false;
+      }
+    }).length;
+
     const stat = {
-      用户: get('SELECT COUNT(*) c FROM user').c,
+      用户: (await get('SELECT COUNT(*) c FROM user')).c,
       会签角色: signRoles.map((r) => r.name).join('、'),
-      投产点: get('SELECT COUNT(*) c FROM release_point').c,
-      需求: get('SELECT COUNT(*) c FROM requirement').c,
-      分析完成: get("SELECT COUNT(*) c FROM requirement WHERE status='分析完成'").c,
-      工单: get('SELECT COUNT(*) c FROM ticket').c,
-      开发任务: get('SELECT COUNT(*) c FROM dev_task').c,
-      测试任务: get('SELECT COUNT(*) c FROM test_task').c,
-      'SIT(应用组装)完成': get("SELECT COUNT(*) c FROM test_task WHERE test_type='SIT' AND status='测试完成'").c,
-      'NFT/SEC任务': get("SELECT COUNT(*) c FROM test_task WHERE test_type IN ('NFT','SEC')").c,
-      投产审批: get('SELECT COUNT(*) c FROM release_task').c,
-      会签记录: get('SELECT COUNT(*) c FROM release_signoff').c,
-      问题: get('SELECT COUNT(*) c FROM issue').c,
-      投产申请: get('SELECT COUNT(*) c FROM release_apply').c,
-      关联问题的投产申请: get(`SELECT COUNT(*) c FROM release_apply ra
-        WHERE EXISTS (SELECT 1 FROM json_each(ra.ref_codes) je
-          JOIN issue i ON i.issue_code = je.value)`).c,
-      评审状态分布: all("SELECT review_status, COUNT(*) c FROM release_task GROUP BY review_status")
+      投产点: (await get('SELECT COUNT(*) c FROM release_point')).c,
+      需求: (await get('SELECT COUNT(*) c FROM requirement')).c,
+      分析完成: (await get("SELECT COUNT(*) c FROM requirement WHERE status='分析完成'")).c,
+      工单: (await get('SELECT COUNT(*) c FROM ticket')).c,
+      开发任务: (await get('SELECT COUNT(*) c FROM dev_task')).c,
+      测试任务: (await get('SELECT COUNT(*) c FROM test_task')).c,
+      'SIT(应用组装)完成': (await get("SELECT COUNT(*) c FROM test_task WHERE test_type='SIT' AND status='测试完成'")).c,
+      'NFT/SEC任务': (await get("SELECT COUNT(*) c FROM test_task WHERE test_type IN ('NFT','SEC')")).c,
+      投产审批: (await get('SELECT COUNT(*) c FROM release_task')).c,
+      会签记录: (await get('SELECT COUNT(*) c FROM release_signoff')).c,
+      问题: (await get('SELECT COUNT(*) c FROM issue')).c,
+      投产申请: (await get('SELECT COUNT(*) c FROM release_apply')).c,
+      关联问题的投产申请: issueApplyCount,
+      评审状态分布: (await all("SELECT review_status, COUNT(*) c FROM release_task GROUP BY review_status"))
         .map((r) => `${r.review_status}:${r.c}`).join('、'),
     };
     console.log('[模拟数据] 生成完成：');
@@ -698,7 +709,7 @@ export function runMock() {
 
 // 直接运行：node src/db/mock.js
 if (import.meta.url === `file://${process.argv[1]}`) {
-  runMock();
-  db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+  await runMock();
+  db.exec?.('PRAGMA wal_checkpoint(TRUNCATE);');
   console.log('[模拟数据] 已写入数据库并完成检查点。');
 }

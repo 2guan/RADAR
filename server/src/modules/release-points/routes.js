@@ -37,11 +37,11 @@ function normalizeReleaseDate(v) {
 }
 
 /** 计算当前投产窗口 */
-function resolveCurrent() {
-  const def = get('SELECT * FROM release_point WHERE is_default = 1 AND is_archived = 0 LIMIT 1');
+async function resolveCurrent() {
+  const def = await get('SELECT * FROM release_point WHERE is_default = 1 AND is_archived = 0 LIMIT 1');
   if (def) return def;
   const today = todayStr();
-  const list = all('SELECT * FROM release_point WHERE is_archived = 0');
+  const list = await all('SELECT * FROM release_point WHERE is_archived = 0');
   const dated = list.filter((p) => isReleaseDate(p.release_date));
   const future = dated.filter((p) => p.release_date >= today)
     .sort((a, b) => a.release_date.localeCompare(b.release_date));
@@ -83,7 +83,7 @@ export default async function releasePointRoutes(fastify) {
     }
     const baseWhere = wh.join(' AND ');
 
-    return ok(listQuery({
+    return ok(await listQuery({
       table: 'release_point', columns: COLUMNS,
       searchColumns: ['release_date', 'version_type', 'remark'],
       query: newBody,
@@ -95,7 +95,7 @@ export default async function releasePointRoutes(fastify) {
   // 全部（供顶栏选择器，任意登录用户）
   fastify.get('/release-points/all', { preHandler: fastify.authenticate }, async () => {
     const today = todayStr();
-    const list = all('SELECT * FROM release_point WHERE is_archived = 0');
+    const list = await all('SELECT * FROM release_point WHERE is_archived = 0');
     const dated = list.filter((p) => isReleaseDate(p.release_date));
     const pending = list.filter((p) => !isReleaseDate(p.release_date)).sort((a, b) => (b.id || 0) - (a.id || 0));
     const future = dated.filter((p) => p.release_date >= today).sort((a, b) => a.release_date.localeCompare(b.release_date));
@@ -105,25 +105,25 @@ export default async function releasePointRoutes(fastify) {
 
   // 当前投产窗口
   fastify.get('/release-points/current', { preHandler: fastify.authenticate }, async () => {
-    return ok(resolveCurrent() || null);
+    return ok(await resolveCurrent() || null);
   });
 
   // 新增
   fastify.post('/release-points', { preHandler: fastify.requirePerm('settings', 'create') }, async (request) => {
     const { release_date, version_type, remark } = request.body || {};
     const dateValue = normalizeReleaseDate(release_date);
-    const res = run(
+    const res = await run(
       'INSERT INTO release_point (release_date, version_type, remark) VALUES (?,?,?)',
       dateValue, version_type || null, remark || null,
     );
-    auditCreate('release_point', res.lastInsertRowid, dateValue, request.currentUser?.name);
+    await auditCreate('release_point', res.lastInsertRowid, dateValue, request.currentUser?.name);
     return ok({ id: res.lastInsertRowid });
   });
 
   // 修改
   fastify.put('/release-points/:id', { preHandler: fastify.requirePerm('settings', 'edit') }, async (request) => {
     const id = request.params.id;
-    const old = get('SELECT * FROM release_point WHERE id = ?', id);
+    const old = await get('SELECT * FROM release_point WHERE id = ?', id);
     if (!old) throw notFound();
     const { release_date, version_type, remark } = request.body || {};
     const data = {
@@ -131,41 +131,41 @@ export default async function releasePointRoutes(fastify) {
       version_type: version_type ?? old.version_type,
       remark: remark ?? old.remark,
     };
-    run(
+    await run(
       `UPDATE release_point SET release_date=?, version_type=?, remark=?, updated_at=datetime('now','localtime') WHERE id=?`,
       data.release_date, data.version_type, data.remark, id,
     );
-    auditUpdate('release_point', id, old.release_date, request.currentUser?.name, old, data, LABELS);
+    await auditUpdate('release_point', id, old.release_date, request.currentUser?.name, old, data, LABELS);
     return ok({ id });
   });
 
   // 删除
   fastify.delete('/release-points/:id', { preHandler: fastify.requirePerm('settings', 'delete') }, async (request) => {
     const id = request.params.id;
-    const row = get('SELECT * FROM release_point WHERE id = ?', id);
+    const row = await get('SELECT * FROM release_point WHERE id = ?', id);
     if (!row) throw notFound();
-    const used = get('SELECT COUNT(*) AS c FROM requirement WHERE release_point_id = ?', id);
+    const used = await get('SELECT COUNT(*) AS c FROM requirement WHERE release_point_id = ?', id);
     if (used?.c > 0) throw badRequest('该投产点已被需求引用，无法删除');
-    run('DELETE FROM release_point WHERE id = ?', id);
-    auditDelete('release_point', id, row.release_date, request.currentUser?.name);
+    await run('DELETE FROM release_point WHERE id = ?', id);
+    await auditDelete('release_point', id, row.release_date, request.currentUser?.name);
     return ok(null, '删除成功');
   });
 
   // 设为默认（先清除其它默认，保证唯一）
   fastify.post('/release-points/:id/set-default', { preHandler: fastify.requirePerm('settings', 'edit') }, async (request) => {
     const id = request.params.id;
-    const row = get('SELECT * FROM release_point WHERE id = ?', id);
+    const row = await get('SELECT * FROM release_point WHERE id = ?', id);
     if (!row) throw notFound();
-    tx(() => {
-      run('UPDATE release_point SET is_default = 0 WHERE is_default = 1');
-      run('UPDATE release_point SET is_default = 1 WHERE id = ?', id);
+    await tx(async () => {
+      await run('UPDATE release_point SET is_default = 0 WHERE is_default = 1');
+      await run('UPDATE release_point SET is_default = 1 WHERE id = ?', id);
     });
     return ok(null, '已设为默认投产点');
   });
 
   // 取消默认
   fastify.post('/release-points/:id/cancel-default', { preHandler: fastify.requirePerm('settings', 'edit') }, async (request) => {
-    run('UPDATE release_point SET is_default = 0 WHERE id = ?', request.params.id);
+    await run('UPDATE release_point SET is_default = 0 WHERE id = ?', request.params.id);
     return ok(null, '已取消默认');
   });
 
@@ -176,20 +176,20 @@ export default async function releasePointRoutes(fastify) {
       { key: 'release_date', title: '投产日期' }, { key: 'version_type', title: '版本类型' },
       { key: 'remark', title: '备注' }, { key: 'is_default', title: '默认' },
     ],
-    list: (q) => listQuery({ table: 'release_point', columns: COLUMNS, searchColumns: ['release_date', 'version_type', 'remark'], query: q })
+    list: async (q) => (await listQuery({ table: 'release_point', columns: COLUMNS, searchColumns: ['release_date', 'version_type', 'remark'], query: q }))
       .list.map((r) => ({ ...r, is_default: r.is_default ? '是' : '' })),
-    upsert: (r, mode) => {
+    upsert: async (r, mode) => {
       if (!r.release_date) return 'skipped';
       const releaseDate = normalizeReleaseDate(r.release_date);
-      const exists = get('SELECT id FROM release_point WHERE release_date = ?', releaseDate);
+      const exists = await get('SELECT id FROM release_point WHERE release_date = ?', releaseDate);
       if (exists) {
         if (mode === 'skip') return 'skipped';
         if (mode === 'rollback') throw badRequest(`投产日期重复：${releaseDate}，已回滚`);
-        run('UPDATE release_point SET version_type=?, remark=?, updated_at=datetime(\'now\',\'localtime\') WHERE id=?',
+        await run('UPDATE release_point SET version_type=?, remark=?, updated_at=datetime(\'now\',\'localtime\') WHERE id=?',
           r.version_type || null, r.remark || null, exists.id);
         return 'updated';
       }
-      run('INSERT INTO release_point (release_date, version_type, remark) VALUES (?,?,?)',
+      await run('INSERT INTO release_point (release_date, version_type, remark) VALUES (?,?,?)',
         releaseDate, r.version_type || null, r.remark || null);
       return 'inserted';
     },

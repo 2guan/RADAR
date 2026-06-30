@@ -46,7 +46,7 @@ const WRITABLE = ['task_name', 'content', 'status', 'owner', 'impl_system', 'imp
 const LABELS = {
   task_name: '开发任务名称', content: '开发内容概述', status: '开发状态', owner: '开发负责人',
   impl_system: '开发实施系统', impl_org: '开发实施方', plan_start: '计划开始时间', plan_end: '计划结束时间',
-  actual_start: '实际开始时间', actual_end: '实际结束时间',
+  actual_start: '实际开始时间', actual_end: '实际结束时间', deviation_rate: '排期偏差率',
 };
 // 本阶段附件字段
 const ATTACH_FIELDS = ['概要设计', '详细设计', '代码走查', '单元测试报告', '影响性分析文档'];
@@ -111,7 +111,7 @@ export default async function devTaskRoutes(fastify) {
       wh.push('req_code = ?');
       params.push(body.reqCode);
     } else if (!hasReleasePointFilter) {
-      const codes = workItemCodesInReleasePoints(windowIds(body));
+      const codes = await workItemCodesInReleasePoints(windowIds(body));
       if (codes) {
         if (codes.length) {
           const sub = inClause('req_code', codes);
@@ -126,20 +126,20 @@ export default async function devTaskRoutes(fastify) {
     const newBody = { ...body, filters: normalFilters };
     const baseWhere = wh.join(' AND ');
 
-    const result = listQuery({ table: 'dev_task', columns: COLUMNS, searchColumns: SEARCH, query: newBody, baseWhere, baseParams: params });
+    const result = await listQuery({ table: 'dev_task', columns: COLUMNS, searchColumns: SEARCH, query: newBody, baseWhere, baseParams: params });
 
     // 仅针对当前页任务涉及的需求/工单映射计划投产点，避免随翻页整表扫描
     const pageCodes = [...new Set(result.list.map((r) => r.req_code).filter(Boolean))];
-    const reqMap = releaseDateMapForCodes(pageCodes);
+    const reqMap = await releaseDateMapForCodes(pageCodes);
 
-    const systems = all('SELECT sys_code, sys_name FROM system');
+    const systems = await all('SELECT sys_code, sys_name FROM system');
     const sysMap = {};
     for (const s of systems) {
       sysMap[s.sys_code] = s.sys_name;
     }
     const itemMap = {};
     for (const code of pageCodes) {
-      const item = getWorkItem(code);
+      const item = await getWorkItem(code);
       if (item) itemMap[code] = item;
     }
 
@@ -156,44 +156,44 @@ export default async function devTaskRoutes(fastify) {
 
   // 详情
   // 组装开发任务详情：附带关联需求/工单标题（供详情联动展示）
-  const buildDevDetail = (row) => {
-    const item = getWorkItem(row.req_code);
+  const buildDevDetail = async (row) => {
+    const item = await getWorkItem(row.req_code);
     return {
       ...row,
       req_title: item?.title || null,
       entity_type: item?.entity_type || null,
       entity_label: item?.entity_label || null,
-      attachments: listByEntity('dev', row.id),
+      attachments: await listByEntity('dev', row.id),
     };
   };
 
   fastify.get('/dev-tasks/:id', { preHandler: fastify.requirePerm('dev', 'view') }, async (request) => {
-    const row = get('SELECT * FROM dev_task WHERE id = ?', request.params.id);
+    const row = await get('SELECT * FROM dev_task WHERE id = ?', request.params.id);
     if (!row) throw notFound();
-    return ok(buildDevDetail(row));
+    return ok(await buildDevDetail(row));
   });
 
   // 按开发任务编号查询（供详情单页通过 URL 编号直达）
   fastify.get('/dev-tasks/by-code/:code', { preHandler: fastify.requirePerm('dev', 'view') }, async (request) => {
-    const row = get('SELECT * FROM dev_task WHERE task_code = ?', request.params.code);
+    const row = await get('SELECT * FROM dev_task WHERE task_code = ?', request.params.code);
     if (!row) throw notFound();
-    return ok(buildDevDetail(row));
+    return ok(await buildDevDetail(row));
   });
 
   // 开发承接预览
   fastify.post('/dev-tasks/intake-preview', { preHandler: fastify.requirePerm('dev', 'dev.intake') }, async (request) => {
     const { reqCode } = request.body || {};
     if (!reqCode) throw badRequest('请选择需求/工单');
-    const req = getWorkItem(reqCode);
+    const req = await getWorkItem(reqCode);
     if (!req) throw notFound('需求/工单不存在');
 
     const main = req.main_systems || [];
     const collab = req.collab_dev_systems || [];
 
-    const existingTasks = all('SELECT impl_system, task_code, task_name, status FROM dev_task WHERE req_code = ?', reqCode);
+    const existingTasks = await all('SELECT impl_system, task_code, task_name, status FROM dev_task WHERE req_code = ?', reqCode);
     const existingMap = new Map(existingTasks.map(t => [t.impl_system, t]));
 
-    const systems = all('SELECT sys_code, sys_name FROM system');
+    const systems = await all('SELECT sys_code, sys_name FROM system');
     const sysMap = new Map(systems.map(s => [s.sys_code, s.sys_name]));
 
     const allSystems = [];
@@ -211,11 +211,11 @@ export default async function devTaskRoutes(fastify) {
       }
     }
 
-    const tplRow = get("SELECT value FROM app_config WHERE key = 'code.dev'");
+    const tplRow = await get("SELECT value FROM app_config WHERE key = 'code.dev'");
     const tpl = tplRow?.value || 'RW_{需求编号}_{序号}';
     const prefix = tpl.replace('{需求编号}', reqCode).replace('{序号}', '');
 
-    const existingCodes = all(`SELECT task_code FROM dev_task WHERE task_code LIKE ?`, `${prefix}%`);
+    const existingCodes = await all(`SELECT task_code FROM dev_task WHERE task_code LIKE ?`, `${prefix}%`);
     let max = 0;
     for (const r of existingCodes) {
       const tail = String(r.task_code).slice(prefix.length);
@@ -263,7 +263,7 @@ export default async function devTaskRoutes(fastify) {
   fastify.post('/dev-tasks/intake', { preHandler: fastify.requirePerm('dev', 'dev.intake') }, async (request) => {
     const { reqCode, systems } = request.body || {};
     if (!reqCode) throw badRequest('请选择需求/工单');
-    const req = getWorkItem(reqCode);
+    const req = await getWorkItem(reqCode);
     if (!req) throw notFound('需求/工单不存在');
 
     // 目标系统：默认主责系统 ∪ 协同改造系统；可由 systems 指定子集
@@ -273,24 +273,24 @@ export default async function devTaskRoutes(fastify) {
     if (!targets.length) throw badRequest('该需求/工单未配置主责/协同改造系统，无法承接开发');
 
     // 已存在开发任务的系统跳过
-    const existing = new Set(all('SELECT impl_system FROM dev_task WHERE req_code = ?', reqCode).map((r) => r.impl_system));
+    const existing = new Set((await all('SELECT impl_system FROM dev_task WHERE req_code = ?', reqCode)).map((r) => r.impl_system));
     targets = targets.filter((s) => !existing.has(s));
     if (!targets.length) throw badRequest('所选系统均已建立开发任务');
 
-    const created = tx(() => {
+    const created = await tx(async () => {
       const out = [];
-      const initialStatus = defaultProcessStatus('开发', 'initial', '开发承接');
+      const initialStatus = await defaultProcessStatus('开发', 'initial', '开发承接');
       for (const sysCode of targets) {
-        const sys = get('SELECT * FROM system WHERE sys_code = ?', sysCode);
-        const taskCode = genDevCode(reqCode);
+        const sys = await get('SELECT * FROM system WHERE sys_code = ?', sysCode);
+        const taskCode = await genDevCode(reqCode);
         const taskName = `RW-${req.title}-${sys?.sys_name || sysCode}`;
-        const res = run(
+        const res = await run(
           `INSERT INTO dev_task (req_code, task_code, task_name, status, impl_system, impl_org, registrar, register_time)
            VALUES (?,?,?,?,?,?,?,?)`,
           reqCode, taskCode, taskName, initialStatus, sysCode, sys?.org || null,
           request.currentUser?.name, new Date().toISOString().slice(0, 10),
         );
-        auditCreate('dev', res.lastInsertRowid, taskCode, request.currentUser?.name);
+        await auditCreate('dev', res.lastInsertRowid, taskCode, request.currentUser?.name);
         out.push({ id: res.lastInsertRowid, task_code: taskCode });
       }
       return out;
@@ -301,34 +301,34 @@ export default async function devTaskRoutes(fastify) {
   // 修改
   fastify.put('/dev-tasks/:id', { preHandler: fastify.requirePerm('dev', 'edit') }, async (request) => {
     const id = request.params.id;
-    const old = get('SELECT * FROM dev_task WHERE id = ?', id);
+    const old = await get('SELECT * FROM dev_task WHERE id = ?', id);
     if (!old) throw notFound();
     const body = request.body || {};
     const data = {};
     for (const k of WRITABLE) if (body[k] !== undefined) data[k] = body[k];
 
     const merged = { ...old, ...data };
-    validateRequiredFields('dev', statusTypeForProcessStatus(merged.status), merged);
+    await validateRequiredFields('dev', await statusTypeForProcessStatus(merged.status), merged);
     validateTerminal(id, merged.status, merged);
     // 重算偏差率
     data.deviation_rate = calcDeviation(merged.plan_start, merged.plan_end, merged.actual_end);
 
     const keys = Object.keys(data);
-    run(
+    await run(
       `UPDATE dev_task SET ${keys.map((k) => `${k}=?`).join(',')}, updated_at=datetime('now','localtime') WHERE id=?`,
       ...keys.map((k) => data[k]), id,
     );
-    auditUpdate('dev', id, old.task_code, request.currentUser?.name, old, data, LABELS);
+    await auditUpdate('dev', id, old.task_code, request.currentUser?.name, old, data, LABELS);
     return ok({ id });
   });
 
   // 删除
   fastify.delete('/dev-tasks/:id', { preHandler: fastify.requirePerm('dev', 'delete') }, async (request) => {
     const id = request.params.id;
-    const row = get('SELECT * FROM dev_task WHERE id = ?', id);
+    const row = await get('SELECT * FROM dev_task WHERE id = ?', id);
     if (!row) throw notFound();
-    run('DELETE FROM dev_task WHERE id = ?', id);
-    auditDelete('dev', id, row.task_code, request.currentUser?.name);
+    await run('DELETE FROM dev_task WHERE id = ?', id);
+    await auditDelete('dev', id, row.task_code, request.currentUser?.name);
     return ok(null, '删除成功');
   });
 
@@ -342,20 +342,20 @@ export default async function devTaskRoutes(fastify) {
     let finalParams = [...baseParams];
     if (!body.req_code) {
       const codes = [
-        ...all("SELECT req_code AS code FROM requirement WHERE release_point_id IN (SELECT id FROM release_point WHERE is_default = 1 OR release_date >= date('now'))").map(r => r.code),
-        ...all("SELECT ticket_code AS code FROM ticket WHERE release_point_id IN (SELECT id FROM release_point WHERE is_default = 1 OR release_date >= date('now'))").map(r => r.code),
+        ...(await all("SELECT req_code AS code FROM requirement WHERE release_point_id IN (SELECT id FROM release_point WHERE is_default = 1 OR release_date >= date('now'))")).map(r => r.code),
+        ...(await all("SELECT ticket_code AS code FROM ticket WHERE release_point_id IN (SELECT id FROM release_point WHERE is_default = 1 OR release_date >= date('now'))")).map(r => r.code),
       ];
       const win = inClause('req_code', [...new Set(codes)]);
       finalWhere = win.where || '1=0';
       finalParams = win.params;
     }
 
-    const result = listQuery({
+    const result = await listQuery({
       table: 'dev_task', columns: COLUMNS, searchColumns: SEARCH,
       query: { ...body, pageSize: 0 }, baseWhere: finalWhere, baseParams: finalParams,
     });
 
-    const systems = all('SELECT sys_code, sys_name FROM system');
+    const systems = await all('SELECT sys_code, sys_name FROM system');
     const sysMap = {};
     for (const s of systems) sysMap[s.sys_code] = s.sys_name;
 
@@ -382,8 +382,8 @@ export default async function devTaskRoutes(fastify) {
       { key: 'impact_analysis', title: '影响性分析文档' },
     ];
 
-    const mappedList = result.list.map(row => {
-      const attaches = all("SELECT * FROM attachment WHERE entity_type = 'dev' AND entity_id = ?", row.id);
+    const mappedList = await Promise.all(result.list.map(async row => {
+      const attaches = await all("SELECT * FROM attachment WHERE entity_type = 'dev' AND entity_id = ?", row.id);
       return {
         ...row,
         impl_system: sysMap[row.impl_system] || row.impl_system,
@@ -394,7 +394,7 @@ export default async function devTaskRoutes(fastify) {
         unit_test: formatAttachments(attaches, '单元测试报告'),
         impact_analysis: formatAttachments(attaches, '影响性分析文档'),
       };
-    });
+    }));
 
     const buf = await exportXlsx(cols, mappedList, '开发任务清单');
     reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -422,11 +422,11 @@ export default async function devTaskRoutes(fastify) {
     const stat = { inserted: 0, updated: 0, skipped: 0, failed: 0 };
     const details = [];
 
-    const systems = all('SELECT sys_code, sys_name FROM system');
+    const systems = await all('SELECT sys_code, sys_name FROM system');
     const sysMap = {};
     for (const s of systems) sysMap[s.sys_code] = s.sys_name;
 
-    const apply = () => {
+    const apply = async () => {
       for (const r of rows) {
         const rowNum = r.__rowNum__;
         try {
@@ -434,16 +434,16 @@ export default async function devTaskRoutes(fastify) {
           if (!r.task_name) throw new Error('开发任务名称不能为空');
 
           // 校验关联需求/工单编号是否存在
-          const req = getWorkItem(r.req_code);
+          const req = await getWorkItem(r.req_code);
           if (!req) throw new Error(`关联需求/工单编号 [${r.req_code}] 不存在`);
 
           // 兼容性字典/系统转换
-          const status = resolveDictAttr('process_status', r.status) || defaultProcessStatus('开发', 'initial', '开发承接');
-          const implOrg = resolveDictAttr('org', r.impl_org);
-          const implSystem = resolveSystemCode(r.impl_system);
+          const status = await resolveDictAttr('process_status', r.status) || await defaultProcessStatus('开发', 'initial', '开发承接');
+          const implOrg = await resolveDictAttr('org', r.impl_org);
+          const implSystem = await resolveSystemCode(r.impl_system);
 
           let code = String(r.task_code || '').trim();
-          const exists = code ? get('SELECT * FROM dev_task WHERE task_code = ?', code) : null;
+          const exists = code ? await get('SELECT * FROM dev_task WHERE task_code = ?', code) : null;
 
           if (exists) {
             if (mode === 'skip') {
@@ -482,7 +482,7 @@ export default async function devTaskRoutes(fastify) {
 
             if (changes.length > 0) {
               const devRate = calcDeviation(r.plan_start || exists.plan_start, r.plan_end || exists.plan_end, r.actual_end || exists.actual_end);
-              run(
+              await run(
                 `UPDATE dev_task SET 
                    task_name=?, content=?, status=?, owner=?, impl_system=?, impl_org=?, 
                    plan_start=?, plan_end=?, actual_start=?, actual_end=?, deviation_rate=?, 
@@ -491,7 +491,7 @@ export default async function devTaskRoutes(fastify) {
                 r.task_name, r.content || null, status, r.owner || null, implSystem || null, implOrg || null,
                 r.plan_start || null, r.plan_end || null, r.actual_start || null, r.actual_end || null, devRate, exists.id
               );
-              auditUpdate('dev', exists.id, code, request.currentUser?.name, exists, {
+              await auditUpdate('dev', exists.id, code, request.currentUser?.name, exists, {
                 task_name: r.task_name, content: r.content || null, status, owner: r.owner || null,
                 impl_system: implSystem, impl_org: implOrg, plan_start: r.plan_start || null, plan_end: r.plan_end || null,
                 actual_start: r.actual_start || null, actual_end: r.actual_end || null, deviation_rate: devRate
@@ -510,9 +510,9 @@ export default async function devTaskRoutes(fastify) {
 
           } else {
             // insert 新建
-            if (!code) code = genDevCode(r.req_code);
+            if (!code) code = await genDevCode(r.req_code);
             const devRate = calcDeviation(r.plan_start, r.plan_end, r.actual_end);
-            const res = run(
+            const res = await run(
               `INSERT INTO dev_task 
                  (req_code, task_code, task_name, content, status, owner, impl_system, impl_org, 
                   plan_start, plan_end, actual_start, actual_end, deviation_rate, registrar, register_time)
@@ -521,7 +521,7 @@ export default async function devTaskRoutes(fastify) {
               r.plan_start || null, r.plan_end || null, r.actual_start || null, r.actual_end || null, devRate,
               request.currentUser?.name, new Date().toISOString().slice(0, 10)
             );
-            auditCreate('dev', res.lastInsertRowid, code, request.currentUser?.name);
+            await auditCreate('dev', res.lastInsertRowid, code, request.currentUser?.name);
             stat.inserted++;
             details.push({
               key: code,
@@ -549,7 +549,7 @@ export default async function devTaskRoutes(fastify) {
 
     if (mode === 'rollback') {
       try {
-        tx(apply);
+        await tx(apply);
       } catch (err) {
         for (const item of details) {
           if (item.status === 'success') {
@@ -560,7 +560,7 @@ export default async function devTaskRoutes(fastify) {
         stat.updated = 0;
       }
     } else {
-      apply();
+      await apply();
     }
 
     return ok({ stat, details }, '导入完成');

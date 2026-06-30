@@ -8,7 +8,7 @@
  *       「各系统投产登记」改为「关联制品情况」：读取引用了该需求/工单/问题的投产申请制品信息。
  */
 
-import { get, all, run, tx } from '../../db/index.js';
+import { get, all, run, tx, dialect } from '../../db/index.js';
 import { auditUpdate } from '../../lib/audit.js';
 import { windowIds } from '../../lib/window.js';
 import { ok, notFound, badRequest, forbidden } from '../../lib/http.js';
@@ -17,15 +17,16 @@ import { signatureDataUrl } from '../../lib/signature.js';
 import { buildReleaseWordDoc } from '../../lib/release-word.js';
 import { getWorkItem } from '../../lib/work-items.js';
 import { defaultDictAttr } from '../../lib/status.js';
+import { parseJsonArray } from '../../lib/json.js';
 
 /** 读取被打标为"会签角色"的角色列表 */
-function signoffRoles() {
-  return all('SELECT id, name FROM role WHERE is_signoff_role = 1 ORDER BY id');
+async function signoffRoles() {
+  return await all('SELECT id, name FROM role WHERE is_signoff_role = 1 ORDER BY id');
 }
 
 /** 汇总某投产任务的会签进度 */
-function signoffSummary(releaseTaskId) {
-  const rows = all('SELECT result FROM release_signoff WHERE release_task_id = ?', releaseTaskId);
+async function signoffSummary(releaseTaskId) {
+  const rows = await all('SELECT result FROM release_signoff WHERE release_task_id = ?', releaseTaskId);
   const total = rows.length;
   const signed = rows.filter((r) => r.result === '已签署').length;
   const rejected = rows.filter((r) => r.result === '已驳回').length;
@@ -39,61 +40,60 @@ const REVIEW_MANUAL = ['评审撤销', '应急审批'];
  * 重算评审状态：任一会签驳回 -> 评审拒绝；全部已签署 -> 评审同意；否则 待评审。
  * 手动状态（评审撤销/应急审批）不被覆盖。返回最终评审状态。
  */
-function recomputeReviewStatus(releaseTaskId) {
-  const rt = get('SELECT review_status FROM release_task WHERE id = ?', releaseTaskId);
+async function recomputeReviewStatus(releaseTaskId) {
+  const rt = await get('SELECT review_status FROM release_task WHERE id = ?', releaseTaskId);
   if (!rt) return null;
   if (REVIEW_MANUAL.includes(rt.review_status)) return rt.review_status;
-  const { total, signed, rejected } = signoffSummary(releaseTaskId);
+  const { total, signed, rejected } = await signoffSummary(releaseTaskId);
   let next = '待评审';
   if (rejected > 0) next = '评审拒绝';
   else if (total > 0 && signed === total) next = '评审同意';
   if (next !== rt.review_status) {
-    run(`UPDATE release_task SET review_status=?, updated_at=datetime('now','localtime') WHERE id=?`, next, releaseTaskId);
+    await run(`UPDATE release_task SET review_status=?, updated_at=datetime('now','localtime') WHERE id=?`, next, releaseTaskId);
   }
   return next;
 }
 
 /** 判定实体类型：需求 / 工单 / 问题 / 未知 */
-function classifyEntity(code) {
-  const item = getWorkItem(code);
+async function classifyEntity(code) {
+  const item = await getWorkItem(code);
   if (item) return item.entity_type;
-  if (get('SELECT 1 FROM issue WHERE issue_code = ?', code)) return 'issue';
+  if (await get('SELECT 1 FROM issue WHERE issue_code = ?', code)) return 'issue';
   return 'unknown';
 }
 
 /**
  * 惰性获取/创建投产任务：首次打开详情时自动创建投产任务与会签项（无 UAT 终态限制）。
  */
-function ensureReleaseTask(code, entityType, operatorName) {
-  let rt = get('SELECT * FROM release_task WHERE req_code = ?', code);
+async function ensureReleaseTask(code, entityType, operatorName) {
+  let rt = await get('SELECT * FROM release_task WHERE req_code = ?', code);
   if (rt) return rt;
-  return tx(() => {
-    const releaseStatus = defaultDictAttr('release_status', '待投产');
-    const reviewStatus = defaultDictAttr('review_status', '待评审');
-    const res = run(
+  return await tx(async () => {
+    const releaseStatus = await defaultDictAttr('release_status', '待投产');
+    const reviewStatus = await defaultDictAttr('review_status', '待评审');
+    const res = await run(
       `INSERT INTO release_task (req_code, entity_type, status, review_status, registrar, register_time) VALUES (?,?,?,?,?,?)`,
       code, entityType || 'unknown', releaseStatus, reviewStatus, operatorName || null, new Date().toISOString().slice(0, 10),
     );
     const rtId = res.lastInsertRowid;
-    for (const role of signoffRoles()) {
-      run('INSERT INTO release_signoff (release_task_id, role_id, role_name, result) VALUES (?,?,?,?)',
+    for (const role of await signoffRoles()) {
+      await run('INSERT INTO release_signoff (release_task_id, role_id, role_name, result) VALUES (?,?,?,?)',
         rtId, role.id, role.name, '未签署');
     }
-    return get('SELECT * FROM release_task WHERE id = ?', rtId);
+    return await get('SELECT * FROM release_task WHERE id = ?', rtId);
   });
 }
 
 /** 读取引用了该需求/工单/问题编号的投产申请制品信息（关联制品情况） */
-function entityArtifacts(code, sysMap) {
-  const rows = all(
+async function entityArtifacts(code, sysMap) {
+  const rows = await all(
     `SELECT ra.* FROM release_apply ra
-       WHERE EXISTS (SELECT 1 FROM json_each(ra.ref_codes) WHERE value = ?)
+       WHERE ${dialect.jsonArrayContains('ra.ref_codes')}
      ORDER BY ra.id DESC`,
     code,
   );
   return rows.map((r) => {
-    let units = [];
-    try { units = r.delivery_units ? JSON.parse(r.delivery_units) : []; } catch { units = []; }
+    const units = parseJsonArray(r.delivery_units);
     return {
       id: r.id,
       change_code: r.change_code,
@@ -110,21 +110,20 @@ function entityArtifacts(code, sysMap) {
  * 计算投产审批清单：从投产申请的 ref_codes 展开为逐条需求/工单/问题，附投产任务/评审/会签进度。
  * @returns {Array} 完整行集合（未分页）
  */
-function computeEntities(windowIdList) {
-  const defaultReleaseStatus = defaultDictAttr('release_status', '待投产');
-  const defaultReviewStatus = defaultDictAttr('review_status', '待评审');
+async function computeEntities(windowIdList) {
+  const defaultReleaseStatus = await defaultDictAttr('release_status', '待投产');
+  const defaultReviewStatus = await defaultDictAttr('review_status', '待评审');
   let applies;
   if (windowIdList.length) {
     const ph = windowIdList.map(() => '?').join(',');
-    applies = all(`SELECT id, ref_codes, release_point_id, change_code, impl_org FROM release_apply WHERE release_point_id IN (${ph})`, ...windowIdList);
+    applies = await all(`SELECT id, ref_codes, release_point_id, change_code, impl_org FROM release_apply WHERE release_point_id IN (${ph})`, ...windowIdList);
   } else {
-    applies = all('SELECT id, ref_codes, release_point_id, change_code, impl_org FROM release_apply');
+    applies = await all('SELECT id, ref_codes, release_point_id, change_code, impl_org FROM release_apply');
   }
 
   const codeMap = new Map(); // code -> { applyPointId, implOrg, changeCode, changeCodes }
   for (const ap of applies) {
-    let refs = [];
-    try { refs = ap.ref_codes ? JSON.parse(ap.ref_codes) : []; } catch { refs = []; }
+    const refs = parseJsonArray(ap.ref_codes);
     for (const code of refs) {
       if (!code) continue;
       const cur = codeMap.get(code);
@@ -147,25 +146,25 @@ function computeEntities(windowIdList) {
     }
   }
 
-  const rps = all('SELECT id, release_date FROM release_point');
+  const rps = await all('SELECT id, release_date FROM release_point');
   const rpMap = {};
   for (const rp of rps) rpMap[rp.id] = rp.release_date;
 
   // 会签角色数：未发起的实体会签进度按 0/角色数 展示（与首次打开详情后惰性创建的会签项数一致）
-  const signoffRoleCount = get('SELECT COUNT(*) AS c FROM role WHERE is_signoff_role = 1')?.c || 0;
+  const signoffRoleCount = (await get('SELECT COUNT(*) AS c FROM role WHERE is_signoff_role = 1'))?.c || 0;
 
   const list = [];
   for (const [code, info] of codeMap) {
-    const item = getWorkItem(code);
-    const issue = item ? null : get('SELECT issue_code, summary, status FROM issue WHERE issue_code = ?', code);
+    const item = await getWorkItem(code);
+    const issue = item ? null : await get('SELECT issue_code, summary, status FROM issue WHERE issue_code = ?', code);
     const type = item ? item.entity_type : (issue ? 'issue' : 'unknown');
     const title = item ? item.title : (issue ? issue.summary : '');
     const pointId = item ? item.release_point_id : info.applyPointId;
     const releaseDate = rpMap[pointId] || null;
 
-    const rt = get('SELECT * FROM release_task WHERE req_code = ?', code);
+    const rt = await get('SELECT * FROM release_task WHERE req_code = ?', code);
     // 未发起时按默认基线展示：投产/评审状态取字典默认值，会签进度=签0/角色数
-    const summary = rt ? signoffSummary(rt.id) : { total: signoffRoleCount, signed: 0, rejected: 0 };
+    const summary = rt ? await signoffSummary(rt.id) : { total: signoffRoleCount, signed: 0, rejected: 0 };
 
     list.push({
       entity_type: type,
@@ -227,7 +226,7 @@ export default async function releaseRoutes(fastify) {
   // 列表：投产申请所选需求/工单/问题逐条展开
   fastify.post('/release/list', { preHandler: fastify.requirePerm('release', 'view') }, async (request) => {
     const body = request.body || {};
-    const all0 = computeEntities(windowIds(body));
+    const all0 = await computeEntities(windowIds(body));
     const filtered = applyFilters(all0, body.filters);
 
     const page = Number(body.page) || 1;
@@ -240,17 +239,17 @@ export default async function releaseRoutes(fastify) {
   // 详情：首次打开惰性创建投产任务；返回实体信息（需求/工单或问题）+ 会签 + 关联制品
   fastify.get('/release/:code', { preHandler: fastify.requirePerm('release', 'view') }, async (request) => {
     const code = request.params.code;
-    const entityType = classifyEntity(code);
-    const rt = ensureReleaseTask(code, entityType, request.currentUser?.name);
-    const signoffs = all('SELECT * FROM release_signoff WHERE release_task_id = ? ORDER BY id', rt.id)
+    const entityType = await classifyEntity(code);
+    const rt = await ensureReleaseTask(code, entityType, request.currentUser?.name);
+    const signoffs = (await all('SELECT * FROM release_signoff WHERE release_task_id = ? ORDER BY id', rt.id))
       .map((s) => ({ ...s, signature_image: signatureDataUrl(s.signature_path) }));
 
-    const systems = all('SELECT sys_code, sys_name FROM system');
+    const systems = await all('SELECT sys_code, sys_name FROM system');
     const sysMap = {};
     for (const s of systems) sysMap[s.sys_code] = s.sys_name;
-    const artifacts = entityArtifacts(code, sysMap);
+    const artifacts = await entityArtifacts(code, sysMap);
 
-    const rps = all('SELECT id, release_date FROM release_point');
+    const rps = await all('SELECT id, release_date FROM release_point');
     const rpMap = {};
     for (const rp of rps) rpMap[rp.id] = rp.release_date;
 
@@ -258,7 +257,7 @@ export default async function releaseRoutes(fastify) {
     let taskStatuses = null;
 
     if (entityType === 'requirement' || entityType === 'ticket') {
-      const req = getWorkItem(code);
+      const req = await getWorkItem(code);
       entity = {
         type: entityType, code,
         title: req?.title || code,
@@ -269,20 +268,20 @@ export default async function releaseRoutes(fastify) {
         release_date: rpMap[req?.release_point_id] || null,
       };
       // 阶段任务：返回任务标识(id/编号/系统/状态)，供详情页点击状态标签直达对应任务弹窗
-      const tt = (type) => all('SELECT id, task_code, impl_system, status FROM test_task WHERE req_code = ? AND test_type = ? ORDER BY id', code, type);
+      const tt = async (type) => all('SELECT id, task_code, impl_system, status FROM test_task WHERE req_code = ? AND test_type = ? ORDER BY id', code, type);
       taskStatuses = {
-        dev: all('SELECT id, task_code, impl_system, status FROM dev_task WHERE req_code = ? ORDER BY id', code),
-        sit: tt('SIT'),
-        uat: tt('UAT'),
-        nft: tt('NFT'),
-        sec: tt('SEC'),
+        dev: await all('SELECT id, task_code, impl_system, status FROM dev_task WHERE req_code = ? ORDER BY id', code),
+        sit: await tt('SIT'),
+        uat: await tt('UAT'),
+        nft: await tt('NFT'),
+        sec: await tt('SEC'),
       };
     } else if (entityType === 'issue') {
-      const issue = get('SELECT * FROM issue WHERE issue_code = ?', code);
+      const issue = await get('SELECT * FROM issue WHERE issue_code = ?', code);
       // 问题无自身计划投产点，取引用它的投产申请的计划投产点
-      const ap = get(
+      const ap = await get(
         `SELECT release_point_id FROM release_apply ra
-           WHERE EXISTS (SELECT 1 FROM json_each(ra.ref_codes) WHERE value = ?) ORDER BY ra.id LIMIT 1`,
+           WHERE ${dialect.jsonArrayContains('ra.ref_codes')} ORDER BY ra.id LIMIT 1`,
         code,
       );
       entity = {
@@ -299,12 +298,12 @@ export default async function releaseRoutes(fastify) {
 
   // 更新投产任务负责人/投产状态/评审状态
   fastify.put('/release/:code', { preHandler: fastify.requirePerm('release', 'edit') }, async (request) => {
-    const rt = get('SELECT * FROM release_task WHERE req_code = ?', request.params.code);
+    const rt = await get('SELECT * FROM release_task WHERE req_code = ?', request.params.code);
     if (!rt) throw notFound('投产任务未发起');
     const { owner, status, review_status } = request.body || {};
 
     if (review_status !== undefined) {
-      const valid = get('SELECT 1 FROM dict_item WHERE category = ? AND attr_value = ?', 'review_status', review_status);
+      const valid = await get('SELECT 1 FROM dict_item WHERE category = ? AND attr_value = ?', 'review_status', review_status);
       if (!valid) throw badRequest('评审状态取值非法');
     }
 
@@ -315,12 +314,12 @@ export default async function releaseRoutes(fastify) {
 
     const keys = Object.keys(updateData);
     if (keys.length > 0) {
-      run(
+      await run(
         `UPDATE release_task SET ${keys.map((k) => `${k}=?`).join(',')}, updated_at=datetime('now','localtime') WHERE id=?`,
         ...keys.map((k) => updateData[k]), rt.id,
       );
       const labels = { owner: '投产负责人', status: '投产状态', review_status: '评审状态' };
-      auditUpdate('release', rt.id, rt.req_code, request.currentUser?.name, rt, updateData, labels);
+      await auditUpdate('release', rt.id, rt.req_code, request.currentUser?.name, rt, updateData, labels);
     }
     return ok({ id: rt.id });
   });
@@ -328,33 +327,38 @@ export default async function releaseRoutes(fastify) {
   // 会签签署
   fastify.post('/release/signoff/:id', { preHandler: fastify.requirePerm('release', 'release.signoff') }, async (request) => {
     const id = request.params.id;
-    const so = get('SELECT * FROM release_signoff WHERE id = ?', id);
+    const so = await get('SELECT * FROM release_signoff WHERE id = ?', id);
     if (!so) throw notFound('会签项不存在');
     const { result, conclusion, signatureId } = request.body || {};
     if (!['已签署', '已驳回', '未签署'].includes(result)) throw badRequest('签署状态非法');
     if (!request.currentUser.is_super && so.role_id) {
-      const hasRole = get('SELECT 1 FROM user_role WHERE user_id = ? AND role_id = ?', request.currentUser.id, so.role_id);
+      const hasRole = await get('SELECT 1 FROM user_role WHERE user_id = ? AND role_id = ?', request.currentUser.id, so.role_id);
       if (!hasRole) throw forbidden(`仅【${so.role_name}】角色可签署该项`);
     }
     // 签名：传入 signatureId 时校验归属当前用户并记录其路径；未传则沿用原签名
     let signaturePath = so.signature_path || null;
     if (signatureId) {
-      const sig = get('SELECT * FROM user_signature WHERE id = ?', signatureId);
+      const sig = await get('SELECT * FROM user_signature WHERE id = ?', signatureId);
       if (!sig || sig.user_id !== request.currentUser.id) throw badRequest('签名无效');
       signaturePath = sig.stored_path;
     }
-    run(
+    await run(
       `UPDATE release_signoff SET result=?, conclusion=?, signature_path=?, signer_user_id=?, signer_name=?, sign_time=datetime('now','localtime'), updated_at=datetime('now','localtime') WHERE id=?`,
       result, conclusion || null, signaturePath, request.currentUser?.id, request.currentUser?.name, id,
     );
-    auditUpdate('release', so.release_task_id, so.role_name, request.currentUser?.name,
+    const updatedSignoff = await get('SELECT signer_name, sign_time FROM release_signoff WHERE id = ?', id);
+    await auditUpdate('release', so.release_task_id, so.role_name, request.currentUser?.name,
       { r: so.result }, { r: result }, { r: `会签-${so.role_name}` });
+    await auditUpdate('release', so.release_task_id, so.role_name, request.currentUser?.name,
+      { signer_name: so.signer_name, sign_time: so.sign_time },
+      { signer_name: updatedSignoff?.signer_name, sign_time: updatedSignoff?.sign_time },
+      { signer_name: `会签-${so.role_name}-签署人`, sign_time: `会签-${so.role_name}-签署时间` });
 
-    const beforeReview = get('SELECT review_status FROM release_task WHERE id = ?', so.release_task_id)?.review_status;
-    const afterReview = recomputeReviewStatus(so.release_task_id);
+    const beforeReview = (await get('SELECT review_status FROM release_task WHERE id = ?', so.release_task_id))?.review_status;
+    const afterReview = await recomputeReviewStatus(so.release_task_id);
     if (beforeReview !== afterReview) {
-      const rt = get('SELECT req_code FROM release_task WHERE id = ?', so.release_task_id);
-      auditUpdate('release', so.release_task_id, rt?.req_code, request.currentUser?.name,
+      const rt = await get('SELECT req_code FROM release_task WHERE id = ?', so.release_task_id);
+      await auditUpdate('release', so.release_task_id, rt?.req_code, request.currentUser?.name,
         { v: beforeReview }, { v: afterReview }, { v: '评审状态' });
     }
     return ok(null, '签署完成');
@@ -363,17 +367,17 @@ export default async function releaseRoutes(fastify) {
   // 导出 Word 详情（单条审批对象的完整信息）
   fastify.get('/release/export-word/:code', { preHandler: fastify.requirePerm('release', 'view') }, async (request, reply) => {
     const code = request.params.code;
-    const entityType = classifyEntity(code);
-    const rt = ensureReleaseTask(code, entityType, request.currentUser?.name);
-    const signoffs = all('SELECT * FROM release_signoff WHERE release_task_id = ? ORDER BY id', rt.id)
+    const entityType = await classifyEntity(code);
+    const rt = await ensureReleaseTask(code, entityType, request.currentUser?.name);
+    const signoffs = (await all('SELECT * FROM release_signoff WHERE release_task_id = ? ORDER BY id', rt.id))
       .map((s) => ({ ...s, signature_image: signatureDataUrl(s.signature_path) }));
 
-    const systems = all('SELECT sys_code, sys_name FROM system');
+    const systems = await all('SELECT sys_code, sys_name FROM system');
     const sysMap = {};
     for (const s of systems) sysMap[s.sys_code] = s.sys_name;
-    const artifacts = entityArtifacts(code, sysMap);
+    const artifacts = await entityArtifacts(code, sysMap);
 
-    const rps = all('SELECT id, release_date FROM release_point');
+    const rps = await all('SELECT id, release_date FROM release_point');
     const rpMap = {};
     for (const rp of rps) rpMap[rp.id] = rp.release_date;
 
@@ -382,7 +386,7 @@ export default async function releaseRoutes(fastify) {
     let testTasksFull = [];
 
     if (entityType === 'requirement' || entityType === 'ticket') {
-      const req = getWorkItem(code);
+      const req = await getWorkItem(code);
       entity = {
         type: entityType, code,
         title: req?.title || code,
@@ -392,19 +396,19 @@ export default async function releaseRoutes(fastify) {
         jk_owner: req?.jk_owner || null,
         release_date: rpMap[req?.release_point_id] || null,
       };
-      devTasksFull = all(
+      devTasksFull = await all(
         'SELECT id, task_code, task_name, content, owner, status, impl_system FROM dev_task WHERE req_code = ? ORDER BY id',
         code,
       );
-      testTasksFull = all(
+      testTasksFull = await all(
         'SELECT id, task_code, task_name, test_type, owner, status, impl_system FROM test_task WHERE req_code = ? ORDER BY id',
         code,
       );
     } else if (entityType === 'issue') {
-      const issue = get('SELECT * FROM issue WHERE issue_code = ?', code);
-      const ap = get(
+      const issue = await get('SELECT * FROM issue WHERE issue_code = ?', code);
+      const ap = await get(
         `SELECT release_point_id FROM release_apply ra
-           WHERE EXISTS (SELECT 1 FROM json_each(ra.ref_codes) WHERE value = ?) ORDER BY ra.id LIMIT 1`,
+           WHERE ${dialect.jsonArrayContains('ra.ref_codes')} ORDER BY ra.id LIMIT 1`,
         code,
       );
       entity = {
@@ -428,7 +432,7 @@ export default async function releaseRoutes(fastify) {
   // 导出
   fastify.post('/release/export', { preHandler: fastify.requirePerm('release', 'export') }, async (request, reply) => {
     const body = request.body || {};
-    const rows = applyFilters(computeEntities(windowIds(body)), body.filters);
+    const rows = applyFilters(await computeEntities(windowIds(body)), body.filters);
 
     const cols = [
       { key: 'impl_org', title: '实施机构' },

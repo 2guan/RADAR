@@ -10,8 +10,8 @@ import { run } from '../db/index.js';
 /**
  * 记录一条变更。
  */
-function write(entityType, entityId, entityCode, action, operator, field, oldValue, newValue) {
-  run(
+async function write(entityType, entityId, entityCode, action, operator, field, oldValue, newValue) {
+  await run(
     `INSERT INTO audit_log
        (entity_type, entity_id, entity_code, action, operator, field, old_value, new_value)
      VALUES (?,?,?,?,?,?,?,?)`,
@@ -24,22 +24,22 @@ function write(entityType, entityId, entityCode, action, operator, field, oldVal
 /**
  * 记录创建动作（整体记一条）。
  */
-export function auditCreate(entityType, entityId, entityCode, operator) {
-  write(entityType, entityId, entityCode, 'create', operator, null, null, '新建记录');
+export async function auditCreate(entityType, entityId, entityCode, operator) {
+  await write(entityType, entityId, entityCode, 'create', operator, null, null, '新建记录');
 }
 
 /**
  * 记录删除动作。
  */
-export function auditDelete(entityType, entityId, entityCode, operator) {
-  write(entityType, entityId, entityCode, 'delete', operator, null, '记录已删除', null);
+export async function auditDelete(entityType, entityId, entityCode, operator) {
+  await write(entityType, entityId, entityCode, 'delete', operator, null, '记录已删除', null);
 }
 
 /**
  * 对比新旧对象，逐字段记录差异。
  * @param {object} fieldLabels 字段英文名 -> 中文名
  */
-export function auditUpdate(entityType, entityId, entityCode, operator, oldObj, newObj, fieldLabels) {
+export async function auditUpdate(entityType, entityId, entityCode, operator, oldObj, newObj, fieldLabels) {
   for (const [key, label] of Object.entries(fieldLabels)) {
     const before = oldObj?.[key];
     const after = newObj?.[key];
@@ -48,7 +48,7 @@ export function auditUpdate(entityType, entityId, entityCode, operator, oldObj, 
     const b = before == null ? '' : String(before);
     const a = after == null ? '' : String(after);
     if (b !== a) {
-      write(entityType, entityId, entityCode, 'update', operator, label, before, after);
+      await write(entityType, entityId, entityCode, 'update', operator, label, before, after);
     }
   }
 }

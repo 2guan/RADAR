@@ -26,6 +26,12 @@ function strEnv(name, fallback = '') {
   return value === undefined || value === '' ? fallback : value;
 }
 
+function boolEnv(name, fallback = false) {
+  const value = process.env[name];
+  if (value === undefined || value === '') return fallback;
+  return ['1', 'true', 'yes', 'on'].includes(String(value).trim().toLowerCase());
+}
+
 function requiredProdEnv(name) {
   const value = process.env[name];
   if (isProd && !value) {
@@ -70,6 +76,20 @@ export const config = {
     expiresIn: strEnv('JWT_EXPIRES_IN', '12h'),
   },
 
+  db: {
+    client: strEnv('DB_CLIENT', 'sqlite').toLowerCase(),
+    file: pathEnv('DB_FILE', path.join('data', 'radar.db')),
+    tdsql: {
+      host: strEnv('TDSQL_HOST', '127.0.0.1'),
+      port: intEnv('TDSQL_PORT', 3306),
+      user: strEnv('TDSQL_USER', 'radar'),
+      password: strEnv('TDSQL_PASSWORD'),
+      database: strEnv('TDSQL_DATABASE', 'radar'),
+      ssl: boolEnv('TDSQL_SSL', false),
+      connectionLimit: intEnv('TDSQL_CONNECTION_LIMIT', 10),
+      timezone: strEnv('TDSQL_TIMEZONE', '+08:00'),
+    },
+  },
   dbFile: pathEnv('DB_FILE', path.join('data', 'radar.db')),
   attachmentDir: pathEnv('ATTACHMENT_DIR', 'attachments'),
   webDist: pathEnv('WEB_DIST', path.join('web', 'dist')),

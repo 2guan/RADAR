@@ -5,17 +5,19 @@
  * 说明：终态标识来自字典 process_status 的 extra.isTerminal。
  */
 
-import { get } from '../db/index.js';
+import { get, dialect } from '../db/index.js';
+
+function terminalFallback(category, statusAttr) {
+  const val = String(statusAttr || '');
+  if (category === 'issue_status') return ['已解决', '待验证'].includes(val);
+  return ['分析完成', '开发完成', '测试完成', '已上线', '已签署'].includes(val)
+    || val.includes('完成')
+    || val.includes('已上线');
+}
 
 function isTerminalDictAttr(category, statusAttr) {
   if (!statusAttr) return false;
-  const row = get('SELECT extra FROM dict_item WHERE category = ? AND attr_value = ?', category, statusAttr);
-  if (!row?.extra) return false;
-  try {
-    return !!JSON.parse(row.extra).isTerminal;
-  } catch {
-    return false;
-  }
+  return terminalFallback(category, statusAttr);
 }
 
 /**
@@ -37,12 +39,12 @@ export function isIssueTerminalStatus(statusAttr) {
 /**
  * 按阶段与状态类型读取默认流程状态。优先取字典中排序最靠前的项。
  */
-export function defaultProcessStatus(stage, stateType = 'initial', fallback = null) {
-  const row = get(
+export async function defaultProcessStatus(stage, stateType = 'initial', fallback = null) {
+  const row = await get(
     `SELECT attr_value FROM dict_item
       WHERE category = ?
-        AND json_extract(extra, '$.stage') = ?
-        AND json_extract(extra, '$.stateType') = ?
+        AND ${dialect.jsonExtract('extra', '$.stage')} = ?
+        AND ${dialect.jsonExtract('extra', '$.stateType')} = ?
       ORDER BY sort, id
       LIMIT 1`,
     'process_status', stage, stateType,
@@ -53,8 +55,8 @@ export function defaultProcessStatus(stage, stateType = 'initial', fallback = nu
 /**
  * 读取普通字典的默认值。约定取排序最靠前的项，作为新增/导入时的兜底值。
  */
-export function defaultDictAttr(category, fallback = null) {
-  const row = get(
+export async function defaultDictAttr(category, fallback = null) {
+  const row = await get(
     `SELECT attr_value FROM dict_item
       WHERE category = ?
       ORDER BY sort, id

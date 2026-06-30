@@ -6,10 +6,11 @@
  * 说明：全部操作幂等：仅当目标数据不存在时才插入，可安全重复执行。
  */
 
-import { db, get, run, tx, all } from './index.js';
+import { get, run, tx, all } from './index.js';
 import { hashPassword } from '../lib/password.js';
 import { config } from '../config.js';
 import { DEFAULT_REQUIRED_FIELD_CONFIG, REQUIRED_FIELDS_CONFIG_KEY } from '../lib/required-fields.js';
+import { parseJsonObject } from '../lib/json.js';
 
 // 角色定义（角色标识、名称、是否内置、是否会签角色）
 // 会签角色（signoff:1）：安全/架构/机构/项目/测试/配置负责人——投产评审会签由这 6 个角色完成。
@@ -230,38 +231,38 @@ const APP_CONFIG = [
 /**
  * 插入字典项（不存在才插）。
  */
-function seedDict(category, attrValue, displayValue, sort, extra) {
+async function seedDict(category, attrValue, displayValue, sort, extra) {
   let exists = null;
   if (category === 'process_status' && extra?.stage) {
-    const rows = all(
+    const rows = await all(
       'SELECT id, extra FROM dict_item WHERE category = ? AND attr_value = ?',
       category, attrValue,
     );
     exists = rows.find((r) => {
       try {
-        const parsed = r.extra ? JSON.parse(r.extra) : {};
+        const parsed = parseJsonObject(r.extra);
         return parsed.stage === extra.stage;
       } catch {
         return false;
       }
     });
   } else {
-    exists = get(
+    exists = await get(
       'SELECT id, extra FROM dict_item WHERE category = ? AND attr_value = ?',
       category, attrValue,
     );
   }
   if (!exists) {
-    run(
+    await run(
       'INSERT INTO dict_item (category, attr_value, display_value, sort, extra) VALUES (?,?,?,?,?)',
       category, attrValue, displayValue, sort, extra ? JSON.stringify(extra) : null,
     );
   } else if (extra) {
     let existingExtra = {};
-    try { existingExtra = exists.extra ? JSON.parse(exists.extra) : {}; } catch {}
+    existingExtra = parseJsonObject(exists.extra);
     const nextExtra = { ...extra, ...existingExtra };
     if (JSON.stringify(nextExtra) !== JSON.stringify(existingExtra)) {
-      run('UPDATE dict_item SET extra=?, updated_at=datetime(\'now\',\'localtime\') WHERE id=?', JSON.stringify(nextExtra), exists.id);
+      await run('UPDATE dict_item SET extra=?, updated_at=datetime(\'now\',\'localtime\') WHERE id=?', JSON.stringify(nextExtra), exists.id);
     }
   }
 }
@@ -269,9 +270,9 @@ function seedDict(category, attrValue, displayValue, sort, extra) {
 /**
  * 为指定角色授予某模块的若干操作权限。
  */
-function grant(roleId, moduleKey, actions) {
+async function grant(roleId, moduleKey, actions) {
   for (const action of actions) {
-    run(
+    await run(
       `INSERT INTO permission (role_id, module_key, action_key, allowed) VALUES (?,?,?,1)
        ON CONFLICT(role_id, module_key, action_key) DO UPDATE SET allowed = 1`,
       roleId, moduleKey, action,
@@ -282,35 +283,35 @@ function grant(roleId, moduleKey, actions) {
 /**
  * 执行全部初始化数据写入。
  */
-export function runSeed() {
-  tx(() => {
+export async function runSeed() {
+  await tx(async () => {
     // 1) 平台配置
     for (const [key, value, remark] of APP_CONFIG) {
-      if (!get('SELECT key FROM app_config WHERE key = ?', key)) {
-        run('INSERT INTO app_config (key, value, remark) VALUES (?,?,?)', key, value, remark);
+      if (!await get('SELECT key FROM app_config WHERE key = ?', key)) {
+        await run('INSERT INTO app_config (key, value, remark) VALUES (?,?,?)', key, value, remark);
       }
     }
 
     // 2) 字典
     for (const [stage, attr, disp, sort, stateType] of PROCESS_STATUS) {
-      seedDict('process_status', attr, disp, sort, { stage, stateType, isTerminal: stateType === 'final' });
+      await seedDict('process_status', attr, disp, sort, { stage, stateType, isTerminal: stateType === 'final' });
     }
-    for (const [attr, sort] of VERSION_TYPE) seedDict('version_type', attr, attr, sort);
-    for (const [attr, sort] of RELEASE_STATUS) seedDict('release_status', attr, attr, sort);
-    for (const [attr, sort] of REQ_TYPE) seedDict('req_type', attr, attr, sort);
-    for (const [attr, sort] of TICKET_TYPE) seedDict('ticket_type', attr, attr, sort);
-    for (const [attr, sort, rank] of REVIEW_STATUS) seedDict('review_status', attr, attr, sort, { rank });
-    for (const [attr, sort, isTerminal] of ISSUE_STATUS) seedDict('issue_status', attr, attr, sort, { isTerminal });
-    for (const [attr, sort] of ARTIFACT_TYPE) seedDict('artifact_type', attr, attr, sort);
-    for (const [attr, sort] of FERRY_STATUS) seedDict('ferry_status', attr, attr, sort);
-    for (const [attr, disp, sort] of ORGS) seedDict('org', attr, disp, sort);
-    for (const [attr, disp, sort] of SECTORS) seedDict('sector', attr, disp, sort);
-    for (const [attr, sort] of REQ_DEPTS) seedDict('req_dept', attr, attr, sort);
+    for (const [attr, sort] of VERSION_TYPE) await seedDict('version_type', attr, attr, sort);
+    for (const [attr, sort] of RELEASE_STATUS) await seedDict('release_status', attr, attr, sort);
+    for (const [attr, sort] of REQ_TYPE) await seedDict('req_type', attr, attr, sort);
+    for (const [attr, sort] of TICKET_TYPE) await seedDict('ticket_type', attr, attr, sort);
+    for (const [attr, sort, rank] of REVIEW_STATUS) await seedDict('review_status', attr, attr, sort, { rank });
+    for (const [attr, sort, isTerminal] of ISSUE_STATUS) await seedDict('issue_status', attr, attr, sort, { isTerminal });
+    for (const [attr, sort] of ARTIFACT_TYPE) await seedDict('artifact_type', attr, attr, sort);
+    for (const [attr, sort] of FERRY_STATUS) await seedDict('ferry_status', attr, attr, sort);
+    for (const [attr, disp, sort] of ORGS) await seedDict('org', attr, disp, sort);
+    for (const [attr, disp, sort] of SECTORS) await seedDict('sector', attr, disp, sort);
+    for (const [attr, sort] of REQ_DEPTS) await seedDict('req_dept', attr, attr, sort);
 
     // 3) 所属系统
     for (const [code, name, org, sector, sort] of SYSTEMS) {
-      if (!get('SELECT id FROM system WHERE sys_code = ?', code)) {
-        run(
+      if (!await get('SELECT id FROM system WHERE sys_code = ?', code)) {
+        await run(
           'INSERT INTO system (sys_code, sys_name, org, sector, sort) VALUES (?,?,?,?,?)',
           code, name, org, sector, sort,
         );
@@ -320,9 +321,9 @@ export function runSeed() {
     // 4) 角色
     const roleIdByCode = {};
     for (const r of ROLES) {
-      let row = get('SELECT id FROM role WHERE code = ?', r.code);
+      let row = await get('SELECT id FROM role WHERE code = ?', r.code);
       if (!row) {
-        const res = run(
+        const res = await run(
           'INSERT INTO role (name, code, default_home, is_builtin, is_signoff_role) VALUES (?,?,?,?,?)',
           r.name, r.code, '仪表盘', r.builtin ? 1 : 0, r.signoff ? 1 : 0,
         );
@@ -333,14 +334,14 @@ export function runSeed() {
     // 4b) 同步会签角色标识：以 ROLES 定义为准（仅影响内置角色，自定义角色不受影响）。
     //     早期迁移 0002 将金科侧业务/开发/测试/运维标记为会签角色，此处统一归位到 6 个负责人角色。
     for (const r of ROLES) {
-      run('UPDATE role SET is_signoff_role = ? WHERE code = ?', r.signoff ? 1 : 0, r.code);
+      await run('UPDATE role SET is_signoff_role = ? WHERE code = ?', r.signoff ? 1 : 0, r.code);
     }
 
     // 5) 权限矩阵默认值
     // 管理员 / 超级管理员：全部权限
     for (const code of ['管理员', '超级管理员']) {
       for (const [mod, actions] of Object.entries(MODULE_ACTIONS)) {
-        grant(roleIdByCode[code], mod, actions);
+        await grant(roleIdByCode[code], mod, actions);
       }
     }
     // 业务/开发/测试/运维角色：主链路模块默认可见，并按职责授予功能权限
@@ -356,21 +357,21 @@ export function runSeed() {
     for (const r of nonAdminRoles) {
       const rid = roleIdByCode[r.code];
       // 所有主链路模块可见
-      for (const mod of CHAIN_MODULES) grant(rid, mod, ['view']);
+      for (const mod of CHAIN_MODULES) await grant(rid, mod, ['view']);
       // 按职责授予写权限
       for (const [mod, roleCodes] of Object.entries(dutyMap)) {
-        if (roleCodes.includes(r.code)) grant(rid, mod, MODULE_ACTIONS[mod]);
+        if (roleCodes.includes(r.code)) await grant(rid, mod, MODULE_ACTIONS[mod]);
       }
       // 会签角色：授予投产审批的签署权限（仅本角色可签署对应会签项）
-      if (r.signoff) grant(rid, 'release', ['view', 'release.signoff']);
+      if (r.signoff) await grant(rid, 'release', ['view', 'release.signoff']);
     }
 
     // 6) 超级管理员用户
-    if (!get('SELECT id FROM user WHERE phone = ?', config.superAdmin.phone)) {
+    if (!await get('SELECT id FROM user WHERE phone = ?', config.superAdmin.phone)) {
       if (!config.superAdmin.password) {
         throw new Error('首次初始化超级管理员前必须配置 ADMIN_PASSWORD');
       }
-      const res = run(
+      const res = await run(
         'INSERT INTO user (phone, name, org, password_hash, status, is_super, password_changed_at) VALUES (?,?,?,?,?,1,datetime(\'now\',\'localtime\'))',
         config.superAdmin.phone,
         config.superAdmin.name,
@@ -378,17 +379,17 @@ export function runSeed() {
         hashPassword(config.superAdmin.password),
         '启用',
       );
-      run(
+      await run(
         'INSERT INTO user_role (user_id, role_id) VALUES (?,?)',
         res.lastInsertRowid, roleIdByCode['超级管理员'],
       );
     }
 
     // 7) 自动迁移/升级历史状态数据，将已有流程状态自动打标为对应的类别
-    const rows = all("SELECT id, attr_value, extra FROM dict_item WHERE category = 'process_status'");
+    const rows = await all("SELECT id, attr_value, extra FROM dict_item WHERE category = 'process_status'");
     for (const r of rows) {
       let extra = {};
-      try { extra = r.extra ? JSON.parse(r.extra) : {}; } catch {}
+      extra = parseJsonObject(r.extra);
       if (!extra.stateType) {
         if (['需求登记', '开发承接', '测试承接'].includes(r.attr_value)) {
           extra.stateType = 'initial';
@@ -398,7 +399,7 @@ export function runSeed() {
           extra.stateType = 'in-progress';
         }
         extra.isTerminal = extra.stateType === 'final';
-        run('UPDATE dict_item SET extra = ? WHERE id = ?', JSON.stringify(extra), r.id);
+        await run('UPDATE dict_item SET extra = ? WHERE id = ?', JSON.stringify(extra), r.id);
       }
     }
   });

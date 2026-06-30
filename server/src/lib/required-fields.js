@@ -1,13 +1,18 @@
 /**
  * 文件：lib/required-fields.js
  * 用途：维护各业务模块字段必填配置目录、默认值、状态归类与保存校验。
+ * 作者：hengguan
+ * 说明：必填字段配置存放在 app_config JSON 中。SQLite 读取为字符串，TDSQL JSON 字段可能
+ *       直接返回对象，因此统一通过 parseJsonObject 解析，保证两类数据库行为一致。
  */
 
 import { get } from '../db/index.js';
 import { badRequest } from './http.js';
+import { parseJsonObject } from './json.js';
 
 export const REQUIRED_FIELDS_CONFIG_KEY = 'required.fields';
 
+// 必填规则按业务状态粗分为初始态、进行中、终态，供前端配置页和后端校验共同使用。
 export const REQUIRED_FIELD_STATES = [
   { key: 'initial', label: '初始态' },
   { key: 'inProgress', label: '进行中' },
@@ -22,6 +27,7 @@ export const ATTACHMENT_INPUT_MODES = [
 
 const ATTACHMENT_MODE_KEYS = new Set(ATTACHMENT_INPUT_MODES.map((m) => m.key));
 
+// 各业务模块可配置的字段清单。字段 key 与数据库列名或前端结构化字段保持一致。
 export const REQUIRED_FIELD_MODULES = [
   {
     key: 'requirement',
@@ -135,13 +141,16 @@ export const REQUIRED_FIELD_MODULES = [
 ];
 
 function allRequired() {
+  // 默认三类状态均必填，用于需求/工单等核心登记字段。
   return { initial: true, inProgress: true, final: true };
 }
 
 function finalRequired() {
+  // 默认仅终态必填，用于计划/实际日期等随流程推进补录的字段。
   return { initial: false, inProgress: false, final: true };
 }
 
+// 系统默认必填配置。用户未配置或配置不完整时会以该对象作为基线补齐。
 export const DEFAULT_REQUIRED_FIELD_CONFIG = {
   requirement: {
     req_code: allRequired(),
@@ -199,10 +208,12 @@ const ENTITY_MODULE_MAP = {
 };
 
 function cloneConfig(config) {
+  // 必填配置是嵌套对象，使用深拷贝避免归一化过程污染默认常量。
   return JSON.parse(JSON.stringify(config || {}));
 }
 
 export function normalizeRequiredFieldConfig(input = {}) {
+  // 只保留当前模块允许配置的字段，并补齐每个字段在三个状态下的布尔值。
   const out = cloneConfig(DEFAULT_REQUIRED_FIELD_CONFIG);
   for (const mod of REQUIRED_FIELD_MODULES) {
     const fieldKeys = new Set([
@@ -248,8 +259,8 @@ export function normalizeRequiredFieldConfig(input = {}) {
   return out;
 }
 
-export function readRequiredFieldConfig() {
-  const row = get('SELECT value FROM app_config WHERE key = ?', REQUIRED_FIELDS_CONFIG_KEY);
+export async function readRequiredFieldConfig() {
+  const row = await get('SELECT value FROM app_config WHERE key = ?', REQUIRED_FIELDS_CONFIG_KEY);
   if (!row?.value) return normalizeRequiredFieldConfig();
   try {
     return normalizeRequiredFieldConfig(JSON.parse(row.value));
@@ -258,12 +269,12 @@ export function readRequiredFieldConfig() {
   }
 }
 
-export function statusTypeForProcessStatus(statusAttr) {
+export async function statusTypeForProcessStatus(statusAttr) {
   if (!statusAttr) return 'initial';
-  const row = get('SELECT extra FROM dict_item WHERE category = ? AND attr_value = ?', 'process_status', statusAttr);
+  const row = await get('SELECT extra FROM dict_item WHERE category = ? AND attr_value = ?', 'process_status', statusAttr);
   if (row?.extra) {
     try {
-      const extra = JSON.parse(row.extra);
+      const extra = parseJsonObject(row.extra);
       if (extra.stateType === 'initial') return 'initial';
       if (extra.stateType === 'final' || extra.isTerminal) return 'final';
       return 'inProgress';
@@ -294,22 +305,22 @@ function deliveryUnitsMissing(row, childKey) {
   return units.some((unit) => isEmptyValue(unit?.[childKey]));
 }
 
-function countAttachments(entityType, entityId, fieldKey, mode = 'both') {
+async function countAttachments(entityType, entityId, fieldKey, mode = 'both') {
   if (!entityType || !entityId || !fieldKey) return 0;
   const kindSql = mode === 'path' || mode === 'file' ? ' AND kind = ?' : '';
   const params = [entityType, entityId, fieldKey];
   if (kindSql) params.push(mode);
-  const row = get(
+  const row = await get(
     `SELECT COUNT(*) AS c FROM attachment WHERE entity_type = ? AND entity_id = ? AND field_key = ?${kindSql}`,
     ...params,
   );
   return row?.c ?? 0;
 }
 
-export function validateRequiredFields(moduleKey, stateType, row) {
+export async function validateRequiredFields(moduleKey, stateType, row) {
   const mod = MODULE_MAP.get(moduleKey);
   if (!mod) return;
-  const config = readRequiredFieldConfig();
+  const config = await readRequiredFieldConfig();
   const stateKey = stateType === 'final' ? 'final' : (stateType === 'initial' ? 'initial' : 'inProgress');
   const moduleConfig = config[moduleKey] || {};
   const missing = [];
@@ -328,7 +339,7 @@ export function validateRequiredFields(moduleKey, stateType, row) {
     if (!moduleConfig[key]?.[stateKey]) continue;
     if (!row.id) continue;
     const mode = moduleConfig[key]?.mode?.[stateKey] || 'both';
-    if (countAttachments(mod.attachmentEntity, row.id, attachmentName, mode) === 0) {
+    if (await countAttachments(mod.attachmentEntity, row.id, attachmentName, mode) === 0) {
       const modeLabel = ATTACHMENT_INPUT_MODES.find((m) => m.key === mode)?.label || '都可以';
       missing.push(`${attachmentName}（${modeLabel}）`);
     }
@@ -339,27 +350,27 @@ export function validateRequiredFields(moduleKey, stateType, row) {
   }
 }
 
-export function getAttachmentInputMode(moduleKey, stateType, fieldKey) {
+export async function getAttachmentInputMode(moduleKey, stateType, fieldKey) {
   const stateKey = stateType === 'final' ? 'final' : (stateType === 'initial' ? 'initial' : 'inProgress');
-  const config = readRequiredFieldConfig();
+  const config = await readRequiredFieldConfig();
   return config[moduleKey]?.[`attachment:${fieldKey}`]?.mode?.[stateKey] || 'both';
 }
 
-export function assertAttachmentInputAllowed(entityType, entityId, fieldKey, kind) {
+export async function assertAttachmentInputAllowed(entityType, entityId, fieldKey, kind) {
   const meta = ENTITY_MODULE_MAP[entityType];
   if (!meta || !fieldKey || !entityId) return;
-  const row = get(`SELECT status FROM ${meta.table} WHERE id = ?`, entityId);
+  const row = await get(`SELECT status FROM ${meta.table} WHERE id = ?`, entityId);
   if (!row) return;
-  const mode = getAttachmentInputMode(meta.moduleKey, statusTypeForProcessStatus(row.status), fieldKey);
+  const mode = await getAttachmentInputMode(meta.moduleKey, await statusTypeForProcessStatus(row.status), fieldKey);
   if (mode === 'path' && kind === 'file') throw badRequest(`${fieldKey}仅允许填写路径`);
   if (mode === 'file' && kind === 'path') throw badRequest(`${fieldKey}仅允许上传文档`);
 }
 
-export function requiredFieldCatalogPayload() {
+export async function requiredFieldCatalogPayload() {
   return {
     states: REQUIRED_FIELD_STATES,
     attachmentModes: ATTACHMENT_INPUT_MODES,
     modules: REQUIRED_FIELD_MODULES,
-    config: readRequiredFieldConfig(),
+    config: await readRequiredFieldConfig(),
   };
 }

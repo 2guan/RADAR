@@ -6,7 +6,7 @@
  * 说明：ref_codes（需求/工单编号）以 JSON 数组入库；change_system 存系统编号；制品类型/摆渡状态取自字典。
  */
 
-import { get, run, tx, all } from '../../db/index.js';
+import { get, run, tx, all, dialect } from '../../db/index.js';
 import { listQuery } from '../../lib/query.js';
 import { genReleaseApplyCode } from '../../lib/code-gen.js';
 import { auditCreate, auditUpdate, auditDelete } from '../../lib/audit.js';
@@ -15,6 +15,7 @@ import { windowIds, inClause } from '../../lib/window.js';
 import { ok, notFound, badRequest } from '../../lib/http.js';
 import { statusTypeForReleaseApply, validateRequiredFields } from '../../lib/required-fields.js';
 import { defaultDictAttr } from '../../lib/status.js';
+import { parseJsonArray, parseJsonObject } from '../../lib/json.js';
 
 // 列表查询可排序/筛选的列白名单（不含派生 review_status）
 const COLUMNS = [
@@ -31,16 +32,16 @@ const LABELS = {
   change_code: '变更编号', change_content: '变更内容', impact_scope: '影响范围', change_system: '变更系统',
   impl_org: '实施机构', delivery_units: '交付制品',
   ref_codes: '关联需求/工单', out_dept: '变更负责部门（输出口径）', deploy_dept: '变更负责部门（部署口径）',
-  release_point_id: '计划投产点',
+  release_point_id: '计划投产点', review_status: '评审状态',
 };
 
 // 交付制品分组字段
 const UNIT_KEYS = ['artifact_type', 'delivery_unit', 'new_version', 'ferry_status'];
 
 /** 规整交付制品数组：仅保留组内字段，过滤全空组，摆渡状态取字典默认值 */
-function normalizeUnits(units) {
+async function normalizeUnits(units) {
   if (!Array.isArray(units)) return [];
-  const defaultFerryStatus = defaultDictAttr('ferry_status', '未摆渡');
+  const defaultFerryStatus = await defaultDictAttr('ferry_status', '未摆渡');
   return units
     .map((u) => ({
       artifact_type: u?.artifact_type ?? null,
@@ -55,7 +56,7 @@ function normalizeUnits(units) {
 function decode(row) {
   if (!row) return row;
   const out = { ...row };
-  for (const f of JSON_FIELDS) out[f] = row[f] ? JSON.parse(row[f]) : [];
+  for (const f of JSON_FIELDS) out[f] = parseJsonArray(row[f]);
   return out;
 }
 
@@ -69,19 +70,19 @@ function encodeField(data) {
 }
 
 /** 仅保留可写字段 */
-function pick(body) {
+async function pick(body) {
   const out = {};
   for (const k of WRITABLE) if (body[k] !== undefined) out[k] = body[k];
-  if (out.delivery_units !== undefined) out.delivery_units = normalizeUnits(out.delivery_units);
+  if (out.delivery_units !== undefined) out.delivery_units = await normalizeUnits(out.delivery_units);
   return out;
 }
 
 /** 读取评审状态强弱排序，数值越小越弱；来自 review_status.extra.rank。 */
-function reviewRankOf(status) {
-  const row = get('SELECT sort, extra FROM dict_item WHERE category = ? AND attr_value = ?', 'review_status', status);
+async function reviewRankOf(status) {
+  const row = await get('SELECT sort, extra FROM dict_item WHERE category = ? AND attr_value = ?', 'review_status', status);
   if (!row) return Number.POSITIVE_INFINITY;
   try {
-    const rank = JSON.parse(row.extra || '{}').rank;
+    const rank = parseJsonObject(row.extra).rank;
     const n = Number(rank);
     if (Number.isFinite(n)) return n;
   } catch {}
@@ -92,23 +93,23 @@ function reviewRankOf(status) {
  * 由关联的需求/工单编号派生评审状态：从投产审批表（release_task）取评审状态，取最弱。
  * 无任何匹配则返回 null。
  */
-function deriveReviewStatus(refCodes) {
+async function deriveReviewStatus(refCodes) {
   if (!Array.isArray(refCodes) || !refCodes.length) return null;
   let weakest = null;
   let weakestRank = Infinity;
   for (const code of refCodes) {
-    const rt = get('SELECT review_status FROM release_task WHERE req_code = ?', code);
+    const rt = await get('SELECT review_status FROM release_task WHERE req_code = ?', code);
     if (!rt || !rt.review_status) continue;
-    const rank = reviewRankOf(rt.review_status);
+    const rank = await reviewRankOf(rt.review_status);
     if (rank < weakestRank) { weakestRank = rank; weakest = rt.review_status; }
   }
   return weakest;
 }
 
 /** 解析投产窗口对应的版本年月（YYYYMM）；缺省回退到当前月 */
-function yearMonthOf(releasePointId) {
+async function yearMonthOf(releasePointId) {
   if (releasePointId) {
-    const rp = get('SELECT release_date FROM release_point WHERE id = ?', releasePointId);
+    const rp = await get('SELECT release_date FROM release_point WHERE id = ?', releasePointId);
     const releaseDate = String(rp?.release_date || '').trim();
     if (/^\d{8}$/.test(releaseDate)) return releaseDate.slice(0, 6);
   }
@@ -146,7 +147,7 @@ export default async function releaseApplyRoutes(fastify) {
         // 交付制品为 JSON 数组，按组内字段匹配
         const vals = Array.isArray(f.value) ? f.value : [f.value];
         if (vals.length) {
-          wh.push(`EXISTS (SELECT 1 FROM json_each(delivery_units) WHERE json_extract(value, '$.${f.field}') IN (${vals.map(() => '?').join(',')}))`);
+          wh.push(dialect.jsonObjectFieldIn('delivery_units', f.field, vals.map(() => '?').join(',')));
           params.push(...vals);
         }
       } else {
@@ -156,47 +157,47 @@ export default async function releaseApplyRoutes(fastify) {
 
     const newBody = { ...body, filters: normalFilters };
     const baseWhere = wh.join(' AND ');
-    const result = listQuery({
+    const result = await listQuery({
       table: 'release_apply', columns: COLUMNS, searchColumns: SEARCH,
       query: newBody, baseWhere, baseParams: params,
     });
 
     // 主数据映射
-    const rps = all('SELECT id, release_date FROM release_point');
+    const rps = await all('SELECT id, release_date FROM release_point');
     const rpMap = {};
     for (const rp of rps) rpMap[rp.id] = rp.release_date;
-    const systems = all('SELECT sys_code, sys_name FROM system');
+    const systems = await all('SELECT sys_code, sys_name FROM system');
     const sysMap = {};
     for (const s of systems) sysMap[s.sys_code] = s.sys_name;
 
     // 逐行补充派生字段（ref_codes 解码、评审状态实时派生、系统名称、投产点日期）
-    const pageRows = result.list.map((r) => get('SELECT * FROM release_apply WHERE id = ?', r.id));
-    result.list = pageRows.map((row) => {
+    const pageRows = await Promise.all(result.list.map((r) => get('SELECT * FROM release_apply WHERE id = ?', r.id)));
+    result.list = await Promise.all(pageRows.map(async (row) => {
       const decoded = decode(row);
-      decoded.review_status = deriveReviewStatus(decoded.ref_codes);
+      decoded.review_status = await deriveReviewStatus(decoded.ref_codes);
       decoded.change_system_name = row.change_system ? `${row.change_system} - ${sysMap[row.change_system] || row.change_system}` : null;
       decoded.release_date = rpMap[row.release_point_id] || null;
       return decoded;
-    });
+    }));
 
     return ok(result);
   });
 
   // 详情
   fastify.get('/release-apply/:id', { preHandler: fastify.requirePerm('release_apply', 'view') }, async (request) => {
-    const row = get('SELECT * FROM release_apply WHERE id = ?', request.params.id);
+    const row = await get('SELECT * FROM release_apply WHERE id = ?', request.params.id);
     if (!row) throw notFound();
     const decoded = decode(row);
-    decoded.review_status = deriveReviewStatus(decoded.ref_codes);
+    decoded.review_status = await deriveReviewStatus(decoded.ref_codes);
     return ok(decoded);
   });
 
   // 按变更编号查询（供详情单页通过 URL 编号直达）
   fastify.get('/release-apply/by-code/:code', { preHandler: fastify.requirePerm('release_apply', 'view') }, async (request) => {
-    const row = get('SELECT * FROM release_apply WHERE change_code = ?', request.params.code);
+    const row = await get('SELECT * FROM release_apply WHERE change_code = ?', request.params.code);
     if (!row) throw notFound();
     const decoded = decode(row);
-    decoded.review_status = deriveReviewStatus(decoded.ref_codes);
+    decoded.review_status = await deriveReviewStatus(decoded.ref_codes);
     return ok(decoded);
   });
 
@@ -204,23 +205,23 @@ export default async function releaseApplyRoutes(fastify) {
   fastify.post('/release-apply', { preHandler: fastify.requirePerm('release_apply', 'create') }, async (request) => {
     const body = request.body || {};
 
-    const picked = pick(body);
+    const picked = await pick(body);
     if (picked.change_content === undefined) picked.change_content = '';
     const refCodes = Array.isArray(body.ref_codes) ? body.ref_codes : [];
-    const reviewStatus = deriveReviewStatus(refCodes);
-    validateRequiredFields('release_apply', statusTypeForReleaseApply(reviewStatus), {
+    const reviewStatus = await deriveReviewStatus(refCodes);
+    await validateRequiredFields('release_apply', statusTypeForReleaseApply(reviewStatus), {
       ...picked,
       change_code: body.change_code || '__AUTO__',
       ref_codes: refCodes,
     });
     const data = encodeField(picked);
 
-    const result = tx(() => {
+    const result = await tx(async () => {
       let code = (body.change_code || '').trim();
       // 若前端传来的编号已存在（并发提交导致冲突），重新生成而非报错；
       // 空编号同样走生成逻辑。两种路径均在 BEGIN IMMEDIATE 事务内串行执行，保证唯一。
-      if (!code || get('SELECT id FROM release_apply WHERE change_code = ?', code)) {
-        code = genReleaseApplyCode(yearMonthOf(body.release_point_id));
+      if (!code || await get('SELECT id FROM release_apply WHERE change_code = ?', code)) {
+        code = await genReleaseApplyCode(await yearMonthOf(body.release_point_id));
       }
 
       const fields = ['change_code', 'review_status', 'registrar', 'register_time', ...Object.keys(data).filter((k) => k !== 'change_code')];
@@ -231,28 +232,28 @@ export default async function releaseApplyRoutes(fastify) {
         new Date().toISOString().slice(0, 10),
         ...Object.keys(data).filter((k) => k !== 'change_code').map((k) => data[k]),
       ];
-      const res = run(
+      const res = await run(
         `INSERT INTO release_apply (${fields.join(',')}) VALUES (${fields.map(() => '?').join(',')})`,
         ...values,
       );
       return { id: res.lastInsertRowid, code };
     });
 
-    auditCreate('release_apply', result.id, result.code, request.currentUser?.name);
+    await auditCreate('release_apply', result.id, result.code, request.currentUser?.name);
     return ok({ id: result.id, change_code: result.code });
   });
 
   // 修改（留痕）
   fastify.put('/release-apply/:id', { preHandler: fastify.requirePerm('release_apply', 'edit') }, async (request) => {
     const id = request.params.id;
-    const old = get('SELECT * FROM release_apply WHERE id = ?', id);
+    const old = await get('SELECT * FROM release_apply WHERE id = ?', id);
     if (!old) throw notFound();
     const body = request.body || {};
-    const picked = pick(body);
+    const picked = await pick(body);
 
     // 变更编号唯一性校验（排除自身）
     if (picked.change_code && picked.change_code !== old.change_code) {
-      const dup = get('SELECT id FROM release_apply WHERE change_code = ? AND id != ?', picked.change_code, id);
+      const dup = await get('SELECT id FROM release_apply WHERE change_code = ? AND id != ?', picked.change_code, id);
       if (dup) throw badRequest('变更编号已存在，请更换');
     }
 
@@ -260,9 +261,9 @@ export default async function releaseApplyRoutes(fastify) {
     // 评审状态随 ref_codes 实时重算
     const newRefs = picked.ref_codes !== undefined
       ? (Array.isArray(picked.ref_codes) ? picked.ref_codes : [])
-      : (old.ref_codes ? JSON.parse(old.ref_codes) : []);
-    data.review_status = deriveReviewStatus(newRefs);
-    validateRequiredFields('release_apply', statusTypeForReleaseApply(data.review_status), {
+      : parseJsonArray(old.ref_codes);
+    data.review_status = await deriveReviewStatus(newRefs);
+    await validateRequiredFields('release_apply', statusTypeForReleaseApply(data.review_status), {
       ...decode(old),
       ...picked,
       ref_codes: newRefs,
@@ -270,13 +271,13 @@ export default async function releaseApplyRoutes(fastify) {
 
     const keys = Object.keys(data);
     if (keys.length) {
-      run(
+      await run(
         `UPDATE release_apply SET ${keys.map((k) => `${k}=?`).join(',')}, updated_at=datetime('now','localtime') WHERE id=?`,
         ...keys.map((k) => data[k]), id,
       );
       const oldReadable = decode(old);
       const newReadable = { ...picked };
-      auditUpdate('release_apply', id, old.change_code, request.currentUser?.name, oldReadable, newReadable, LABELS);
+      await auditUpdate('release_apply', id, old.change_code, request.currentUser?.name, oldReadable, newReadable, LABELS);
     }
     return ok({ id });
   });
@@ -284,7 +285,7 @@ export default async function releaseApplyRoutes(fastify) {
   // 生成变更编号
   fastify.get('/release-apply/gen-code', { preHandler: fastify.requirePerm('release_apply', 'view') }, async (request) => {
     const releasePointId = request.query.releasePointId;
-    return ok({ change_code: genReleaseApplyCode(yearMonthOf(releasePointId)) });
+    return ok({ change_code: await genReleaseApplyCode(await yearMonthOf(releasePointId)) });
   });
 
   // 校验编号唯一性
@@ -292,18 +293,18 @@ export default async function releaseApplyRoutes(fastify) {
     const { code, excludeId } = request.query;
     if (!code) return ok({ exists: false });
     const row = excludeId
-      ? get('SELECT id FROM release_apply WHERE change_code = ? AND id != ?', code, excludeId)
-      : get('SELECT id FROM release_apply WHERE change_code = ?', code);
+      ? await get('SELECT id FROM release_apply WHERE change_code = ? AND id != ?', code, excludeId)
+      : await get('SELECT id FROM release_apply WHERE change_code = ?', code);
     return ok({ exists: !!row });
   });
 
   // 删除
   fastify.delete('/release-apply/:id', { preHandler: fastify.requirePerm('release_apply', 'delete') }, async (request) => {
     const id = request.params.id;
-    const row = get('SELECT * FROM release_apply WHERE id = ?', id);
+    const row = await get('SELECT * FROM release_apply WHERE id = ?', id);
     if (!row) throw notFound();
-    run('DELETE FROM release_apply WHERE id = ?', id);
-    auditDelete('release_apply', id, row.change_code, request.currentUser?.name);
+    await run('DELETE FROM release_apply WHERE id = ?', id);
+    await auditDelete('release_apply', id, row.change_code, request.currentUser?.name);
     return ok(null, '删除成功');
   });
 
@@ -311,15 +312,15 @@ export default async function releaseApplyRoutes(fastify) {
   fastify.post('/release-apply/export', { preHandler: fastify.requirePerm('release_apply', 'export') }, async (request, reply) => {
     const body = request.body || {};
     const { where: baseWhere, params: baseParams } = inClause('release_point_id', windowIds(body));
-    const result = listQuery({
+    const result = await listQuery({
       table: 'release_apply', columns: COLUMNS, searchColumns: SEARCH,
       query: { ...body, pageSize: 0 }, baseWhere, baseParams,
     });
 
-    const systems = all('SELECT sys_code, sys_name FROM system');
+    const systems = await all('SELECT sys_code, sys_name FROM system');
     const sysMap = {};
     for (const s of systems) sysMap[s.sys_code] = s.sys_name;
-    const rps = all('SELECT id, release_date FROM release_point');
+    const rps = await all('SELECT id, release_date FROM release_point');
     const rpMap = {};
     for (const rp of rps) rpMap[rp.id] = rp.release_date;
 
@@ -339,10 +340,9 @@ export default async function releaseApplyRoutes(fastify) {
       { key: 'register_time', title: '登记时间' },
     ];
 
-    const mappedList = result.list.map((row) => {
-      const refs = row.ref_codes ? JSON.parse(row.ref_codes) : [];
-      let units = [];
-      try { units = row.delivery_units ? JSON.parse(row.delivery_units) : []; } catch { units = []; }
+    const mappedList = await Promise.all(result.list.map(async (row) => {
+      const refs = parseJsonArray(row.ref_codes);
+      const units = parseJsonArray(row.delivery_units);
       const unitsText = units
         .map((u) => [u.artifact_type, u.delivery_unit, u.new_version, u.ferry_status].filter(Boolean).join(' / '))
         .join('\n');
@@ -351,10 +351,10 @@ export default async function releaseApplyRoutes(fastify) {
         change_system: row.change_system ? `${row.change_system} - ${sysMap[row.change_system] || row.change_system}` : '',
         delivery_units: unitsText,
         ref_codes: refs.join('、'),
-        review_status: deriveReviewStatus(refs) || '',
+        review_status: await deriveReviewStatus(refs) || '',
         release_date: rpMap[row.release_point_id] || '',
       };
-    });
+    }));
 
     const buf = await exportXlsx(cols, mappedList, '投产申请清单');
     reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -399,20 +399,20 @@ export default async function releaseApplyRoutes(fastify) {
 
     const splitCodes = (v) => String(v || '').split(/[、,，\s]+/).map((s) => s.trim()).filter(Boolean);
 
-    const apply = () => {
+    const apply = async () => {
       for (const r of rows) {
         const rowNum = r.__rowNum__;
         try {
           if (!r.change_content) throw new Error('变更内容不能为空');
           const refs = splitCodes(r.ref_codes);
-          const reviewStatus = deriveReviewStatus(refs);
+          const reviewStatus = await deriveReviewStatus(refs);
           // 导入按单组交付制品处理（多组请在页面维护）
-          const units = JSON.stringify(normalizeUnits([{
+          const units = JSON.stringify(await normalizeUnits([{
             artifact_type: r.artifact_type || null, delivery_unit: r.delivery_unit || null,
             new_version: r.new_version || null, ferry_status: r.ferry_status || null,
           }]));
           let code = String(r.change_code || '').trim();
-          const exists = code ? get('SELECT * FROM release_apply WHERE change_code = ?', code) : null;
+          const exists = code ? await get('SELECT * FROM release_apply WHERE change_code = ?', code) : null;
 
           if (exists) {
             if (mode === 'skip') {
@@ -421,21 +421,29 @@ export default async function releaseApplyRoutes(fastify) {
               continue;
             }
             if (mode === 'rollback') throw new Error(`变更编号 [${code}] 已存在，无法覆盖`);
-            run(
+            await run(
               `UPDATE release_apply SET change_content=?, impact_scope=?, change_system=?, impl_org=?, delivery_units=?,
                  ref_codes=?, review_status=?, out_dept=?, deploy_dept=?,
                  updated_at=datetime('now','localtime') WHERE id=?`,
               r.change_content, r.impact_scope || null, r.change_system || null, r.impl_org || null, units,
               JSON.stringify(refs), reviewStatus, r.out_dept || null, r.deploy_dept || null, exists.id,
             );
-            auditUpdate('release_apply', exists.id, code, request.currentUser?.name, exists, {
-              change_content: r.change_content, impact_scope: r.impact_scope || null,
+            await auditUpdate('release_apply', exists.id, code, request.currentUser?.name, exists, {
+              change_content: r.change_content,
+              impact_scope: r.impact_scope || null,
+              change_system: r.change_system || null,
+              impl_org: r.impl_org || null,
+              delivery_units: units,
+              ref_codes: JSON.stringify(refs),
+              review_status: reviewStatus,
+              out_dept: r.out_dept || null,
+              deploy_dept: r.deploy_dept || null,
             }, LABELS);
             stat.updated++;
             details.push({ key: code, title: r.change_content, action: 'update', status: 'success', __rowNum__: rowNum });
           } else {
-            if (!code) code = genReleaseApplyCode(yearMonthOf(null));
-            const res = run(
+            if (!code) code = await genReleaseApplyCode(await yearMonthOf(null));
+            const res = await run(
               `INSERT INTO release_apply
                  (change_code, change_content, impact_scope, change_system, impl_org, delivery_units,
                   ref_codes, review_status, out_dept, deploy_dept, registrar, register_time)
@@ -444,7 +452,7 @@ export default async function releaseApplyRoutes(fastify) {
               units, JSON.stringify(refs), reviewStatus, r.out_dept || null, r.deploy_dept || null,
               request.currentUser?.name, new Date().toISOString().slice(0, 10),
             );
-            auditCreate('release_apply', res.lastInsertRowid, code, request.currentUser?.name);
+            await auditCreate('release_apply', res.lastInsertRowid, code, request.currentUser?.name);
             stat.inserted++;
             details.push({ key: code, title: r.change_content, action: 'insert', status: 'success', __rowNum__: rowNum });
           }
@@ -457,12 +465,12 @@ export default async function releaseApplyRoutes(fastify) {
     };
 
     if (mode === 'rollback') {
-      try { tx(apply); } catch (err) {
+      try { await tx(apply); } catch (err) {
         for (const item of details) if (item.status === 'success') item.action = 'skip';
         stat.inserted = 0; stat.updated = 0;
       }
     } else {
-      apply();
+      await apply();
     }
 
     return ok({ stat, details }, '导入完成');

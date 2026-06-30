@@ -6,12 +6,13 @@
  * 说明：流程状态等字典的 extra 字段存 JSON（stage/isTerminal）。
  */
 
-import { all, get, run, tx } from '../../db/index.js';
+import { all, get, run, tx, dialect } from '../../db/index.js';
 import { registerCrud } from '../../lib/crud.js';
 import { cascadeDictRename } from '../../lib/dict-cascade.js';
 import { listQuery } from '../../lib/query.js';
 import { exportXlsx, parseXlsx } from '../../lib/excel.js';
 import { ok, badRequest } from '../../lib/http.js';
+import { parseJsonObject } from '../../lib/json.js';
 
 // 基础列；流程状态额外含 阶段/终态
 const BASE_COLS = [
@@ -32,7 +33,7 @@ function colsOf(category) {
 
 /** 把字典行转为导出对象 */
 function toExport(category, r) {
-  const extra = r.extra ? JSON.parse(r.extra) : {};
+  const extra = parseJsonObject(r.extra);
   if (category === 'process_status') {
     const stLabel = extra.stateType === 'initial' ? '初始态' : (extra.stateType === 'final' ? '终态' : '进行中');
     return { stage: extra.stage || '', attr_value: r.attr_value, display_value: r.display_value, sort: r.sort, state_type: stLabel };
@@ -56,10 +57,10 @@ export default async function dictRoutes(fastify) {
     codeField: 'attr_value',
     skipList: true,
     // 修改字典属性值时，级联同步所有引用旧值的存量业务数据（流程状态/机构/版本类型等）
-    afterWrite: ({ isCreate, request, data, old }) => {
+    afterWrite: async ({ isCreate, request, data, old }) => {
       if (isCreate || !old) return;
       if (data.attr_value === undefined || data.attr_value === old.attr_value) return;
-      cascadeDictRename(old.category, old.attr_value, data.attr_value, request.currentUser?.name);
+      await cascadeDictRename(old.category, old.attr_value, data.attr_value, request.currentUser?.name);
     },
   });
 
@@ -77,13 +78,13 @@ export default async function dictRoutes(fastify) {
       if (f.field === 'stage') {
         const vals = Array.isArray(f.value) ? f.value : [f.value];
         if (vals.length) {
-          wh.push(`json_extract(extra, '$.stage') IN (${vals.map(() => '?').join(',')})`);
+          wh.push(`${dialect.jsonExtract('extra', '$.stage')} IN (${vals.map(() => '?').join(',')})`);
           params.push(...vals);
         }
       } else if (f.field === 'state_type') {
         const vals = Array.isArray(f.value) ? f.value : [f.value];
         if (vals.length) {
-          wh.push(`json_extract(extra, '$.stateType') IN (${vals.map(() => '?').join(',')})`);
+          wh.push(`${dialect.jsonExtract('extra', '$.stateType')} IN (${vals.map(() => '?').join(',')})`);
           params.push(...vals);
         }
       } else if (f.field === 'dict_query') {
@@ -97,7 +98,7 @@ export default async function dictRoutes(fastify) {
     const newBody = { ...body, filters: normalFilters };
     const baseWhere = wh.join(' AND ');
 
-    const result = listQuery({
+    const result = await listQuery({
       table: 'dict_item',
       columns: ['id', 'category', 'attr_value', 'display_value', 'sort', 'created_at'],
       searchColumns: ['attr_value', 'display_value'],
@@ -110,11 +111,11 @@ export default async function dictRoutes(fastify) {
 
   // 按分类读取（供下拉框/筛选器使用，任意登录用户可读）
   fastify.get('/dict/by-category/:category', { preHandler: fastify.authenticate }, async (request) => {
-    const rows = all(
+    const rows = await all(
       'SELECT id, attr_value, display_value, sort, extra FROM dict_item WHERE category = ? ORDER BY sort, id',
       request.params.category,
     );
-    return ok(rows.map((r) => ({ ...r, extra: r.extra ? JSON.parse(r.extra) : null })));
+    return ok(rows.map((r) => ({ ...r, extra: r.extra ? parseJsonObject(r.extra) : null })));
   });
 
   // 模板下载（按分类）
@@ -129,7 +130,7 @@ export default async function dictRoutes(fastify) {
   // 导出（按分类）
   fastify.post('/dict/export', { preHandler: fastify.requirePerm('settings', 'export') }, async (request, reply) => {
     const { category } = request.body || {};
-    const rows = all('SELECT * FROM dict_item WHERE category = ? ORDER BY sort, id', category);
+    const rows = await all('SELECT * FROM dict_item WHERE category = ? ORDER BY sort, id', category);
     const buf = await exportXlsx(colsOf(category), rows.map((r) => toExport(category, r)), '字典');
     reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     reply.header('Content-Disposition', 'attachment; filename=dict.xlsx');
@@ -148,7 +149,7 @@ export default async function dictRoutes(fastify) {
     if (!rows.length) throw badRequest('文件中无有效数据');
 
     const stat = { inserted: 0, updated: 0, skipped: 0 };
-    const apply = () => {
+    const apply = async () => {
       for (const r of rows) {
         if (!r.attr_value) { stat.skipped++; continue; }
         let extra = null;
@@ -162,21 +163,21 @@ export default async function dictRoutes(fastify) {
           }
           extra = JSON.stringify({ stage: r.stage || '', stateType, isTerminal: stateType === 'final' });
         }
-        const exists = get('SELECT id FROM dict_item WHERE category = ? AND attr_value = ?', category, r.attr_value);
+        const exists = await get('SELECT id FROM dict_item WHERE category = ? AND attr_value = ?', category, r.attr_value);
         if (exists) {
           if (mode === 'skip') { stat.skipped++; continue; }
           if (mode === 'rollback') throw badRequest(`属性值重复：${r.attr_value}，已回滚`);
-          run('UPDATE dict_item SET display_value=?, sort=?, extra=?, updated_at=datetime(\'now\',\'localtime\') WHERE id=?',
+          await run('UPDATE dict_item SET display_value=?, sort=?, extra=?, updated_at=datetime(\'now\',\'localtime\') WHERE id=?',
             r.display_value || r.attr_value, Number(r.sort) || 0, extra, exists.id);
           stat.updated++;
         } else {
-          run('INSERT INTO dict_item (category, attr_value, display_value, sort, extra) VALUES (?,?,?,?,?)',
+          await run('INSERT INTO dict_item (category, attr_value, display_value, sort, extra) VALUES (?,?,?,?,?)',
             category, r.attr_value, r.display_value || r.attr_value, Number(r.sort) || 0, extra);
           stat.inserted++;
         }
       }
     };
-    if (mode === 'rollback') tx(apply); else apply();
+    if (mode === 'rollback') await tx(apply); else await apply();
     return ok(stat, '导入完成');
   });
 }

@@ -20,7 +20,7 @@ import { all, get } from '../db/index.js';
  * @param {string} [opts.select] 自定义 SELECT 列，默认 *
  * @returns {{list:object[], total:number, page:number, pageSize:number}}
  */
-export function listQuery(opts) {
+export async function listQuery(opts) {
   const {
     table, columns, searchColumns = [], query = {},
     baseWhere = '', baseParams = [], select = '*',
@@ -84,7 +84,7 @@ export function listQuery(opts) {
   const orderSql = orderParts.length ? `ORDER BY ${orderParts.join(', ')}` : 'ORDER BY id DESC';
 
   // 总数
-  const totalRow = get(`SELECT COUNT(*) AS c FROM ${table} ${whereSql}`, ...params);
+  const totalRow = await get(`SELECT COUNT(*) AS c FROM ${table} ${whereSql}`, ...params);
   const total = totalRow?.c ?? 0;
 
   // 分页（pageSize <= 0 表示导出全量）
@@ -94,10 +94,10 @@ export function listQuery(opts) {
   const listParams = [...params];
   if (Number.isFinite(pageSize) && pageSize > 0) {
     limitSql = 'LIMIT ? OFFSET ?';
-    listParams.push(pageSize, (page - 1) * pageSize);
+    listParams.push(String(pageSize), String((page - 1) * pageSize));
   }
 
-  const list = all(
+  const list = await all(
     `SELECT ${select} FROM ${table} ${whereSql} ${orderSql} ${limitSql}`,
     ...listParams,
   );

@@ -6,7 +6,7 @@
  * 说明：JSON 数组字段（主责/协同系统）入库前序列化；终态时校验主责系统。
  */
 
-import { get, run, tx, all } from '../../db/index.js';
+import { get, run, tx, all, dialect } from '../../db/index.js';
 import { listQuery } from '../../lib/query.js';
 import { genRequirementCode } from '../../lib/code-gen.js';
 import { defaultProcessStatus, isTerminalStatus } from '../../lib/status.js';
@@ -16,6 +16,7 @@ import { listByEntity } from '../../lib/attachment.js';
 import { exportXlsx, parseXlsx } from '../../lib/excel.js';
 import { windowIds, inClause } from '../../lib/window.js';
 import { ok, notFound, badRequest } from '../../lib/http.js';
+import { parseJsonArray, parseJsonObject } from '../../lib/json.js';
 import {
   resolveDictAttr,
   resolveSystemCode,
@@ -69,18 +70,7 @@ const LABELS = {
 function decode(row) {
   if (!row) return row;
   const out = { ...row };
-  for (const f of JSON_FIELDS) {
-    if (row[f]) {
-      try {
-        const parsed = JSON.parse(row[f]);
-        out[f] = Array.isArray(parsed) ? parsed : [parsed];
-      } catch {
-        out[f] = [row[f]];
-      }
-    } else {
-      out[f] = [];
-    }
-  }
+  for (const f of JSON_FIELDS) out[f] = parseJsonArray(row[f]);
   return out;
 }
 
@@ -101,10 +91,10 @@ function pick(body) {
 }
 
 /** 统计需求（按编号）已关联的开发/测试任务数量 */
-function linkedTaskCount(reqCode) {
+async function linkedTaskCount(reqCode) {
   if (!reqCode) return 0;
-  const d = get('SELECT COUNT(*) AS c FROM dev_task WHERE req_code = ?', reqCode);
-  const t = get('SELECT COUNT(*) AS c FROM test_task WHERE req_code = ?', reqCode);
+  const d = await get('SELECT COUNT(*) AS c FROM dev_task WHERE req_code = ?', reqCode);
+  const t = await get('SELECT COUNT(*) AS c FROM test_task WHERE req_code = ?', reqCode);
   return (d?.c || 0) + (t?.c || 0);
 }
 
@@ -150,13 +140,13 @@ export default async function requirementRoutes(fastify) {
               (
                 SELECT impl_org FROM dev_task 
                 WHERE dev_task.req_code = requirement.req_code 
-                  AND dev_task.impl_system IN (SELECT value FROM json_each(requirement.main_systems))
+                  AND ${dialect.jsonArrayContains('requirement.main_systems', 'dev_task.impl_system')}
                   AND dev_task.impl_org IS NOT NULL AND dev_task.impl_org != ''
                 ORDER BY id ASC LIMIT 1
               ),
               (
                 SELECT org FROM system 
-                WHERE sys_code = (SELECT value FROM json_each(requirement.main_systems) LIMIT 1)
+                WHERE sys_code = ${dialect.jsonExtract('requirement.main_systems', '$[0]')}
                   AND org IS NOT NULL AND org != ''
               ),
               requirement.propose_dept,
@@ -177,7 +167,7 @@ export default async function requirementRoutes(fastify) {
         const codes = Array.isArray(f.value) ? f.value : [f.value];
         if (codes.length) {
           const placeholders = codes.map(() => '?').join(',');
-          wh.push(`EXISTS (SELECT 1 FROM json_each(requirement.main_systems) WHERE value IN (${placeholders}))`);
+          wh.push(dialect.jsonArrayOverlaps('requirement.main_systems', placeholders));
           params.push(...codes);
         }
       } else if (f.field === 'collab_systems') {
@@ -185,8 +175,8 @@ export default async function requirementRoutes(fastify) {
         if (codes.length) {
           const placeholders = codes.map(() => '?').join(',');
           wh.push(`(
-            EXISTS (SELECT 1 FROM json_each(requirement.collab_dev_systems) WHERE value IN (${placeholders})) OR
-            EXISTS (SELECT 1 FROM json_each(requirement.collab_test_systems) WHERE value IN (${placeholders}))
+            ${dialect.jsonArrayOverlaps('requirement.collab_dev_systems', placeholders)} OR
+            ${dialect.jsonArrayOverlaps('requirement.collab_test_systems', placeholders)}
           )`);
           params.push(...codes, ...codes);
         }
@@ -198,19 +188,19 @@ export default async function requirementRoutes(fastify) {
     const newBody = { ...body, filters: normalFilters };
     const baseWhere = wh.join(' AND ');
     
-    const result = listQuery({
+    const result = await listQuery({
       table: 'requirement', columns: COLUMNS, searchColumns: SEARCH,
       query: newBody, baseWhere, baseParams: params,
     });
 
     // 投产点与系统为主数据（量小），整表载入做编号→名称映射
-    const rps = all('SELECT id, release_date FROM release_point');
+    const rps = await all('SELECT id, release_date FROM release_point');
     const rpMap = {};
     for (const rp of rps) {
       rpMap[rp.id] = rp.release_date;
     }
 
-    const systems = all('SELECT sys_code, sys_name FROM system');
+    const systems = await all('SELECT sys_code, sys_name FROM system');
     const sysMap = {};
     for (const s of systems) {
       sysMap[s.sys_code] = s.sys_name;
@@ -222,23 +212,23 @@ export default async function requirementRoutes(fastify) {
     const rtMap = {};
     if (pageCodes.length) {
       const ph = pageCodes.map(() => '?').join(',');
-      for (const r of all(`SELECT DISTINCT req_code FROM dev_task WHERE req_code IN (${ph})`, ...pageCodes)) {
+      for (const r of await all(`SELECT DISTINCT req_code FROM dev_task WHERE req_code IN (${ph})`, ...pageCodes)) {
         linkedCodes.add(r.req_code);
       }
-      for (const r of all(`SELECT DISTINCT req_code FROM test_task WHERE req_code IN (${ph})`, ...pageCodes)) {
+      for (const r of await all(`SELECT DISTINCT req_code FROM test_task WHERE req_code IN (${ph})`, ...pageCodes)) {
         linkedCodes.add(r.req_code);
       }
-      for (const rt of all(`SELECT req_code, status FROM release_task WHERE req_code IN (${ph})`, ...pageCodes)) {
+      for (const rt of await all(`SELECT req_code, status FROM release_task WHERE req_code IN (${ph})`, ...pageCodes)) {
         rtMap[rt.req_code] = rt.status;
       }
     }
 
     // 从流程状态配置中获取“投产”阶段的状态类型配置，避免硬编码
-    const processItems = all("SELECT attr_value, extra FROM dict_item WHERE category = 'process_status'");
+    const processItems = await all("SELECT attr_value, extra FROM dict_item WHERE category = 'process_status'");
     const processStatusMap = {};
     for (const item of processItems) {
       try {
-        const extra = JSON.parse(item.extra);
+        const extra = parseJsonObject(item.extra);
         if (extra.stage === '投产') {
           processStatusMap[item.attr_value] = extra.stateType; // 'final' / 'in-progress'
         }
@@ -269,26 +259,26 @@ export default async function requirementRoutes(fastify) {
 
   // 详情（含附件）
   fastify.get('/requirements/:id', { preHandler: fastify.requirePerm('requirement', 'view') }, async (request) => {
-    const row = get('SELECT * FROM requirement WHERE id = ?', request.params.id);
+    const row = await get('SELECT * FROM requirement WHERE id = ?', request.params.id);
     if (!row) throw notFound();
-    return ok({ ...decode(row), has_tasks: linkedTaskCount(row.req_code) > 0, attachments: listByEntity('requirement', row.id) });
+    return ok({ ...decode(row), has_tasks: await linkedTaskCount(row.req_code) > 0, attachments: await listByEntity('requirement', row.id) });
   });
 
   // 按需求编号查询（供详情单页通过 URL 编号直达）
   fastify.get('/requirements/by-code/:code', { preHandler: fastify.requirePerm('requirement', 'view') }, async (request) => {
-    const row = get('SELECT * FROM requirement WHERE req_code = ?', request.params.code);
+    const row = await get('SELECT * FROM requirement WHERE req_code = ?', request.params.code);
     if (!row) throw notFound();
-    return ok({ ...decode(row), has_tasks: linkedTaskCount(row.req_code) > 0, attachments: listByEntity('requirement', row.id) });
+    return ok({ ...decode(row), has_tasks: await linkedTaskCount(row.req_code) > 0, attachments: await listByEntity('requirement', row.id) });
   });
 
   // 新增
   fastify.post('/requirements', { preHandler: fastify.requirePerm('requirement', 'create') }, async (request) => {
     const body = request.body || {};
-    const rp = body.release_point_id ? get('SELECT * FROM release_point WHERE id = ?', body.release_point_id) : null;
+    const rp = body.release_point_id ? await get('SELECT * FROM release_point WHERE id = ?', body.release_point_id) : null;
     if (body.release_point_id && !rp) throw badRequest('投产点不存在');
-    const initialStatus = defaultProcessStatus('需求', 'initial', '需求登记');
+    const initialStatus = await defaultProcessStatus('需求', 'initial', '需求登记');
 
-    validateRequiredFields('requirement', statusTypeForProcessStatus(body.status || initialStatus), {
+    await validateRequiredFields('requirement', await statusTypeForProcessStatus(body.status || initialStatus), {
       ...body,
       req_code: body.req_code || '__AUTO__',
       status: body.status || initialStatus,
@@ -296,12 +286,14 @@ export default async function requirementRoutes(fastify) {
 
     const data = encodeField(pick(body));
     if (data.title === undefined) data.title = '';
+    delete data.req_code;
+    delete data.status;
     // 编号生成与 INSERT 在同一 BEGIN IMMEDIATE 事务内，防止并发提交时编号冲突；
     // 若前端传来的编号已被抢占，自动重新生成而非报错。
-    const { id, reqCode } = tx(() => {
+    const { id, reqCode } = await tx(async () => {
       let code = (body.req_code || '').trim();
-      if (!code || get('SELECT id FROM requirement WHERE req_code = ?', code)) {
-        code = genRequirementCode(rp?.release_date);
+      if (!code || await get('SELECT id FROM requirement WHERE req_code = ?', code)) {
+        code = await genRequirementCode(rp?.release_date);
       }
       const fields = ['req_code', 'status', 'registrar', 'register_time', ...Object.keys(data)];
       const values = [
@@ -311,20 +303,20 @@ export default async function requirementRoutes(fastify) {
         new Date().toISOString().slice(0, 10),
         ...Object.keys(data).map((k) => data[k]),
       ];
-      const res = run(
+      const res = await run(
         `INSERT INTO requirement (${fields.join(',')}) VALUES (${fields.map(() => '?').join(',')})`,
         ...values,
       );
       return { id: res.lastInsertRowid, reqCode: code };
     });
-    auditCreate('requirement', id, reqCode, request.currentUser?.name);
+    await auditCreate('requirement', id, reqCode, request.currentUser?.name);
     return ok({ id, req_code: reqCode });
   });
 
   // 修改（终态校验 + 留痕）
   fastify.put('/requirements/:id', { preHandler: fastify.requirePerm('requirement', 'edit') }, async (request) => {
     const id = request.params.id;
-    const old = get('SELECT * FROM requirement WHERE id = ?', id);
+    const old = await get('SELECT * FROM requirement WHERE id = ?', id);
     if (!old) throw notFound();
     const body = request.body || {};
     const picked = pick(body);
@@ -332,28 +324,28 @@ export default async function requirementRoutes(fastify) {
     // 如果提交了新编号，校验唯一性（排除自身）
     if (picked.req_code && picked.req_code !== old.req_code) {
       // 已关联开发/测试任务的需求，编号不可修改
-      if (linkedTaskCount(old.req_code) > 0) throw badRequest('该需求已关联开发/测试任务，需求编号不可修改');
-      const dup = get('SELECT id FROM requirement WHERE req_code = ? AND id != ?', picked.req_code, id);
+      if (await linkedTaskCount(old.req_code) > 0) throw badRequest('该需求已关联开发/测试任务，需求编号不可修改');
+      const dup = await get('SELECT id FROM requirement WHERE req_code = ? AND id != ?', picked.req_code, id);
       if (dup) throw badRequest('需求编号已存在，请更换');
     }
 
     // 终态校验：用提交后的状态与主责系统
     const newStatus = picked.status ?? old.status;
-    const newMain = picked.main_systems ?? (old.main_systems ? JSON.parse(old.main_systems) : []);
-    validateRequiredFields('requirement', statusTypeForProcessStatus(newStatus), { ...decode(old), ...picked, status: newStatus });
+    const newMain = picked.main_systems ?? parseJsonArray(old.main_systems);
+    await validateRequiredFields('requirement', await statusTypeForProcessStatus(newStatus), { ...decode(old), ...picked, status: newStatus });
     validateTerminal(id, newStatus, newMain);
 
     const data = encodeField(picked);
     const keys = Object.keys(data);
     if (keys.length) {
-      run(
+      await run(
         `UPDATE requirement SET ${keys.map((k) => `${k}=?`).join(',')}, updated_at=datetime('now','localtime') WHERE id=?`,
         ...keys.map((k) => data[k]), id,
       );
       // 留痕：数组字段比较用解码后的可读值
       const oldReadable = decode(old);
       const newReadable = { ...picked };
-      auditUpdate('requirement', id, old.req_code, request.currentUser?.name, oldReadable, newReadable, LABELS);
+      await auditUpdate('requirement', id, old.req_code, request.currentUser?.name, oldReadable, newReadable, LABELS);
     }
     return ok({ id });
   });
@@ -362,9 +354,9 @@ export default async function requirementRoutes(fastify) {
   fastify.get('/requirements/gen-code', { preHandler: fastify.requirePerm('requirement', 'view') }, async (request) => {
     const releasePointId = request.query.releasePointId;
     if (!releasePointId) throw badRequest('缺少 releasePointId');
-    const rp = get('SELECT release_date FROM release_point WHERE id = ?', releasePointId);
+    const rp = await get('SELECT release_date FROM release_point WHERE id = ?', releasePointId);
     if (!rp) throw badRequest('投产点不存在');
-    return ok({ req_code: genRequirementCode(rp.release_date) });
+    return ok({ req_code: await genRequirementCode(rp.release_date) });
   });
 
   // 校验编号唯一性（前端实时校验调用）
@@ -372,20 +364,20 @@ export default async function requirementRoutes(fastify) {
     const { code, excludeId } = request.query;
     if (!code) return ok({ exists: false });
     const row = excludeId
-      ? get('SELECT id FROM requirement WHERE req_code = ? AND id != ?', code, excludeId)
-      : get('SELECT id FROM requirement WHERE req_code = ?', code);
+      ? await get('SELECT id FROM requirement WHERE req_code = ? AND id != ?', code, excludeId)
+      : await get('SELECT id FROM requirement WHERE req_code = ?', code);
     return ok({ exists: !!row });
   });
 
   // 删除
   fastify.delete('/requirements/:id', { preHandler: fastify.requirePerm('requirement', 'delete') }, async (request) => {
     const id = request.params.id;
-    const row = get('SELECT * FROM requirement WHERE id = ?', id);
+    const row = await get('SELECT * FROM requirement WHERE id = ?', id);
     if (!row) throw notFound();
     // 已关联开发/测试任务的需求不可删除
-    if (linkedTaskCount(row.req_code) > 0) throw badRequest('该需求已关联开发/测试任务，无法删除');
-    run('DELETE FROM requirement WHERE id = ?', id);
-    auditDelete('requirement', id, row.req_code, request.currentUser?.name);
+    if (await linkedTaskCount(row.req_code) > 0) throw badRequest('该需求已关联开发/测试任务，无法删除');
+    await run('DELETE FROM requirement WHERE id = ?', id);
+    await auditDelete('requirement', id, row.req_code, request.currentUser?.name);
     return ok(null, '删除成功');
   });
 
@@ -393,16 +385,16 @@ export default async function requirementRoutes(fastify) {
   fastify.post('/requirements/export', { preHandler: fastify.requirePerm('requirement', 'export') }, async (request, reply) => {
     const body = request.body || {};
     const { where: baseWhere, params: baseParams } = inClause('release_point_id', windowIds(body));
-    const result = listQuery({
+    const result = await listQuery({
       table: 'requirement', columns: COLUMNS, searchColumns: SEARCH,
       query: { ...body, pageSize: 0 }, baseWhere, baseParams,
     });
 
-    const systems = all('SELECT sys_code, sys_name FROM system');
+    const systems = await all('SELECT sys_code, sys_name FROM system');
     const sysMap = {};
     for (const s of systems) sysMap[s.sys_code] = s.sys_name;
 
-    const rps = all('SELECT id, release_date FROM release_point');
+    const rps = await all('SELECT id, release_date FROM release_point');
     const rpMap = {};
     for (const rp of rps) rpMap[rp.id] = rp.release_date;
 
@@ -428,21 +420,13 @@ export default async function requirementRoutes(fastify) {
       { key: 'attachments', title: '需求说明书' },
     ];
 
-    const mappedList = result.list.map(row => {
-      const main = row.main_systems ? JSON.parse(row.main_systems) : [];
-      const collabDev = row.collab_dev_systems ? JSON.parse(row.collab_dev_systems) : [];
-      const collabTest = row.collab_test_systems ? JSON.parse(row.collab_test_systems) : [];
-      const attaches = all("SELECT * FROM attachment WHERE entity_type = 'requirement' AND entity_id = ?", row.id);
+    const mappedList = await Promise.all(result.list.map(async row => {
+      const main = parseJsonArray(row.main_systems);
+      const collabDev = parseJsonArray(row.collab_dev_systems);
+      const collabTest = parseJsonArray(row.collab_test_systems);
+      const attaches = await all("SELECT * FROM attachment WHERE entity_type = 'requirement' AND entity_id = ?", row.id);
 
-      const proposerArray = (() => {
-        if (!row.proposer) return [];
-        try {
-          const parsed = JSON.parse(row.proposer);
-          return Array.isArray(parsed) ? parsed : [row.proposer];
-        } catch {
-          return [row.proposer];
-        }
-      })();
+      const proposerArray = parseJsonArray(row.proposer);
 
       return {
         ...row,
@@ -453,7 +437,7 @@ export default async function requirementRoutes(fastify) {
         collab_test_systems: collabTest.map(c => sysMap[c] || c).join(', '),
         attachments: formatAttachments(attaches, '需求说明书'),
       };
-    });
+    }));
 
     const buf = await exportXlsx(cols, mappedList, '需求清单');
     reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -482,15 +466,15 @@ export default async function requirementRoutes(fastify) {
     const details = [];
 
     // 载入投产点和系统映射用于变化展示及解析
-    const rps = all('SELECT id, release_date FROM release_point');
+    const rps = await all('SELECT id, release_date FROM release_point');
     const rpMap = {};
     for (const rp of rps) rpMap[rp.id] = rp.release_date;
 
-    const systems = all('SELECT sys_code, sys_name FROM system');
+    const systems = await all('SELECT sys_code, sys_name FROM system');
     const sysMap = {};
     for (const s of systems) sysMap[s.sys_code] = s.sys_name;
 
-    const apply = () => {
+    const apply = async () => {
       for (const r of rows) {
         const rowNum = r.__rowNum__;
         try {
@@ -498,21 +482,21 @@ export default async function requirementRoutes(fastify) {
           if (!r.release_date) throw new Error('计划投产点不能为空');
 
           // 解析计划投产点
-          const rpId = resolveReleasePoint(r.release_date);
+          const rpId = await resolveReleasePoint(r.release_date);
           if (!rpId) throw new Error(`计划投产点投产日期 [${r.release_date}] 不存在`);
 
           // 兼容性字典转换
-          const status = resolveDictAttr('process_status', r.status) || defaultProcessStatus('需求', 'initial', '需求登记');
-          const reqType = resolveDictAttr('req_type', r.req_type);
+          const status = await resolveDictAttr('process_status', r.status) || await defaultProcessStatus('需求', 'initial', '需求登记');
+          const reqType = await resolveDictAttr('req_type', r.req_type);
           const isAccounting = ['是', '否'].includes(String(r.is_accounting || '').trim())
             ? String(r.is_accounting).trim()
             : '否';
-          const proposeDept = resolveDictAttr('org', r.propose_dept);
+          const proposeDept = await resolveDictAttr('org', r.propose_dept);
 
           // 兼容性系统转换
-          const mainSystems = resolveSystemCodes(r.main_systems);
-          const collabDevSystems = resolveSystemCodes(r.collab_dev_systems);
-          const collabTestSystems = resolveSystemCodes(r.collab_test_systems);
+          const mainSystems = await resolveSystemCodes(r.main_systems);
+          const collabDevSystems = await resolveSystemCodes(r.collab_dev_systems);
+          const collabTestSystems = await resolveSystemCodes(r.collab_test_systems);
 
           const proposerArray = r.proposer
             ? String(r.proposer).split(/[，,]/).map(s => s.trim()).filter(Boolean)
@@ -520,7 +504,7 @@ export default async function requirementRoutes(fastify) {
           const proposerJson = JSON.stringify(proposerArray);
 
           let code = String(r.req_code || '').trim();
-          const exists = code ? get('SELECT * FROM requirement WHERE req_code = ?', code) : null;
+          const exists = code ? await get('SELECT * FROM requirement WHERE req_code = ?', code) : null;
 
           if (exists) {
             if (mode === 'skip') {
@@ -547,13 +531,7 @@ export default async function requirementRoutes(fastify) {
             };
 
             const oldProposers = (() => {
-              if (!exists.proposer) return '';
-              try {
-                const parsed = JSON.parse(exists.proposer);
-                return Array.isArray(parsed) ? parsed.join(', ') : exists.proposer;
-              } catch {
-                return exists.proposer;
-              }
+              return parseJsonArray(exists.proposer).join(', ');
             })();
             const newProposers = proposerArray.join(', ');
 
@@ -575,13 +553,13 @@ export default async function requirementRoutes(fastify) {
             compareAndPush('release_point_id', '计划投产点', oldRpDate, newRpDate);
 
             // 系统比较
-            const decodeSystems = (jsonStr) => (jsonStr ? JSON.parse(jsonStr) : []).map(c => sysMap[c] || c).join(', ');
+            const decodeSystems = (jsonStr) => parseJsonArray(jsonStr).map(c => sysMap[c] || c).join(', ');
             compareAndPush('main_systems', '主责系统', decodeSystems(exists.main_systems), decodeSystems(mainSystems));
             compareAndPush('collab_dev_systems', '协同改造系统', decodeSystems(exists.collab_dev_systems), decodeSystems(collabDevSystems));
             compareAndPush('collab_test_systems', '协同测试系统', decodeSystems(exists.collab_test_systems), decodeSystems(collabTestSystems));
 
             if (changes.length > 0) {
-              run(
+              await run(
                 `UPDATE requirement SET 
                    title=?, summary=?, status=?, req_type=?, is_accounting=?, propose_dept=?, proposer=?, yn_owner=?, jk_owner=?, 
                    propose_time=?, release_point_id=?, main_systems=?, collab_dev_systems=?, collab_test_systems=?, 
@@ -592,7 +570,7 @@ export default async function requirementRoutes(fastify) {
                 r.yn_owner || null, r.jk_owner || null, r.propose_time || null, rpId,
                 mainSystems, collabDevSystems, collabTestSystems, r.issue_no || null, exists.id
               );
-              auditUpdate('requirement', exists.id, code, request.currentUser?.name, exists, {
+              await auditUpdate('requirement', exists.id, code, request.currentUser?.name, exists, {
                 title: r.title, summary: r.summary || null, status, req_type: reqType || null, is_accounting: isAccounting,
                 propose_dept: proposeDept || null, proposer: proposerJson, yn_owner: r.yn_owner || null,
                 jk_owner: r.jk_owner || null, propose_time: r.propose_time || null, release_point_id: rpId,
@@ -613,8 +591,8 @@ export default async function requirementRoutes(fastify) {
 
           } else {
             // insert 新建
-            if (!code) code = genRequirementCode(rpMap[rpId]);
-            const res = run(
+            if (!code) code = await genRequirementCode(rpMap[rpId]);
+            const res = await run(
               `INSERT INTO requirement 
                  (req_code, title, summary, status, req_type, is_accounting, propose_dept, proposer, yn_owner, jk_owner, 
                   propose_time, release_point_id, main_systems, collab_dev_systems, collab_test_systems, registrar, register_time, issue_no)
@@ -624,7 +602,7 @@ export default async function requirementRoutes(fastify) {
               mainSystems, collabDevSystems, collabTestSystems, request.currentUser?.name, new Date().toISOString().slice(0, 10),
               r.issue_no || null
             );
-            auditCreate('requirement', res.lastInsertRowid, code, request.currentUser?.name);
+            await auditCreate('requirement', res.lastInsertRowid, code, request.currentUser?.name);
             stat.inserted++;
             details.push({
               key: code,
@@ -652,7 +630,7 @@ export default async function requirementRoutes(fastify) {
 
     if (mode === 'rollback') {
       try {
-        tx(apply);
+        await tx(apply);
       } catch (err) {
         // tx 发生回滚后，将成功导入/更新的项修正为 skip 状态
         for (const item of details) {
@@ -665,7 +643,7 @@ export default async function requirementRoutes(fastify) {
         stat.updated = 0;
       }
     } else {
-      apply();
+      await apply();
     }
 
     return ok({ stat, details }, '导入完成');

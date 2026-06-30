@@ -14,10 +14,10 @@ import { get, all } from '../db/index.js';
  * @param {string} text 属性值或显示值
  * @returns {string|null} 解析出的属性值，若无匹配则保留原文本进行后续常规校验
  */
-export function resolveDictAttr(category, text) {
+export async function resolveDictAttr(category, text) {
   if (!text) return null;
   const val = String(text).trim();
-  const row = get(
+  const row = await get(
     'SELECT attr_value FROM dict_item WHERE category = ? AND (LOWER(attr_value) = LOWER(?) OR LOWER(display_value) = LOWER(?))',
     category, val, val
   );
@@ -29,10 +29,10 @@ export function resolveDictAttr(category, text) {
  * @param {string} text 系统编号或系统名称
  * @returns {string|null} 系统编号，若无匹配则保留原文本
  */
-export function resolveSystemCode(text) {
+export async function resolveSystemCode(text) {
   if (!text) return null;
   const val = String(text).trim();
-  const row = get(
+  const row = await get(
     'SELECT sys_code FROM system WHERE LOWER(sys_code) = LOWER(?) OR LOWER(sys_name) = LOWER(?)',
     val, val
   );
@@ -44,10 +44,11 @@ export function resolveSystemCode(text) {
  * @param {string} text 逗号/分号/换行分隔的多系统文本（系统编号或系统名称）
  * @returns {string} 序列化后的 JSON 系统编号数组
  */
-export function resolveSystemCodes(text) {
+export async function resolveSystemCodes(text) {
   if (!text) return '[]';
   const parts = String(text).split(/[,,，;；\n]/).map(p => p.trim()).filter(Boolean);
-  const codes = parts.map(p => resolveSystemCode(p) || p);
+  const codes = [];
+  for (const p of parts) codes.push((await resolveSystemCode(p)) || p);
   return JSON.stringify(codes);
 }
 
@@ -56,10 +57,10 @@ export function resolveSystemCodes(text) {
  * @param {string} text 投产日期（如 20260815）
  * @returns {number|null} 投产点 ID
  */
-export function resolveReleasePoint(text) {
+export async function resolveReleasePoint(text) {
   if (!text) return null;
   const val = String(text).trim();
-  const row = get('SELECT id FROM release_point WHERE release_date = ?', val);
+  const row = await get('SELECT id FROM release_point WHERE release_date = ?', val);
   return row ? row.id : null;
 }
 
@@ -75,4 +76,3 @@ export function formatAttachments(attachments, fieldKey) {
   if (!list.length) return '';
   return list.map(a => (a.kind === 'file' ? a.filename : a.path_text)).join('\n');
 }
-

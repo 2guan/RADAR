@@ -12,6 +12,7 @@
  */
 
 import { all, run, tx } from '../db/index.js';
+import { parseJsonArray } from './json.js';
 
 /**
  * 字典分类 → 引用该字典 attr_value 的业务表字段清单。
@@ -81,8 +82,8 @@ const SYSTEM_REFERENCES = [
 ];
 
 /** 替换某普通文本列中等于 oldVal 的值为 newVal，返回受影响行数。 */
-function cascadePlain(table, column, oldVal, newVal) {
-  const res = run(
+async function cascadePlain(table, column, oldVal, newVal) {
+  const res = await run(
     `UPDATE ${table} SET ${column} = ?, updated_at = datetime('now','localtime') WHERE ${column} = ?`,
     newVal, oldVal,
   );
@@ -90,20 +91,19 @@ function cascadePlain(table, column, oldVal, newVal) {
 }
 
 /** 替换某 JSON 对象数组列中各元素 jsonKey 字段等于 oldVal 的值为 newVal，返回受影响行数。 */
-function cascadeJsonKey(table, column, jsonKey, oldVal, newVal) {
-  const rows = all(`SELECT id, ${column} AS raw FROM ${table} WHERE ${column} LIKE ?`, `%${oldVal}%`);
+async function cascadeJsonKey(table, column, jsonKey, oldVal, newVal) {
+  const rows = await all(`SELECT id, ${column} AS raw FROM ${table} WHERE ${column} LIKE ?`, `%${oldVal}%`);
   let affected = 0;
   for (const r of rows) {
     if (!r.raw) continue;
-    let arr;
-    try { arr = JSON.parse(r.raw); } catch { continue; }
+    const arr = parseJsonArray(r.raw);
     if (!Array.isArray(arr)) continue;
     let changed = false;
     for (const el of arr) {
       if (el && el[jsonKey] === oldVal) { el[jsonKey] = newVal; changed = true; }
     }
     if (changed) {
-      run(`UPDATE ${table} SET ${column} = ?, updated_at = datetime('now','localtime') WHERE id = ?`,
+      await run(`UPDATE ${table} SET ${column} = ?, updated_at = datetime('now','localtime') WHERE id = ?`,
         JSON.stringify(arr), r.id);
       affected++;
     }
@@ -112,13 +112,12 @@ function cascadeJsonKey(table, column, jsonKey, oldVal, newVal) {
 }
 
 /** 替换某 JSON 字符串数组列中等于 oldVal 的元素为 newVal，返回受影响行数。 */
-function cascadeJsonArray(table, column, oldVal, newVal) {
-  const rows = all(`SELECT id, ${column} AS raw FROM ${table} WHERE ${column} LIKE ?`, `%${oldVal}%`);
+async function cascadeJsonArray(table, column, oldVal, newVal) {
+  const rows = await all(`SELECT id, ${column} AS raw FROM ${table} WHERE ${column} LIKE ?`, `%${oldVal}%`);
   let affected = 0;
   for (const r of rows) {
     if (!r.raw) continue;
-    let arr;
-    try { arr = JSON.parse(r.raw); } catch { continue; }
+    const arr = parseJsonArray(r.raw);
     if (!Array.isArray(arr)) continue;
     let changed = false;
     const next = arr.map((v) => {
@@ -126,7 +125,7 @@ function cascadeJsonArray(table, column, oldVal, newVal) {
       return v;
     });
     if (changed) {
-      run(`UPDATE ${table} SET ${column} = ?, updated_at = datetime('now','localtime') WHERE id = ?`,
+      await run(`UPDATE ${table} SET ${column} = ?, updated_at = datetime('now','localtime') WHERE id = ?`,
         JSON.stringify(next), r.id);
       affected++;
     }
@@ -135,15 +134,15 @@ function cascadeJsonArray(table, column, oldVal, newVal) {
 }
 
 /** 按引用定义执行一处级联替换。 */
-function applyRef(ref, oldVal, newVal) {
+async function applyRef(ref, oldVal, newVal) {
   if (ref.jsonKey) return cascadeJsonKey(ref.table, ref.column, ref.jsonKey, oldVal, newVal);
   if (ref.jsonArray) return cascadeJsonArray(ref.table, ref.column, oldVal, newVal);
   return cascadePlain(ref.table, ref.column, oldVal, newVal);
 }
 
 /** 写一条级联同步留痕。 */
-function auditCascade(entityCode, ref, affected, oldVal, newVal, operator) {
-  run(
+async function auditCascade(entityCode, ref, affected, oldVal, newVal, operator) {
+  await run(
     `INSERT INTO audit_log
        (entity_type, entity_id, entity_code, action, operator, field, old_value, new_value)
      VALUES (?,?,?,?,?,?,?,?)`,
@@ -153,15 +152,15 @@ function auditCascade(entityCode, ref, affected, oldVal, newVal, operator) {
 }
 
 /** 在单事务内执行一组引用替换并留痕，返回各表受影响明细。 */
-function runCascade(refs, oldVal, newVal, entityCode, operator) {
+async function runCascade(refs, oldVal, newVal, entityCode, operator) {
   if (!refs || !refs.length || oldVal === newVal || oldVal == null || newVal == null) return [];
   const details = [];
-  tx(() => {
+  await tx(async () => {
     for (const ref of refs) {
-      const affected = applyRef(ref, oldVal, newVal);
+      const affected = await applyRef(ref, oldVal, newVal);
       if (affected > 0) {
         details.push({ table: ref.table, column: ref.column, affected });
-        auditCascade(entityCode, ref, affected, oldVal, newVal, operator);
+        await auditCascade(entityCode, ref, affected, oldVal, newVal, operator);
       }
     }
   });
@@ -176,7 +175,7 @@ function runCascade(refs, oldVal, newVal, entityCode, operator) {
  * @param {string} [operator] 操作人（留痕用）
  * @returns {{table:string, column:string, affected:number}[]}
  */
-export function cascadeDictRename(category, oldVal, newVal, operator) {
+export async function cascadeDictRename(category, oldVal, newVal, operator) {
   return runCascade(DICT_REFERENCES[category], oldVal, newVal, category, operator);
 }
 
@@ -187,6 +186,6 @@ export function cascadeDictRename(category, oldVal, newVal, operator) {
  * @param {string} [operator] 操作人（留痕用）
  * @returns {{table:string, column:string, affected:number}[]}
  */
-export function cascadeSystemRename(oldCode, newCode, operator) {
+export async function cascadeSystemRename(oldCode, newCode, operator) {
   return runCascade(SYSTEM_REFERENCES, oldCode, newCode, oldCode, operator);
 }

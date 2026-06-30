@@ -8,10 +8,11 @@
  *       后台同步状态（bgState）保存在内存中，服务重启后重置；前端通过轮询 /issues/sync-detail-status 获取进度。
  */
 
-import { get, run, all, tx } from '../../db/index.js';
+import { get, run, all, tx, isSqlite } from '../../db/index.js';
 import { listQuery } from '../../lib/query.js';
 import { ok, notFound, badRequest } from '../../lib/http.js';
 import { fetchIssueOverview, fetchIssueDetail } from '../../lib/pams.js';
+import { parseJsonArray } from '../../lib/json.js';
 
 // 列表查询可排序/筛选的列白名单
 const COLUMNS = [
@@ -28,13 +29,7 @@ const JSON_FIELDS = ['analysis_log', 'tags', 'linked_cases'];
 function decode(row) {
   if (!row) return row;
   const out = { ...row };
-  for (const f of JSON_FIELDS) {
-    try {
-      out[f] = row[f] ? JSON.parse(row[f]) : [];
-    } catch {
-      out[f] = [];
-    }
-  }
+  for (const f of JSON_FIELDS) out[f] = parseJsonArray(row[f]);
   out.is_major = !!row.is_major;
   out.is_common = !!row.is_common;
   return out;
@@ -112,14 +107,14 @@ async function runBgSyncDetail(codes) {
       setData.synced_at    = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
       const keys = Object.keys(setData);
-      const exists = get('SELECT id FROM issue WHERE issue_code = ?', code);
+      const exists = await get('SELECT id FROM issue WHERE issue_code = ?', code);
       if (exists) {
-        run(
+        await run(
           `UPDATE issue SET ${keys.map((k) => `${k}=?`).join(',')}, updated_at=datetime('now','localtime') WHERE issue_code=?`,
           ...keys.map((k) => setData[k]), code,
         );
       } else {
-        run(
+        await run(
           `INSERT INTO issue (issue_code, ${keys.join(',')}) VALUES (?, ${keys.map(() => '?').join(',')})`,
           code, ...keys.map((k) => setData[k]),
         );
@@ -142,7 +137,7 @@ async function runBgSyncDetail(codes) {
 export default async function issueRoutes(fastify) {
   // 列表
   fastify.post('/issues/list', { preHandler: fastify.requirePerm('issue', 'view') }, async (request) => {
-    const result = listQuery({
+    const result = await listQuery({
       table: 'issue', columns: COLUMNS, searchColumns: SEARCH,
       query: request.body || {},
     });
@@ -152,10 +147,10 @@ export default async function issueRoutes(fastify) {
   // 清空全部问题数据
   fastify.delete('/issues', { preHandler: fastify.requirePerm('issue', 'delete') }, async () => {
     if (bgState.running) throw badRequest('后台同步正在进行中，请等待完成后再清空');
-    const before = get('SELECT COUNT(*) AS c FROM issue')?.c ?? 0;
-    tx(() => {
-      run('DELETE FROM issue');
-      run("DELETE FROM sqlite_sequence WHERE name = 'issue'");
+    const before = (await get('SELECT COUNT(*) AS c FROM issue'))?.c ?? 0;
+    await tx(async () => {
+      await run('DELETE FROM issue');
+      if (isSqlite()) await run("DELETE FROM sqlite_sequence WHERE name = 'issue'");
     });
     Object.assign(bgState, {
       running: false,
@@ -170,7 +165,7 @@ export default async function issueRoutes(fastify) {
 
   // 详情
   fastify.get('/issues/:id', { preHandler: fastify.requirePerm('issue', 'view') }, async (request) => {
-    const row = get('SELECT * FROM issue WHERE id = ?', request.params.id);
+    const row = await get('SELECT * FROM issue WHERE id = ?', request.params.id);
     if (!row) throw notFound();
     return ok(decode(row));
   });
@@ -182,17 +177,17 @@ export default async function issueRoutes(fastify) {
     let updated = 0;
     const failed = [];
 
-    tx(() => {
+    await tx(async () => {
       for (const item of list) {
         const code = (item.issue_id || '').trim();
         if (!code) { failed.push({ issue_id: item.issue_id, error: '缺少 issue_id' }); continue; }
-        const exists = get('SELECT id FROM issue WHERE issue_code = ?', code);
+        const exists = await get('SELECT id FROM issue WHERE issue_code = ?', code);
         const pairs = Object.entries(OVERVIEW_MAP).filter(([k]) => hasOwn(item, k));
         const cols = pairs.map(([, col]) => col);
         const vals = pairs.map(([k]) => item[k] ?? null);
         if (exists) {
           if (cols.length) {
-            run(
+            await run(
               `UPDATE issue SET ${cols.map((c) => `${c}=?`).join(',')}, updated_at=datetime('now','localtime') WHERE issue_code=?`,
               ...vals, code,
             );
@@ -200,12 +195,12 @@ export default async function issueRoutes(fastify) {
           updated++;
         } else {
           if (cols.length) {
-            run(
+            await run(
               `INSERT INTO issue (issue_code, ${cols.join(',')}) VALUES (?, ${cols.map(() => '?').join(',')})`,
               code, ...vals,
             );
           } else {
-            run('INSERT INTO issue (issue_code) VALUES (?)', code);
+            await run('INSERT INTO issue (issue_code) VALUES (?)', code);
           }
           inserted++;
         }
@@ -221,7 +216,7 @@ export default async function issueRoutes(fastify) {
     const body = request.body || {};
     let codes = Array.isArray(body.codes) ? body.codes.filter(Boolean) : null;
     if (!codes || !codes.length) {
-      codes = all('SELECT issue_code FROM issue ORDER BY id ASC').map((r) => r.issue_code);
+      codes = await all('SELECT issue_code FROM issue ORDER BY id ASC').map((r) => r.issue_code);
     }
     if (!codes.length) throw badRequest('暂无可同步的问题，请先点击「同步问题」');
 
@@ -244,15 +239,15 @@ export default async function issueRoutes(fastify) {
         setData.synced_at = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
         const keys = Object.keys(setData);
-        const exists = get('SELECT id FROM issue WHERE issue_code = ?', code);
+        const exists = await get('SELECT id FROM issue WHERE issue_code = ?', code);
         if (exists) {
-          run(
+          await run(
             `UPDATE issue SET ${keys.map((k) => `${k}=?`).join(',')}, updated_at=datetime('now','localtime') WHERE issue_code=?`,
             ...keys.map((k) => setData[k]), code,
           );
         } else {
           // 概述中尚不存在该问题时，按明细新建
-          run(
+          await run(
             `INSERT INTO issue (issue_code, ${keys.join(',')}) VALUES (?, ${keys.map(() => '?').join(',')})`,
             code, ...keys.map((k) => setData[k]),
           );
@@ -272,7 +267,7 @@ export default async function issueRoutes(fastify) {
     const body = request.body || {};
     let codes = Array.isArray(body.codes) ? body.codes.filter(Boolean) : null;
     if (!codes || !codes.length) {
-      codes = all('SELECT issue_code FROM issue ORDER BY id ASC').map((r) => r.issue_code);
+      codes = await all('SELECT issue_code FROM issue ORDER BY id ASC').map((r) => r.issue_code);
     }
     if (!codes.length) throw badRequest('暂无可同步的问题，请先点击「同步问题」');
     // 不 await，让任务在后台运行

@@ -23,7 +23,7 @@ function toClient(row) {
 export default async function signatureRoutes(fastify) {
   // 我的签名列表（默认在前、其余按新到旧）
   fastify.get('/signatures', { preHandler: fastify.authenticate }, async (request) => {
-    const rows = all(
+    const rows = await all(
       'SELECT * FROM user_signature WHERE user_id = ? ORDER BY is_default DESC, id DESC',
       request.currentUser.id,
     );
@@ -35,31 +35,31 @@ export default async function signatureRoutes(fastify) {
     const { dataUrl, label } = request.body || {};
     const { ext, buffer } = decodeSignatureDataUrl(dataUrl);
     const relPath = saveSignatureFile(request.currentUser.id, buffer, ext);
-    const count = get('SELECT COUNT(*) AS c FROM user_signature WHERE user_id = ?', request.currentUser.id)?.c || 0;
-    const res = run(
+    const count = await get('SELECT COUNT(*) AS c FROM user_signature WHERE user_id = ?', request.currentUser.id)?.c || 0;
+    const res = await run(
       'INSERT INTO user_signature (user_id, label, stored_path, is_default) VALUES (?,?,?,?)',
       request.currentUser.id, (label || '').trim() || null, relPath, count === 0 ? 1 : 0,
     );
-    return ok(toClient(get('SELECT * FROM user_signature WHERE id = ?', res.lastInsertRowid)), '签名已保存');
+    return ok(toClient(await get('SELECT * FROM user_signature WHERE id = ?', res.lastInsertRowid)), '签名已保存');
   });
 
   // 设为默认签名
   fastify.post('/signatures/:id/default', { preHandler: fastify.authenticate }, async (request) => {
-    const row = get('SELECT * FROM user_signature WHERE id = ?', request.params.id);
+    const row = await get('SELECT * FROM user_signature WHERE id = ?', request.params.id);
     if (!row || row.user_id !== request.currentUser.id) throw notFound('签名不存在');
-    tx(() => {
-      run('UPDATE user_signature SET is_default = 0 WHERE user_id = ?', request.currentUser.id);
-      run('UPDATE user_signature SET is_default = 1 WHERE id = ?', row.id);
+    await tx(async () => {
+      await run('UPDATE user_signature SET is_default = 0 WHERE user_id = ?', request.currentUser.id);
+      await run('UPDATE user_signature SET is_default = 1 WHERE id = ?', row.id);
     });
     return ok(null, '已设为默认');
   });
 
   // 删除自己的签名
   fastify.delete('/signatures/:id', { preHandler: fastify.authenticate }, async (request) => {
-    const row = get('SELECT * FROM user_signature WHERE id = ?', request.params.id);
+    const row = await get('SELECT * FROM user_signature WHERE id = ?', request.params.id);
     if (!row || row.user_id !== request.currentUser.id) throw notFound('签名不存在');
     removeSignatureFile(row.stored_path);
-    run('DELETE FROM user_signature WHERE id = ?', row.id);
+    await run('DELETE FROM user_signature WHERE id = ?', row.id);
     return ok(null, '已删除');
   });
 }

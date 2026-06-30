@@ -77,7 +77,7 @@ export default async function systemRoutes(fastify) {
     const newBody = { ...body, filters: normalFilters };
     const baseWhere = wh.join(' AND ');
 
-    return ok(listQuery({
+    return ok(await listQuery({
       table: 'system', columns: COLUMNS,
       searchColumns: ['sys_code', 'sys_name', 'org', 'sector'],
       query: newBody,
@@ -88,7 +88,7 @@ export default async function systemRoutes(fastify) {
 
   // 全量读取（供需求等表单的系统多选下拉，输入即搜由前端完成）
   fastify.get('/systems/all', { preHandler: fastify.authenticate }, async () => {
-    const rows = all('SELECT id, sys_code, sys_name, org, sector, out_dept, deploy_dept FROM system ORDER BY sort, id');
+    const rows = await all('SELECT id, sys_code, sys_name, org, sector, out_dept, deploy_dept FROM system ORDER BY sort, id');
     return ok(rows);
   });
 
@@ -101,18 +101,18 @@ export default async function systemRoutes(fastify) {
       { key: 'out_dept', title: '变更负责部门（输出口径）' }, { key: 'deploy_dept', title: '变更负责部门（部署口径）' },
       { key: 'sort', title: '排序' },
     ],
-    list: (q) => listQuery({ table: 'system', columns: COLUMNS, searchColumns: ['sys_code', 'sys_name', 'org', 'sector'], query: q }).list,
-    upsert: (r, mode) => {
+    list: async (q) => (await listQuery({ table: 'system', columns: COLUMNS, searchColumns: ['sys_code', 'sys_name', 'org', 'sector'], query: q })).list,
+    upsert: async (r, mode) => {
       if (!r.sys_code || !r.sys_name) return 'skipped';
-      const exists = get('SELECT id FROM system WHERE sys_code = ?', r.sys_code);
+      const exists = await get('SELECT id FROM system WHERE sys_code = ?', r.sys_code);
       if (exists) {
         if (mode === 'skip') return 'skipped';
         if (mode === 'rollback') throw badRequest(`系统编号重复：${r.sys_code}，已回滚`);
-        run('UPDATE system SET sys_name=?, org=?, sector=?, out_dept=?, deploy_dept=?, sort=?, updated_at=datetime(\'now\',\'localtime\') WHERE id=?',
+        await run('UPDATE system SET sys_name=?, org=?, sector=?, out_dept=?, deploy_dept=?, sort=?, updated_at=datetime(\'now\',\'localtime\') WHERE id=?',
           r.sys_name, r.org || null, r.sector || null, r.out_dept || null, r.deploy_dept || null, Number(r.sort) || 0, exists.id);
         return 'updated';
       }
-      run('INSERT INTO system (sys_code, sys_name, org, sector, out_dept, deploy_dept, sort) VALUES (?,?,?,?,?,?,?)',
+      await run('INSERT INTO system (sys_code, sys_name, org, sector, out_dept, deploy_dept, sort) VALUES (?,?,?,?,?,?,?)',
         r.sys_code, r.sys_name, r.org || null, r.sector || null, r.out_dept || null, r.deploy_dept || null, Number(r.sort) || 0);
       return 'inserted';
     },

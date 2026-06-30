@@ -14,14 +14,15 @@ import { ok, badRequest, notFound, forbidden } from '../../lib/http.js';
 import {
   SOURCES, DIMENSIONS, CHART_TYPES, buildContext, aggregate, extract, matchFilters, isValidDim, testTypeOf,
 } from '../../lib/chart-dims.js';
+import { parseJsonArray } from '../../lib/json.js';
 
 /** 取所选投产窗口下的需求/工单编号集合；ids 为空返回 null（=全部，不过滤） */
-function workItemCodesInWindow(ids) {
+async function workItemCodesInWindow(ids) {
   if (!ids?.length) return null;
   const sub = inClause('release_point_id', ids);
   return [
-    ...all(`SELECT req_code AS code FROM requirement WHERE ${sub.where}`, ...sub.params).map((r) => r.code),
-    ...all(`SELECT ticket_code AS code FROM ticket WHERE ${sub.where}`, ...sub.params).map((r) => r.code),
+    ...(await all(`SELECT req_code AS code FROM requirement WHERE ${sub.where}`, ...sub.params)).map((r) => r.code),
+    ...(await all(`SELECT ticket_code AS code FROM ticket WHERE ${sub.where}`, ...sub.params)).map((r) => r.code),
   ];
 }
 
@@ -31,26 +32,26 @@ function countTerminal(rows) {
 }
 
 /** 载入某数据源的记录，并按投产窗口（req_code 集合）过滤 */
-function loadRows(source, codes) {
+async function loadRows(source, codes) {
   let rows;
   switch (source) {
-    case 'requirement': rows = all('SELECT * FROM requirement'); break;
-    case 'ticket': rows = all('SELECT *, ticket_code AS req_code FROM ticket'); break;
-    case 'dev': rows = all('SELECT * FROM dev_task'); break;
+    case 'requirement': rows = await all('SELECT * FROM requirement'); break;
+    case 'ticket': rows = await all('SELECT *, ticket_code AS req_code FROM ticket'); break;
+    case 'dev': rows = await all('SELECT * FROM dev_task'); break;
     case 'sit': case 'uat': case 'nft': case 'sec':
-      rows = all('SELECT * FROM test_task WHERE test_type = ?', testTypeOf(source)); break;
+      rows = await all('SELECT * FROM test_task WHERE test_type = ?', testTypeOf(source)); break;
     case 'releaseSystem':
-      rows = all(`SELECT rs.*, rt.req_code AS req_code FROM release_system rs
+      rows = await all(`SELECT rs.*, rt.req_code AS req_code FROM release_system rs
                   JOIN release_task rt ON rt.id = rs.release_task_id`); break;
     case 'all': {
-      const requirement = loadRows('requirement', null).map((r) => ({ ...r, _source: 'requirement' }));
-      const ticket = loadRows('ticket', null).map((r) => ({ ...r, _source: 'ticket' }));
-      const dev = loadRows('dev', null).map((r) => ({ ...r, _source: 'dev' }));
-      const sit = loadRows('sit', null).map((r) => ({ ...r, _source: 'sit' }));
-      const uat = loadRows('uat', null).map((r) => ({ ...r, _source: 'uat' }));
-      const nft = loadRows('nft', null).map((r) => ({ ...r, _source: 'nft' }));
-      const sec = loadRows('sec', null).map((r) => ({ ...r, _source: 'sec' }));
-      const releaseSystem = loadRows('releaseSystem', null).map((r) => ({ ...r, _source: 'releaseSystem' }));
+      const requirement = (await loadRows('requirement', null)).map((r) => ({ ...r, _source: 'requirement' }));
+      const ticket = (await loadRows('ticket', null)).map((r) => ({ ...r, _source: 'ticket' }));
+      const dev = (await loadRows('dev', null)).map((r) => ({ ...r, _source: 'dev' }));
+      const sit = (await loadRows('sit', null)).map((r) => ({ ...r, _source: 'sit' }));
+      const uat = (await loadRows('uat', null)).map((r) => ({ ...r, _source: 'uat' }));
+      const nft = (await loadRows('nft', null)).map((r) => ({ ...r, _source: 'nft' }));
+      const sec = (await loadRows('sec', null)).map((r) => ({ ...r, _source: 'sec' }));
+      const releaseSystem = (await loadRows('releaseSystem', null)).map((r) => ({ ...r, _source: 'releaseSystem' }));
       rows = [...requirement, ...ticket, ...dev, ...sit, ...uat, ...nft, ...sec, ...releaseSystem];
       break;
     }
@@ -68,15 +69,7 @@ function projectRecord(source, row, ctx) {
   const sysName = (code) => ctx.sysMap[code]?.name || code;
   const systems = extract(realSource, 'system', row, ctx).map(sysName).join('、');
   if (realSource === 'requirement' || realSource === 'ticket') {
-    const proposerNames = (() => {
-      if (!row.proposer) return '';
-      try {
-        const parsed = JSON.parse(row.proposer);
-        return Array.isArray(parsed) ? parsed.join('、') : row.proposer;
-      } catch {
-        return row.proposer;
-      }
-    })();
+    const proposerNames = parseJsonArray(row.proposer).join('、');
     const code = realSource === 'ticket' ? row.ticket_code : row.req_code;
     return { req_code: code, code, name: row.title, status: row.status, system: systems, org: extract(realSource, 'org', row, ctx).join('、'), owner: proposerNames };
   }
@@ -96,45 +89,44 @@ export default async function dashboardRoutes(fastify) {
   // 原子指标卡（每项返回 总数 total 与 终态计数 terminal）
   fastify.get('/dashboard/metrics', { preHandler: fastify.requirePerm('dashboard', 'view') }, async (request) => {
     const winIds = windowIds(request.query);
-    const codes = workItemCodesInWindow(winIds);
-    const inWindow = (table, extraWhere = '') => {
-      if (!codes) return all(`SELECT status FROM ${table} ${extraWhere ? 'WHERE ' + extraWhere : ''}`);
+    const codes = await workItemCodesInWindow(winIds);
+    const inWindow = async (table, extraWhere = '') => {
+      if (!codes) return await all(`SELECT status FROM ${table} ${extraWhere ? 'WHERE ' + extraWhere : ''}`);
       if (!codes.length) return [];
       const ph = codes.map(() => '?').join(',');
       const where = `req_code IN (${ph})${extraWhere ? ' AND ' + extraWhere : ''}`;
-      return all(`SELECT status FROM ${table} WHERE ${where}`, ...codes);
+      return await all(`SELECT status FROM ${table} WHERE ${where}`, ...codes);
     };
 
     const reqRows = codes
-      ? (codes.length ? all(`SELECT status FROM requirement WHERE req_code IN (${codes.map(() => '?').join(',')})`, ...codes) : [])
-      : all('SELECT status FROM requirement');
+      ? (codes.length ? await all(`SELECT status FROM requirement WHERE req_code IN (${codes.map(() => '?').join(',')})`, ...codes) : [])
+      : await all('SELECT status FROM requirement');
 
     const ticketRows = codes
-      ? (codes.length ? all(`SELECT status FROM ticket WHERE ticket_code IN (${codes.map(() => '?').join(',')})`, ...codes) : [])
-      : all('SELECT status FROM ticket');
+      ? (codes.length ? await all(`SELECT status FROM ticket WHERE ticket_code IN (${codes.map(() => '?').join(',')})`, ...codes) : [])
+      : await all('SELECT status FROM ticket');
 
     // 投产申请（变更单）：按所选投产点过滤（窗口为空=全部）
     let applyRows;
     if (!winIds?.length) {
-      applyRows = all('SELECT ref_codes, delivery_units FROM release_apply');
+      applyRows = await all('SELECT ref_codes, delivery_units FROM release_apply');
     } else {
       const sub = inClause('release_point_id', winIds);
-      applyRows = all(`SELECT ref_codes, delivery_units FROM release_apply WHERE ${sub.where}`, ...sub.params);
+      applyRows = await all(`SELECT ref_codes, delivery_units FROM release_apply WHERE ${sub.where}`, ...sub.params);
     }
 
     // 投产系统：对应投产点提交了投产申请的变更单数；完成=全部交付单元已摆渡
     const releaseSystem = {
       total: applyRows.length,
       terminal: applyRows.filter((r) => {
-        let units = [];
-        try { units = r.delivery_units ? JSON.parse(r.delivery_units) : []; } catch { units = []; }
+        const units = parseJsonArray(r.delivery_units);
         return units.length > 0 && units.every((u) => u.ferry_status === '已摆渡');
       }).length,
     };
 
-    const dev = inWindow('dev_task');
-    const sit = inWindow('test_task', "test_type='SIT'");
-    const uat = inWindow('test_task', "test_type='UAT'");
+    const dev = await inWindow('dev_task');
+    const sit = await inWindow('test_task', "test_type='SIT'");
+    const uat = await inWindow('test_task', "test_type='UAT'");
 
     return ok({
       requirement: { total: reqRows.length, terminal: countTerminal(reqRows) },
@@ -169,9 +161,9 @@ export default async function dashboardRoutes(fastify) {
     if (!isValidDim(source, dimension)) throw badRequest('非法的统计维度');
     const xDim = xAxisDimension && isValidDim(source, xAxisDimension) ? xAxisDimension : undefined;
 
-    const codes = workItemCodesInWindow(windowIds(request.body));
-    const ctx = buildContext();
-    const rows = loadRows(source, codes);
+    const codes = await workItemCodesInWindow(windowIds(request.body));
+    const ctx = await buildContext();
+    const rows = await loadRows(source, codes);
     const data = aggregate({ source, dimension, xAxisDimension: xDim, filters, groups, xAxisGroups, rows, ctx });
     return ok({ data });
   });
@@ -180,11 +172,11 @@ export default async function dashboardRoutes(fastify) {
   // 取代「每张图表各发一次请求 + 各自整表扫描」的放大开销（仪表盘打开瞬时返回）。
   fastify.post('/dashboard/chart-data-batch', { preHandler: fastify.requirePerm('dashboard', 'view') }, async (request) => {
     const { charts = [] } = request.body || {};
-    const codes = workItemCodesInWindow(windowIds(request.body));
-    const ctx = buildContext();
+    const codes = await workItemCodesInWindow(windowIds(request.body));
+    const ctx = await buildContext();
     const rowsCache = new Map(); // source → 该窗口下的记录集（同源复用）
-    const loadOnce = (source) => {
-      if (!rowsCache.has(source)) rowsCache.set(source, loadRows(source, codes));
+    const loadOnce = async (source) => {
+      if (!rowsCache.has(source)) rowsCache.set(source, await loadRows(source, codes));
       return rowsCache.get(source);
     };
 
@@ -199,7 +191,7 @@ export default async function dashboardRoutes(fastify) {
         result[ch.id] = aggregate({
           source, dimension: cfg.dimension, xAxisDimension: xDim,
           filters: cfg.filters, groups: cfg.groups, xAxisGroups: cfg.xAxisGroups,
-          rows: loadOnce(source), ctx,
+          rows: await loadOnce(source), ctx,
         });
       } catch { result[ch.id] = []; }
     }
@@ -210,9 +202,9 @@ export default async function dashboardRoutes(fastify) {
   fastify.post('/dashboard/chart-drilldown', { preHandler: fastify.requirePerm('dashboard', 'view') }, async (request) => {
     const { source = 'requirement', filters } = request.body || {};
     if (!SOURCES[source]) throw badRequest('未知数据源');
-    const codes = workItemCodesInWindow(windowIds(request.body));
-    const ctx = buildContext();
-    const rows = loadRows(source, codes);
+    const codes = await workItemCodesInWindow(windowIds(request.body));
+    const ctx = await buildContext();
+    const rows = await loadRows(source, codes);
     // 复用聚合的过滤规则筛出明细
     const data = rows
       .filter((r) => matchFilters(source, r, filters, ctx))
@@ -222,7 +214,7 @@ export default async function dashboardRoutes(fastify) {
 
   // 我的图表 + 系统图表：列表
   fastify.get('/dashboard/charts', { preHandler: fastify.requirePerm('dashboard', 'view') }, async (request) => {
-    const rows = all(
+    const rows = await all(
       `SELECT * FROM dashboard_chart
         WHERE scope = 'system' OR (scope = 'user' AND user_id = ?)
         ORDER BY scope DESC, sort, id`,
@@ -236,7 +228,7 @@ export default async function dashboardRoutes(fastify) {
     const { title, chart_type, config, sort, scope = 'user', col_span = 12, height = 320 } = request.body || {};
     if (!title || !chart_type) throw badRequest('标题与图表类型必填');
     if (scope === 'system' && !canManageSystem(fastify, request)) throw forbidden('无管理系统图表权限');
-    const res = run(
+    const res = await run(
       'INSERT INTO dashboard_chart (user_id, title, chart_type, config, sort, scope, col_span, height) VALUES (?,?,?,?,?,?,?,?)',
       request.currentUser.id, title, chart_type, JSON.stringify(config || {}), sort || 0, scope, col_span, height,
     );
@@ -245,7 +237,7 @@ export default async function dashboardRoutes(fastify) {
 
   // 修改图表
   fastify.put('/dashboard/charts/:id', { preHandler: fastify.requirePerm('dashboard', 'view') }, async (request) => {
-    const row = get('SELECT * FROM dashboard_chart WHERE id = ?', request.params.id);
+    const row = await get('SELECT * FROM dashboard_chart WHERE id = ?', request.params.id);
     if (!row) throw notFound();
     // 系统图表需 manage；个人图表仅本人
     if (row.scope === 'system') {
@@ -254,7 +246,7 @@ export default async function dashboardRoutes(fastify) {
       throw forbidden('只能修改自己的图表');
     }
     const { title, chart_type, config, sort, col_span, height } = request.body || {};
-    run(
+    await run(
       `UPDATE dashboard_chart SET title=?, chart_type=?, config=?, sort=?, col_span=?, height=?, updated_at=datetime('now','localtime') WHERE id=?`,
       title ?? row.title, chart_type ?? row.chart_type,
       config !== undefined ? JSON.stringify(config) : row.config,
@@ -265,14 +257,14 @@ export default async function dashboardRoutes(fastify) {
 
   // 删除图表
   fastify.delete('/dashboard/charts/:id', { preHandler: fastify.requirePerm('dashboard', 'view') }, async (request) => {
-    const row = get('SELECT * FROM dashboard_chart WHERE id = ?', request.params.id);
+    const row = await get('SELECT * FROM dashboard_chart WHERE id = ?', request.params.id);
     if (!row) return ok(null, '已删除');
     if (row.scope === 'system') {
       if (!canManageSystem(fastify, request)) throw forbidden('无管理系统图表权限');
     } else if (row.user_id !== request.currentUser.id) {
       throw forbidden('只能删除自己的图表');
     }
-    run('DELETE FROM dashboard_chart WHERE id = ?', row.id);
+    await run('DELETE FROM dashboard_chart WHERE id = ?', row.id);
     return ok(null, '已删除');
   });
 }

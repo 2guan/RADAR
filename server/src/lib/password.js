@@ -10,25 +10,26 @@ import { scryptSync, randomBytes, timingSafeEqual } from 'node:crypto';
 import { get } from '../db/index.js';
 
 const KEYLEN = 64;
+const DEFAULT_SECURITY_CONFIG = {
+  'security.password.complexity': true,
+  'security.password.minLength': 8,
+  'security.password.expireDays': 90,
+  'security.lockout.enabled': true,
+  'security.lockout.maxAttempts': 5,
+  'security.lockout.durationMinutes': 15,
+};
 
 /**
  * 从数据库读取最新的安全参数配置
  */
-export function getSecurityConfig() {
-  const defaults = {
-    'security.password.complexity': true,
-    'security.password.minLength': 8,
-    'security.password.expireDays': 90,
-    'security.lockout.enabled': true,
-    'security.lockout.maxAttempts': 5,
-    'security.lockout.durationMinutes': 15,
-  };
+export async function getSecurityConfig() {
+  const defaults = DEFAULT_SECURITY_CONFIG;
 
   try {
     const keys = Object.keys(defaults);
     const config = {};
     for (const key of keys) {
-      const row = get('SELECT value FROM app_config WHERE key = ?', key);
+      const row = await get('SELECT value FROM app_config WHERE key = ?', key);
       if (row && row.value !== null && row.value !== undefined) {
         if (typeof defaults[key] === 'boolean') {
           config[key] = row.value === 'true' || row.value === '1';
@@ -52,8 +53,7 @@ export function getSecurityConfig() {
  * @param {string} password 明文密码
  * @returns {boolean}
  */
-export function validatePasswordComplexity(password) {
-  const config = getSecurityConfig();
+export function validatePasswordComplexity(password, config = DEFAULT_SECURITY_CONFIG) {
   const minLength = config['security.password.minLength'];
   const enableComplexity = config['security.password.complexity'];
 
@@ -74,17 +74,19 @@ export function validatePasswordComplexity(password) {
  * @param {object} user 包含 password_changed_at 与 created_at 的用户对象
  * @returns {boolean}
  */
-export function isPasswordExpired(user) {
+export function isPasswordExpired(user, config = DEFAULT_SECURITY_CONFIG) {
   if (!user) return false;
-  const config = getSecurityConfig();
   const expireDays = config['security.password.expireDays'];
 
   if (!expireDays || expireDays <= 0) return false;
 
-  const changedAtStr = user.password_changed_at || user.created_at;
-  if (!changedAtStr) return false;
+  const changedAtValue = user.password_changed_at || user.created_at;
+  if (!changedAtValue) return false;
 
-  const changedAt = new Date(changedAtStr.replace(' ', 'T'));
+  const changedAt = changedAtValue instanceof Date
+    ? changedAtValue
+    : new Date(String(changedAtValue).replace(' ', 'T'));
+  if (Number.isNaN(changedAt.getTime())) return false;
   const now = new Date();
   const diffTime = now - changedAt;
   const diffDays = diffTime / (1000 * 60 * 60 * 24);

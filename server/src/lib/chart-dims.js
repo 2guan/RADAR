@@ -120,25 +120,25 @@ function buildChain(req, devMap = {}, testMap = {}, rtMap = {}) {
 // ---------------------------------------------------------------------------
 // 上下文：系统映射（编号→名称/机构/板块），构造一次复用
 // ---------------------------------------------------------------------------
-export function buildContext() {
+export async function buildContext() {
   const sysMap = {};
-  for (const s of all('SELECT sys_code, sys_name, org, sector FROM system')) {
+  for (const s of await all('SELECT sys_code, sys_name, org, sector FROM system')) {
     sysMap[s.sys_code] = { name: s.sys_name, org: s.org, sector: s.sector };
   }
 
   const devMap = {};
-  for (const d of all('SELECT id, req_code, status, impl_system, impl_org FROM dev_task ORDER BY id ASC')) {
+  for (const d of await all('SELECT id, req_code, status, impl_system, impl_org FROM dev_task ORDER BY id ASC')) {
     (devMap[d.req_code] ||= []).push(d);
   }
 
   const testMap = {};
-  for (const t of all('SELECT req_code, test_type, status FROM test_task')) {
+  for (const t of await all('SELECT req_code, test_type, status FROM test_task')) {
     const bucket = (testMap[t.req_code] ||= {});
     (bucket[t.test_type] ||= []).push({ status: t.status });
   }
 
   const rtMap = {};
-  for (const rt of all('SELECT req_code, status FROM release_task')) {
+  for (const rt of await all('SELECT req_code, status FROM release_task')) {
     rtMap[rt.req_code] = rt.status;
   }
 
@@ -286,7 +286,7 @@ function labelInGroups(name, groups, dim) {
 function mergeGroups2D(buckets, groups, xGroups, dim, xDim) {
   const matrix = {};
   for (const [key, value] of Object.entries(buckets)) {
-    const [y, x] = key.split(' ');
+    const [y, x] = key.split('\u0000');
     const ly = labelInGroups(y, groups, dim);
     const lx = labelInGroups(x, xGroups, xDim);
     matrix[ly] = matrix[ly] || {};
@@ -336,7 +336,7 @@ export function aggregate({ source, dimension, xAxisDimension, filters, groups, 
     const ys = extract(source, dimension, r, ctx);
     const xs = extract(source, xAxisDimension, r, ctx);
     for (const y of ys) for (const x of xs) {
-      const key = `${y} ${x}`;
+      const key = `${y}\u0000${x}`;
       buckets[key] = (buckets[key] || 0) + 1;
     }
   }
