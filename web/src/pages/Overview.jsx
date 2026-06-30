@@ -6,7 +6,7 @@
  * 作者：hengguan
  * 说明：系统概览和个人待办面板，以工作流看板形式展示个人的开发和测试任务，支持拖拽状态更新。
  */
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useLayoutEffect, useRef } from 'react';
 import {
   Card, Row, Col, Tag, Typography, Empty, Modal, Space, Spin, Select, Avatar, Tabs, Button, Table, Radio, message, Timeline, Tooltip, List, Checkbox,
 } from 'antd';
@@ -158,16 +158,91 @@ function Field({ label, col, children }) {
 }
 
 /** 详情卡片外框（状态绝对定位在右上角，避免挤压） */
-function DetailCard({ status, code, title, onEdit, lg, children }) {
+function DetailCard({ status, code, title, onEdit, lg, shrinkCodeForStatus, children }) {
+  const cardRef = useRef(null);
+  const codeRef = useRef(null);
+  const statusRef = useRef(null);
+  const [codeFitStyle, setCodeFitStyle] = useState(null);
+
+  useLayoutEffect(() => {
+    if (!shrinkCodeForStatus || !status) {
+      setCodeFitStyle(null);
+      return undefined;
+    }
+
+    let raf = 0;
+    const updateCodeSize = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const cardEl = cardRef.current;
+        const codeEl = codeRef.current;
+        const statusEl = statusRef.current;
+        if (!cardEl || !codeEl || !statusEl) return;
+
+        const cardStyle = window.getComputedStyle(cardEl);
+        const codeStyle = window.getComputedStyle(codeEl);
+        const baseSize = Number.parseFloat(codeStyle.getPropertyValue('--lc-id-base-size')) || Number.parseFloat(codeStyle.fontSize) || 11;
+        const cardRect = cardEl.getBoundingClientRect();
+        const statusRect = statusEl.getBoundingClientRect();
+        const codeHorizontalSpace =
+          Number.parseFloat(codeStyle.paddingLeft || 0) +
+          Number.parseFloat(codeStyle.paddingRight || 0);
+        const currentSize = Number.parseFloat(codeStyle.fontSize) || baseSize;
+        const leftGap = codeEl.offsetLeft;
+        const safeGap = 8;
+        const availableWidth = Math.max(0, statusRect.left - cardRect.left - leftGap - safeGap);
+        const currentTextWidth = Math.max(0, codeEl.scrollWidth - codeHorizontalSpace);
+        const naturalTextWidth = currentTextWidth * (baseSize / Math.max(currentSize, 1));
+        const naturalWidth = naturalTextWidth + codeHorizontalSpace;
+
+        if (naturalWidth <= availableWidth) {
+          setCodeFitStyle((prev) => (prev ? null : prev));
+          return;
+        }
+
+        const targetTextWidth = Math.max(0, availableWidth - codeHorizontalSpace);
+        const nextSize = Math.max(8, Math.floor((baseSize * targetTextWidth) / Math.max(naturalTextWidth, 1) * 10) / 10);
+        const nextStyle = {
+          fontSize: nextSize < baseSize ? nextSize : baseSize,
+          maxWidth: Math.max(0, Math.floor(availableWidth)),
+        };
+        setCodeFitStyle((prev) => {
+          if (prev && prev.fontSize === nextStyle.fontSize && prev.maxWidth === nextStyle.maxWidth) return prev;
+          return nextStyle;
+        });
+      });
+    };
+
+    updateCodeSize();
+
+    const resizeObserver = new ResizeObserver(updateCodeSize);
+    if (cardRef.current) resizeObserver.observe(cardRef.current);
+    if (codeRef.current) resizeObserver.observe(codeRef.current);
+    if (statusRef.current) resizeObserver.observe(statusRef.current);
+    window.addEventListener('resize', updateCodeSize);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      resizeObserver.disconnect();
+      window.removeEventListener('resize', updateCodeSize);
+    };
+  }, [shrinkCodeForStatus, status, code]);
+
   return (
-    <div className={`lc-card ${lg ? 'lc-card-lg' : ''}`} onClick={onEdit} style={{ position: 'relative' }}>
+    <div ref={cardRef} className={`lc-card ${lg ? 'lc-card-lg' : ''}`} onClick={onEdit} style={{ position: 'relative' }}>
       {status && (
-        <div className="lc-card-status">
+        <div ref={statusRef} className="lc-card-status">
           <StatusBadge status={status} />
         </div>
       )}
       <div>
-        <span className={`lc-id ${lg ? 'big' : ''}`}>{code}</span>
+        <span
+          ref={codeRef}
+          className={`lc-id ${lg ? 'big' : ''} ${shrinkCodeForStatus ? 'lc-id-fit-status' : ''}`}
+          style={codeFitStyle || undefined}
+        >
+          {code}
+        </span>
       </div>
       {title && <div className={`lc-title ${lg ? 'lg' : ''}`}>{title}</div>}
       {children}
@@ -182,9 +257,7 @@ function ReqDetailCard({ req, entityType = 'requirement', onEdit }) {
     <DetailCard status={req.status} code={req.req_code} title={req.title} onEdit={onEdit} lg>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6, fontSize: 11 }}>
         <Tag className="tag-type" style={{ borderRadius: 2, margin: 0, fontSize: 10 }}>{req.req_type || '—'}</Tag>
-        <Tag className="tag-org" style={{ borderRadius: 2, margin: 0, fontSize: 10 }}>涉账：{req.is_accounting || '否'}</Tag>
         <span style={{ color: 'var(--radar-text-secondary)' }}>{req.propose_time || '—'}</span>
-        <span style={{ color: 'var(--radar-text-secondary)' }}>计划投产点：<ReleasePointText value={req.release_date} /></span>
       </div>
       <div className="lc-text" style={{ marginBottom: 8, color: 'var(--radar-ink)' }}>
         {req.summary || '—'}
@@ -247,7 +320,7 @@ function TaskDetailCard({ t, attachFields, onEdit }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <DetailCard status={t.status} code={t.task_code} onEdit={onEdit}>
+    <DetailCard status={t.status} code={t.task_code} onEdit={onEdit} shrinkCodeForStatus>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 6 }}>
         {t.systemInfo && <SystemCard s={t.systemInfo} />}
         {t.ownerInfo && <PersonCard p={t.ownerInfo} />}

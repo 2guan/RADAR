@@ -317,8 +317,9 @@ body {
 .lc-card:hover { border-color: var(--radar-primary); box-shadow: 0 4px 14px rgba(31,45,80,0.08); }
 .lc-card-lg { max-width: 100%; }
 .lc-card-status { position: absolute; top: 12px; right: 12px; z-index: 2; }
-.lc-id { display: inline-block; font-size: 11px; font-weight: 700; color: var(--radar-text-secondary); background: rgba(120,130,150,0.12); padding: 1px 6px; letter-spacing: .3px; margin-bottom: 6px; }
-.lc-id.big { font-size: 12px; color: var(--radar-primary); background: var(--radar-primary-soft); }
+.lc-id { --lc-id-base-size: 11; display: inline-block; font-size: 11px; font-weight: 700; color: var(--radar-text-secondary); background: rgba(120,130,150,0.12); padding: 1px 6px; letter-spacing: .3px; margin-bottom: 6px; }
+.lc-id.big { --lc-id-base-size: 12; font-size: 12px; color: var(--radar-primary); background: var(--radar-primary-soft); }
+.lc-id-fit-status { white-space: nowrap; line-height: 1.5; overflow: hidden; text-overflow: ellipsis; vertical-align: top; }
 .lc-title { font-weight: 600; font-size: 13px; color: var(--radar-ink); line-height: 1.35; margin-top: 4px; padding-right: 70px; }
 .lc-title.lg { font-size: 14px; padding-right: 0; }
 
