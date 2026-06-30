@@ -1,6 +1,8 @@
 /**
  * 文件：utils/time.js
  * 用途：前端时间格式化工具。历史记录统一按北京时间展示。
+ * 作者：hengguan
+ * 说明：兼容后端返回的 Date、时间戳、ISO 字符串，以及数据库无时区时间字符串。
  */
 
 const BEIJING_TIME_ZONE = 'Asia/Shanghai';
