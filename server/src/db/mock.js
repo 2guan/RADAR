@@ -395,6 +395,7 @@ export async function runMock() {
         const result = signResults[i] || '未签署';
         const signer = result === '未签署' ? null : pickUser(role.name);
         const signed = result !== '未签署';
+        const conclusion = result === '已驳回' ? '存在投产风险，需补充回退方案' : (result === '已签署' ? '同意投产' : null);
         const signerUser = signed ? await get('SELECT id FROM user WHERE name = ?', signer) : null;
         await run(
           `INSERT INTO release_signoff
@@ -403,11 +404,17 @@ export async function runMock() {
           rtId, role.id, role.name,
           signerUser?.id || null,
           signed ? signer : null, result,
-          result === '已驳回' ? '存在投产风险，需补充回退方案' : (result === '已签署' ? '同意投产' : null),
+          conclusion,
           signed ? `${signedDate} 10:00:00` : null,
         );
         if (signed) {
-          await auditUpdate('release', rtId, role.name, signer, { r: '未签署' }, { r: result }, { r: `会签-${role.name}` });
+          await auditUpdate('release', rtId, role.name, signer,
+            { result: '未签署', conclusion: null },
+            { result, conclusion },
+            {
+              result: `会签-${role.name}-签署状态`,
+              conclusion: `会签-${role.name}-签署意见`,
+            });
         }
       }
       return rtId;

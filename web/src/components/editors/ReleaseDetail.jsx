@@ -239,7 +239,27 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, onC
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 11, color: 'var(--radar-text-secondary)', flex: 1, minWidth: 0 }}>
             <div><span style={{ display: 'inline-block', width: 55 }}>签署人：</span><span style={{ color: 'var(--radar-ink)' }}>{so.signer_name || '—'}</span></div>
             <div><span style={{ display: 'inline-block', width: 55 }}>签署时间：</span><span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace' }}>{fmtSignTime(so.sign_time)}</span></div>
-            <div style={{ display: 'flex', alignItems: 'flex-start' }}><span style={{ display: 'inline-block', width: 55, flexShrink: 0 }}>签署意见：</span><span style={{ color: 'var(--radar-ink)', wordBreak: 'break-all' }}>{so.conclusion || '—'}</span></div>
+            <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+              <span style={{ display: 'inline-block', width: 55, flexShrink: 0 }}>签署意见：</span>
+              <span
+                title={so.conclusion || ''}
+                style={{
+                  color: 'var(--radar-ink)',
+                  display: '-webkit-box',
+                  flex: 1,
+                  minWidth: 0,
+                  WebkitLineClamp: 3,
+                  WebkitBoxOrient: 'vertical',
+                  overflow: 'hidden',
+                  whiteSpace: 'normal',
+                  wordBreak: 'break-word',
+                  lineHeight: '16px',
+                  maxHeight: 48,
+                }}
+              >
+                {so.conclusion || '—'}
+              </span>
+            </div>
           </div>
           {/* 右：评审人签名（夜间模式反色，使深色笔迹可见） */}
           <div style={{ width: 84, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
@@ -504,7 +524,13 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, onC
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <span style={{ fontSize: 12, fontWeight: 600 }}>签署意见：</span>
-            <Input.TextArea placeholder="请输入签署意见 / 结论" value={signConclusion} onChange={(e) => setSignConclusion(e.target.value)} rows={2} style={{ fontSize: 12 }} />
+            <Input.TextArea
+              placeholder="请输入签署意见 / 结论"
+              value={signConclusion}
+              onChange={(e) => setSignConclusion(e.target.value)}
+              autoSize={{ minRows: 2 }}
+              style={{ fontSize: 12 }}
+            />
           </div>
 
           {/* 评审签名：选择已存签名，或新建（手写/上传）并保存 */}

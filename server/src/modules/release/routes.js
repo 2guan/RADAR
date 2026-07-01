@@ -347,7 +347,12 @@ export default async function releaseRoutes(fastify) {
       result, conclusion || null, signaturePath, request.currentUser?.id, request.currentUser?.name, id,
     );
     await auditUpdate('release', so.release_task_id, so.role_name, request.currentUser?.name,
-      { r: so.result }, { r: result }, { r: `会签-${so.role_name}` });
+      { result: so.result, conclusion: so.conclusion },
+      { result, conclusion: conclusion || null },
+      {
+        result: `会签-${so.role_name}-签署状态`,
+        conclusion: `会签-${so.role_name}-签署意见`,
+      });
 
     const beforeReview = (await get('SELECT review_status FROM release_task WHERE id = ?', so.release_task_id))?.review_status;
     const afterReview = await recomputeReviewStatus(so.release_task_id);
