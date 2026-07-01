@@ -7,7 +7,12 @@
 
 services:
   radar:
-    build: .
+    build:
+      context: .
+      args:
+        # 国内服务器如无法访问 Docker Hub，可通过 .env 覆盖为其他可用镜像源。
+        NODE_IMAGE: ${NODE_IMAGE:-docker.m.daocloud.io/library/node:22-alpine}
+        NPM_CONFIG_REGISTRY: ${NPM_CONFIG_REGISTRY:-https://registry.npmmirror.com}
     image: radar:latest
     container_name: ${RADAR_CONTAINER_NAME:-radar}
     restart: unless-stopped

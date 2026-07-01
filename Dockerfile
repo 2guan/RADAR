@@ -5,21 +5,27 @@
 # 作者：hengguan
 # ============================================================================
 
+# ---- 可替换基础镜像：国内服务器可在 Compose/.env 中指定 Docker Hub 加速地址 ----
+ARG NODE_IMAGE=node:22-alpine
+ARG NPM_CONFIG_REGISTRY=https://registry.npmjs.org/
+
 # ---- 阶段一：构建前端 ----
-FROM node:22-alpine AS web-builder
+FROM ${NODE_IMAGE} AS web-builder
+ARG NPM_CONFIG_REGISTRY
 WORKDIR /build/web
 COPY web/package*.json ./
-RUN npm install
+RUN npm config set registry "${NPM_CONFIG_REGISTRY}" && npm ci
 COPY web/ ./
 RUN npm run build
 
 # ---- 阶段二：后端运行环境 ----
-FROM node:22-alpine
+FROM ${NODE_IMAGE}
+ARG NPM_CONFIG_REGISTRY
 WORKDIR /app
 
 # 安装后端依赖（仅生产）
 COPY server/package*.json ./server/
-RUN cd server && npm install --omit=dev
+RUN npm config set registry "${NPM_CONFIG_REGISTRY}" && cd server && npm ci --omit=dev
 
 # 拷贝后端源码与前端构建产物
 COPY server/ ./server/

@@ -429,7 +429,9 @@ docker compose up -d --build
 
 - [`docker-compose.yml`](docker-compose.yml) 将宿主机 **3510** 映射到容器 **3000**。
 - `./data` 与 `./attachments` 挂载到宿主机，**容器删除后数据与附件不丢失**。
-- 生产环境务必修改 compose 中的 `JWT_SECRET` 与 `ADMIN_PASSWORD`。
+- 国内服务器若无法拉取 `node:22-alpine`，Compose 默认会使用 `docker.m.daocloud.io/library/node:22-alpine` 构建，并将 npm 源切到 `https://registry.npmmirror.com`。
+- 如需切换镜像源，可在 `.env` 中覆盖：`NODE_IMAGE=<可访问的 node:22-alpine 镜像>`、`NPM_CONFIG_REGISTRY=<可访问的 npm registry>`。
+- 生产环境务必修改 `.env` 中的 `JWT_SECRET` 与 `ADMIN_PASSWORD`。
 - 容器启动自动执行迁移 + 种子。
 
 ---

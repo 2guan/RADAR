@@ -80,9 +80,10 @@ function projectRecord(source, row, ctx) {
 }
 
 /** 当前用户是否可管理系统图表 */
-function canManageSystem(fastify, request) {
+async function canManageSystem(fastify, request) {
   if (request.currentUser.is_super) return true;
-  return fastify.loadUserPermissions(request.currentUser.id).has('dashboard:manage');
+  const permissions = await fastify.loadUserPermissions(request.currentUser.id);
+  return permissions.has('dashboard:manage');
 }
 
 export default async function dashboardRoutes(fastify) {
@@ -227,7 +228,7 @@ export default async function dashboardRoutes(fastify) {
   fastify.post('/dashboard/charts', { preHandler: fastify.requirePerm('dashboard', 'view') }, async (request) => {
     const { title, chart_type, config, sort, scope = 'user', col_span = 12, height = 320 } = request.body || {};
     if (!title || !chart_type) throw badRequest('标题与图表类型必填');
-    if (scope === 'system' && !canManageSystem(fastify, request)) throw forbidden('无管理系统图表权限');
+    if (scope === 'system' && !(await canManageSystem(fastify, request))) throw forbidden('无管理系统图表权限');
     const res = await run(
       'INSERT INTO dashboard_chart (user_id, title, chart_type, config, sort, scope, col_span, height) VALUES (?,?,?,?,?,?,?,?)',
       request.currentUser.id, title, chart_type, JSON.stringify(config || {}), sort || 0, scope, col_span, height,
@@ -241,7 +242,7 @@ export default async function dashboardRoutes(fastify) {
     if (!row) throw notFound();
     // 系统图表需 manage；个人图表仅本人
     if (row.scope === 'system') {
-      if (!canManageSystem(fastify, request)) throw forbidden('无管理系统图表权限');
+      if (!(await canManageSystem(fastify, request))) throw forbidden('无管理系统图表权限');
     } else if (row.user_id !== request.currentUser.id) {
       throw forbidden('只能修改自己的图表');
     }
@@ -260,7 +261,7 @@ export default async function dashboardRoutes(fastify) {
     const row = await get('SELECT * FROM dashboard_chart WHERE id = ?', request.params.id);
     if (!row) return ok(null, '已删除');
     if (row.scope === 'system') {
-      if (!canManageSystem(fastify, request)) throw forbidden('无管理系统图表权限');
+      if (!(await canManageSystem(fastify, request))) throw forbidden('无管理系统图表权限');
     } else if (row.user_id !== request.currentUser.id) {
       throw forbidden('只能删除自己的图表');
     }

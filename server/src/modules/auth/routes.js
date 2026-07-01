@@ -163,7 +163,7 @@ export default async function authRoutes(fastify) {
     // 超管拥有全部权限，前端用通配标记
     const permissions = u.is_super
       ? ['*']
-      : [...fastify.loadUserPermissions(u.id)];
+      : [...await fastify.loadUserPermissions(u.id)];
 
     const userDetail = await get('SELECT created_at, password_changed_at FROM user WHERE id = ?', u.id);
     const expired = isPasswordExpired(userDetail);
