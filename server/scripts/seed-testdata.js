@@ -9,40 +9,40 @@
  *       保留管理员、字典、系统、角色、权限等基础配置。
  */
 
-import { db, get, all, run, tx } from '../src/db/index.js';
+import { get, all, run, tx } from '../src/db/index.js';
 import { hashPassword } from '../src/lib/password.js';
 import { calcDeviation } from '../src/lib/deviation.js';
 
 /** undefined -> null（SQLite 不能绑定 undefined） */
 const nz = (v) => (v === undefined ? null : v);
 /** 取系统所属机构 */
-const sysOrg = (code) => get('SELECT org FROM system WHERE sys_code = ?', code)?.org || null;
+const sysOrg = async (code) => (await get('SELECT org FROM system WHERE sys_code = ?', code))?.org || null;
 /** 取系统名称 */
-const sysName = (code) => get('SELECT sys_name FROM system WHERE sys_code = ?', code)?.sys_name || code;
+const sysName = async (code) => (await get('SELECT sys_name FROM system WHERE sys_code = ?', code))?.sys_name || code;
 
 /** 清空业务数据 */
-function clearBusiness() {
-  run('DELETE FROM release_signoff');
-  run('DELETE FROM release_system');
-  run('DELETE FROM release_task');
-  run('DELETE FROM test_task');
-  run('DELETE FROM dev_task');
-  run('DELETE FROM requirement');
-  run('DELETE FROM release_point');
-  run('DELETE FROM attachment');
-  run('DELETE FROM audit_log');
-  run('DELETE FROM dashboard_chart');
+async function clearBusiness() {
+  await run('DELETE FROM release_signoff');
+  await run('DELETE FROM release_system');
+  await run('DELETE FROM release_task');
+  await run('DELETE FROM test_task');
+  await run('DELETE FROM dev_task');
+  await run('DELETE FROM requirement');
+  await run('DELETE FROM release_point');
+  await run('DELETE FROM attachment');
+  await run('DELETE FROM audit_log');
+  await run('DELETE FROM dashboard_chart');
   // 删除测试人员（手机号 138 开头），保留管理员
-  const testUsers = all("SELECT id FROM user WHERE phone LIKE '138%'");
+  const testUsers = await all("SELECT id FROM user WHERE phone LIKE '138%'");
   for (const u of testUsers) {
-    run('DELETE FROM user_role WHERE user_id = ?', u.id);
-    run('DELETE FROM user WHERE id = ?', u.id);
+    await run('DELETE FROM user_role WHERE user_id = ?', u.id);
+    await run('DELETE FROM user WHERE id = ?', u.id);
   }
 }
 
 /** 新增投产点 */
-function addReleasePoint(date, type, remark, isDefault) {
-  const res = run(
+async function addReleasePoint(date, type, remark, isDefault) {
+  const res = await run(
     'INSERT INTO release_point (release_date, version_type, remark, is_default) VALUES (?,?,?,?)',
     date, type, remark, isDefault ? 1 : 0,
   );
@@ -50,22 +50,22 @@ function addReleasePoint(date, type, remark, isDefault) {
 }
 
 /** 新增人员（带角色） */
-function addUser(phone, name, org, roleCodes) {
-  const res = run(
+async function addUser(phone, name, org, roleCodes) {
+  const res = await run(
     'INSERT INTO user (phone, name, org, password_hash, status, password_changed_at) VALUES (?,?,?,?,?,datetime(\'now\',\'localtime\'))',
     phone, name, org, hashPassword('Radar@2026!'), '启用',
   );
   for (const code of roleCodes) {
-    const role = get('SELECT id FROM role WHERE code = ?', code);
-    if (role) run('INSERT INTO user_role (user_id, role_id) VALUES (?,?)', res.lastInsertRowid, role.id);
+    const role = await get('SELECT id FROM role WHERE code = ?', code);
+    if (role) await run('INSERT INTO user_role (user_id, role_id) VALUES (?,?)', res.lastInsertRowid, role.id);
   }
   return res.lastInsertRowid;
 }
 
 /** 新增需求 */
-function addReq(o) {
+async function addReq(o) {
   const proposerJson = JSON.stringify(o.proposer ? [o.proposer] : []);
-  const res = run(
+  await run(
     `INSERT INTO requirement
        (req_code, title, summary, status, req_type, propose_dept, proposer, yn_owner, jk_owner,
         propose_time, main_systems, collab_dev_systems, collab_test_systems, release_point_id, registrar, register_time, issue_no)
@@ -78,49 +78,53 @@ function addReq(o) {
 }
 
 /** 新增开发任务 */
-function addDev(reqCode, seq, o) {
+async function addDev(reqCode, seq, o) {
   const code = `RW_${reqCode}_${String(seq).padStart(3, '0')}`;
   const dev = calcDeviation(o.plan_start, o.plan_end, o.actual_end);
-  run(
+  const implSystemName = await sysName(o.impl_system);
+  const implOrg = await sysOrg(o.impl_system);
+  await run(
     `INSERT INTO dev_task
        (req_code, task_code, task_name, content, status, owner, impl_system, impl_org,
         plan_start, plan_end, actual_start, actual_end, deviation_rate, registrar, register_time)
      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    reqCode, code, o.task_name || `RW-${o.title || ''}-${sysName(o.impl_system)}`, o.content || '完成相应改造',
-    o.status, o.owner, o.impl_system, sysOrg(o.impl_system),
+    reqCode, code, o.task_name || `RW-${o.title || ''}-${implSystemName}`, o.content || '完成相应改造',
+    o.status, o.owner, o.impl_system, implOrg,
     o.plan_start, o.plan_end, o.actual_start, o.actual_end, dev, '超级管理员', o.register_time,
   );
-  return get('SELECT id FROM dev_task WHERE task_code = ?', code).id;
+  return (await get('SELECT id FROM dev_task WHERE task_code = ?', code)).id;
 }
 
 /** 新增测试任务 */
-function addTest(type, reqCode, seq, o) {
+async function addTest(type, reqCode, seq, o) {
   const code = `${type}_${reqCode}_${String(seq).padStart(3, '0')}`;
   const dev = calcDeviation(o.plan_start, o.plan_end, o.actual_end);
-  run(
+  const implSystemName = await sysName(o.impl_system);
+  const implOrg = await sysOrg(o.impl_system);
+  await run(
     `INSERT INTO test_task
        (req_code, task_code, task_name, test_type, status, owner, impl_system, impl_org, impl_agency,
         plan_start, plan_end, actual_start, actual_end, deviation_rate, registrar, register_time)
      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    reqCode, code, o.task_name || `${type}-${o.title || ''}-${sysName(o.impl_system)}`, type,
-    o.status, o.owner, o.impl_system, sysOrg(o.impl_system), o.impl_agency || sysOrg(o.impl_system),
+    reqCode, code, o.task_name || `${type}-${o.title || ''}-${implSystemName}`, type,
+    o.status, o.owner, o.impl_system, implOrg, o.impl_agency || implOrg,
     o.plan_start, o.plan_end, o.actual_start, o.actual_end, dev, '超级管理员', o.register_time,
   );
-  return get('SELECT id FROM test_task WHERE task_code = ?', code).id;
+  return (await get('SELECT id FROM test_task WHERE task_code = ?', code)).id;
 }
 
 /** 发起投产并按指定签署结果/系统状态落库 */
-function addRelease(reqCode, o) {
-  const res = run(
+async function addRelease(reqCode, o) {
+  const res = await run(
     'INSERT INTO release_task (req_code, status, owner, registrar, register_time) VALUES (?,?,?,?,?)',
     reqCode, o.status, o.owner, '超级管理员', o.register_time,
   );
   const rtId = res.lastInsertRowid;
   // 会签项（按系统设置中打标的会签角色生成）
-  const roles = all('SELECT id, name FROM role WHERE is_signoff_role = 1 ORDER BY id');
+  const roles = await all('SELECT id, name FROM role WHERE is_signoff_role = 1 ORDER BY id');
   for (const role of roles) {
     const r = (o.signoffs && o.signoffs[role.name]) || { result: '未签署' };
-    run(
+    await run(
       `INSERT INTO release_signoff (release_task_id, role_id, role_name, signer_name, result, conclusion, sign_time)
        VALUES (?,?,?,?,?,?,?)`,
       rtId, role.id, role.name, r.signer || null, r.result, r.conclusion || null,
@@ -129,17 +133,17 @@ function addRelease(reqCode, o) {
   }
   // 系统投产登记
   for (const s of o.systems || []) {
-    run(
+    await run(
       'INSERT INTO release_system (release_task_id, system_code, impl_org, actual_release_time, status) VALUES (?,?,?,?,?)',
-      rtId, s.code, sysOrg(s.code), s.time || null, s.status,
+      rtId, s.code, await sysOrg(s.code), s.time || null, s.status,
     );
   }
   return rtId;
 }
 
 /** 新增路径型附件 */
-function addPath(entityType, entityId, field, path) {
-  run(
+async function addPath(entityType, entityId, field, path) {
+  await run(
     `INSERT INTO attachment (entity_type, entity_id, field_key, kind, path_text, uploader) VALUES (?,?,?, 'path', ?, ?)`,
     entityType, entityId, field, path, '超级管理员',
   );
@@ -189,12 +193,12 @@ const REQ_TEMPLATES = [
   { title: "个人征信报告异常查询实时拦截", summary: "对柜员异常高频查询征信报告行为进行实时审计拦截，防止客户信息泄露。" }
 ];
 
-function main() {
-  tx(() => {
-    clearBusiness();
+async function main() {
+  await tx(async () => {
+    await clearBusiness();
 
     // 确保会签角色打标正确（修正由于基础种子数据运行在迁移后导致的 is_signoff_role 未打标问题）
-    run("UPDATE role SET is_signoff_role = 1 WHERE code IN ('金科业务', '金科开发', '金科测试', '金科运维')");
+    await run("UPDATE role SET is_signoff_role = 1 WHERE code IN ('金科业务', '金科开发', '金科测试', '金科运维')");
 
     // ===== 1. 十个投产点 =====
     const releasePointsData = [
@@ -211,45 +215,45 @@ function main() {
     ];
     const rps = [];
     for (const item of releasePointsData) {
-      rps.push(addReleasePoint(item.date, item.type, item.remark, item.isDefault));
+      rps.push(await addReleasePoint(item.date, item.type, item.remark, item.isDefault));
     }
 
     // ===== 2. 人员定义（16人，覆盖各角色、各机构，保证数据关联） =====
-    function addTestUser(phone, name, org, roleCodes) {
-      const id = addUser(phone, name, org, roleCodes);
+    async function addTestUser(phone, name, org, roleCodes) {
+      const id = await addUser(phone, name, org, roleCodes);
       return { id, phone, name, org, roleCodes };
     }
 
     const developers = [
-      addTestUser('13800000001', '张三', '上海事业群', ['金科开发']),
-      addTestUser('13800000006', '钱七', '深圳事业群', ['农信开发']),
-      addTestUser('13800000009', '吴十', '广州事业群', ['农信开发']),
-      addTestUser('13800000011', '王十二', '厦门事业群', ['农信开发']),
-      addTestUser('13800000013', '林十四', '大数据中心', ['金科开发']),
-      addTestUser('13800000015', '高十六', '交付事业部', ['金科开发'])
+      await addTestUser('13800000001', '张三', '上海事业群', ['金科开发']),
+      await addTestUser('13800000006', '钱七', '深圳事业群', ['农信开发']),
+      await addTestUser('13800000009', '吴十', '广州事业群', ['农信开发']),
+      await addTestUser('13800000011', '王十二', '厦门事业群', ['农信开发']),
+      await addTestUser('13800000013', '林十四', '大数据中心', ['金科开发']),
+      await addTestUser('13800000015', '高十六', '交付事业部', ['金科开发'])
     ];
 
     const testers = [
-      addTestUser('13800000002', '李四', '上海事业群', ['金科测试']),
-      addTestUser('13800000007', '孙八', '成都事业群', ['农信测试']),
-      addTestUser('13800000010', '郑十一', '北京事业群', ['农信测试']),
-      addTestUser('13800000012', '陈十三', '武汉事业群', ['农信测试']),
-      addTestUser('13800000014', '徐十五', '大数据中心', ['金科测试']),
-      addTestUser('13800000016', '梁十七', '交付事业部', ['金科测试'])
+      await addTestUser('13800000002', '李四', '上海事业群', ['金科测试']),
+      await addTestUser('13800000007', '孙八', '成都事业群', ['农信测试']),
+      await addTestUser('13800000010', '郑十一', '北京事业群', ['农信测试']),
+      await addTestUser('13800000012', '陈十三', '武汉事业群', ['农信测试']),
+      await addTestUser('13800000014', '徐十五', '大数据中心', ['金科测试']),
+      await addTestUser('13800000016', '梁十七', '交付事业部', ['金科测试'])
     ];
 
     const businessOwners = [
-      addTestUser('13800000003', '王五', '建信金科', ['金科业务']),
-      addTestUser('13800000005', '朱俊杰', '云南农信', ['农信业务']),
-      addTestUser('13800000008', '周九', '建信金科', ['金科业务', '金科测试'])
+      await addTestUser('13800000003', '王五', '建信金科', ['金科业务']),
+      await addTestUser('13800000005', '朱俊杰', '云南农信', ['农信业务']),
+      await addTestUser('13800000008', '周九', '建信金科', ['金科业务', '金科测试'])
     ];
 
     const opsOwners = [
-      addTestUser('13800000004', '赵六', '建信金科', ['金科运维'])
+      await addTestUser('13800000004', '赵六', '建信金科', ['金科运维'])
     ];
 
     // ===== 3. 查询系统，按机构分组以便做关联 =====
-    const allSystems = all('SELECT sys_code, sys_name, org, sector FROM system');
+    const allSystems = await all('SELECT sys_code, sys_name, org, sector FROM system');
     const systemsByOrg = {};
     for (const s of allSystems) {
       if (!systemsByOrg[s.org]) {
@@ -303,7 +307,7 @@ function main() {
       }
 
       const reqCode = `RC_${rpDate}_${String(i + 1).padStart(3, '0')}`;
-      addReq({
+      await addReq({
         req_code: reqCode,
         title: tpl.title,
         summary: tpl.summary,
@@ -320,13 +324,13 @@ function main() {
         rp: rpId
       });
 
-      const reqRow = get("SELECT id FROM requirement WHERE req_code = ?", reqCode);
-      addPath('requirement', reqRow.id, '需求说明书', `\\\\fileserver\\specs\\${tpl.title}需求说明书.docx`);
+      const reqRow = await get("SELECT id FROM requirement WHERE req_code = ?", reqCode);
+      await addPath('requirement', reqRow.id, '需求说明书', `\\\\fileserver\\specs\\${tpl.title}需求说明书.docx`);
 
       // ------------------ 投产阶段 (13个) ------------------
       if (i >= 0 && i <= 12) {
         // 1. 开发任务：每个需求2个开发任务 (全完成)
-        const d1 = addDev(reqCode, 1, {
+        const d1 = await addDev(reqCode, 1, {
           title: tpl.title,
           status: '开发完成',
           owner: primaryDev.name,
@@ -338,11 +342,11 @@ function main() {
           register_time: '2026-06-15'
         });
         devTaskCount++;
-        addPath('dev', d1, '概要设计', `\\\\fileserver\\dev\\${sys1.sys_code}_概要设计.docx`);
-        addPath('dev', d1, '单元测试报告', `\\\\fileserver\\dev\\${sys1.sys_code}_单测报告.pdf`);
+        await addPath('dev', d1, '概要设计', `\\\\fileserver\\dev\\${sys1.sys_code}_概要设计.docx`);
+        await addPath('dev', d1, '单元测试报告', `\\\\fileserver\\dev\\${sys1.sys_code}_单测报告.pdf`);
 
         const d2TargetSys = collabDev.length ? collabDev[0] : sys1.sys_code;
-        const d2 = addDev(reqCode, 2, {
+        const d2 = await addDev(reqCode, 2, {
           title: tpl.title,
           status: '开发完成',
           owner: secondaryDev.name,
@@ -354,11 +358,11 @@ function main() {
           register_time: '2026-06-15'
         });
         devTaskCount++;
-        addPath('dev', d2, '概要设计', `\\\\fileserver\\dev\\${d2TargetSys}_概要设计.docx`);
+        await addPath('dev', d2, '概要设计', `\\\\fileserver\\dev\\${d2TargetSys}_概要设计.docx`);
 
         // 2. 测试任务：1 SIT + 1 UAT (全完成)
         const tester1 = testers[i % testers.length];
-        const tSIT = addTest('SIT', reqCode, 1, {
+        const tSIT = await addTest('SIT', reqCode, 1, {
           title: tpl.title,
           status: '测试完成',
           owner: tester1.name,
@@ -370,9 +374,9 @@ function main() {
           register_time: '2026-07-09'
         });
         testSITUATCount++;
-        addPath('test', tSIT, 'SIT测试报告', `\\\\fileserver\\test\\SIT_${reqCode}_测试报告.pdf`);
+        await addPath('test', tSIT, 'SIT测试报告', `\\\\fileserver\\test\\SIT_${reqCode}_测试报告.pdf`);
 
-        const tUAT = addTest('UAT', reqCode, 1, {
+        const tUAT = await addTest('UAT', reqCode, 1, {
           title: tpl.title,
           status: '测试完成',
           owner: bizOwner.name,
@@ -384,11 +388,11 @@ function main() {
           register_time: '2026-07-26'
         });
         testSITUATCount++;
-        addPath('test', tUAT, 'UAT验收报告', `\\\\fileserver\\test\\UAT_${reqCode}_验收报告.pdf`);
+        await addPath('test', tUAT, 'UAT验收报告', `\\\\fileserver\\test\\UAT_${reqCode}_验收报告.pdf`);
 
         // 3. 安全或非功能测试：前5个配置NFT，第6-10个配置SEC (10个任务)
         if (i < 5) {
-          const tNFT = addTest('NFT', reqCode, 1, {
+          const tNFT = await addTest('NFT', reqCode, 1, {
             title: tpl.title,
             status: '测试完成',
             owner: testers[(i + 2) % testers.length].name,
@@ -400,9 +404,9 @@ function main() {
             register_time: '2026-07-20'
           });
           testSECNFTCount++;
-          addPath('test', tNFT, 'NFT性能报告', `\\\\fileserver\\test\\NFT_${reqCode}_性能报告.pdf`);
+          await addPath('test', tNFT, 'NFT性能报告', `\\\\fileserver\\test\\NFT_${reqCode}_性能报告.pdf`);
         } else if (i >= 5 && i < 10) {
-          const tSEC = addTest('SEC', reqCode, 1, {
+          const tSEC = await addTest('SEC', reqCode, 1, {
             title: tpl.title,
             status: '测试完成',
             owner: testers[(i + 3) % testers.length].name,
@@ -414,7 +418,7 @@ function main() {
             register_time: '2026-07-20'
           });
           testSECNFTCount++;
-          addPath('test', tSEC, '安全扫描报告', `\\\\fileserver\\test\\SEC_${reqCode}_安全报告.pdf`);
+          await addPath('test', tSEC, '安全扫描报告', `\\\\fileserver\\test\\SEC_${reqCode}_安全报告.pdf`);
         }
 
         // 4. 投产任务：9个已投产，4个待投产
@@ -453,7 +457,7 @@ function main() {
           systemsRel.push({ code: collabDev[0], status: relStatus, time: isReleased ? rpDate : null });
         }
 
-        addRelease(reqCode, {
+        await addRelease(reqCode, {
           status: relStatus,
           owner: opsOwner.name,
           register_time: '2026-08-05',
@@ -465,7 +469,7 @@ function main() {
       // ------------------ 测试阶段 (5个) ------------------
       else if (i >= 13 && i <= 17) {
         // 1. 开发任务：每个需求2个开发任务 (全完成)
-        addDev(reqCode, 1, {
+        await addDev(reqCode, 1, {
           title: tpl.title,
           status: '开发完成',
           owner: primaryDev.name,
@@ -479,7 +483,7 @@ function main() {
         devTaskCount++;
 
         const d2TargetSys = collabDev.length ? collabDev[0] : sys1.sys_code;
-        addDev(reqCode, 2, {
+        await addDev(reqCode, 2, {
           title: tpl.title,
           status: '开发完成',
           owner: secondaryDev.name,
@@ -496,7 +500,7 @@ function main() {
         const tester1 = testers[i % testers.length];
         if (i === 13) {
           // SIT完成
-          addTest('SIT', reqCode, 1, {
+          await addTest('SIT', reqCode, 1, {
             title: tpl.title,
             status: '测试完成',
             owner: tester1.name,
@@ -510,7 +514,7 @@ function main() {
           testSITUATCount++;
         } else if (i === 14 || i === 15) {
           // SIT进行中
-          addTest('SIT', reqCode, 1, {
+          await addTest('SIT', reqCode, 1, {
             title: tpl.title,
             status: '测试实施',
             owner: tester1.name,
@@ -524,7 +528,7 @@ function main() {
           testSITUATCount++;
         } else if (i === 16) {
           // UAT进行中
-          addTest('UAT', reqCode, 1, {
+          await addTest('UAT', reqCode, 1, {
             title: tpl.title,
             status: '测试实施',
             owner: bizOwner.name,
@@ -553,7 +557,7 @@ function main() {
           const curStatus = devStatuses[(i + d) % devStatuses.length];
           const hasStarted = curStatus !== '开发设计';
 
-          addDev(reqCode, d, {
+          await addDev(reqCode, d, {
             title: tpl.title,
             status: curStatus,
             owner: devUser.name,
@@ -577,7 +581,7 @@ function main() {
             const devUser = developers[(i + d) % developers.length];
             const taskSys = (d === 1) ? sys1.sys_code : sys2.sys_code;
 
-            addDev(reqCode, d, {
+            await addDev(reqCode, d, {
               title: tpl.title,
               status: '开发承接',
               owner: devUser.name,
@@ -600,9 +604,13 @@ function main() {
   });
 
   // 统计
-  const c = (t) => get(`SELECT COUNT(*) AS c FROM ${t}`).c;
+  const c = async (t) => (await get(`SELECT COUNT(*) AS c FROM ${t}`)).c;
+  const testUserCount = (await all("SELECT id FROM user WHERE phone LIKE '138%'")).length;
   console.log('[测试数据] 已写入：',
-    `投产点 ${c('release_point')} / 人员 ${all("SELECT id FROM user WHERE phone LIKE '138%'").length} / 需求 ${c('requirement')} / 开发 ${c('dev_task')} / 测试 ${c('test_task')} / 投产 ${c('release_task')} / 会签 ${c('release_signoff')} / 系统投产 ${c('release_system')} / 附件 ${c('attachment')}`);
+    `投产点 ${await c('release_point')} / 人员 ${testUserCount} / 需求 ${await c('requirement')} / 开发 ${await c('dev_task')} / 测试 ${await c('test_task')} / 投产 ${await c('release_task')} / 会签 ${await c('release_signoff')} / 系统投产 ${await c('release_system')} / 附件 ${await c('attachment')}`);
 }
 
-main();
+main().catch((err) => {
+  console.error('[测试数据] 写入失败：', err);
+  process.exit(1);
+});

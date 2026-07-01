@@ -35,7 +35,7 @@ export default async function signatureRoutes(fastify) {
     const { dataUrl, label } = request.body || {};
     const { ext, buffer } = decodeSignatureDataUrl(dataUrl);
     const relPath = saveSignatureFile(request.currentUser.id, buffer, ext);
-    const count = await get('SELECT COUNT(*) AS c FROM user_signature WHERE user_id = ?', request.currentUser.id)?.c || 0;
+    const count = (await get('SELECT COUNT(*) AS c FROM user_signature WHERE user_id = ?', request.currentUser.id))?.c || 0;
     const res = await run(
       'INSERT INTO user_signature (user_id, label, stored_path, is_default) VALUES (?,?,?,?)',
       request.currentUser.id, (label || '').trim() || null, relPath, count === 0 ? 1 : 0,

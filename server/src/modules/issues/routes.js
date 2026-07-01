@@ -216,7 +216,7 @@ export default async function issueRoutes(fastify) {
     const body = request.body || {};
     let codes = Array.isArray(body.codes) ? body.codes.filter(Boolean) : null;
     if (!codes || !codes.length) {
-      codes = await all('SELECT issue_code FROM issue ORDER BY id ASC').map((r) => r.issue_code);
+      codes = (await all('SELECT issue_code FROM issue ORDER BY id ASC')).map((r) => r.issue_code);
     }
     if (!codes.length) throw badRequest('暂无可同步的问题，请先点击「同步问题」');
 
@@ -267,7 +267,7 @@ export default async function issueRoutes(fastify) {
     const body = request.body || {};
     let codes = Array.isArray(body.codes) ? body.codes.filter(Boolean) : null;
     if (!codes || !codes.length) {
-      codes = await all('SELECT issue_code FROM issue ORDER BY id ASC').map((r) => r.issue_code);
+      codes = (await all('SELECT issue_code FROM issue ORDER BY id ASC')).map((r) => r.issue_code);
     }
     if (!codes.length) throw badRequest('暂无可同步的问题，请先点击「同步问题」');
     // 不 await，让任务在后台运行
