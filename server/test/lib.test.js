@@ -9,6 +9,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { hashPassword, verifyPassword } from '../src/lib/password.js';
 import { calcDeviation } from '../src/lib/deviation.js';
+import { formatWordDateTime } from '../src/lib/release-word.js';
 
 test('密码哈希：正确密码校验通过、错误密码失败', () => {
   const h = hashPassword('admin2026');
@@ -25,6 +26,13 @@ test('排期偏差率：延期为正、提前为负、信息不全为 null', () 
   assert.ok(calcDeviation('2026-07-01', '2026-07-10', '2026-07-05') < 0);
   // 缺少实际结束 -> null
   assert.equal(calcDeviation('2026-07-01', '2026-07-10', null), null);
+});
+
+test('投产评审 Word 日期时间格式：兼容数据库字符串与 Date 对象', () => {
+  assert.equal(formatWordDateTime('2026-05-05 08:15:00'), '2026-5-5 8:15');
+  assert.equal(formatWordDateTime('2026-05-05T08:15:30.000Z'), '2026-5-5 8:15');
+  assert.equal(formatWordDateTime(new Date(2026, 4, 5, 8, 15, 0)), '2026-5-5 8:15');
+  assert.equal(formatWordDateTime(null), '—');
 });
 
 import { reqOrg } from '../src/modules/overview/routes.js';

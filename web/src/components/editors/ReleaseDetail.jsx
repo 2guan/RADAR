@@ -68,6 +68,7 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, onC
 
   // 会签弹窗状态
   const [signOpen, setSignOpen] = useState(false);
+  const [signReadonly, setSignReadonly] = useState(false);
   const [currentSignoff, setCurrentSignoff] = useState(null);
   const [signResult, setSignResult] = useState('已签署');
   const [signConclusion, setSignConclusion] = useState('');
@@ -140,13 +141,16 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, onC
   const canSign = (so) => can('release', 'release.signoff')
     && (user?.isSuper || (user?.roles || []).some((r) => r.name === so.role_name));
 
-  const handleOpenSign = (so) => {
+  const isSignedSignoff = (so) => so?.result && so.result !== '未签署';
+
+  const handleOpenSign = (so, readonly = false) => {
     setCurrentSignoff(so);
     const result = so.result === '已驳回' ? '已驳回' : '已签署';
     setSignResult(result);
-    setSignConclusion(so.conclusion || (result === '已签署' ? '同意投产' : '不同意，[补充具体原因]'));
+    setSignConclusion(readonly ? (so.conclusion || '') : (so.conclusion || (result === '已签署' ? '同意投产' : '不同意，[补充具体原因]')));
+    setSignReadonly(readonly);
     setSignOpen(true);
-    loadSignatures();
+    if (!readonly) loadSignatures();
   };
 
   const handleSignResultChange = (val) => {
@@ -225,11 +229,16 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, onC
   };
 
   const SignoffCard = ({ so }) => {
-    const clickable = canSign(so);
+    const editableSign = canSign(so);
+    const readonlySign = !editableSign && isSignedSignoff(so);
+    const clickable = editableSign || readonlySign;
     return (
       <Card size="small" hoverable={clickable} styles={{ body: { padding: '6px 8px' } }}
         style={{ cursor: clickable ? 'pointer' : 'default', borderColor: 'var(--radar-border)', height: '100%', boxShadow: 'none' }}
-        onClick={() => { if (clickable) handleOpenSign(so); }}>
+        onClick={() => {
+          if (editableSign) handleOpenSign(so);
+          else if (readonlySign) handleOpenSign(so, true);
+        }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
           <strong style={{ fontSize: 12, color: 'var(--radar-ink)' }}>{so.role_name}</strong>
           <StatusBadge status={so.result} />
@@ -273,6 +282,39 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, onC
       </Card>
     );
   };
+
+  const ReadonlySignoffView = ({ so }) => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 12, fontSize: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontWeight: 600, width: 70 }}>签署结论：</span>
+        <StatusBadge status={so?.result} />
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontWeight: 600, width: 70 }}>签署人：</span>
+        <span style={{ color: 'var(--radar-ink)' }}>{so?.signer_name || '—'}</span>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontWeight: 600, width: 70 }}>签署时间：</span>
+        <span style={{ color: 'var(--radar-ink)', fontFamily: 'SFMono-Regular, Consolas, monospace' }}>{fmtSignTime(so?.sign_time)}</span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <span style={{ fontWeight: 600 }}>签署意见：</span>
+        <div style={{ minHeight: 64, padding: '6px 8px', border: '1px solid var(--radar-border)', borderRadius: 2, background: 'var(--radar-bg)', color: 'var(--radar-ink)', lineHeight: '18px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+          {so?.conclusion || '—'}
+        </div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <span style={{ fontWeight: 600 }}>评审签名：</span>
+        <div style={{ minHeight: 96, border: '1px solid var(--radar-border)', borderRadius: 2, background: 'var(--radar-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 10 }}>
+          {so?.signature_image ? (
+            <img src={so.signature_image} alt="签名" style={{ maxWidth: '100%', maxHeight: 76, objectFit: 'contain', filter: isDark ? 'invert(1)' : 'none' }} />
+          ) : (
+            <span style={{ fontSize: 11, color: '#bbb' }}>未签名</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 
   // 关联制品卡片（只读）：含各部署单元的摆渡状态
   const ArtifactCard = ({ a }) => {
@@ -508,13 +550,14 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, onC
       {/* 会签签署弹窗 */}
       <Modal
         open={signOpen}
-        title={`签署会签 · ${currentSignoff?.role_name}`}
+        title={`${signReadonly ? '查看会签' : '签署会签'} · ${currentSignoff?.role_name}`}
         onCancel={() => setSignOpen(false)}
-        onOk={confirmSign}
+        onOk={signReadonly ? undefined : confirmSign}
         confirmLoading={signing}
         width={460} destroyOnHidden okText="确认签署" cancelText="取消"
+        footer={signReadonly ? null : undefined}
       >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 12, fontSize: 12 }}>
+        {signReadonly ? <ReadonlySignoffView so={currentSignoff} /> : <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 12, fontSize: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 12, fontWeight: 600, width: 70 }}>签署结论：</span>
             <Radio.Group value={signResult} onChange={(e) => handleSignResultChange(e.target.value)} size="small">
@@ -575,7 +618,7 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, onC
               </div>
             )}
           </div>
-        </div>
+        </div>}
       </Modal>
 
       <HistoryDrawer open={historyOpen} entityType="release" entityId={detail?.releaseTask?.id} onClose={() => setHistoryOpen(false)} />

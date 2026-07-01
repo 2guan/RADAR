@@ -97,6 +97,39 @@ function dataUrlToBuffer(dataUrl) {
   try { return Buffer.from(m[2], 'base64'); } catch { return null; }
 }
 
+/** Word 中显示的日期时间：2026-5-5 8:15。 */
+export function formatWordDateTime(value) {
+  if (!value) return '—';
+
+  const fromParts = (y, mo, d, h, mi) => {
+    const date = `${Number(y)}-${Number(mo)}-${Number(d)}`;
+    if (h === undefined || mi === undefined) return date;
+    return `${date} ${Number(h)}:${String(Number(mi)).padStart(2, '0')}`;
+  };
+
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return '—';
+    return fromParts(
+      value.getFullYear(),
+      value.getMonth() + 1,
+      value.getDate(),
+      value.getHours(),
+      value.getMinutes(),
+    );
+  }
+
+  const text = String(value).trim();
+  if (!text) return '—';
+
+  const m = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[ T](\d{1,2}):(\d{1,2}))?/.exec(text);
+  if (m) return fromParts(m[1], m[2], m[3], m[4], m[5]);
+
+  const parsed = new Date(text);
+  if (!Number.isNaN(parsed.getTime())) return formatWordDateTime(parsed);
+
+  return text;
+}
+
 // ── 表格构建辅助 ─────────────────────────────────────────────────────────
 
 /** 两列 key-value 行（label 宽 2000，value 宽 6500） */
@@ -303,9 +336,7 @@ export async function buildReleaseWordDoc(detail, devTasksFull, testTasksFull) {
 
     const dataRows = signoffs.map((so) => {
       const sigBuf = dataUrlToBuffer(so.signature_image);
-      const signTime = so.sign_time
-        ? String(so.sign_time).slice(0, 16).replace('T', ' ')
-        : '—';
+      const signTime = formatWordDateTime(so.sign_time);
 
       // 「签署人及签名」列：姓名 + 签名图片（有则显示）
       const sigCellChildren = [
