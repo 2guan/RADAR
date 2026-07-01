@@ -1,3 +1,9 @@
+<!--
+文件：README.md
+用途：说明 RADAR 项目的功能范围、目录结构、部署方式与开发约定。
+作者：hengguan
+-->
+
 # RADAR · 日常需求研发流程管理
 
 > **R**equirement **A**gile **D**elivery & **A**cceleration **R**esource
@@ -182,7 +188,7 @@ RADAR/
 ├─ Dockerfile                      # 多阶段构建
 ├─ docker-compose.yml              # 单服务编排（端口 3510→3000）
 ├─ .env.example                    # 环境变量示例
-├─ CLAUDE.md / PRODUCT.md / DESIGN.md   # 产品与设计上下文
+├─ AI-GUIDE.md / PRODUCT.md / DESIGN.md # 产品与设计上下文
 └─ README.md
 ```
 
@@ -451,7 +457,7 @@ docker compose up -d --build
 
 - **[PRODUCT.md](PRODUCT.md)** —— 战略、用户角色、品牌人格（精密·沉稳·数据导向）、5 条设计原则、无障碍（WCAG AA + 明暗对等 + 大小屏一致）。
 - **[DESIGN.md](DESIGN.md)** —— 视觉系统：主色翡翠绿 `#0E9F6E`、语义状态色、系统字体栈、圆角 8px、偏平分层阴影、组件清单、Do's & Don'ts。
-- **[CLAUDE.md](CLAUDE.md)** —— 给协作 AI 的项目约定速览。
+- **[AI-GUIDE.md](AI-GUIDE.md)** —— 给协作 AI 的项目约定速览。
 
 ---
 

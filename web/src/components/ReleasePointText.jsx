@@ -1,3 +1,9 @@
+/**
+ * 文件：components/ReleasePointText.jsx
+ * 用途：统一渲染投产点文本、选项标签与投产点待定占位值。
+ * 作者：hengguan
+ */
+
 import React from 'react';
 
 export const PENDING_RELEASE_POINT = '投产点待定';
@@ -9,6 +15,7 @@ export function isNumericReleasePoint(value) {
   return NUMERIC_RELEASE_POINT_RE.test(String(value || ''));
 }
 
+// 投产点标签可按场景附带版本类型，供列表、筛选与搜索复用。
 export function releasePointLabelText(point, { includeVersionType = false, separator = ' · ' } = {}) {
   const releaseDate = String(point?.release_date || '');
   if (!releaseDate) return '';

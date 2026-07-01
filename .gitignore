@@ -1,3 +1,7 @@
+# 文件：.gitignore
+# 用途：声明仓库忽略的依赖、构建产物、运行数据与本地工具配置。
+# 作者：hengguan
+
 # 依赖
 node_modules/
 # 构建产物
@@ -15,5 +19,5 @@ attachments/*
 .DS_Store
 
 # 本地工具/代理配置（不入库）
-.claude/
+.assistant-tools/
 .impeccable/

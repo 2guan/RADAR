@@ -1,3 +1,9 @@
+<!--
+文件：PRODUCT.md
+用途：记录 RADAR 的产品定位、用户场景、品牌人格与设计原则。
+作者：hengguan
+-->
+
 # Product
 
 ## Register

@@ -1,6 +1,7 @@
 ---
 name: RADAR · 日常需求研发流程管理
 description: 精密、沉稳、数据导向的现代企业研发控制台
+author: hengguan
 colors:
   primary: "#0E9F6E"
   primary-deep: "#0B7D56"

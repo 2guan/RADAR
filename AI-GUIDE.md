@@ -1,4 +1,10 @@
-# CLAUDE.md
+<!--
+文件：AI-GUIDE.md
+用途：记录 RADAR 项目协作约定、运行方式与设计上下文入口。
+作者：hengguan
+-->
+
+# AI-GUIDE.md
 
 RADAR · 日常需求研发流程管理（Requirement Agile Delivery & Acceleration Resource）。以"投产版本（投产点）"为主线，把"需求分析 → 开发管理 → 测试管理(SIT/UAT/NFT/SEC) → 投产管理"全链路数字化。
 
@@ -37,4 +43,4 @@ cd web && npm install && npm run dev       # 前端 :5173（代理 /api）
 - **[PRODUCT.md](PRODUCT.md)** — 战略：register=product；用户=农信/金科研发协同团队；品牌人格=精密·沉稳·数据导向（现代精致科技感）；5 条设计原则（状态先行 / 密度即效率 / 一致胜于惊喜 / 克制的精致 / 可追溯即可信）；无障碍=WCAG AA + 明暗对等 + 大小屏一致。
 - **[DESIGN.md](DESIGN.md)** — 视觉系统：主色翡翠绿 `#0E9F6E`（非蓝）、语义状态色、系统字体栈、圆角 8px、偏平分层阴影、统一组件清单、Do's & Don'ts。
 
-设计/迭代界面时用 impeccable 命令（需重启 Claude Code 后斜杠命令方可用）：`/impeccable craft|shape|critique|audit|polish|live <目标>`。
+设计/迭代界面时用 impeccable 命令：`/impeccable craft|shape|critique|audit|polish|live <目标>`。

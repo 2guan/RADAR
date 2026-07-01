@@ -1,6 +1,7 @@
 /**
  * 文件：lib/env.js
  * 用途：加载仓库根目录下的 .env 文件，避免运行配置散落在代码默认值中。
+ * 作者：hengguan
  */
 
 import fs from 'node:fs';

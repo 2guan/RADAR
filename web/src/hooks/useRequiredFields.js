@@ -1,3 +1,9 @@
+/**
+ * 文件：hooks/useRequiredFields.js
+ * 用途：读取并缓存字段必填配置，为表单生成统一校验规则。
+ * 作者：hengguan
+ */
+
 import { useEffect, useMemo, useState } from 'react';
 import { apiGet } from '../api/client.js';
 

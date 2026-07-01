@@ -1,6 +1,7 @@
 /**
  * 文件：components/RequiredFieldMatrix.jsx
  * 用途：系统设置中的字段必填项矩阵配置。
+ * 作者：hengguan
  */
 
 import React, { useEffect, useState } from 'react';

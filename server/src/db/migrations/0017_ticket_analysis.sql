@@ -1,5 +1,6 @@
 -- 0017_ticket_analysis.sql
 -- 用途：新增工单分析主表，并将开发/测试任务的 req_code 泛化为「需求/工单编号」。
+-- 作者：hengguan
 
 CREATE TABLE ticket (
   id                  INTEGER PRIMARY KEY AUTOINCREMENT,
