@@ -1,6 +1,6 @@
 /**
  * 文件：pages/Release.jsx
- * 用途：投产审批页面。逐条展示「投产申请」中所选择的需求/工单/问题，含投产状态、评审状态、计划投产点、
+ * 用途：投产审批页面。逐条展示「投产申请」中所选择的需求/工单/问题，含投产状态、评审状态、申请投产点、
  *       需求/问题/工单编号、需求标题/工单概述/问题概述、会签进度。点击行打开投产审批详情（复用 ReleaseDetail）。
  * 作者：hengguan
  * 说明：审批对象来源于投产申请的 ref_codes（需求、工单或问题）；不再列出全部投产点需求，也不再有「UAT 终态发起评审」逻辑。
@@ -22,7 +22,7 @@ import { ReleasePointText } from '../components/ReleasePointText.jsx';
 export default function Release() {
   const tableRef = useRef();
   const releasePointIds = useAppStore((s) => s.releasePointIds);
-  const [detailCode, setDetailCode] = useState(null);
+  const [detailTarget, setDetailTarget] = useState(null);
   const [filterQuery, setFilterQuery] = useState([]);
 
   const [statuses, setStatuses] = useState([]);
@@ -88,7 +88,7 @@ export default function Release() {
       ) : '—'),
     },
     {
-      title: '计划投产点', dataIndex: 'release_date', key: 'release_date', width: 120,
+      title: '申请投产点', dataIndex: 'release_date', key: 'release_date', width: 120,
       render: (val) => <ReleasePointText value={val} />,
     },
     {
@@ -123,6 +123,7 @@ export default function Release() {
     },
     {
       title: '需求标题/工单概述/问题概述', dataIndex: 'title', key: 'title',
+      width: 360,
       render: (v) => (
         <div
           title={v || ''}
@@ -146,10 +147,10 @@ export default function Release() {
         ]}
       />
       <DataTable
-        ref={tableRef} columns={columns} fetcher={fetcher} baseQuery={{ releasePointIds, filters: filterQuery }} rowKey="code"
+        ref={tableRef} columns={columns} fetcher={fetcher} baseQuery={{ releasePointIds, filters: filterQuery }} rowKey={(r) => `${r.code}_${r.release_point_id ?? 'none'}`}
         showSearch={false}
-        tableScroll={{}}
-        onRowClick={(r) => setDetailCode(r.code)}
+        tableScroll={{ x: 1300 }}
+        onRowClick={(r) => setDetailTarget({ code: r.code, releasePointId: r.release_point_id })}
         mobileCard={(r) => (
           <Space direction="vertical" size={4} style={{ width: '100%' }}>
             <Space style={{ justifyContent: 'space-between', width: '100%' }}>
@@ -167,13 +168,19 @@ export default function Release() {
               <div style={{ fontSize: '11px', color: 'var(--radar-text-secondary)' }}>实施机构：{r.impl_org}</div>
             )}
             {r.release_date && (
-              <div style={{ fontSize: '11px', color: 'var(--radar-text-secondary)' }}>计划投产点：<ReleasePointText value={r.release_date} /></div>
+              <div style={{ fontSize: '11px', color: 'var(--radar-text-secondary)' }}>申请投产点：<ReleasePointText value={r.release_date} /></div>
             )}
           </Space>
         )}
       />
 
-      <ReleaseDetail open={!!detailCode} code={detailCode} onClose={() => setDetailCode(null)} onChanged={() => tableRef.current?.reload()} />
+      <ReleaseDetail
+        open={!!detailTarget}
+        code={detailTarget?.code}
+        releasePointId={detailTarget?.releasePointId}
+        onClose={() => setDetailTarget(null)}
+        onChanged={() => tableRef.current?.reload()}
+      />
     </Card>
   );
 }

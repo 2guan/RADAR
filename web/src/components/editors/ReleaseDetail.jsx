@@ -8,7 +8,7 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Modal, Card, Space, Button, Input, message, Empty, Row, Col, Radio, Tooltip, Tag, Upload, Popconfirm } from 'antd';
+import { Modal, Card, Space, Button, Input, message, Empty, Row, Col, Radio, Tooltip, Tag, Upload, Popconfirm, Select } from 'antd';
 import { HistoryOutlined, UploadOutlined, DeleteOutlined, PlusOutlined, HighlightOutlined, DownloadOutlined } from '@ant-design/icons';
 import HistoryDrawer from '../HistoryDrawer.jsx';
 import SignaturePad from '../SignaturePad.jsx';
@@ -21,7 +21,7 @@ import TicketEditor from './TicketEditor.jsx';
 import StatusBadge, { getStatusType, statusSelectWidth } from '../StatusBadge.jsx';
 import DictSelect from '../DictSelect.jsx';
 import PersonPicker from '../PersonPicker.jsx';
-import { ReleasePointText } from '../ReleasePointText.jsx';
+import { makeReleasePointOptions, ReleasePointText } from '../ReleasePointText.jsx';
 import { apiGet, apiPost, apiPut, apiDelete, rawClient } from '../../api/client.js';
 import { useAppStore } from '../../stores/app.js';
 
@@ -59,12 +59,14 @@ function StageChip({ label, children }) {
   );
 }
 
-export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, onClose, onChanged }) {
+export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, releasePointId, onClose, onChanged }) {
   const entityCode = code ?? reqCode;
   const { user, can, theme } = useAppStore();
   const isDark = theme === 'dark';
   const [detail, setDetail] = useState(null);
   const [owner, setOwner] = useState(null);
+  const [currentReleasePointId, setCurrentReleasePointId] = useState(releasePointId ?? null);
+  const [points, setPoints] = useState([]);
 
   // 会签弹窗状态
   const [signOpen, setSignOpen] = useState(false);
@@ -84,12 +86,17 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, onC
   const [historyOpen, setHistoryOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
 
+  const releasePointQuery = () => {
+    const id = currentReleasePointId ?? detail?.entity?.apply_release_point_id ?? releasePointId;
+    return id ? `?releasePointId=${encodeURIComponent(id)}` : '';
+  };
+
   /** 导出 Word 文档 */
   const handleExportWord = async () => {
     if (!entityCode) return;
     setExporting(true);
     try {
-      const resp = await rawClient.get(`/release/export-word/${entityCode}`, { responseType: 'blob' });
+      const resp = await rawClient.get(`/release/export-word/${entityCode}${releasePointQuery()}`, { responseType: 'blob' });
       const url = URL.createObjectURL(resp.data);
       const a = document.createElement('a');
       a.href = url;
@@ -122,21 +129,29 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, onC
     } catch { /* 忽略 */ }
   };
 
-  const reload = async () => {
+  const reload = async (pointOverride) => {
     if (!entityCode) return;
     try {
-      const res = await apiGet(`/release/${entityCode}`);
+      const queryPointId = pointOverride ?? currentReleasePointId ?? releasePointId;
+      const pointQuery = queryPointId ? `?releasePointId=${encodeURIComponent(queryPointId)}` : '';
+      const res = await apiGet(`/release/${entityCode}${pointQuery}`);
       setDetail(res);
       if (res?.releaseTask) setOwner(res.releaseTask.owner);
+      setCurrentReleasePointId(res?.releaseTask?.release_point_id ?? res?.entity?.apply_release_point_id ?? null);
     } catch (e) {
       message.error(e.message || '加载详情失败');
     }
   };
 
   useEffect(() => {
+    setCurrentReleasePointId(releasePointId ?? null);
     if ((mode === 'page' || open) && entityCode) reload();
     if (mode !== 'page' && !open) setDetail(null);
-  }, [open, entityCode, mode]);
+  }, [open, entityCode, mode, releasePointId]);
+
+  useEffect(() => {
+    if (mode === 'page' || open) apiGet('/release-points/all').then(setPoints).catch(() => {});
+  }, [open, mode]);
 
   const canSign = (so) => can('release', 'release.signoff')
     && (user?.isSuper || (user?.roles || []).some((r) => r.name === so.role_name));
@@ -219,11 +234,26 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, onC
   const handleOwnerChange = async (val) => {
     setOwner(val);
     try {
-      await apiPut(`/release/${entityCode}`, { owner: val });
+      await apiPut(`/release/${entityCode}${releasePointQuery()}`, { owner: val });
       message.success('已更新投产负责人');
       reload();
       onChanged?.();
     } catch (e) {
+      message.error(e.message || '更新失败');
+    }
+  };
+
+  const handleApplyPointChange = async (val) => {
+    const prev = currentReleasePointId;
+    setCurrentReleasePointId(val);
+    try {
+      // 申请投产点是审批实例维度；后端会同步移动关联投产申请，并在目标点已有审批时按较新数据合并。
+      await apiPut(`/release/${entityCode}${releasePointQuery()}`, { release_point_id: val });
+      message.success('已更新申请投产点');
+      await reload(val);
+      onChanged?.();
+    } catch (e) {
+      setCurrentReleasePointId(prev);
       message.error(e.message || '更新失败');
     }
   };
@@ -389,7 +419,7 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, onC
                 popupClassName="status-select-dropdown" popupMatchSelectWidth={false}
                 value={statusValue}
                 onChange={async (v) => {
-                  try { await apiPut(`/release/${entityCode}`, { status: v }); message.success('已更新投产状态'); reload(); onChanged?.(); }
+                  try { await apiPut(`/release/${entityCode}${releasePointQuery()}`, { status: v }); message.success('已更新投产状态'); reload(); onChanged?.(); }
                   catch (e) { message.error(e.message || '更新失败'); }
                 }}
                 placeholder="投产状态"
@@ -431,7 +461,7 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, onC
                       </div>
                       <div>
                         <span style={{ fontSize: 11, color: 'var(--radar-text-secondary)' }}>计划投产点：</span>
-                        <ReleasePointText value={entity.release_date} style={{ color: 'var(--radar-ink)', fontSize: 11 }} />
+                        <ReleasePointText value={entity.plan_release_date || entity.release_date} style={{ color: 'var(--radar-ink)', fontSize: 11 }} />
                       </div>
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--radar-ink)', background: 'var(--radar-bg)', padding: '6px 10px', borderRadius: 2, maxHeight: 80, overflowY: 'auto', border: '1px solid var(--radar-border)', whiteSpace: 'pre-wrap', lineHeight: '16px' }}>
@@ -460,8 +490,8 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, onC
                         {entity.status ? <StatusBadge status={entity.status} /> : <span style={{ fontSize: 11 }}>—</span>}
                       </div>
                       <div>
-                        <span style={{ fontSize: 11, color: 'var(--radar-text-secondary)' }}>计划投产点：</span>
-                        <ReleasePointText value={entity.release_date} style={{ color: 'var(--radar-ink)', fontSize: 11 }} />
+                        <span style={{ fontSize: 11, color: 'var(--radar-text-secondary)' }}>申请投产点：</span>
+                        <ReleasePointText value={entity.apply_release_date || entity.release_date} style={{ color: 'var(--radar-ink)', fontSize: 11 }} />
                       </div>
                     </div>
                     <div>
@@ -490,7 +520,7 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, onC
                       popupClassName="status-select-dropdown" popupMatchSelectWidth={false}
                       value={reviewStatus}
                       onChange={async (v) => {
-                        try { await apiPut(`/release/${entityCode}`, { review_status: v }); message.success('已更新评审状态'); reload(); onChanged?.(); }
+                        try { await apiPut(`/release/${entityCode}${releasePointQuery()}`, { review_status: v }); message.success('已更新评审状态'); reload(); onChanged?.(); }
                         catch (e) { message.error(e.message || '更新失败'); }
                       }}
                       placeholder="评审状态"
@@ -515,6 +545,20 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, onC
               <div className="form-section-card">
                 <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>投产信息</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--radar-ink)', width: 80 }}>申请投产点</span>
+                    <Select
+                      size="small"
+                      value={currentReleasePointId}
+                      onChange={handleApplyPointChange}
+                      placeholder="选择申请投产点"
+                      showSearch
+                      optionFilterProp="searchLabel"
+                      options={makeReleasePointOptions(points, { includeVersionType: true })}
+                      style={{ flex: 1, ...(editable ? {} : { pointerEvents: 'none' }) }}
+                      tabIndex={editable ? undefined : -1}
+                    />
+                  </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--radar-ink)', width: 80 }}>投产负责人</span>
                     <PersonPicker style={{ flex: 1, ...(!editable ? { pointerEvents: 'none' } : {}) }} placeholder="选择投产负责人" size="small" value={owner} onChange={handleOwnerChange} />

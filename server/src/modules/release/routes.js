@@ -3,8 +3,8 @@
  * 用途：投产审批模块接口。审批对象为「投产申请」中所选择的需求/工单/问题（逐条展开），
  *       提供列表、详情（含评审会签、投产信息、关联制品情况）、负责人/状态/评审状态更新、会签签署。
  * 作者：hengguan
- * 说明：投产任务（release_task）以实体编号（req_code 列，存需求编号、工单编号或问题编号）为唯一键，entity_type 区分类型；
- *       首次打开详情时惰性创建投产任务与会签项（不再有「UAT 终态方可发起」的限制）。
+ * 说明：投产任务（release_task）以「实体编号 + 申请投产点」为唯一审批实例，entity_type 区分类型；
+ *       首次打开某个申请投产点下的详情时惰性创建投产任务与会签项（不再有「UAT 终态方可发起」的限制）。
  *       「各系统投产登记」改为「关联制品情况」：读取引用了该需求/工单/问题的投产申请制品信息。
  */
 
@@ -31,6 +31,38 @@ async function signoffSummary(releaseTaskId) {
   const signed = rows.filter((r) => r.result === '已签署').length;
   const rejected = rows.filter((r) => r.result === '已驳回').length;
   return { total, signed, rejected };
+}
+
+function pointWhere(alias = 'release_task') {
+  // release_point_id 允许历史空值；所有按申请投产点定位的查询都通过此片段统一处理 NULL。
+  return `(${alias}.release_point_id = ? OR (${alias}.release_point_id IS NULL AND ? IS NULL))`;
+}
+
+function numberOrNull(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+async function releaseTaskByCodePoint(code, releasePointId) {
+  return await get(
+    `SELECT * FROM release_task WHERE req_code = ? AND ${pointWhere('release_task')}`,
+    code, releasePointId, releasePointId,
+  );
+}
+
+/** 未显式传申请投产点时，按投产申请、工作项计划投产点依次推断，兼容旧入口。 */
+async function resolveReleasePointId(code, explicitValue) {
+  const explicit = numberOrNull(explicitValue);
+  if (explicit !== null) return explicit;
+  const ap = await get(
+    `SELECT release_point_id FROM release_apply ra
+       WHERE ${dialect.jsonArrayContains('ra.ref_codes')} ORDER BY ra.id LIMIT 1`,
+    code,
+  );
+  if (ap?.release_point_id) return Number(ap.release_point_id);
+  const item = await getWorkItem(code);
+  if (item?.release_point_id) return Number(item.release_point_id);
+  return null;
 }
 
 // 手动设置后不被自动逻辑覆盖的评审状态
@@ -65,15 +97,15 @@ async function classifyEntity(code) {
 /**
  * 惰性获取/创建投产任务：首次打开详情时自动创建投产任务与会签项（无 UAT 终态限制）。
  */
-async function ensureReleaseTask(code, entityType, operatorName) {
-  let rt = await get('SELECT * FROM release_task WHERE req_code = ?', code);
+async function ensureReleaseTask(code, entityType, releasePointId, operatorName) {
+  let rt = await releaseTaskByCodePoint(code, releasePointId);
   if (rt) return rt;
   return await tx(async () => {
     const releaseStatus = await defaultDictAttr('release_status', '待投产');
     const reviewStatus = await defaultDictAttr('review_status', '待评审');
     const res = await run(
-      `INSERT INTO release_task (req_code, entity_type, status, review_status, registrar, register_time) VALUES (?,?,?,?,?,?)`,
-      code, entityType || 'unknown', releaseStatus, reviewStatus, operatorName || null, new Date().toISOString().slice(0, 10),
+      `INSERT INTO release_task (req_code, release_point_id, entity_type, status, review_status, registrar, register_time) VALUES (?,?,?,?,?,?,?)`,
+      code, releasePointId, entityType || 'unknown', releaseStatus, reviewStatus, operatorName || null, new Date().toISOString().slice(0, 10),
     );
     const rtId = res.lastInsertRowid;
     for (const role of await signoffRoles()) {
@@ -85,12 +117,17 @@ async function ensureReleaseTask(code, entityType, operatorName) {
 }
 
 /** 读取引用了该需求/工单/问题编号的投产申请制品信息（关联制品情况） */
-async function entityArtifacts(code, sysMap) {
+async function entityArtifacts(code, releasePointId, sysMap) {
+  const pointFilter = releasePointId === null
+    ? 'AND ra.release_point_id IS NULL'
+    : 'AND ra.release_point_id = ?';
+  const params = releasePointId === null ? [code] : [code, releasePointId];
   const rows = await all(
     `SELECT ra.* FROM release_apply ra
        WHERE ${dialect.jsonArrayContains('ra.ref_codes')}
+       ${pointFilter}
      ORDER BY ra.id DESC`,
-    code,
+    ...params,
   );
   return rows.map((r) => {
     const units = parseJsonArray(r.delivery_units);
@@ -103,6 +140,114 @@ async function entityArtifacts(code, sysMap) {
       change_content: r.change_content,
       units,
     };
+  });
+}
+
+function isNewer(a, b) {
+  // SQLite/TDSQL 都以可比较的时间字符串保存 updated_at；空值按最旧处理。
+  return String(a || '') > String(b || '');
+}
+
+async function cloneSignoffToTask(source, targetTaskId) {
+  await run(
+    `INSERT INTO release_signoff
+       (release_task_id, role_id, role_name, signer_user_id, signer_name, result, conclusion, sign_time, signature_path, created_at, updated_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+    targetTaskId, source.role_id, source.role_name, source.signer_user_id, source.signer_name,
+    source.result, source.conclusion, source.sign_time, source.signature_path, source.created_at, source.updated_at,
+  );
+}
+
+async function cloneSystemToTask(source, targetTaskId) {
+  await run(
+    `INSERT INTO release_system
+       (release_task_id, system_code, impl_org, actual_release_time, status, created_at, updated_at)
+     VALUES (?,?,?,?,?,?,?)`,
+    targetTaskId, source.system_code, source.impl_org, source.actual_release_time,
+    source.status, source.created_at, source.updated_at,
+  );
+}
+
+async function mergeReleaseTaskIntoTarget(source, target, operatorName) {
+  // 合并主表：投产负责人、投产状态、评审状态等以更新时间较新的审批实例为准。
+  if (isNewer(source.updated_at, target.updated_at)) {
+    await run(
+      `UPDATE release_task
+          SET status=?, owner=?, registrar=?, register_time=?, review_status=?, updated_at=?
+        WHERE id=?`,
+      source.status, source.owner, source.registrar, source.register_time, source.review_status, source.updated_at, target.id,
+    );
+  }
+
+  // 合并会签：按 role_id/role_name 匹配，同一角色以 updated_at 较新的签署内容为准。
+  const targetSignoffs = await all('SELECT * FROM release_signoff WHERE release_task_id = ?', target.id);
+  const targetKeyMap = new Map(targetSignoffs.map((s) => [`${s.role_id || ''}::${s.role_name || ''}`, s]));
+  for (const sourceSignoff of await all('SELECT * FROM release_signoff WHERE release_task_id = ?', source.id)) {
+    const key = `${sourceSignoff.role_id || ''}::${sourceSignoff.role_name || ''}`;
+    const targetSignoff = targetKeyMap.get(key);
+    if (!targetSignoff) {
+      await cloneSignoffToTask(sourceSignoff, target.id);
+    } else if (isNewer(sourceSignoff.updated_at, targetSignoff.updated_at)) {
+      await run(
+        `UPDATE release_signoff
+            SET signer_user_id=?, signer_name=?, result=?, conclusion=?, sign_time=?, signature_path=?, updated_at=?
+          WHERE id=?`,
+        sourceSignoff.signer_user_id, sourceSignoff.signer_name, sourceSignoff.result, sourceSignoff.conclusion,
+        sourceSignoff.sign_time, sourceSignoff.signature_path, sourceSignoff.updated_at, targetSignoff.id,
+      );
+    }
+  }
+
+  // 兼容旧的系统投产登记数据：同一系统以 updated_at 较新的状态为准。
+  const targetSystems = await all('SELECT * FROM release_system WHERE release_task_id = ?', target.id);
+  const targetSystemMap = new Map(targetSystems.map((s) => [s.system_code, s]));
+  for (const sourceSystem of await all('SELECT * FROM release_system WHERE release_task_id = ?', source.id)) {
+    const targetSystem = targetSystemMap.get(sourceSystem.system_code);
+    if (!targetSystem) {
+      await cloneSystemToTask(sourceSystem, target.id);
+    } else if (isNewer(sourceSystem.updated_at, targetSystem.updated_at)) {
+      await run(
+        `UPDATE release_system
+            SET impl_org=?, actual_release_time=?, status=?, updated_at=?
+          WHERE id=?`,
+        sourceSystem.impl_org, sourceSystem.actual_release_time, sourceSystem.status,
+        sourceSystem.updated_at, targetSystem.id,
+      );
+    }
+  }
+
+  await run('DELETE FROM release_task WHERE id = ?', source.id);
+  await auditUpdate('release', target.id, target.req_code, operatorName,
+    { release_point_id: source.release_point_id, merged_task_id: source.id },
+    { release_point_id: target.release_point_id, merged_task_id: target.id },
+    { release_point_id: '申请投产点', merged_task_id: '投产审批合并' });
+  return await get('SELECT * FROM release_task WHERE id = ?', target.id);
+}
+
+async function moveReleaseTaskPoint(code, fromPointId, toPointId, operatorName) {
+  const source = await releaseTaskByCodePoint(code, fromPointId);
+  if (!source) throw notFound('投产任务未发起');
+  if (Number(source.release_point_id) === Number(toPointId)) return source;
+
+  return await tx(async () => {
+    // 从审批详情切换申请投产点时，同步移动引用当前工作项的投产申请，从而让关联制品自动进入新投产点。
+    await run(
+      `UPDATE release_apply
+          SET release_point_id=?, updated_at=datetime('now','localtime')
+        WHERE ${dialect.jsonArrayContains('ref_codes')}
+          AND ${fromPointId === null ? 'release_point_id IS NULL' : 'release_point_id = ?'}`,
+      ...(fromPointId === null ? [toPointId, code] : [toPointId, code, fromPointId]),
+    );
+
+    const target = await releaseTaskByCodePoint(code, toPointId);
+    if (!target) {
+      await run(
+        `UPDATE release_task SET release_point_id=?, updated_at=datetime('now','localtime') WHERE id=?`,
+        toPointId, source.id,
+      );
+      return await get('SELECT * FROM release_task WHERE id = ?', source.id);
+    }
+    return await mergeReleaseTaskIntoTarget(source, target, operatorName);
   });
 }
 
@@ -121,15 +266,17 @@ async function computeEntities(windowIdList) {
     applies = await all('SELECT id, ref_codes, release_point_id, change_code, impl_org FROM release_apply');
   }
 
-  const codeMap = new Map(); // code -> { applyPointId, implOrg, changeCode, changeCodes }
+  const codeMap = new Map(); // `${code}::${releasePointId}` -> { code, applyPointId, implOrg, changeCode, changeCodes }
   for (const ap of applies) {
     const refs = parseJsonArray(ap.ref_codes);
     for (const code of refs) {
       if (!code) continue;
-      const cur = codeMap.get(code);
+      const key = `${code}::${ap.release_point_id || ''}`;
+      const cur = codeMap.get(key);
       if (!cur) {
-        // 首次记录：投产点取首个申请；实施机构暂以该申请填充（后续遇更小申请编号再覆盖）
-        codeMap.set(code, {
+        // 首次记录：同一工作项在不同申请投产点下是不同审批实例；同点多申请则聚合变更编号。
+        codeMap.set(key, {
+          code,
           applyPointId: ap.release_point_id,
           implOrg: ap.impl_org || null,
           changeCode: ap.change_code || '',
@@ -154,15 +301,16 @@ async function computeEntities(windowIdList) {
   const signoffRoleCount = (await get('SELECT COUNT(*) AS c FROM role WHERE is_signoff_role = 1'))?.c || 0;
 
   const list = [];
-  for (const [code, info] of codeMap) {
+  for (const info of codeMap.values()) {
+    const code = info.code;
     const item = await getWorkItem(code);
     const issue = item ? null : await get('SELECT issue_code, summary, status FROM issue WHERE issue_code = ?', code);
     const type = item ? item.entity_type : (issue ? 'issue' : 'unknown');
     const title = item ? item.title : (issue ? issue.summary : '');
-    const pointId = item ? item.release_point_id : info.applyPointId;
+    const pointId = info.applyPointId;
     const releaseDate = rpMap[pointId] || null;
 
-    const rt = await get('SELECT * FROM release_task WHERE req_code = ?', code);
+    const rt = await releaseTaskByCodePoint(code, pointId);
     // 未发起时按默认基线展示：投产/评审状态取字典默认值，会签进度=签0/角色数
     const summary = rt ? await signoffSummary(rt.id) : { total: signoffRoleCount, signed: 0, rejected: 0 };
 
@@ -181,7 +329,7 @@ async function computeEntities(windowIdList) {
     });
   }
 
-  // 默认按计划投产点倒序、再按编号排序
+  // 默认按申请投产点倒序、再按编号排序。
   list.sort((a, b) => {
     const da = a.release_date || '';
     const db = b.release_date || '';
@@ -191,7 +339,7 @@ async function computeEntities(windowIdList) {
   return list;
 }
 
-/** 内存筛选：编号(like) / 标题概述(like) / 计划投产点(in) / 投产状态(in) / 评审状态(in) / 实施机构(in) */
+/** 内存筛选：编号(like) / 标题概述(like) / 申请投产点(in) / 投产状态(in) / 评审状态(in) / 实施机构(in) */
 function applyFilters(rows, filters) {
   let out = rows;
   for (const f of (filters || [])) {
@@ -239,15 +387,16 @@ export default async function releaseRoutes(fastify) {
   // 详情：首次打开惰性创建投产任务；返回实体信息（需求/工单或问题）+ 会签 + 关联制品
   fastify.get('/release/:code', { preHandler: fastify.requirePerm('release', 'view') }, async (request) => {
     const code = request.params.code;
+    const releasePointId = await resolveReleasePointId(code, request.query?.releasePointId);
     const entityType = await classifyEntity(code);
-    const rt = await ensureReleaseTask(code, entityType, request.currentUser?.name);
+    const rt = await ensureReleaseTask(code, entityType, releasePointId, request.currentUser?.name);
     const signoffs = (await all('SELECT * FROM release_signoff WHERE release_task_id = ? ORDER BY id', rt.id))
       .map((s) => ({ ...s, signature_image: signatureDataUrl(s.signature_path) }));
 
     const systems = await all('SELECT sys_code, sys_name FROM system');
     const sysMap = {};
     for (const s of systems) sysMap[s.sys_code] = s.sys_name;
-    const artifacts = await entityArtifacts(code, sysMap);
+    const artifacts = await entityArtifacts(code, releasePointId, sysMap);
 
     const rps = await all('SELECT id, release_date FROM release_point');
     const rpMap = {};
@@ -265,7 +414,10 @@ export default async function releaseRoutes(fastify) {
         status: req?.status || null,
         yn_owner: req?.yn_owner || null,
         jk_owner: req?.jk_owner || null,
+        plan_release_date: rpMap[req?.release_point_id] || null,
         release_date: rpMap[req?.release_point_id] || null,
+        apply_release_point_id: releasePointId,
+        apply_release_date: rpMap[releasePointId] || null,
       };
       // 阶段任务：返回任务标识(id/编号/系统/状态)，供详情页点击状态标签直达对应任务弹窗
       const tt = async (type) => all('SELECT id, task_code, impl_system, status FROM test_task WHERE req_code = ? AND test_type = ? ORDER BY id', code, type);
@@ -278,18 +430,14 @@ export default async function releaseRoutes(fastify) {
       };
     } else if (entityType === 'issue') {
       const issue = await get('SELECT * FROM issue WHERE issue_code = ?', code);
-      // 问题无自身计划投产点，取引用它的投产申请的计划投产点
-      const ap = await get(
-        `SELECT release_point_id FROM release_apply ra
-           WHERE ${dialect.jsonArrayContains('ra.ref_codes')} ORDER BY ra.id LIMIT 1`,
-        code,
-      );
       entity = {
         type: 'issue', code,
         summary: issue?.summary || '',
         details: issue?.details || '',
         status: issue?.status || null,
-        release_date: rpMap[ap?.release_point_id] || null,
+        release_date: rpMap[releasePointId] || null,
+        apply_release_point_id: releasePointId,
+        apply_release_date: rpMap[releasePointId] || null,
       };
     }
 
@@ -298,13 +446,21 @@ export default async function releaseRoutes(fastify) {
 
   // 更新投产任务负责人/投产状态/评审状态
   fastify.put('/release/:code', { preHandler: fastify.requirePerm('release', 'edit') }, async (request) => {
-    const rt = await get('SELECT * FROM release_task WHERE req_code = ?', request.params.code);
+    const releasePointId = await resolveReleasePointId(request.params.code, request.query?.releasePointId ?? request.body?.releasePointId);
+    let rt = await releaseTaskByCodePoint(request.params.code, releasePointId);
     if (!rt) throw notFound('投产任务未发起');
-    const { owner, status, review_status } = request.body || {};
+    const { owner, status, review_status, release_point_id } = request.body || {};
 
     if (review_status !== undefined) {
       const valid = await get('SELECT 1 FROM dict_item WHERE category = ? AND attr_value = ?', 'review_status', review_status);
       if (!valid) throw badRequest('评审状态取值非法');
+    }
+
+    if (release_point_id !== undefined) {
+      const nextPointId = numberOrNull(release_point_id);
+      if (nextPointId === null) throw badRequest('申请投产点不能为空');
+      const moved = await moveReleaseTaskPoint(request.params.code, releasePointId, nextPointId, request.currentUser?.name);
+      return ok({ id: moved.id, release_point_id: moved.release_point_id });
     }
 
     const updateData = {};
@@ -367,15 +523,16 @@ export default async function releaseRoutes(fastify) {
   // 导出 Word 详情（单条审批对象的完整信息）
   fastify.get('/release/export-word/:code', { preHandler: fastify.requirePerm('release', 'view') }, async (request, reply) => {
     const code = request.params.code;
+    const releasePointId = await resolveReleasePointId(code, request.query?.releasePointId);
     const entityType = await classifyEntity(code);
-    const rt = await ensureReleaseTask(code, entityType, request.currentUser?.name);
+    const rt = await ensureReleaseTask(code, entityType, releasePointId, request.currentUser?.name);
     const signoffs = (await all('SELECT * FROM release_signoff WHERE release_task_id = ? ORDER BY id', rt.id))
       .map((s) => ({ ...s, signature_image: signatureDataUrl(s.signature_path) }));
 
     const systems = await all('SELECT sys_code, sys_name FROM system');
     const sysMap = {};
     for (const s of systems) sysMap[s.sys_code] = s.sys_name;
-    const artifacts = await entityArtifacts(code, sysMap);
+    const artifacts = await entityArtifacts(code, releasePointId, sysMap);
 
     const rps = await all('SELECT id, release_date FROM release_point');
     const rpMap = {};
@@ -394,7 +551,10 @@ export default async function releaseRoutes(fastify) {
         status: req?.status || null,
         yn_owner: req?.yn_owner || null,
         jk_owner: req?.jk_owner || null,
+        plan_release_date: rpMap[req?.release_point_id] || null,
         release_date: rpMap[req?.release_point_id] || null,
+        apply_release_point_id: releasePointId,
+        apply_release_date: rpMap[releasePointId] || null,
       };
       devTasksFull = await all(
         'SELECT id, task_code, task_name, content, owner, status, impl_system FROM dev_task WHERE req_code = ? ORDER BY id',
@@ -406,17 +566,14 @@ export default async function releaseRoutes(fastify) {
       );
     } else if (entityType === 'issue') {
       const issue = await get('SELECT * FROM issue WHERE issue_code = ?', code);
-      const ap = await get(
-        `SELECT release_point_id FROM release_apply ra
-           WHERE ${dialect.jsonArrayContains('ra.ref_codes')} ORDER BY ra.id LIMIT 1`,
-        code,
-      );
       entity = {
         type: 'issue', code,
         summary: issue?.summary || '',
         details: issue?.details || '',
         status: issue?.status || null,
-        release_date: rpMap[ap?.release_point_id] || null,
+        release_date: rpMap[releasePointId] || null,
+        apply_release_point_id: releasePointId,
+        apply_release_date: rpMap[releasePointId] || null,
       };
     }
 
@@ -440,7 +597,7 @@ export default async function releaseRoutes(fastify) {
       { key: 'code', title: '需求/问题/工单编号' },
       { key: 'entity_label', title: '类型' },
       { key: 'title', title: '需求标题/工单概述/问题概述' },
-      { key: 'release_date', title: '计划投产点' },
+      { key: 'release_date', title: '申请投产点' },
       { key: 'release_status', title: '投产状态' },
       { key: 'review_status', title: '评审状态' },
       { key: 'signoff_progress', title: '会签进度' },

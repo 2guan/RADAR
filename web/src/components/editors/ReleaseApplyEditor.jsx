@@ -24,7 +24,7 @@ import { makeReleasePointOptions, ReleasePointText } from '../ReleasePointText.j
 
 export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId, defaultReleasePointId, defaultReqCodes, defaultTicketCodes, defaultType = 'req', onClose, onSaved }) {
   const [form] = Form.useForm();
-  // 监听计划投产点，用于与所选需求的投产点做一致性校验提示
+  // 监听申请投产点，用于与所选需求的计划投产点做一致性校验提示
   const releasePointIdValue = Form.useWatch('release_point_id', form);
   const [current, setCurrent] = useState(null);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -137,7 +137,7 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
     ),
     searchLabel: `${t.ticket_code}　${t.title}${t.release_date ? `　${t.release_date}` : ''}`,
   }));
-  // ── 计划投产点与所选需求/工单的一致性校验（仅提示，不阻断提交） ──
+  // ── 申请投产点与所选需求/工单计划投产点的一致性校验（仅提示，不阻断提交） ──
   const selectedReqObjs = selReqs.map((c) => reqs.find((r) => r.req_code === c)).filter(Boolean);
   const selectedTicketObjs = selTickets.map((c) => tickets.find((t) => t.ticket_code === c)).filter(Boolean);
   const selectedWorkItems = [...selectedReqObjs, ...selectedTicketObjs];
@@ -146,11 +146,11 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
   // 所选多个需求/工单是否分属不同投产点
   const reqPointIds = [...new Set(selectedWorkItems.map((r) => r.release_point_id).filter((v) => v != null))];
   const multiReqDiffer = reqPointIds.length > 1;
-  // 当前填写的计划投产点与首个需求/工单不一致
+  // 当前填写的申请投产点与首个需求/工单计划投产点不一致
   const pointMismatch = selectedWorkItems.length > 0 && firstReqPointId != null
     && releasePointIdValue != null && Number(releasePointIdValue) !== Number(firstReqPointId);
 
-  /** 选择需求：联动把计划投产点设为首个需求的计划投产点（仅新增态有下拉，可再手改） */
+  /** 选择需求：联动把申请投产点设为首个需求的计划投产点（仅新增态有下拉，可再手改） */
   const onSelReqsChange = (vals) => {
     setSelReqs(vals);
     if (!readonly) setIsDirty(true);
@@ -161,7 +161,7 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
     }
   };
 
-  /** 选择工单：联动把计划投产点设为首个工单的计划投产点（与需求规则一致） */
+  /** 选择工单：联动把申请投产点设为首个工单的计划投产点（与需求规则一致） */
   const onSelTicketsChange = (vals) => {
     setSelTickets(vals);
     if (!readonly) setIsDirty(true);
@@ -389,8 +389,8 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item name="release_point_id" label="计划投产点" rules={required.rules('release_point_id', '计划投产点', { action: '请选择' })} style={{ marginBottom: (multiReqDiffer || pointMismatch) ? 2 : 8 }}>
-                    <Select placeholder="选择计划投产点" size="small" allowClear showSearch optionFilterProp="searchLabel"
+                  <Form.Item name="release_point_id" label="申请投产点" rules={required.rules('release_point_id', '申请投产点', { action: '请选择' })} style={{ marginBottom: (multiReqDiffer || pointMismatch) ? 2 : 8 }}>
+                    <Select placeholder="选择申请投产点" size="small" allowClear showSearch optionFilterProp="searchLabel"
                       style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined}
                       options={makeReleasePointOptions(points, { includeVersionType: true })} />
                   </Form.Item>

@@ -18,6 +18,7 @@ import ReleaseApplyEditor from '../components/editors/ReleaseApplyEditor.jsx';
 import { apiPost, apiDelete, apiGet } from '../api/client.js';
 import { exportXlsx } from '../utils/io.js';
 import { useAppStore } from '../stores/app.js';
+import { ReleasePointText } from '../components/ReleasePointText.jsx';
 
 export default function ReleaseApply() {
   const tableRef = useRef();
@@ -84,6 +85,7 @@ export default function ReleaseApply() {
       ),
     },
     { title: '变更编号', dataIndex: 'change_code', key: 'change_code', width: 120, sorter: true, render: (v) => <span style={{ ...monoStyle, fontWeight: 500 }}>{v}</span> },
+    { title: '申请投产点', dataIndex: 'release_date', key: 'release_date', width: 118, render: (v) => <ReleasePointText value={v} /> },
     { title: '变更系统', dataIndex: 'change_system_name', key: 'change_system_name', width: 110, ellipsis: true, render: (v) => v || '—' },
     {
       title: '变更内容', dataIndex: 'change_content', key: 'change_content', width: 260,
@@ -179,6 +181,9 @@ export default function ReleaseApply() {
               </Space>
             </Space>
             <div>{item.change_content}</div>
+            {item.release_date && (
+              <div style={{ fontSize: '11px', color: 'var(--radar-text-secondary)' }}>申请投产点：<ReleasePointText value={item.release_date} /></div>
+            )}
             {item.change_system_name && (
               <div style={{ fontSize: '11px', color: 'var(--radar-text-secondary)' }}>变更系统：{item.change_system_name}</div>
             )}

@@ -382,11 +382,11 @@ export async function runMock() {
     // ----------------------------------------------------------------------
     const signRoles = await all('SELECT id, name FROM role WHERE is_signoff_role = 1 ORDER BY id');
     /** 创建投产任务 + 6 个会签项；signedPlan 决定每个会签项结果 */
-    async function makeReleaseTask(code, entityType, relStatus, reviewStatus, signResults, signedDate) {
+    async function makeReleaseTask(code, entityType, releasePointId, relStatus, reviewStatus, signResults, signedDate) {
       const res = await run(
-        `INSERT INTO release_task (req_code, entity_type, status, review_status, owner, registrar, register_time)
-         VALUES (?,?,?,?,?,?,?)`,
-        code, entityType, relStatus, reviewStatus, pickUser(rng() < 0.5 ? '金科运维' : '农信运维'),
+        `INSERT INTO release_task (req_code, release_point_id, entity_type, status, review_status, owner, registrar, register_time)
+         VALUES (?,?,?,?,?,?,?,?)`,
+        code, releasePointId, entityType, relStatus, reviewStatus, pickUser(rng() < 0.5 ? '金科运维' : '农信运维'),
         pickUser('项目负责人'), signedDate,
       );
       const rtId = res.lastInsertRowid;
@@ -429,7 +429,7 @@ export async function runMock() {
       if (req.spec.profile === 'released') {
         // 评审同意：前 8 个已投产(已上线)，后 2 个评审通过待投产
         const relStatus = ai < 8 ? '已投产' : '待投产';
-        await makeReleaseTask(req.code, 'requirement', relStatus, '评审同意', allSigned, signedDate);
+        await makeReleaseTask(req.code, 'requirement', req.rp.id, relStatus, '评审同意', allSigned, signedDate);
       } else {
         // approving 12 个：5 待评审 / 3 评审拒绝 / 2 应急审批 / 2 评审撤销
         const k = approvalReqs.filter((r) => r.spec.profile === 'released').length; // 偏移
@@ -448,7 +448,7 @@ export async function runMock() {
           reviewStatus = '评审撤销'; // 手动状态
           results = signRoles.map(() => '未签署');
         }
-        await makeReleaseTask(req.code, 'requirement', '待投产', reviewStatus, results, signedDate);
+        await makeReleaseTask(req.code, 'requirement', req.rp.id, '待投产', reviewStatus, results, signedDate);
       }
       ai++;
     }
@@ -604,7 +604,7 @@ export async function runMock() {
 
       // 投产审批（released）
       if (tspec.profile === 'released') {
-        await makeReleaseTask(code, 'ticket', '已投产', '评审同意', allSigned, shift(ymd(tspec.rp.date), -3));
+        await makeReleaseTask(code, 'ticket', tspec.rp.id, '已投产', '评审同意', allSigned, shift(ymd(tspec.rp.date), -3));
       }
     }
 
@@ -615,10 +615,13 @@ export async function runMock() {
     const FERRY = ['未摆渡', '待发送', '已摆渡', '摆渡失败'];
     /** 评审状态派生（取最弱）——与 release-apply 路由一致 */
     const REVIEW_RANK = { 评审拒绝: 0, 评审撤销: 1, 待评审: 2, 应急审批: 3, 评审同意: 4 };
-    async function deriveReview(refCodes) {
+    async function deriveReview(refCodes, releasePointId) {
       let weakest = null; let weakestRank = Infinity;
       for (const c of refCodes) {
-        const rt = await get('SELECT review_status FROM release_task WHERE req_code = ?', c);
+        const rt = await get(
+          'SELECT review_status FROM release_task WHERE req_code = ? AND release_point_id = ?',
+          c, releasePointId,
+        );
         if (!rt?.review_status) continue;
         const rank = REVIEW_RANK[rt.review_status] ?? 2;
         if (rank < weakestRank) { weakestRank = rank; weakest = rt.review_status; }
@@ -642,7 +645,7 @@ export async function runMock() {
     }
     async function makeApply(refCodes, rp, changeSys) {
       const code = await genReleaseApplyCode(rp.date.slice(0, 6));
-      const review = await deriveReview(refCodes);
+      const review = await deriveReview(refCodes, rp.id);
       const sys = sysByCode[changeSys];
       await run(
         `INSERT INTO release_apply

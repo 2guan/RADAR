@@ -28,6 +28,8 @@ async function clearBusiness() {
   await run('DELETE FROM test_task');
   await run('DELETE FROM dev_task');
   await run('DELETE FROM requirement');
+  await run('DELETE FROM ticket');
+  await run('DELETE FROM release_apply');
   await run('DELETE FROM release_point');
   await run('DELETE FROM attachment');
   await run('DELETE FROM audit_log');
@@ -116,14 +118,14 @@ async function addTest(type, reqCode, seq, o) {
 /** 发起投产并按指定签署结果/系统状态落库 */
 async function addRelease(reqCode, o) {
   const res = await run(
-    'INSERT INTO release_task (req_code, status, owner, registrar, register_time) VALUES (?,?,?,?,?)',
-    reqCode, o.status, o.owner, '超级管理员', o.register_time,
+    'INSERT INTO release_task (req_code, release_point_id, status, review_status, owner, registrar, register_time) VALUES (?,?,?,?,?,?,?)',
+    reqCode, o.release_point_id || null, o.status, o.review_status || '待评审', o.owner, '超级管理员', o.register_time,
   );
   const rtId = res.lastInsertRowid;
   // 会签项（按系统设置中打标的会签角色生成）
   const roles = await all('SELECT id, name FROM role WHERE is_signoff_role = 1 ORDER BY id');
   for (const role of roles) {
-    const r = (o.signoffs && o.signoffs[role.name]) || { result: '未签署' };
+    const r = (o.signoffs && o.signoffs[role.name]) || o.defaultSignoff || { result: '未签署' };
     await run(
       `INSERT INTO release_signoff (release_task_id, role_id, role_name, signer_name, result, conclusion, sign_time)
        VALUES (?,?,?,?,?,?,?)`,
@@ -139,6 +141,41 @@ async function addRelease(reqCode, o) {
     );
   }
   return rtId;
+}
+
+/** 由审批任务派生投产申请评审状态 */
+async function deriveApplyReviewStatus(refCodes, releasePointId) {
+  const rank = { '评审拒绝': 0, '评审撤销': 1, '待评审': 2, '应急审批': 3, '评审同意': 4 };
+  let weakest = null;
+  let weakestRank = Infinity;
+  for (const code of refCodes) {
+    const rt = await get(
+      'SELECT review_status FROM release_task WHERE req_code = ? AND release_point_id = ?',
+      code, releasePointId,
+    );
+    if (!rt?.review_status) continue;
+    const n = rank[rt.review_status] ?? 2;
+    if (n < weakestRank) {
+      weakest = rt.review_status;
+      weakestRank = n;
+    }
+  }
+  return weakest;
+}
+
+/** 新增投产申请 */
+async function addReleaseApply(o) {
+  const reviewStatus = await deriveApplyReviewStatus(o.ref_codes, o.release_point_id);
+  await run(
+    `INSERT INTO release_apply
+       (change_code, change_content, impact_scope, change_system, impl_org, delivery_units,
+        ref_codes, review_status, out_dept, deploy_dept, release_point_id, registrar, register_time)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    o.change_code, o.change_content, o.impact_scope, o.change_system, o.impl_org,
+    JSON.stringify(o.delivery_units || []), JSON.stringify(o.ref_codes || []), reviewStatus,
+    o.out_dept || '建信金科', o.deploy_dept || o.impl_org, o.release_point_id,
+    '超级管理员', o.register_time,
+  );
 }
 
 /** 新增路径型附件 */
@@ -270,6 +307,7 @@ async function main() {
     let devTaskCount = 0;
     let testSITUATCount = 0;
     let testSECNFTCount = 0;
+    const generatedReqs = [];
 
     for (let i = 0; i < 40; i++) {
       const rpId = rps[i % 10];
@@ -322,6 +360,14 @@ async function main() {
         collabDev: collabDev,
         collabTest: [],
         rp: rpId
+      });
+      generatedReqs.push({
+        req_code: reqCode,
+        title: tpl.title,
+        release_point_id: rpId,
+        release_date: rpDate,
+        main_system: sys1.sys_code,
+        impl_org: sys1.org,
       });
 
       const reqRow = await get("SELECT id FROM requirement WHERE req_code = ?", reqCode);
@@ -458,11 +504,16 @@ async function main() {
         }
 
         await addRelease(reqCode, {
+          release_point_id: rpId,
           status: relStatus,
+          review_status: isReleased ? '评审同意' : (i === 9 ? '评审拒绝' : '待评审'),
           owner: opsOwner.name,
           register_time: '2026-08-05',
           signTime: isReleased ? '2026-08-06' : null,
           signoffs: signoffs,
+          defaultSignoff: isReleased
+            ? { result: '已签署', signer: opsOwner.name, conclusion: '会签通过，同意投产' }
+            : null,
           systems: systemsRel
         });
       }
@@ -598,16 +649,102 @@ async function main() {
       }
     }
 
+    // ===== 5. 投产申请：把审批对象真正挂到申请单上，保证投产申请/投产审批页面有数据 =====
+    const systemByCode = Object.fromEntries(allSystems.map((s) => [s.sys_code, s]));
+    const issueRows = await all(
+      "SELECT issue_code, system, business_group, summary FROM issue WHERE issue_code IS NOT NULL AND issue_code <> '' ORDER BY id LIMIT 40",
+    );
+    const monthSeq = new Map();
+    const nextApplyCode = (releaseDate) => {
+      const ym = String(releaseDate).slice(0, 6);
+      const n = (monthSeq.get(ym) || 0) + 1;
+      monthSeq.set(ym, n);
+      return `${ym}-10bg${String(n).padStart(3, '0')}`;
+    };
+    const makeUnits = (sysCode, idx) => {
+      const artifactTypes = ['镜像制品', '二进制制品', '介质库文件'];
+      const ferryStatuses = ['已摆渡', '待发送', '未摆渡', '摆渡失败'];
+      const primaryType = artifactTypes[idx % artifactTypes.length];
+      const units = [{
+        artifact_type: primaryType,
+        delivery_unit: `${sysCode}-${idx % 2 === 0 ? 'app' : 'batch'}-release-${String(idx + 1).padStart(2, '0')}`,
+        new_version: `V${2 + (idx % 3)}.${idx % 10}.${idx % 7}`,
+        ferry_status: ferryStatuses[idx % ferryStatuses.length],
+      }];
+      if (idx % 3 === 0) {
+        units.push({
+          artifact_type: '介质库文件',
+          delivery_unit: `${sysCode}-config-${String(idx + 1).padStart(2, '0')}.xlsx`,
+          new_version: `CFG-${String(idx + 1).padStart(3, '0')}`,
+          ferry_status: ferryStatuses[(idx + 1) % ferryStatuses.length],
+        });
+      }
+      return units;
+    };
+
+    const applyReqs = [];
+    const pushReq = (req) => {
+      if (req && !applyReqs.some((item) => item.req_code === req.req_code)) applyReqs.push(req);
+    };
+    generatedReqs.slice(0, 13).forEach(pushReq);
+    generatedReqs.slice(13, 20).forEach(pushReq);
+    generatedReqs.filter((_, idx) => [20, 30].includes(idx)).forEach(pushReq);
+
+    let releaseApplyCount = 0;
+    for (const req of applyReqs) {
+      const issue = issueRows[releaseApplyCount % Math.max(issueRows.length, 1)];
+      const refCodes = [req.req_code];
+      if (issue?.issue_code) refCodes.push(issue.issue_code);
+      const sys = systemByCode[req.main_system] || allSystems[releaseApplyCount % allSystems.length];
+      await addReleaseApply({
+        change_code: nextApplyCode(req.release_date),
+        change_content: `${req.title}版本投产变更`,
+        impact_scope: `影响${sys.sys_name || req.main_system}及上下游日间交易，投产窗口内完成灰度发布与回退验证`,
+        change_system: req.main_system,
+        impl_org: req.impl_org || sys.org,
+        delivery_units: makeUnits(req.main_system, releaseApplyCount),
+        ref_codes: refCodes,
+        out_dept: '建信金科',
+        deploy_dept: req.impl_org || sys.org,
+        release_point_id: req.release_point_id,
+        register_time: '2026-08-03',
+      });
+      releaseApplyCount++;
+    }
+
+    // 补充少量仅关联问题的投产申请，覆盖问题直接进投产审批的场景。
+    for (let i = 0; i < Math.min(4, issueRows.length); i++) {
+      const issue = issueRows[(applyReqs.length + i) % issueRows.length];
+      const sys = systemByCode[issue.system] || allSystems[(applyReqs.length + i) % allSystems.length];
+      const rpId = rps[i % 2 === 0 ? 0 : 1];
+      const rpDate = releasePointsData[i % 2 === 0 ? 0 : 1].date;
+      await addReleaseApply({
+        change_code: nextApplyCode(rpDate),
+        change_content: `${sys.sys_name || issue.system}生产问题修复投产变更`,
+        impact_scope: `影响${sys.sys_name || issue.system}相关问题修复流程，需完成制品摆渡和投产复核`,
+        change_system: sys.sys_code,
+        impl_org: issue.business_group || sys.org,
+        delivery_units: makeUnits(sys.sys_code, applyReqs.length + i),
+        ref_codes: [issue.issue_code],
+        out_dept: '建信金科',
+        deploy_dept: issue.business_group || sys.org,
+        release_point_id: rpId,
+        register_time: '2026-08-04',
+      });
+      releaseApplyCount++;
+    }
+
     console.log(`[开发生成完毕] 开发任务总数: ${devTaskCount}`);
     console.log(`[测试生成完毕] 应用组装/用户测试任务总数: ${testSITUATCount}`);
     console.log(`[测试生成完毕] 安全/非功能测试任务总数: ${testSECNFTCount}`);
+    console.log(`[投产申请生成完毕] 投产申请总数: ${releaseApplyCount}`);
   });
 
   // 统计
   const c = async (t) => (await get(`SELECT COUNT(*) AS c FROM ${t}`)).c;
   const testUserCount = (await all("SELECT id FROM user WHERE phone LIKE '138%'")).length;
   console.log('[测试数据] 已写入：',
-    `投产点 ${await c('release_point')} / 人员 ${testUserCount} / 需求 ${await c('requirement')} / 开发 ${await c('dev_task')} / 测试 ${await c('test_task')} / 投产 ${await c('release_task')} / 会签 ${await c('release_signoff')} / 系统投产 ${await c('release_system')} / 附件 ${await c('attachment')}`);
+    `投产点 ${await c('release_point')} / 人员 ${testUserCount} / 需求 ${await c('requirement')} / 开发 ${await c('dev_task')} / 测试 ${await c('test_task')} / 投产 ${await c('release_task')} / 会签 ${await c('release_signoff')} / 系统投产 ${await c('release_system')} / 投产申请 ${await c('release_apply')} / 附件 ${await c('attachment')}`);
 }
 
 main().catch((err) => {

@@ -9,7 +9,8 @@ import React from 'react';
 export const PENDING_RELEASE_POINT = '投产点待定';
 
 const NUMERIC_RELEASE_POINT_RE = /^\d+$/;
-const RELEASE_POINT_NUMBER_FONT = '"Courier New", Courier, "Nimbus Mono PS", "Liberation Mono", monospace';
+// 投产点日期与变更编号统一使用同一套等宽字体，保证数字在各列表/详情中对齐。
+const RELEASE_POINT_NUMBER_FONT = 'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace';
 
 export function isNumericReleasePoint(value) {
   return NUMERIC_RELEASE_POINT_RE.test(String(value || ''));

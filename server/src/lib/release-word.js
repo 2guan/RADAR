@@ -196,6 +196,7 @@ export async function buildReleaseWordDoc(detail, devTasksFull, testTasksFull) {
     width: { size: 100, type: WidthType.PERCENTAGE },
     rows: [
       fourColRow('投产负责人', releaseTask?.owner, '投产状态', releaseTask?.status),
+      fourColRow('申请投产点', entity?.apply_release_date || entity?.release_date, '评审状态', releaseTask?.review_status),
       fourColRow('发起人', releaseTask?.registrar, '发起时间', releaseTask?.register_time),
     ],
   }));
@@ -257,7 +258,7 @@ export async function buildReleaseWordDoc(detail, devTasksFull, testTasksFull) {
       kvRow(entityType === 'ticket' ? '云南农信工单负责人' : '云南农信业务负责人', entity.yn_owner),
       kvRow(entityType === 'ticket' ? '建信金科工单负责人' : '建信金科业务负责人', entity.jk_owner),
       kvRow(`${workLabel}状态`, entity.status),
-      kvRow('计划投产点', entity.release_date),
+      kvRow('计划投产点', entity.plan_release_date || entity.release_date),
     ]));
   } else {
     children.push(kvTable([
@@ -265,7 +266,7 @@ export async function buildReleaseWordDoc(detail, devTasksFull, testTasksFull) {
       kvRow('问题概述', entity.summary),
       kvRow('问题详情', entity.details),
       kvRow('问题状态', entity.status),
-      kvRow('计划投产点', entity.release_date),
+      kvRow('申请投产点', entity.apply_release_date || entity.release_date),
     ]));
   }
 

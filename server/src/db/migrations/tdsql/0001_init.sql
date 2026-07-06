@@ -199,7 +199,8 @@ CREATE TABLE test_task (
 -- 投产申请与审批表：记录投产任务、系统维度投产状态、会签和投产申请单。
 CREATE TABLE release_task (
   id            BIGINT PRIMARY KEY AUTO_INCREMENT,
-  req_code      VARCHAR(128) NOT NULL UNIQUE,
+  req_code      VARCHAR(128) NOT NULL,
+  release_point_id BIGINT,
   entity_type   VARCHAR(32) NOT NULL DEFAULT 'requirement',
   status        VARCHAR(128) NOT NULL DEFAULT '待投产',
   owner         VARCHAR(255),
@@ -207,7 +208,10 @@ CREATE TABLE release_task (
   register_time VARCHAR(64),
   review_status VARCHAR(128) NOT NULL DEFAULT '待评审',
   created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  updated_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_release_task_code_point (req_code, release_point_id),
+  INDEX idx_release_task_point (release_point_id),
+  CONSTRAINT fk_release_task_release_point FOREIGN KEY (release_point_id) REFERENCES release_point(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE release_system (
