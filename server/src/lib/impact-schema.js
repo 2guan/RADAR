@@ -150,27 +150,67 @@ export function decodeChangeItem(row) {
   };
 }
 
-/**
- * 将若干影响性分析条目格式化为可读文本（用于导出）。
- */
-export function formatImpactItemsText(rows) {
-  return (rows || []).map((r, i) => {
-    const d = decodeChangeItem(r);
-    return `${i + 1}.[${d.category}]${d.system || ''} ${d.change_kind || ''}：${d.change_content || ''}`;
-  }).join('\n');
+function exportFieldValue(value) {
+  if (Array.isArray(value)) return value.filter(Boolean).join('、') || '—';
+  return value == null || value === '' ? '—' : String(value);
+}
+
+function exportVisibleFields(item) {
+  return (CATEGORY_FIELDS[item.category] || []).filter((key) => {
+    const def = FIELD_DEFS[key];
+    if (!def.requiredWhen) return true;
+    const [depKey, depValue] = def.requiredWhen;
+    return String(item[depKey] || '').trim() === depValue;
+  });
+}
+
+/** 单条影响性分析的导出字段行，可供 Excel 与 Word 复用。 */
+export function impactItemExportLines(row, { includeCategory = true } = {}) {
+  const item = decodeChangeItem(row);
+  const fields = exportVisibleFields(item);
+  const lines = includeCategory ? [`变更分类：${exportFieldValue(item.category)}`] : [];
+  for (const key of fields) lines.push(`${FIELD_DEFS[key].label}：${exportFieldValue(item[key])}`);
+  return lines;
+}
+
+/** 单条测试覆盖分析的导出字段行，可供 Excel 与 Word 复用。 */
+export function coverageItemExportLines(item, coverage, { includeCategory = true } = {}) {
+  const impact = decodeChangeItem(item);
+  const row = coverage || {};
+  const lines = includeCategory ? [`影响性分析分类：${exportFieldValue(impact.category)}`] : [];
+  return [
+    ...lines,
+    `系统名称：${exportFieldValue(impact.system)}`,
+    `变更内容：${exportFieldValue(impact.change_content)}`,
+    `案例覆盖策略简述：${exportFieldValue(row.strategy)}`,
+    `测试案例编号：${exportFieldValue(row.case_no)}`,
+    `测试人员：${exportFieldValue(row.tester)}`,
+    `测试覆盖检查结果：${exportFieldValue(row.result)}`,
+  ];
 }
 
 /**
- * 将若干覆盖登记格式化为可读文本（用于导出）。
+ * 将若干影响性分析条目的全部适用字段格式化到一个单元格（用于导出）。
+ */
+export function formatImpactItemsText(rows) {
+  return (rows || []).map((r, i) => {
+    const lines = impactItemExportLines(r);
+    lines[0] = `${i + 1}. ${lines[0]}`;
+    return lines.join('\n');
+  }).join('\n\n');
+}
+
+/**
+ * 将影响性分析分类、系统名称、变更内容及完整测试覆盖内容格式化到一个单元格（用于测试导出）。
  * @param {Array} items 影响条目行
  * @param {Map} covMap change_item_id -> coverage_item
  */
 export function formatCoverageText(items, covMap) {
   return (items || []).map((it, i) => {
-    const d = decodeChangeItem(it);
-    const c = covMap.get(it.id) || {};
-    return `${i + 1}.[${d.category}]${d.system || ''} ${d.change_content || ''} → ${c.result || '未登记'}${c.case_no ? `（案例:${c.case_no}）` : ''}`;
-  }).join('\n');
+    const lines = coverageItemExportLines(it, covMap.get(it.id));
+    lines[0] = `${i + 1}. ${lines[0]}`;
+    return lines.join('\n');
+  }).join('\n\n');
 }
 
 // ---- 测试覆盖性分析字段 ----

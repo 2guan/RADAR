@@ -541,6 +541,7 @@ export default async function releaseRoutes(fastify) {
     let entity = { type: entityType, code };
     let devTasksFull = [];
     let testTasksFull = [];
+    let analysisData = {};
 
     if (entityType === 'requirement' || entityType === 'ticket') {
       const req = await getWorkItem(code);
@@ -564,6 +565,13 @@ export default async function releaseRoutes(fastify) {
         'SELECT id, task_code, task_name, test_type, owner, status, impl_system FROM test_task WHERE req_code = ? ORDER BY id',
         code,
       );
+      const impactItems = await all('SELECT * FROM impact_change_item WHERE req_code = ? ORDER BY sort_order, id', code);
+      const coverages = await all('SELECT * FROM coverage_item WHERE req_code = ?', code);
+      const coverageMap = new Map(coverages.map((coverage) => [coverage.change_item_id, coverage]));
+      analysisData = {
+        impactItems,
+        coverageMap,
+      };
     } else if (entityType === 'issue') {
       const issue = await get('SELECT * FROM issue WHERE issue_code = ?', code);
       entity = {
@@ -578,7 +586,7 @@ export default async function releaseRoutes(fastify) {
     }
 
     const detail = { entityType, entity, releaseTask: rt, signoffs, artifacts };
-    const buf = await buildReleaseWordDoc(detail, devTasksFull, testTasksFull);
+    const buf = await buildReleaseWordDoc(detail, devTasksFull, testTasksFull, analysisData);
 
     const filename = `版本发布评审单_${code}.docx`;
     reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');

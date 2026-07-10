@@ -8,14 +8,13 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { Modal, Button, Dropdown, Select, Input, Tag, Empty, Spin, message, Popconfirm, Row, Col } from 'antd';
+import { Modal, Button, Dropdown, Select, Input, Tag, Empty, Spin, message, Popconfirm, Row, Col, Tooltip } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, SaveOutlined, CloseOutlined } from '@ant-design/icons';
 import { apiGet, apiPost, apiPut, apiDelete } from '../../api/client.js';
-import { useResponsive } from '../../hooks/useResponsive.js';
 import SystemNameInput, { SystemNamesSelect } from '../SystemNameInput.jsx';
 import AnalysisHeader from './AnalysisHeader.jsx';
 import {
-  CHANGE_CATEGORIES, FIELD_DEFS, CHANGE_KINDS, YES_NO, visibleFieldsOf, validateItem,
+  CHANGE_CATEGORIES, FIELD_DEFS, CHANGE_KINDS, YES_NO, visibleFieldsOf, validateItem, valueTagClass,
 } from '../../config/impactSchema.js';
 
 let _seq = 1;
@@ -35,7 +34,6 @@ function makeValues(category, defaultSystem) {
 }
 
 export default function ImpactAnalysisModal({ open, reqCode, readOnly, onClose, onSaved }) {
-  const { isMobile } = useResponsive();
   const [header, setHeader] = useState(null);
   const [cards, setCards] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -124,7 +122,7 @@ export default function ImpactAnalysisModal({ open, reqCode, readOnly, onClose, 
         <AnalysisHeader header={header} />
 
         {!readOnly && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '0 0 12px' }}>
+          <div className="analysis-toolbar">
             <Dropdown menu={categoryMenu} trigger={['click']}>
               <Button type="primary" size="small" icon={<PlusOutlined />}>添加变更内容</Button>
             </Dropdown>
@@ -135,21 +133,22 @@ export default function ImpactAnalysisModal({ open, reqCode, readOnly, onClose, 
         {cards.length === 0 ? (
           <Empty description={readOnly ? '暂无影响性分析条目' : '点击「添加变更内容」新增条目'} style={{ padding: '32px 0' }} />
         ) : (
-          cards.map((card, idx) => (
-            <ChangeItemCard
-              key={card._key}
-              index={idx}
-              card={card}
-              readOnly={readOnly}
-              isMobile={isMobile}
-              busy={busyKey === card._key}
-              onPatch={(p) => patch(card._key, p)}
-              onEdit={() => startEdit(card._key)}
-              onCancel={() => cancelEdit(card)}
-              onSave={() => saveCard(card)}
-              onRemove={() => removeCard(card)}
-            />
-          ))
+          <div className="analysis-card-grid">
+            {cards.map((card, idx) => (
+              <ChangeItemCard
+                key={card._key}
+                index={idx}
+                card={card}
+                readOnly={readOnly}
+                busy={busyKey === card._key}
+                onPatch={(p) => patch(card._key, p)}
+                onEdit={() => startEdit(card._key)}
+                onCancel={() => cancelEdit(card)}
+                onSave={() => saveCard(card)}
+                onRemove={() => removeCard(card)}
+              />
+            ))}
+          </div>
         )}
       </Spin>
     </Modal>
@@ -157,17 +156,17 @@ export default function ImpactAnalysisModal({ open, reqCode, readOnly, onClose, 
 }
 
 /** 单条变更内容卡片：编辑态用表单控件、展示态用只读呈现，字段按分类等宽栅格排列 */
-function ChangeItemCard({ index, card, readOnly, isMobile, busy, onPatch, onEdit, onCancel, onSave, onRemove }) {
+function ChangeItemCard({ index, card, readOnly, busy, onPatch, onEdit, onCancel, onSave, onRemove }) {
   const { values, editing } = card;
   const fields = visibleFieldsOf(values);
 
   return (
-    <div className="form-section-card" style={{ marginBottom: 12, padding: '10px 14px' }}>
+    <div className="form-section-card analysis-card impact-analysis-card">
       {/* 卡片头：序号 + 分类 + 操作 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: editing ? 10 : 6 }}>
-        <span style={{ fontWeight: 700, color: 'var(--radar-primary)', fontSize: 12 }}>#{index + 1}</span>
-        <Tag color="processing" style={{ margin: 0, borderRadius: 2 }}>{values.category}</Tag>
-        <div style={{ flex: 1 }} />
+      <div className="analysis-card-header" style={{ marginBottom: editing ? 10 : 8 }}>
+        <span className="analysis-card-index">#{index + 1}</span>
+        <span className="analysis-card-category">{values.category}</span>
+        <div className="analysis-card-spacer" />
         {!readOnly && (editing ? (
           <>
             <Button size="small" type="primary" icon={<SaveOutlined />} loading={busy} onClick={onSave}>保存</Button>
@@ -181,9 +180,9 @@ function ChangeItemCard({ index, card, readOnly, isMobile, busy, onPatch, onEdit
           </>
         ) : (
           <>
-            <Button size="small" type="link" icon={<EditOutlined />} onClick={onEdit} style={{ padding: '0 6px' }}>修改</Button>
+            <Tooltip title="修改"><Button size="small" type="link" icon={<EditOutlined />} onClick={onEdit} aria-label="修改" style={{ padding: '0 6px' }} /></Tooltip>
             <Popconfirm title="确认删除该条目？" onConfirm={onRemove}>
-              <Button size="small" type="link" danger icon={<DeleteOutlined />} loading={busy} style={{ padding: '0 6px' }}>删除</Button>
+              <Tooltip title="删除"><Button size="small" type="link" danger icon={<DeleteOutlined />} loading={busy} aria-label="删除" style={{ padding: '0 6px' }} /></Tooltip>
             </Popconfirm>
           </>
         ))}
@@ -194,7 +193,7 @@ function ChangeItemCard({ index, card, readOnly, isMobile, busy, onPatch, onEdit
           const def = FIELD_DEFS[key];
           return (
             <Col key={key} xs={24} md={def.col}>
-              <div style={{ fontSize: 11, color: 'var(--radar-text-secondary)', marginBottom: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <div className="analysis-field-label">
                 {def.label}
               </div>
               {editing
@@ -210,21 +209,21 @@ function ChangeItemCard({ index, card, readOnly, isMobile, busy, onPatch, onEdit
 
 /** 编辑态控件 */
 function FieldControl({ def, value, onChange }) {
-  if (def.type === 'system') return <SystemNameInput value={value} onChange={onChange} />;
-  if (def.type === 'systems') return <SystemNamesSelect value={value} onChange={onChange} />;
+  if (def.type === 'system') return <SystemNameInput value={value} onChange={onChange} popupClassName="analysis-select-dropdown" />;
+  if (def.type === 'systems') return <SystemNamesSelect value={value} onChange={onChange} popupClassName="analysis-select-dropdown" />;
   if (def.type === 'kind') {
-    return <Select size="small" style={{ width: '100%' }} placeholder="请选择" value={value || undefined} onChange={onChange}
+    return <Select size="small" style={{ width: '100%' }} popupClassName="analysis-select-dropdown" placeholder="选择新增、修改或删除" value={value || undefined} onChange={onChange}
       options={CHANGE_KINDS.map((k) => ({ value: k, label: k }))} />;
   }
   if (def.type === 'yesno') {
-    return <Select size="small" style={{ width: '100%' }} placeholder="请选择" value={value || undefined} onChange={onChange}
+    return <Select size="small" style={{ width: '100%' }} popupClassName="analysis-select-dropdown" placeholder={`请选择${def.label}`} value={value || undefined} onChange={onChange}
       options={YES_NO.map((k) => ({ value: k, label: k }))} />;
   }
   return (
     <Input.TextArea
       size="small" value={value} onChange={(e) => onChange(e.target.value)}
       autoSize={{ minRows: def.rows || 2, maxRows: 8 }} maxLength={def.max} showCount={!!def.max}
-      placeholder={def.min ? `不少于 ${def.min} 个字` : '请输入'} style={{ fontSize: 12 }}
+      placeholder={def.placeholder || `填写${def.label}`}
     />
   );
 }
@@ -243,10 +242,14 @@ function FieldValue({ def, value }) {
       : <span style={{ color: 'var(--radar-text-secondary)', fontSize: 12 }}>—</span>;
   }
   if (def.type === 'yesno') {
-    return <span style={{ fontSize: 12, fontWeight: 500, color: value === '是' ? 'var(--radar-primary)' : 'var(--radar-ink)' }}>{value || '—'}</span>;
+    return value
+      ? <Tag className={`status-tag ${valueTagClass(def.type, value)}`} style={{ borderRadius: 2, margin: 0 }}>{value}</Tag>
+      : <span style={{ color: 'var(--radar-text-secondary)', fontSize: 12 }}>—</span>;
   }
   if (def.type === 'kind') {
-    return <span style={{ fontSize: 12 }}>{value || '—'}</span>;
+    return value
+      ? <Tag className={`status-tag ${valueTagClass(def.type, value)}`} style={{ borderRadius: 2, margin: 0 }}>{value}</Tag>
+      : <span style={{ color: 'var(--radar-text-secondary)', fontSize: 12 }}>—</span>;
   }
   return (
     <div style={{ fontSize: 12, color: 'var(--radar-ink)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.6 }}>

@@ -454,6 +454,153 @@ body {
 .meta-bar .meta-item { display: flex; gap: 6px; align-items: center; }
 .meta-bar .meta-label { color: var(--radar-text-secondary); }
 
+/* ============ 影响性 / 测试覆盖性分析 ============ */
+.analysis-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 12px;
+}
+.analysis-card-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+.analysis-card-grid .form-section-card { margin-bottom: 0; }
+.analysis-card {
+  padding: 12px 14px !important;
+  box-shadow: inset 3px 0 0 var(--radar-primary);
+}
+.analysis-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--radar-border);
+}
+.impact-analysis-card .analysis-card-header,
+.coverage-analysis-card .analysis-card-header {
+  margin: -12px -14px 8px;
+  padding: 8px 14px;
+  background: var(--radar-primary-soft);
+  border-bottom-color: var(--radar-primary-fade);
+}
+.analysis-card-index {
+  color: var(--radar-primary);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.analysis-card-category {
+  color: var(--radar-ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+.analysis-card-spacer { flex: 1; }
+.analysis-field-label {
+  margin-bottom: 3px;
+  color: var(--radar-text-secondary);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.analysis-card .ant-input,
+.analysis-card .ant-input-affix-wrapper,
+.analysis-card .ant-input-textarea textarea,
+.analysis-card .ant-select,
+.analysis-card .ant-select-selector,
+.analysis-card .ant-select-selection-item,
+.analysis-card .ant-select-selection-placeholder,
+.analysis-card .ant-select-selection-search-input {
+  font-size: 12px !important;
+}
+.analysis-select-dropdown .ant-select-item,
+.analysis-select-dropdown .ant-select-item-option-content {
+  font-size: 12px;
+}
+.coverage-card-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  margin-top: 12px;
+}
+.analysis-pane {
+  min-width: 0;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--radar-border);
+  background: var(--radar-surface);
+}
+.analysis-pane-impact { border-top: 2px solid var(--radar-primary); }
+.analysis-pane-coverage { border-top: 2px solid var(--radar-primary); }
+.analysis-pane-title {
+  margin-bottom: 10px;
+  color: var(--radar-ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+.analysis-value {
+  color: var(--radar-ink);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.analysis-value-text { white-space: pre-wrap; word-break: break-word; }
+.analysis-empty-value { color: var(--radar-text-secondary); font-size: 12px; }
+.release-stage-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 4px;
+}
+.release-stage-chip {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  min-height: 28px;
+  padding: 4px 7px;
+  background: var(--radar-surface);
+  border: 1px solid var(--radar-border);
+  border-radius: 2px;
+}
+.release-stage-chip-label {
+  min-width: 0;
+  color: var(--radar-text-secondary);
+  font-size: 10px;
+  font-weight: 500;
+  text-align: center;
+  white-space: nowrap;
+}
+.release-stage-chip-value {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  min-width: 0;
+  height: 100%;
+  white-space: nowrap;
+}
+.release-stage-chip .status-tag {
+  align-self: center;
+  width: 52px;
+  padding-inline: 4px;
+  font-size: 10px;
+  line-height: 18px;
+  text-align: center;
+}
+@media (min-width: 768px) {
+  .release-stage-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (min-width: 1024px) {
+  .analysis-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .coverage-card-grid { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); }
+}
+@media (max-width: 767px) {
+  .analysis-toolbar { align-items: flex-start; flex-wrap: wrap; }
+  .analysis-card-header { flex-wrap: wrap; }
+  .analysis-card-spacer { display: none; }
+}
+
 /* ============ 编辑弹窗：紧凑表单 + 标题状态选择器（需求/开发/测试通用） ============ */
 /* 缩小 label 与控件字号，统一单行控件高度为 24px（small 规格） */
 .editor-form .ant-form-item-label > label { font-size: 12px !important; font-weight: 600 !important; color: var(--radar-ink) !important; }

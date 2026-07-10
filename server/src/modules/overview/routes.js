@@ -15,6 +15,7 @@ import { exportXlsx } from '../../lib/excel.js';
 import { formatAttachments } from '../../lib/resolver.js';
 import { getWorkItem } from '../../lib/work-items.js';
 import { parseJsonArray } from '../../lib/json.js';
+import { formatImpactItemsText, formatCoverageText } from '../../lib/impact-schema.js';
 
 /** 计算一组任务的节点状态（含单一代表状态 status，供阶段标签展示） */
 function nodeState(tasks) {
@@ -564,6 +565,20 @@ export default async function overviewRoutes(fastify) {
     const rps = await all('SELECT id, release_date FROM release_point');
     const rpMap = {};
     for (const rp of rps) rpMap[rp.id] = rp.release_date;
+    const analysisCache = {};
+    const analysisTextFor = async (reqCode) => {
+      if (!reqCode) return { impact: '', coverage: '' };
+      if (!analysisCache[reqCode]) {
+        const items = await all('SELECT * FROM impact_change_item WHERE req_code = ? ORDER BY sort_order, id', reqCode);
+        const covs = await all('SELECT * FROM coverage_item WHERE req_code = ?', reqCode);
+        const covMap = new Map(covs.map((c) => [c.change_item_id, c]));
+        analysisCache[reqCode] = {
+          impact: formatImpactItemsText(items),
+          coverage: formatCoverageText(items, covMap),
+        };
+      }
+      return analysisCache[reqCode];
+    };
 
     const filteredReqs = [];
     for (const r of workItems) {
@@ -628,6 +643,7 @@ export default async function overviewRoutes(fastify) {
       const devTasks = devMap[r.req_code] || [];
       const testBucket = testMap[r.req_code] || {};
       const rtRow = rtMap[r.req_code];
+      const analysisText = await analysisTextFor(r.req_code);
 
       // 提取需求/工单层级的基础信息
       const reqMainSys = parseJsonArray(r.main_systems);
@@ -682,12 +698,12 @@ export default async function overviewRoutes(fastify) {
           dev_code: '', dev_name: '', dev_content: '', dev_status: '', dev_owner: '',
           dev_system: '', dev_org: '', dev_plan_start: '', dev_plan_end: '',
           dev_actual_start: '', dev_actual_end: '', dev_deviation_rate: '',
-          dev_design_brief: '', dev_design_detail: '', dev_code_review: '', dev_unit_test: '',
+          dev_design_brief: '', dev_design_detail: '', dev_code_review: '', dev_unit_test: '', dev_impact_analysis: '',
         };
         let sysReleaseTime = '无';
         let sysReleaseStatus = '无';
 
-        let sitInfo = { sit_code: '无', sit_status: '无', sit_owner: '无', sit_actual_end: '无', sit_test_plan: '无', sit_test_report: '无' };
+        let sitInfo = { sit_code: '无', sit_status: '无', sit_owner: '无', sit_actual_end: '无', sit_test_plan: '无', sit_test_coverage_design: '无', sit_test_report: '无' };
         let uatInfo = { uat_code: '无', uat_status: '无', uat_owner: '无', uat_actual_end: '无', uat_test_plan: '无', uat_test_report: '无' };
         let nftInfo = { nft_code: '无', nft_status: '无', nft_owner: '无', nft_actual_end: '无', nft_test_plan: '无', nft_test_report: '无' };
         let secInfo = { sec_code: '无', sec_status: '无', sec_owner: '无', sec_actual_end: '无', sec_test_plan: '无', sec_test_report: '无' };
@@ -712,6 +728,7 @@ export default async function overviewRoutes(fastify) {
             dev_design_detail: formatAttachments(devAttaches, '详细设计'),
             dev_code_review: formatAttachments(devAttaches, '代码走查'),
             dev_unit_test: formatAttachments(devAttaches, '单元测试报告'),
+            dev_impact_analysis: analysisText.impact,
           };
 
           // 关联投产系统状态
@@ -753,7 +770,8 @@ export default async function overviewRoutes(fastify) {
               sit_owner: sitMatch.owner,
               sit_actual_end: sitMatch.actual_end,
               sit_test_plan: sitMatch.test_plan,
-              sit_test_report: sitMatch.test_report
+              sit_test_report: sitMatch.test_report,
+              sit_test_coverage_design: analysisText.coverage,
             };
           }
           const uatMatch = await mapTestInfo('UAT');
@@ -803,6 +821,7 @@ export default async function overviewRoutes(fastify) {
           sit_owner: sitInfo.sit_owner,
           sit_actual_end: sitInfo.sit_actual_end,
           sit_test_plan: sitInfo.sit_test_plan,
+          sit_test_coverage_design: sitInfo.sit_test_coverage_design,
           sit_test_report: sitInfo.sit_test_report,
 
           uat_code: uatInfo.uat_code,
@@ -865,12 +884,14 @@ export default async function overviewRoutes(fastify) {
       { key: 'dev_design_detail', title: '详细设计' },
       { key: 'dev_code_review', title: '代码走查' },
       { key: 'dev_unit_test', title: '单元测试报告' },
+      { key: 'dev_impact_analysis', title: '影响性分析', width: 60, wrapText: true },
       // 应用组装测试 (SIT)
       { key: 'sit_code', title: '应用组装测试任务编号' },
       { key: 'sit_status', title: '应用组装测试状态' },
       { key: 'sit_owner', title: '应用组装测试负责人' },
       { key: 'sit_actual_end', title: '应用组装测试实际完成时间' },
       { key: 'sit_test_plan', title: '应用组装测试方案' },
+      { key: 'sit_test_coverage_design', title: '应用组装测试覆盖性分析', width: 60, wrapText: true },
       { key: 'sit_test_report', title: '应用组装测试报告' },
       // 用户测试 (UAT)
       { key: 'uat_code', title: '用户测试任务编号' },

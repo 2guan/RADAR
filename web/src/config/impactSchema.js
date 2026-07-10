@@ -16,19 +16,19 @@ export const COVERAGE_RESULTS = ['未覆盖', '已覆盖'];
 export const FIELD_DEFS = {
   system: { label: '系统名称', type: 'system', required: true, col: 12 },
   change_kind: { label: '变更类型', type: 'kind', required: true, col: 12 },
-  change_content: { label: '变更内容', type: 'text', min: 5, max: 1000, required: true, col: 24, rows: 4 },
-  artifact: { label: '对应制品/脚本', type: 'text', required: true, col: 24, rows: 2 },
-  impact_analysis: { label: '影响分析', type: 'text', min: 5, max: 1000, required: true, col: 24, rows: 4 },
+  change_content: { label: '变更内容', type: 'text', min: 5, max: 1000, required: true, col: 24, rows: 4, placeholder: '描述本次变更的功能、接口或处理逻辑', validationHint: '补充本次变更的具体内容' },
+  artifact: { label: '对应制品/脚本', type: 'text', required: true, col: 24, rows: 2, placeholder: '填写涉及的制品、脚本、表或模块名称', validationHint: '填写涉及的制品、脚本、表或模块名称' },
+  impact_analysis: { label: '影响分析', type: 'text', min: 5, max: 1000, required: true, col: 24, rows: 4, placeholder: '说明影响范围、风险及处理方式', validationHint: '补充影响范围、风险及处理方式' },
   involve_other: { label: '是否涉及其他系统', type: 'yesno', required: true, col: 8 },
   involve_other_systems: { label: '影响系统', type: 'systems', requiredWhen: ['involve_other', '是'], col: 16 },
-  upstream_impact: { label: '对上下游接口的影响分析', type: 'text', required: true, col: 24, rows: 4 },
-  data_impact: { label: '对存量数据的影响分析', type: 'text', required: true, col: 24, rows: 4 },
+  upstream_impact: { label: '对上下游接口的影响分析', type: 'text', required: true, col: 24, rows: 4, placeholder: '说明对调用方、上下游接口或依赖方的影响', validationHint: '补充对上下游接口或依赖方的影响说明' },
+  data_impact: { label: '对存量数据的影响分析', type: 'text', required: true, col: 24, rows: 4, placeholder: '说明存量数据影响及对应处理方案', validationHint: '补充存量数据影响及处理方案' },
   job_chain_change: { label: '是否涉及本系统作业链依赖关系变更', type: 'yesno', required: true, col: 8 },
-  job_chain_change_detail: { label: '作业链依赖变更内容', type: 'text', requiredWhen: ['job_chain_change', '是'], col: 16, rows: 2 },
+  job_chain_change_detail: { label: '作业链依赖变更内容', type: 'text', requiredWhen: ['job_chain_change', '是'], col: 16, rows: 2, placeholder: '填写作业链依赖关系及调整方式', validationHint: '填写作业链依赖关系及调整方式' },
   updown_dep_change: { label: '是否涉及上下游系统依赖关系变更', type: 'yesno', required: true, col: 8 },
-  updown_dep_change_detail: { label: '上下游依赖变更内容', type: 'text', requiredWhen: ['updown_dep_change', '是'], col: 16, rows: 2 },
+  updown_dep_change_detail: { label: '上下游依赖变更内容', type: 'text', requiredWhen: ['updown_dep_change', '是'], col: 16, rows: 2, placeholder: '填写上下游系统依赖关系的变更内容', validationHint: '填写上下游系统依赖关系的变更内容' },
   runtime_change: { label: '是否存在运行时长明显变化', type: 'yesno', required: true, col: 8 },
-  runtime_change_detail: { label: '运行时长变化说明', type: 'text', requiredWhen: ['runtime_change', '是'], col: 16, rows: 2 },
+  runtime_change_detail: { label: '运行时长变化说明', type: 'text', requiredWhen: ['runtime_change', '是'], col: 16, rows: 2, placeholder: '说明运行时长变化的原因及预估', validationHint: '补充运行时长变化的原因及预估' },
 };
 
 // 成对字段相邻，保证 24 栅格整齐排列
@@ -52,6 +52,15 @@ export const CATEGORY_FIELDS = {
 };
 
 export const CHANGE_CATEGORIES = Object.keys(CATEGORY_FIELDS);
+
+/** 变更类型与是/否字段的展示标签色，复用当前主题的语义色。 */
+export function valueTagClass(type, value) {
+  if (type === 'kind') {
+    return ({ '新增': 'tag-system', '修改': 'tag-type', '删除': 'status-tag-initial' })[value] || 'tag-system';
+  }
+  if (type === 'yesno') return value === '是' ? 'status-tag-final' : 'status-tag-initial';
+  return 'tag-system';
+}
 
 /** 某分类下当前应展示的字段（过滤未激活的条件字段） */
 export function visibleFieldsOf(item) {
@@ -84,7 +93,7 @@ export function validateItem(it) {
     if (def.type === 'kind') { if (!CHANGE_KINDS.includes(val)) errs.push(`「${def.label}」请选择`); continue; }
     if (def.type === 'yesno') { if (!YES_NO.includes(val)) errs.push(`「${def.label}」请选择`); continue; }
     if ((def.required || def.requiredWhen) && !val) { errs.push(`「${def.label}」不能为空`); continue; }
-    if (def.min && val.length < def.min) errs.push(`「${def.label}」不少于 ${def.min} 个字`);
+    if (def.min && val.length < def.min) errs.push(`「${def.label}」请${def.validationHint || '补充完整内容'}`);
     if (def.max && val.length > def.max) errs.push(`「${def.label}」不大于 ${def.max} 个字`);
   }
   return errs;

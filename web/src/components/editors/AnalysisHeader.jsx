@@ -34,10 +34,12 @@ export default function AnalysisHeader({ header }) {
         <span className="meta-label">主责系统</span>
         <SysTags names={header.main_system_names} />
       </span>
-      <span className="meta-item">
-        <span className="meta-label">协同系统</span>
-        <SysTags names={header.collab_system_names} />
-      </span>
+      {header.collab_system_names?.length > 0 && (
+        <span className="meta-item">
+          <span className="meta-label">协同系统</span>
+          <SysTags names={header.collab_system_names} />
+        </span>
+      )}
     </div>
   );
 }

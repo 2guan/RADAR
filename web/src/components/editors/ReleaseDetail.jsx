@@ -18,6 +18,8 @@ import RequirementEditor from './RequirementEditor.jsx';
 import TaskEditor from './TaskEditor.jsx';
 import ReleaseApplyEditor from './ReleaseApplyEditor.jsx';
 import TicketEditor from './TicketEditor.jsx';
+import ImpactAnalysisModal from './ImpactAnalysisModal.jsx';
+import CoverageAnalysisModal from './CoverageAnalysisModal.jsx';
 import StatusBadge, { getStatusType, statusSelectWidth } from '../StatusBadge.jsx';
 import DictSelect from '../DictSelect.jsx';
 import PersonPicker from '../PersonPicker.jsx';
@@ -52,9 +54,9 @@ const weakestStatus = (list, order) => {
 /** 阶段进度小卡片 */
 function StageChip({ label, children }) {
   return (
-    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--radar-surface)', border: '1px solid var(--radar-border)', borderRadius: 2, padding: '4px 8px' }}>
-      <span style={{ fontSize: 11, color: 'var(--radar-text-secondary)', fontWeight: 500 }}>{label}</span>
-      {children}
+    <div className="release-stage-chip">
+      <span className="release-stage-chip-label">{label}</span>
+      <span className="release-stage-chip-value">{children}</span>
     </div>
   );
 }
@@ -85,6 +87,9 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
 
   const [historyOpen, setHistoryOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [impactOpen, setImpactOpen] = useState(false);
+  const [coverageOpen, setCoverageOpen] = useState(false);
+  const [analysisSummary, setAnalysisSummary] = useState(null);
 
   const releasePointQuery = () => {
     const id = currentReleasePointId ?? detail?.entity?.apply_release_point_id ?? releasePointId;
@@ -138,6 +143,25 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
       setDetail(res);
       if (res?.releaseTask) setOwner(res.releaseTask.owner);
       setCurrentReleasePointId(res?.releaseTask?.release_point_id ?? res?.entity?.apply_release_point_id ?? null);
+      if (res?.entityType === 'requirement' || res?.entityType === 'ticket') {
+        try {
+          const [impact, coverage] = await Promise.all([
+            apiGet(`/impact-analysis/${encodeURIComponent(entityCode)}`),
+            apiGet(`/coverage-analysis/${encodeURIComponent(entityCode)}`),
+          ]);
+          const rows = coverage.rows || [];
+          const impactCount = impact.items?.length || 0;
+          const coveredCount = rows.filter((row) => row.result === '已覆盖').length;
+          setAnalysisSummary({
+            impactCount,
+            coverageComplete: impactCount > 0 && coveredCount === impactCount,
+          });
+        } catch {
+          setAnalysisSummary({ impactCount: 0, coverageComplete: false });
+        }
+      } else {
+        setAnalysisSummary(null);
+      }
     } catch (e) {
       message.error(e.message || '加载详情失败');
     }
@@ -467,7 +491,7 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
                     <div style={{ fontSize: 11, color: 'var(--radar-ink)', background: 'var(--radar-bg)', padding: '6px 10px', borderRadius: 2, maxHeight: 80, overflowY: 'auto', border: '1px solid var(--radar-border)', whiteSpace: 'pre-wrap', lineHeight: '16px' }}>
                       {entity.summary || '无概述内容'}
                     </div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+                    <div className="release-stage-grid">
                       <StageChip label={entityType === 'ticket' ? '工单' : '需求'}>
                         <span style={stageLinkStyle} onClick={() => setReqOpen(true)}><StatusBadge status={entity.status} /></span>
                       </StageChip>
@@ -480,6 +504,22 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
                       {ts?.sec && ts.sec.length > 0 && (
                         <StageChip label="安全测试">{stageBadge(ts.sec, TEST_ORDER, 'test', '安全测试')}</StageChip>
                       )}
+                      <StageChip label="影响性分析">
+                        <Tag className="status-tag tag-system" role="button" tabIndex={0}
+                          onClick={() => setImpactOpen(true)}
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setImpactOpen(true); }}
+                          style={{ margin: 0, borderRadius: 2, cursor: 'pointer' }}>
+                          {analysisSummary ? `${analysisSummary.impactCount}条` : '—'}
+                        </Tag>
+                      </StageChip>
+                      <StageChip label="测试覆盖">
+                        <Tag className={`status-tag ${analysisSummary?.coverageComplete ? 'status-tag-final' : 'status-tag-initial'}`} role="button" tabIndex={0}
+                          onClick={() => setCoverageOpen(true)}
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setCoverageOpen(true); }}
+                          style={{ margin: 0, borderRadius: 2, cursor: 'pointer' }}>
+                          {analysisSummary?.coverageComplete ? '已覆盖' : '未覆盖'}
+                        </Tag>
+                      </StageChip>
                     </div>
                   </div>
                 ) : (
@@ -699,6 +739,8 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
       <TaskEditor open={!!devTaskId} kind="dev" taskId={devTaskId} onClose={() => setDevTaskId(null)} onSaved={reload} />
       <TaskEditor open={!!testTaskId} kind="test" taskId={testTaskId} onClose={() => setTestTaskId(null)} onSaved={reload} />
       <ReleaseApplyEditor open={!!applyCode} code={applyCode} onClose={() => setApplyCode(null)} onSaved={reload} />
+      <ImpactAnalysisModal open={impactOpen} reqCode={entityCode} readOnly onClose={() => setImpactOpen(false)} />
+      <CoverageAnalysisModal open={coverageOpen} reqCode={entityCode} readOnly onClose={() => setCoverageOpen(false)} />
     </EditorShell>
   );
 }

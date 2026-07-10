@@ -1,7 +1,8 @@
 /**
  * 文件：lib/release-word.js
  * 用途：投产审批「版本发布评审单」Word 文档生成。按模板格式输出：
- *       一、投产基本信息；二、需求/工单/问题信息；三、开发情况；四、测试情况；评审会签。
+ *       一、投产基本信息；二、需求/工单/问题信息；三、开发情况；四、测试情况；
+ *       五、影响性分析；六、测试覆盖分析；评审会签。
  *       全文微软雅黑、黑色；表头/标签列灰色底纹。
  * 作者：hengguan
  */
@@ -11,6 +12,7 @@ import {
   HeadingLevel, AlignmentType, WidthType, BorderStyle, ShadingType,
   ImageRun, VerticalAlign, convertInchesToTwip,
 } from 'docx';
+import { coverageItemExportLines, decodeChangeItem, impactItemExportLines } from './impact-schema.js';
 
 // ── 基础常量 ──────────────────────────────────────────────────────────────
 const FONT = '微软雅黑';
@@ -157,6 +159,40 @@ function kvTable(rows) {
   });
 }
 
+/** 左侧灰底：序号与变更分类，垂直/水平居中。 */
+function analysisTitleCell(index, category, width) {
+  return new TableCell({
+    width: { size: width, type: WidthType.DXA },
+    verticalAlign: VerticalAlign.CENTER,
+    shading: { type: ShadingType.CLEAR, color: 'auto', fill: FILL_GRAY },
+    borders: CELL_BORDER,
+    children: [
+      para(run(String(index), { bold: true, size: 20 }), { alignment: AlignmentType.CENTER, spaceAfter: 30 }),
+      para(run(category || '—', { bold: true, size: 20 }), { alignment: AlignmentType.CENTER }),
+    ],
+  });
+}
+
+/** 分析导出内容：每条影响项单独成行，右侧字段顺序与 Excel 导出一致。 */
+function analysisTable(items, lineOf, emptyText) {
+  if (!items?.length) return para(run(emptyText, { size: 18 }));
+  return new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    rows: items.map((item, index) => {
+      const impact = decodeChangeItem(item);
+      return new TableRow({
+        children: [
+          analysisTitleCell(index + 1, impact.category, 2000),
+          tdCell('', 6500, {
+            vAlign: VerticalAlign.TOP,
+            children: lineOf(item).map((line) => para(run(line, { size: 20 }), { alignment: AlignmentType.LEFT, spaceAfter: 30 })),
+          }),
+        ],
+      });
+    }),
+  });
+}
+
 // ── 主入口 ───────────────────────────────────────────────────────────────
 
 /**
@@ -164,9 +200,10 @@ function kvTable(rows) {
  * @param {object} detail  GET /release/:code 返回数据
  * @param {object[]} devTasksFull  完整 dev_task 行（含 task_name, content, owner, status）
  * @param {object[]} testTasksFull 完整 test_task 行（含 task_name, test_type, owner, status）
+ * @param {{impactItems?: object[], coverageMap?: Map}} analysisData 影响/覆盖分析原始数据
  * @returns {Promise<Buffer>}
  */
-export async function buildReleaseWordDoc(detail, devTasksFull, testTasksFull) {
+export async function buildReleaseWordDoc(detail, devTasksFull, testTasksFull, analysisData = {}) {
   const { entityType, entity, releaseTask, signoffs = [], artifacts = [] } = detail;
   const isWorkItem = entityType === 'requirement' || entityType === 'ticket';
   const workLabel = entityType === 'ticket' ? '工单' : '需求';
@@ -312,10 +349,28 @@ export async function buildReleaseWordDoc(detail, devTasksFull, testTasksFull) {
         ]));
       });
     }
+
+    // ── 五、影响性分析 ────────────────────────────────────────────────
+    children.push(spacer());
+    children.push(section('五、影响性分析'));
+    children.push(analysisTable(
+      analysisData.impactItems,
+      (item) => impactItemExportLines(item, { includeCategory: false }),
+      '暂无影响性分析内容',
+    ));
+
+    // ── 六、测试覆盖分析 ──────────────────────────────────────────────
+    children.push(spacer());
+    children.push(section('六、测试覆盖分析'));
+    children.push(analysisTable(
+      analysisData.impactItems,
+      (item) => coverageItemExportLines(item, analysisData.coverageMap?.get(item.id), { includeCategory: false }),
+      '暂无测试覆盖分析内容',
+    ));
   }
 
   // ── 评审会签（紧凑5列表） ─────────────────────────────────────────────
-  const signoffSectionNum = isWorkItem ? '五' : '三';
+  const signoffSectionNum = isWorkItem ? '七' : '三';
   children.push(spacer());
   children.push(section(`${signoffSectionNum}、评审会签`));
 

@@ -380,7 +380,7 @@ export default async function devTaskRoutes(fastify) {
       { key: 'design_detail', title: '详细设计' },
       { key: 'code_review', title: '代码走查' },
       { key: 'unit_test', title: '单元测试报告' },
-      { key: 'impact_analysis', title: '影响性分析' },
+      { key: 'impact_analysis', title: '影响性分析', width: 60, wrapText: true },
     ];
 
     // 影响性分析按需求/工单级别存储，按 req_code 缓存，避免逐任务重复查询

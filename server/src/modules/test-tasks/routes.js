@@ -439,7 +439,7 @@ export default async function testTaskRoutes(fastify) {
       { key: 'registrar', title: '登记人' },
       { key: 'register_time', title: '登记时间' },
       { key: 'test_plan', title: '测试方案' },
-      { key: 'test_coverage_design', title: '测试覆盖性分析' },
+      { key: 'test_coverage_design', title: '测试覆盖性分析', width: 60, wrapText: true },
       { key: 'test_report', title: '测试报告' },
     ];
 

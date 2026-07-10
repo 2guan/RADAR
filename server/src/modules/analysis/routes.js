@@ -9,7 +9,7 @@
  */
 
 import { get, all, run, tx } from '../../db/index.js';
-import { ok, notFound, badRequest } from '../../lib/http.js';
+import { ok, notFound, badRequest, forbidden } from '../../lib/http.js';
 import { auditCreate, auditUpdate, auditDelete } from '../../lib/audit.js';
 import { getWorkItem } from '../../lib/work-items.js';
 import {
@@ -46,10 +46,20 @@ async function buildHeader(reqCode, collabField) {
 }
 
 export default async function analysisRoutes(fastify) {
+  // 投产审批只需查看分析结果，因此允许具备 release:view 的用户只读访问；写操作仍由各阶段权限控制。
+  const requireAnalysisView = (moduleKey) => async (request) => {
+    await fastify.authenticate(request);
+    if (request.currentUser.is_super) return;
+    const permissions = await fastify.loadUserPermissions(request.currentUser.id);
+    if (!permissions.has(`${moduleKey}:view`) && !permissions.has('release:view')) {
+      throw forbidden(`无【${moduleKey}/view】操作权限`);
+    }
+  };
+
   // ---- 影响性分析 ----
 
   // 读取某需求/工单的影响性分析（头部 + 全部变更条目）
-  fastify.get('/impact-analysis/:reqCode', { preHandler: fastify.requirePerm('dev', 'view') }, async (request) => {
+  fastify.get('/impact-analysis/:reqCode', { preHandler: requireAnalysisView('dev') }, async (request) => {
     const reqCode = request.params.reqCode;
     const header = await buildHeader(reqCode, 'collab_dev_systems');
     const rows = await all('SELECT * FROM impact_change_item WHERE req_code = ? ORDER BY sort_order, id', reqCode);
@@ -104,7 +114,7 @@ export default async function analysisRoutes(fastify) {
   // ---- 测试覆盖性分析 ----
 
   // 读取某需求/工单的测试覆盖性分析（头部 + 逐条影响条目及其覆盖登记）
-  fastify.get('/coverage-analysis/:reqCode', { preHandler: fastify.requirePerm('test', 'view') }, async (request) => {
+  fastify.get('/coverage-analysis/:reqCode', { preHandler: requireAnalysisView('test') }, async (request) => {
     const reqCode = request.params.reqCode;
     const header = await buildHeader(reqCode, 'collab_test_systems');
     const items = await all('SELECT * FROM impact_change_item WHERE req_code = ? ORDER BY sort_order, id', reqCode);
@@ -114,8 +124,8 @@ export default async function analysisRoutes(fastify) {
       const d = decodeChangeItem(it);
       const c = covMap.get(it.id) || {};
       return {
+        ...d,
         change_item_id: it.id,
-        category: d.category, system: d.system, change_kind: d.change_kind, change_content: d.change_content,
         strategy: c.strategy || '', result: c.result || '', case_no: c.case_no || '', tester: c.tester || '',
         saved: !!c.id,
       };

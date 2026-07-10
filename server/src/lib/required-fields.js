@@ -89,6 +89,7 @@ export const REQUIRED_FIELD_MODULES = [
     fields: [
       { key: 'task_name', label: '开发任务名称' },
       { key: 'content', label: '开发内容概述' },
+      { key: 'impact_analysis', label: '影响性分析', valueType: 'impactAnalysis' },
       { key: 'status', label: '开发状态' },
       { key: 'owner', label: '开发负责人' },
       { key: 'impl_system', label: '开发实施系统' },
@@ -108,6 +109,7 @@ export const REQUIRED_FIELD_MODULES = [
     attachmentFields: ['测试方案', '测试报告'],
     fields: [
       { key: 'task_name', label: '测试任务名称' },
+      { key: 'coverage_analysis', label: '测试覆盖性分析', valueType: 'coverageAnalysis' },
       { key: 'status', label: '测试状态' },
       { key: 'owner', label: '测试负责人' },
       { key: 'impl_system', label: '测试实施系统' },
@@ -305,6 +307,35 @@ function deliveryUnitsMissing(row, childKey) {
   return units.some((unit) => isEmptyValue(unit?.[childKey]));
 }
 
+async function analysisMissing(valueType, row) {
+  const reqCode = String(row?.req_code || '').trim();
+  if (!reqCode) return true;
+
+  if (valueType === 'impactAnalysis') {
+    const item = await get('SELECT id FROM impact_change_item WHERE req_code = ? LIMIT 1', reqCode);
+    return !item;
+  }
+
+  if (valueType === 'coverageAnalysis') {
+    // 测试覆盖性分析仅适用于 SIT；其他测试类型无需填写该结构化分析。
+    if (row?.test_type !== 'SIT') return false;
+    const total = await get('SELECT COUNT(*) AS c FROM impact_change_item WHERE req_code = ?', reqCode);
+    if (!total?.c) return true;
+    const covered = await get(
+      `SELECT COUNT(*) AS c FROM coverage_item
+       WHERE req_code = ?
+         AND strategy IS NOT NULL AND TRIM(strategy) <> ''
+         AND result IS NOT NULL AND TRIM(result) <> ''
+         AND case_no IS NOT NULL AND TRIM(case_no) <> ''
+         AND tester IS NOT NULL AND TRIM(tester) <> ''`,
+      reqCode,
+    );
+    return Number(covered?.c || 0) !== Number(total.c || 0);
+  }
+
+  return false;
+}
+
 async function countAttachments(entityType, entityId, fieldKey, mode = 'both') {
   if (!entityType || !entityId || !fieldKey) return 0;
   const kindSql = mode === 'path' || mode === 'file' ? ' AND kind = ?' : '';
@@ -330,6 +361,8 @@ export async function validateRequiredFields(moduleKey, stateType, row) {
     if (field.valueType === 'deliveryUnit') {
       const childKey = field.key.split('.')[1];
       if (deliveryUnitsMissing(row, childKey)) missing.push(field.label);
+    } else if (field.valueType === 'impactAnalysis' || field.valueType === 'coverageAnalysis') {
+      if (await analysisMissing(field.valueType, row)) missing.push(field.label);
     } else if (isEmptyValue(row[field.key])) {
       missing.push(field.label);
     }

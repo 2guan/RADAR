@@ -27,7 +27,7 @@ function useSystemOptions() {
 }
 
 /** 单个系统名称（tags 模式限 1 个，值为字符串） */
-export default function SystemNameInput({ value, onChange, size = 'small', style, placeholder, disabled }) {
+export default function SystemNameInput({ value, onChange, size = 'small', style, placeholder, disabled, popupClassName }) {
   const options = useSystemOptions();
   const arr = value ? [value] : [];
   return (
@@ -41,6 +41,7 @@ export default function SystemNameInput({ value, onChange, size = 'small', style
       allowClear
       disabled={disabled}
       style={{ width: '100%', ...style }}
+      popupClassName={popupClassName}
       placeholder={placeholder || '检索或手动填写系统'}
       filterOption={(input, opt) => (opt.label || '').toLowerCase().includes((input || '').toLowerCase())}
     />
@@ -48,7 +49,7 @@ export default function SystemNameInput({ value, onChange, size = 'small', style
 }
 
 /** 多个系统名称（tags 模式，值为字符串数组） */
-export function SystemNamesSelect({ value, onChange, size = 'small', style, placeholder, disabled }) {
+export function SystemNamesSelect({ value, onChange, size = 'small', style, placeholder, disabled, popupClassName }) {
   const options = useSystemOptions();
   return (
     <Select
@@ -60,6 +61,7 @@ export function SystemNamesSelect({ value, onChange, size = 'small', style, plac
       allowClear
       disabled={disabled}
       style={{ width: '100%', ...style }}
+      popupClassName={popupClassName}
       placeholder={placeholder || '检索或手动填写，可多个'}
       maxTagCount="responsive"
       filterOption={(input, opt) => (opt.label || '').toLowerCase().includes((input || '').toLowerCase())}

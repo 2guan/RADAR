@@ -10,7 +10,7 @@ import ExcelJS from 'exceljs';
 
 /**
  * 导出数据为 xlsx Buffer。
- * @param {Array<{key:string,title:string}>} columns 列定义
+ * @param {Array<{key:string,title:string,width?:number,wrapText?:boolean}>} columns 列定义
  * @param {object[]} rows 数据行
  * @param {string} [sheetName] 工作表名
  * @returns {Promise<Buffer>}
@@ -19,10 +19,16 @@ export async function exportXlsx(columns, rows, sheetName = '数据') {
   const wb = new ExcelJS.Workbook();
   wb.creator = 'RADAR';
   const ws = wb.addWorksheet(sheetName);
-  ws.columns = columns.map((c) => ({ header: c.title, key: c.key, width: 22 }));
+  ws.columns = columns.map((c) => ({ header: c.title, key: c.key, width: c.width || 22 }));
   // 表头加粗
   ws.getRow(1).font = { bold: true };
   for (const row of rows) ws.addRow(row);
+  columns.forEach((column, index) => {
+    if (!column.wrapText) return;
+    ws.getColumn(index + 1).eachCell({ includeEmpty: true }, (cell, rowNumber) => {
+      if (rowNumber > 1) cell.alignment = { vertical: 'top', wrapText: true };
+    });
+  });
   const buf = await wb.xlsx.writeBuffer();
   return Buffer.from(buf);
 }
