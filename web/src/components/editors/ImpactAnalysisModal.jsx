@@ -1,29 +1,30 @@
 /**
  * 文件：components/editors/ImpactAnalysisModal.jsx
  * 用途：开发阶段「影响性分析」结构化填写弹窗（接近全屏）。
- *       头部展示需求/工单编号、名称、主责系统、协同系统；
- *       「添加变更内容」按分类新增条目，PC 端每个模块尽量一行内展示全部字段。
+ *       头部展示需求/工单编号、名称、主责系统、协同系统；「添加变更内容」按分类新增条目；
+ *       每条支持逐条编辑/保存/删除，保存后转为展示态，点「修改」回到编辑态。
+ *       同一字段在不同分类中保持一致列宽，整体与开发任务详情页风格统一。
  * 作者：hengguan
- * 说明：按需求/工单（reqCode）级别存取，多条变更条目一次性保存（整表替换语义）。
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
-import { Modal, Button, Dropdown, Select, Input, Tag, Empty, Spin, message, Popconfirm, Tooltip } from 'antd';
-import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
-import { apiGet, apiPost } from '../../api/client.js';
+import React, { useEffect, useState } from 'react';
+import { Modal, Button, Dropdown, Select, Input, Tag, Empty, Spin, message, Popconfirm, Row, Col } from 'antd';
+import { PlusOutlined, EditOutlined, DeleteOutlined, SaveOutlined, CloseOutlined } from '@ant-design/icons';
+import { apiGet, apiPost, apiPut, apiDelete } from '../../api/client.js';
 import { useResponsive } from '../../hooks/useResponsive.js';
 import SystemNameInput, { SystemNamesSelect } from '../SystemNameInput.jsx';
+import AnalysisHeader from './AnalysisHeader.jsx';
 import {
-  CHANGE_CATEGORIES, CATEGORY_FIELDS, FIELD_DEFS, CHANGE_KINDS, YES_NO, validateItems,
+  CHANGE_CATEGORIES, FIELD_DEFS, CHANGE_KINDS, YES_NO, visibleFieldsOf, validateItem,
 } from '../../config/impactSchema.js';
 
 let _seq = 1;
 const uid = () => `k${_seq++}`;
 
 // 新增条目的默认值
-function makeItem(category, defaultSystem) {
+function makeValues(category, defaultSystem) {
   return {
-    _key: uid(), category, system: defaultSystem || '', change_kind: undefined,
+    category, system: defaultSystem || '', change_kind: undefined,
     change_content: '', artifact: '', impact_analysis: '',
     involve_other: '否', involve_other_systems: [],
     upstream_impact: '', data_impact: '',
@@ -36,51 +37,76 @@ function makeItem(category, defaultSystem) {
 export default function ImpactAnalysisModal({ open, reqCode, readOnly, onClose, onSaved }) {
   const { isMobile } = useResponsive();
   const [header, setHeader] = useState(null);
-  const [items, setItems] = useState([]);
+  const [cards, setCards] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [busyKey, setBusyKey] = useState(null);
 
-  useEffect(() => {
-    if (!open || !reqCode) return;
+  const reload = () => {
     setLoading(true);
     apiGet(`/impact-analysis/${encodeURIComponent(reqCode)}`)
       .then((d) => {
         setHeader(d.header);
-        setItems((d.items || []).map((it) => ({ ...makeItem(it.category), ...it, _key: uid() })));
+        setCards((d.items || []).map((it) => ({ _key: uid(), id: it.id, editing: false, values: { ...makeValues(it.category), ...it } })));
       })
       .catch((e) => message.error(e.message || '加载失败'))
       .finally(() => setLoading(false));
-  }, [open, reqCode]);
+  };
+  useEffect(() => { if (open && reqCode) reload(); /* eslint-disable-next-line */ }, [open, reqCode]);
 
   const defaultSystem = header?.main_system_names?.[0] || '';
 
-  const addItem = (category) => setItems((prev) => [...prev, makeItem(category, defaultSystem)]);
-  const removeItem = (key) => setItems((prev) => prev.filter((it) => it._key !== key));
-  const patchItem = (key, patch) => setItems((prev) => prev.map((it) => (it._key === key ? { ...it, ...patch } : it)));
+  const addCard = (category) =>
+    setCards((prev) => [...prev, { _key: uid(), id: null, editing: true, values: makeValues(category, defaultSystem) }]);
 
-  const save = async () => {
-    const errs = validateItems(items);
-    if (errs.length) {
-      message.error(errs[0] + (errs.length > 1 ? ` 等 ${errs.length} 处` : ''));
-      return;
-    }
-    setSaving(true);
+  const patch = (key, p) =>
+    setCards((prev) => prev.map((c) => (c._key === key ? { ...c, values: { ...c.values, ...p } } : c)));
+
+  const startEdit = (key) =>
+    setCards((prev) => prev.map((c) => (c._key === key ? { ...c, editing: true, snapshot: { ...c.values } } : c)));
+
+  const cancelEdit = (card) => {
+    if (card.id == null) { setCards((prev) => prev.filter((c) => c._key !== card._key)); return; }
+    setCards((prev) => prev.map((c) => (c._key === card._key ? { ...c, editing: false, values: c.snapshot || c.values, snapshot: undefined } : c)));
+  };
+
+  const saveCard = async (card) => {
+    const errs = validateItem(card.values);
+    if (errs.length) { message.error(errs[0] + (errs.length > 1 ? ` 等 ${errs.length} 处` : '')); return; }
+    setBusyKey(card._key);
     try {
-      const payload = items.map(({ _key, ...rest }) => rest);
-      const d = await apiPost(`/impact-analysis/${encodeURIComponent(reqCode)}/save`, { items: payload });
+      const saved = card.id == null
+        ? await apiPost(`/impact-analysis/${encodeURIComponent(reqCode)}/items`, card.values)
+        : await apiPut(`/impact-analysis/items/${card.id}`, card.values);
+      setCards((prev) => prev.map((c) => (c._key === card._key
+        ? { _key: c._key, id: saved.id, editing: false, values: { ...makeValues(saved.category), ...saved } }
+        : c)));
       message.success('已保存');
-      setItems((d.items || []).map((it) => ({ ...makeItem(it.category), ...it, _key: uid() })));
-      onSaved?.(d.items || []);
+      onSaved?.();
     } catch (e) {
       message.error(e.message || '保存失败');
     } finally {
-      setSaving(false);
+      setBusyKey(null);
+    }
+  };
+
+  const removeCard = async (card) => {
+    if (card.id == null) { setCards((prev) => prev.filter((c) => c._key !== card._key)); return; }
+    setBusyKey(card._key);
+    try {
+      await apiDelete(`/impact-analysis/items/${card.id}`);
+      setCards((prev) => prev.filter((c) => c._key !== card._key));
+      message.success('已删除');
+      onSaved?.();
+    } catch (e) {
+      message.error(e.message || '删除失败');
+    } finally {
+      setBusyKey(null);
     }
   };
 
   const categoryMenu = {
     items: CHANGE_CATEGORIES.map((c) => ({ key: c, label: c })),
-    onClick: ({ key }) => addItem(key),
+    onClick: ({ key }) => addCard(key),
   };
 
   return (
@@ -89,50 +115,39 @@ export default function ImpactAnalysisModal({ open, reqCode, readOnly, onClose, 
       onCancel={onClose}
       title="开发阶段 · 影响性分析"
       width="94%"
-      style={{ top: 16, maxWidth: 1500, paddingBottom: 0 }}
-      styles={{ body: { padding: '12px 16px', maxHeight: 'calc(100vh - 160px)', overflow: 'auto' } }}
+      style={{ top: 16, maxWidth: 1440, paddingBottom: 0 }}
+      styles={{ body: { padding: '12px 16px', maxHeight: 'calc(100vh - 150px)', overflow: 'auto' } }}
       destroyOnHidden
-      footer={[
-        <Button key="cancel" onClick={onClose}>{readOnly ? '关闭' : '取消'}</Button>,
-        !readOnly && <Button key="save" type="primary" loading={saving} onClick={save}>保存</Button>,
-      ].filter(Boolean)}
+      footer={[<Button key="close" onClick={onClose}>{readOnly ? '关闭' : '完成'}</Button>]}
     >
       <Spin spinning={loading}>
-        {/* 头部信息 */}
-        {header && (
-          <div className="form-section-card" style={{ marginBottom: 12 }}>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 24px', fontSize: 12 }}>
-              <HeaderField label={`${header.entity_label || '需求'}编号`} value={<b style={{ fontFamily: 'SFMono-Regular, Consolas, monospace' }}>{header.req_code}</b>} />
-              <HeaderField label={`${header.entity_label || '需求'}名称`} value={header.title || '—'} />
-              <HeaderField label="主责系统" value={<SysTags names={header.main_system_names} />} />
-              <HeaderField label="协同系统" value={<SysTags names={header.collab_system_names} />} />
-            </div>
-          </div>
-        )}
+        <AnalysisHeader header={header} />
 
-        {/* 工具条 */}
         {!readOnly && (
-          <div style={{ marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '0 0 12px' }}>
             <Dropdown menu={categoryMenu} trigger={['click']}>
               <Button type="primary" size="small" icon={<PlusOutlined />}>添加变更内容</Button>
             </Dropdown>
-            <span style={{ marginLeft: 12, fontSize: 12, color: 'var(--radar-text-secondary)' }}>共 {items.length} 条</span>
+            <span style={{ fontSize: 12, color: 'var(--radar-text-secondary)' }}>共 {cards.length} 条变更内容</span>
           </div>
         )}
 
-        {/* 变更条目 */}
-        {items.length === 0 ? (
-          <Empty description={readOnly ? '暂无影响性分析条目' : '点击「添加变更内容」新增条目'} />
+        {cards.length === 0 ? (
+          <Empty description={readOnly ? '暂无影响性分析条目' : '点击「添加变更内容」新增条目'} style={{ padding: '32px 0' }} />
         ) : (
-          items.map((it, idx) => (
+          cards.map((card, idx) => (
             <ChangeItemCard
-              key={it._key}
+              key={card._key}
               index={idx}
-              item={it}
+              card={card}
               readOnly={readOnly}
               isMobile={isMobile}
-              onPatch={(patch) => patchItem(it._key, patch)}
-              onRemove={() => removeItem(it._key)}
+              busy={busyKey === card._key}
+              onPatch={(p) => patch(card._key, p)}
+              onEdit={() => startEdit(card._key)}
+              onCancel={() => cancelEdit(card)}
+              onSave={() => saveCard(card)}
+              onRemove={() => removeCard(card)}
             />
           ))
         )}
@@ -141,102 +156,101 @@ export default function ImpactAnalysisModal({ open, reqCode, readOnly, onClose, 
   );
 }
 
-function HeaderField({ label, value }) {
-  return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-      <span style={{ color: 'var(--radar-text-secondary)' }}>{label}：</span>
-      <span>{value}</span>
-    </span>
-  );
-}
-
-function SysTags({ names }) {
-  if (!names?.length) return <span style={{ color: 'var(--radar-text-secondary)' }}>—</span>;
-  return (
-    <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 4 }}>
-      {names.map((n) => <Tag key={n} className="status-tag tag-system" style={{ borderRadius: 2, margin: 0 }}>{n}</Tag>)}
-    </span>
-  );
-}
-
-/** 单条变更内容卡片：字段按分类渲染，PC 端一行内平铺 */
-function ChangeItemCard({ index, item, readOnly, isMobile, onPatch, onRemove }) {
-  const fields = CATEGORY_FIELDS[item.category] || [];
-  // 过滤掉未激活的条件字段（依赖项 ≠ 指定值时不展示）
-  const visibleFields = fields.filter((key) => {
-    const def = FIELD_DEFS[key];
-    if (!def.requiredWhen) return true;
-    const [dk, dv] = def.requiredWhen;
-    return String(item[dk] || '').trim() === dv;
-  });
+/** 单条变更内容卡片：编辑态用表单控件、展示态用只读呈现，字段按分类等宽栅格排列 */
+function ChangeItemCard({ index, card, readOnly, isMobile, busy, onPatch, onEdit, onCancel, onSave, onRemove }) {
+  const { values, editing } = card;
+  const fields = visibleFieldsOf(values);
 
   return (
-    <div className="form-section-card" style={{ marginBottom: 10, padding: '10px 12px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8, gap: 8 }}>
-        <span style={{ fontWeight: 600, color: 'var(--radar-text-secondary)', fontSize: 12 }}>#{index + 1}</span>
-        <Tag color="processing" style={{ margin: 0, borderRadius: 2 }}>{item.category}</Tag>
+    <div className="form-section-card" style={{ marginBottom: 12, padding: '10px 14px' }}>
+      {/* 卡片头：序号 + 分类 + 操作 */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: editing ? 10 : 6 }}>
+        <span style={{ fontWeight: 700, color: 'var(--radar-primary)', fontSize: 12 }}>#{index + 1}</span>
+        <Tag color="processing" style={{ margin: 0, borderRadius: 2 }}>{values.category}</Tag>
         <div style={{ flex: 1 }} />
-        {!readOnly && (
-          <Popconfirm title="确认删除该条目？" onConfirm={onRemove}>
-            <Tooltip title="删除条目"><Button danger size="small" type="text" icon={<DeleteOutlined />} /></Tooltip>
-          </Popconfirm>
-        )}
+        {!readOnly && (editing ? (
+          <>
+            <Button size="small" type="primary" icon={<SaveOutlined />} loading={busy} onClick={onSave}>保存</Button>
+            {card.id == null ? (
+              <Popconfirm title="放弃该条目？" onConfirm={onCancel}>
+                <Button size="small" type="text" icon={<CloseOutlined />}>取消</Button>
+              </Popconfirm>
+            ) : (
+              <Button size="small" type="text" icon={<CloseOutlined />} onClick={onCancel}>取消</Button>
+            )}
+          </>
+        ) : (
+          <>
+            <Button size="small" type="link" icon={<EditOutlined />} onClick={onEdit} style={{ padding: '0 6px' }}>修改</Button>
+            <Popconfirm title="确认删除该条目？" onConfirm={onRemove}>
+              <Button size="small" type="link" danger icon={<DeleteOutlined />} loading={busy} style={{ padding: '0 6px' }}>删除</Button>
+            </Popconfirm>
+          </>
+        ))}
       </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'flex-start' }}>
-        {visibleFields.map((key) => {
+
+      <Row gutter={[12, editing ? 10 : 8]}>
+        {fields.map((key) => {
           const def = FIELD_DEFS[key];
           return (
-            <div
-              key={key}
-              style={{
-                flex: isMobile ? '1 1 100%' : `${def.span || 1} 1 0`,
-                minWidth: isMobile ? '100%' : (def.type === 'text' ? 180 : 130),
-              }}
-            >
+            <Col key={key} xs={24} md={def.col}>
               <div style={{ fontSize: 11, color: 'var(--radar-text-secondary)', marginBottom: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {def.label}
               </div>
-              <FieldControl def={def} value={item[key]} readOnly={readOnly} onChange={(v) => onPatch({ [key]: v })} />
-            </div>
+              {editing
+                ? <FieldControl def={def} value={values[key]} onChange={(v) => onPatch({ [key]: v })} />
+                : <FieldValue def={def} value={values[key]} />}
+            </Col>
           );
         })}
-      </div>
+      </Row>
     </div>
   );
 }
 
-/** 按字段类型渲染录入控件 */
-function FieldControl({ def, value, onChange, readOnly }) {
-  if (def.type === 'system') {
-    return <SystemNameInput value={value} onChange={onChange} disabled={readOnly} />;
-  }
-  if (def.type === 'systems') {
-    return <SystemNamesSelect value={value} onChange={onChange} disabled={readOnly} />;
-  }
+/** 编辑态控件 */
+function FieldControl({ def, value, onChange }) {
+  if (def.type === 'system') return <SystemNameInput value={value} onChange={onChange} />;
+  if (def.type === 'systems') return <SystemNamesSelect value={value} onChange={onChange} />;
   if (def.type === 'kind') {
-    return (
-      <Select size="small" style={{ width: '100%' }} placeholder="请选择" value={value || undefined} onChange={onChange} disabled={readOnly}
-        options={CHANGE_KINDS.map((k) => ({ value: k, label: k }))} />
-    );
+    return <Select size="small" style={{ width: '100%' }} placeholder="请选择" value={value || undefined} onChange={onChange}
+      options={CHANGE_KINDS.map((k) => ({ value: k, label: k }))} />;
   }
   if (def.type === 'yesno') {
-    return (
-      <Select size="small" style={{ width: '100%' }} placeholder="请选择" value={value || undefined} onChange={onChange} disabled={readOnly}
-        options={YES_NO.map((k) => ({ value: k, label: k }))} />
-    );
+    return <Select size="small" style={{ width: '100%' }} placeholder="请选择" value={value || undefined} onChange={onChange}
+      options={YES_NO.map((k) => ({ value: k, label: k }))} />;
   }
-  // text
   return (
     <Input.TextArea
-      size="small"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      readOnly={readOnly}
-      autoSize={{ minRows: 1, maxRows: 4 }}
-      maxLength={def.max}
-      showCount={!!def.max}
-      placeholder={def.min ? `不少于 ${def.min} 个字` : '请输入'}
-      style={{ fontSize: 12 }}
+      size="small" value={value} onChange={(e) => onChange(e.target.value)}
+      autoSize={{ minRows: def.rows || 2, maxRows: 8 }} maxLength={def.max} showCount={!!def.max}
+      placeholder={def.min ? `不少于 ${def.min} 个字` : '请输入'} style={{ fontSize: 12 }}
     />
+  );
+}
+
+/** 展示态呈现 */
+function FieldValue({ def, value }) {
+  if (def.type === 'system') {
+    return value
+      ? <Tag className="status-tag tag-system" style={{ borderRadius: 2, margin: 0 }}>{value}</Tag>
+      : <span style={{ color: 'var(--radar-text-secondary)', fontSize: 12 }}>—</span>;
+  }
+  if (def.type === 'systems') {
+    const arr = Array.isArray(value) ? value : [];
+    return arr.length
+      ? <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 4 }}>{arr.map((n) => <Tag key={n} className="status-tag tag-system" style={{ borderRadius: 2, margin: 0 }}>{n}</Tag>)}</span>
+      : <span style={{ color: 'var(--radar-text-secondary)', fontSize: 12 }}>—</span>;
+  }
+  if (def.type === 'yesno') {
+    return <span style={{ fontSize: 12, fontWeight: 500, color: value === '是' ? 'var(--radar-primary)' : 'var(--radar-ink)' }}>{value || '—'}</span>;
+  }
+  if (def.type === 'kind') {
+    return <span style={{ fontSize: 12 }}>{value || '—'}</span>;
+  }
+  return (
+    <div style={{ fontSize: 12, color: 'var(--radar-ink)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.6 }}>
+      {value || <span style={{ color: 'var(--radar-text-secondary)' }}>—</span>}
+    </div>
   );
 }

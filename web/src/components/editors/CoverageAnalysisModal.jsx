@@ -1,117 +1,84 @@
 /**
  * 文件：components/editors/CoverageAnalysisModal.jsx
  * 用途：应用组装阶段「测试覆盖性分析」结构化填写弹窗（接近全屏）。
- *       头部展示需求/工单编号、名称、主责系统、协同系统；
- *       逐条列出开发阶段影响性分析条目（系统名称/变更类型/变更内容），
- *       右侧填写案例覆盖策略简述、测试覆盖检查结果、测试案例编号、测试人员。
+ *       头部展示需求/工单编号、名称、主责系统、协同系统；逐条列出开发阶段影响性分析条目
+ *       （系统名称/变更类型/变更内容），右侧填写案例覆盖策略简述、测试覆盖检查结果、
+ *       测试案例编号、测试人员。逐条编辑/保存，保存后转为展示态，点「修改」回到编辑态。
  * 作者：hengguan
  * 说明：需先在开发阶段填写影响性分析，才能填写本表；无影响条目时给出提示。
  */
 
 import React, { useEffect, useState } from 'react';
-import { Modal, Button, Select, Input, Tag, Table, Spin, Empty, message, Card, Space, Tooltip } from 'antd';
-import { apiGet, apiPost } from '../../api/client.js';
-import { useResponsive } from '../../hooks/useResponsive.js';
+import { Modal, Button, Select, Input, Tag, Spin, Empty, message, Row, Col } from 'antd';
+import { EditOutlined, SaveOutlined, CloseOutlined } from '@ant-design/icons';
+import { apiGet, apiPut } from '../../api/client.js';
+import AnalysisHeader from './AnalysisHeader.jsx';
 import { COVERAGE_RESULTS } from '../../config/impactSchema.js';
 
-// 覆盖登记字段校验规则（与后端 impact-schema.js 保持一致）
-const COV_RULES = {
-  strategy: { label: '案例覆盖策略简述', min: 5, max: 1000 },
-  result: { label: '测试覆盖检查结果', enum: COVERAGE_RESULTS },
-  case_no: { label: '测试案例编号', min: 5, max: 1000 },
-  tester: { label: '测试人员', min: 2, max: 100 },
-};
+// 覆盖登记字段（与后端 impact-schema.js 一致），col 为 24 栅格列宽，保证等宽
+const COV_FIELDS = [
+  { key: 'result', label: '测试覆盖检查结果', type: 'result', col: 8 },
+  { key: 'tester', label: '测试人员', type: 'input', col: 8, min: 2, max: 100 },
+  { key: 'strategy', label: '案例覆盖策略简述', type: 'text', col: 24, rows: 3, min: 5, max: 1000 },
+  { key: 'case_no', label: '测试案例编号', type: 'text', col: 24, rows: 2, min: 5, max: 1000 },
+];
 
-function validateRows(rows) {
+function validateRow(r) {
   const errs = [];
-  rows.forEach((r, idx) => {
-    for (const [key, def] of Object.entries(COV_RULES)) {
-      const val = r[key] == null ? '' : String(r[key]).trim();
-      if (def.enum) { if (!def.enum.includes(val)) errs.push(`第 ${idx + 1} 条「${def.label}」请选择`); continue; }
-      if (!val) { errs.push(`第 ${idx + 1} 条「${def.label}」不能为空`); continue; }
-      if (def.min && val.length < def.min) errs.push(`第 ${idx + 1} 条「${def.label}」不少于 ${def.min} 个字`);
-      if (def.max && val.length > def.max) errs.push(`第 ${idx + 1} 条「${def.label}」不大于 ${def.max} 个字`);
-    }
-  });
+  for (const def of COV_FIELDS) {
+    const val = r[def.key] == null ? '' : String(r[def.key]).trim();
+    if (def.type === 'result') { if (!COVERAGE_RESULTS.includes(val)) errs.push(`「${def.label}」请选择`); continue; }
+    if (!val) { errs.push(`「${def.label}」不能为空`); continue; }
+    if (def.min && val.length < def.min) errs.push(`「${def.label}」不少于 ${def.min} 个字`);
+    if (def.max && val.length > def.max) errs.push(`「${def.label}」不大于 ${def.max} 个字`);
+  }
   return errs;
 }
 
 export default function CoverageAnalysisModal({ open, reqCode, readOnly, onClose, onSaved }) {
-  const { isMobile } = useResponsive();
   const [header, setHeader] = useState(null);
   const [rows, setRows] = useState([]);
   const [hasImpact, setHasImpact] = useState(true);
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [busyId, setBusyId] = useState(null);
 
-  useEffect(() => {
-    if (!open || !reqCode) return;
+  const reload = () => {
     setLoading(true);
     apiGet(`/coverage-analysis/${encodeURIComponent(reqCode)}`)
       .then((d) => {
         setHeader(d.header);
-        setRows(d.rows || []);
         setHasImpact(!!d.hasImpact);
+        // 未登记的行默认进入编辑态，方便填写
+        setRows((d.rows || []).map((r) => ({ ...r, _editing: !r.saved, _snapshot: null })));
       })
       .catch((e) => message.error(e.message || '加载失败'))
       .finally(() => setLoading(false));
-  }, [open, reqCode]);
+  };
+  useEffect(() => { if (open && reqCode) reload(); /* eslint-disable-next-line */ }, [open, reqCode]);
 
-  const patchRow = (cid, patch) => setRows((prev) => prev.map((r) => (r.change_item_id === cid ? { ...r, ...patch } : r)));
+  const patch = (cid, p) => setRows((prev) => prev.map((r) => (r.change_item_id === cid ? { ...r, ...p } : r)));
+  const startEdit = (cid) => setRows((prev) => prev.map((r) => (r.change_item_id === cid
+    ? { ...r, _editing: true, _snapshot: { strategy: r.strategy, result: r.result, case_no: r.case_no, tester: r.tester } } : r)));
+  const cancelEdit = (cid) => setRows((prev) => prev.map((r) => (r.change_item_id === cid && r._snapshot
+    ? { ...r, _editing: false, ...r._snapshot, _snapshot: null } : r)));
 
-  const save = async () => {
-    const errs = validateRows(rows);
+  const saveRow = async (row) => {
+    const errs = validateRow(row);
     if (errs.length) { message.error(errs[0] + (errs.length > 1 ? ` 等 ${errs.length} 处` : '')); return; }
-    setSaving(true);
+    setBusyId(row.change_item_id);
     try {
-      const payload = rows.map((r) => ({
-        change_item_id: r.change_item_id, strategy: r.strategy, result: r.result, case_no: r.case_no, tester: r.tester,
-      }));
-      await apiPost(`/coverage-analysis/${encodeURIComponent(reqCode)}/save`, { rows: payload });
+      await apiPut(`/coverage-analysis/items/${row.change_item_id}`, {
+        strategy: row.strategy, result: row.result, case_no: row.case_no, tester: row.tester,
+      });
+      setRows((prev) => prev.map((r) => (r.change_item_id === row.change_item_id ? { ...r, saved: true, _editing: false, _snapshot: null } : r)));
       message.success('已保存');
       onSaved?.();
     } catch (e) {
       message.error(e.message || '保存失败');
     } finally {
-      setSaving(false);
+      setBusyId(null);
     }
   };
-
-  const columns = [
-    { title: '#', key: 'idx', width: 44, align: 'center', render: (_, __, i) => i + 1 },
-    { title: '分类', dataIndex: 'category', width: 150, render: (v) => <Tag color="processing" style={{ margin: 0, borderRadius: 2 }}>{v}</Tag> },
-    { title: '系统名称', dataIndex: 'system', width: 130, ellipsis: true, render: (v) => v || '—' },
-    { title: '变更类型', dataIndex: 'change_kind', width: 80, align: 'center', render: (v) => v || '—' },
-    { title: '变更内容', dataIndex: 'change_content', width: 220, render: (v) => <Tooltip title={v}><div style={{ maxHeight: 60, overflow: 'hidden' }}>{v || '—'}</div></Tooltip> },
-    {
-      title: '案例覆盖策略简述', dataIndex: 'strategy', width: 240,
-      render: (v, r) => (
-        <Input.TextArea size="small" value={v} readOnly={readOnly} autoSize={{ minRows: 1, maxRows: 4 }} maxLength={1000} showCount
-          placeholder="不少于 5 个字" style={{ fontSize: 12 }} onChange={(e) => patchRow(r.change_item_id, { strategy: e.target.value })} />
-      ),
-    },
-    {
-      title: '测试覆盖检查结果', dataIndex: 'result', width: 120, align: 'center',
-      render: (v, r) => (
-        <Select size="small" style={{ width: '100%' }} value={v || undefined} placeholder="请选择" disabled={readOnly}
-          options={COVERAGE_RESULTS.map((o) => ({ value: o, label: o }))} onChange={(val) => patchRow(r.change_item_id, { result: val })} />
-      ),
-    },
-    {
-      title: '测试案例编号', dataIndex: 'case_no', width: 200,
-      render: (v, r) => (
-        <Input.TextArea size="small" value={v} readOnly={readOnly} autoSize={{ minRows: 1, maxRows: 4 }} maxLength={1000} showCount
-          placeholder="不少于 5 个字" style={{ fontSize: 12 }} onChange={(e) => patchRow(r.change_item_id, { case_no: e.target.value })} />
-      ),
-    },
-    {
-      title: '测试人员', dataIndex: 'tester', width: 130,
-      render: (v, r) => (
-        <Input size="small" value={v} readOnly={readOnly} maxLength={100} placeholder="姓名"
-          onChange={(e) => patchRow(r.change_item_id, { tester: e.target.value })} />
-      ),
-    },
-  ];
 
   return (
     <Modal
@@ -119,98 +86,111 @@ export default function CoverageAnalysisModal({ open, reqCode, readOnly, onClose
       onCancel={onClose}
       title="应用组装阶段 · 测试覆盖性分析"
       width="94%"
-      style={{ top: 16, maxWidth: 1500, paddingBottom: 0 }}
-      styles={{ body: { padding: '12px 16px', maxHeight: 'calc(100vh - 160px)', overflow: 'auto' } }}
+      style={{ top: 16, maxWidth: 1440, paddingBottom: 0 }}
+      styles={{ body: { padding: '12px 16px', maxHeight: 'calc(100vh - 150px)', overflow: 'auto' } }}
       destroyOnHidden
-      footer={[
-        <Button key="cancel" onClick={onClose}>{readOnly ? '关闭' : '取消'}</Button>,
-        !readOnly && hasImpact && <Button key="save" type="primary" loading={saving} onClick={save}>保存</Button>,
-      ].filter(Boolean)}
+      footer={[<Button key="close" onClick={onClose}>{readOnly ? '关闭' : '完成'}</Button>]}
     >
       <Spin spinning={loading}>
-        {header && (
-          <div className="form-section-card" style={{ marginBottom: 12 }}>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 24px', fontSize: 12 }}>
-              <HeaderField label={`${header.entity_label || '需求'}编号`} value={<b style={{ fontFamily: 'SFMono-Regular, Consolas, monospace' }}>{header.req_code}</b>} />
-              <HeaderField label={`${header.entity_label || '需求'}名称`} value={header.title || '—'} />
-              <HeaderField label="主责系统" value={<SysTags names={header.main_system_names} />} />
-              <HeaderField label="协同系统" value={<SysTags names={header.collab_system_names} />} />
-            </div>
-          </div>
-        )}
+        <AnalysisHeader header={header} />
 
         {!hasImpact ? (
-          <Empty description="请先在开发阶段填写影响性分析后，再填写测试覆盖性分析" />
+          <Empty description="请先在开发阶段填写影响性分析后，再填写测试覆盖性分析" style={{ padding: '32px 0' }} />
         ) : rows.length === 0 ? (
-          <Empty description="暂无影响性分析条目" />
-        ) : isMobile ? (
-          <Space direction="vertical" size={8} style={{ width: '100%' }}>
-            {rows.map((r, idx) => (
-              <Card key={r.change_item_id} size="small">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                  <span style={{ fontWeight: 600, color: 'var(--radar-text-secondary)', fontSize: 12 }}>#{idx + 1}</span>
-                  <Tag color="processing" style={{ margin: 0, borderRadius: 2 }}>{r.category}</Tag>
-                  <span style={{ fontSize: 12 }}>{r.system} · {r.change_kind}</span>
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--radar-text-secondary)', marginBottom: 8 }}>变更内容：{r.change_content}</div>
-                <MobileField label="案例覆盖策略简述">
-                  <Input.TextArea size="small" value={r.strategy} readOnly={readOnly} autoSize={{ minRows: 1, maxRows: 4 }} maxLength={1000} showCount
-                    placeholder="不少于 5 个字" onChange={(e) => patchRow(r.change_item_id, { strategy: e.target.value })} />
-                </MobileField>
-                <MobileField label="测试覆盖检查结果">
-                  <Select size="small" style={{ width: '100%' }} value={r.result || undefined} placeholder="请选择" disabled={readOnly}
-                    options={COVERAGE_RESULTS.map((o) => ({ value: o, label: o }))} onChange={(val) => patchRow(r.change_item_id, { result: val })} />
-                </MobileField>
-                <MobileField label="测试案例编号">
-                  <Input.TextArea size="small" value={r.case_no} readOnly={readOnly} autoSize={{ minRows: 1, maxRows: 4 }} maxLength={1000} showCount
-                    placeholder="不少于 5 个字" onChange={(e) => patchRow(r.change_item_id, { case_no: e.target.value })} />
-                </MobileField>
-                <MobileField label="测试人员">
-                  <Input size="small" value={r.tester} readOnly={readOnly} maxLength={100} placeholder="姓名"
-                    onChange={(e) => patchRow(r.change_item_id, { tester: e.target.value })} />
-                </MobileField>
-              </Card>
-            ))}
-          </Space>
+          <Empty description="暂无影响性分析条目" style={{ padding: '32px 0' }} />
         ) : (
-          <Table
-            dataSource={rows}
-            columns={columns}
-            rowKey="change_item_id"
-            size="small"
-            className="super-compact-table"
-            pagination={false}
-            scroll={{ x: 'max-content' }}
-          />
+          rows.map((row, idx) => (
+            <CoverageCard
+              key={row.change_item_id}
+              index={idx}
+              row={row}
+              readOnly={readOnly}
+              busy={busyId === row.change_item_id}
+              onPatch={(p) => patch(row.change_item_id, p)}
+              onEdit={() => startEdit(row.change_item_id)}
+              onCancel={() => cancelEdit(row.change_item_id)}
+              onSave={() => saveRow(row)}
+            />
+          ))
         )}
       </Spin>
     </Modal>
   );
 }
 
-function HeaderField({ label, value }) {
+/** 单条覆盖卡片：上部展示影响条目，下部编辑/展示覆盖登记 */
+function CoverageCard({ index, row, readOnly, busy, onPatch, onEdit, onCancel, onSave }) {
+  const editing = row._editing;
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-      <span style={{ color: 'var(--radar-text-secondary)' }}>{label}：</span>
-      <span>{value}</span>
-    </span>
+    <div className="form-section-card" style={{ marginBottom: 12, padding: '10px 14px' }}>
+      {/* 影响条目（只读）+ 操作 */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+        <span style={{ fontWeight: 700, color: 'var(--radar-primary)', fontSize: 12 }}>#{index + 1}</span>
+        <Tag color="processing" style={{ margin: 0, borderRadius: 2 }}>{row.category}</Tag>
+        {row.system && <Tag className="status-tag tag-system" style={{ borderRadius: 2, margin: 0 }}>{row.system}</Tag>}
+        {row.change_kind && <span style={{ fontSize: 12, color: 'var(--radar-text-secondary)' }}>{row.change_kind}</span>}
+        {!editing && (row.saved
+          ? <Tag className="status-tag" style={{ margin: 0, borderColor: row.result === '已覆盖' ? 'var(--radar-success, #52c41a)' : 'var(--radar-error, #ff4d4f)', color: row.result === '已覆盖' ? 'var(--radar-success, #52c41a)' : 'var(--radar-error, #ff4d4f)' }}>{row.result || '未登记'}</Tag>
+          : <Tag className="status-tag status-tag-error" style={{ margin: 0 }}>未登记</Tag>)}
+        <div style={{ flex: 1 }} />
+        {!readOnly && (editing ? (
+          <>
+            <Button size="small" type="primary" icon={<SaveOutlined />} loading={busy} onClick={onSave}>保存</Button>
+            {row._snapshot && <Button size="small" type="text" icon={<CloseOutlined />} onClick={onCancel}>取消</Button>}
+          </>
+        ) : (
+          <Button size="small" type="link" icon={<EditOutlined />} onClick={onEdit} style={{ padding: '0 6px' }}>修改</Button>
+        ))}
+      </div>
+
+      {/* 变更内容（只读） */}
+      <div style={{ marginBottom: 10 }}>
+        <div style={{ fontSize: 11, color: 'var(--radar-text-secondary)', marginBottom: 3 }}>变更内容</div>
+        <div style={{ fontSize: 12, color: 'var(--radar-ink)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.6 }}>{row.change_content || '—'}</div>
+      </div>
+
+      {/* 覆盖登记字段 */}
+      <Row gutter={[12, editing ? 10 : 8]}>
+        {COV_FIELDS.map((def) => (
+          <Col key={def.key} xs={24} md={def.col}>
+            <div style={{ fontSize: 11, color: 'var(--radar-text-secondary)', marginBottom: 3 }}>{def.label}</div>
+            {editing
+              ? <CovControl def={def} value={row[def.key]} onChange={(v) => onPatch({ [def.key]: v })} />
+              : <CovValue def={def} value={row[def.key]} />}
+          </Col>
+        ))}
+      </Row>
+    </div>
   );
 }
 
-function SysTags({ names }) {
-  if (!names?.length) return <span style={{ color: 'var(--radar-text-secondary)' }}>—</span>;
+function CovControl({ def, value, onChange }) {
+  if (def.type === 'result') {
+    return <Select size="small" style={{ width: '100%' }} placeholder="请选择" value={value || undefined} onChange={onChange}
+      options={COVERAGE_RESULTS.map((o) => ({ value: o, label: o }))} />;
+  }
+  if (def.type === 'input') {
+    return <Input size="small" value={value} maxLength={def.max} placeholder="姓名" onChange={(e) => onChange(e.target.value)} />;
+  }
   return (
-    <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 4 }}>
-      {names.map((n) => <Tag key={n} className="status-tag tag-system" style={{ borderRadius: 2, margin: 0 }}>{n}</Tag>)}
-    </span>
+    <Input.TextArea size="small" value={value} onChange={(e) => onChange(e.target.value)}
+      autoSize={{ minRows: def.rows || 2, maxRows: 8 }} maxLength={def.max} showCount
+      placeholder={def.min ? `不少于 ${def.min} 个字` : '请输入'} style={{ fontSize: 12 }} />
   );
 }
 
-function MobileField({ label, children }) {
+function CovValue({ def, value }) {
+  if (def.type === 'result') {
+    if (!value) return <span style={{ color: 'var(--radar-text-secondary)', fontSize: 12 }}>—</span>;
+    const ok = value === '已覆盖';
+    return <Tag className="status-tag" style={{ margin: 0, borderColor: ok ? 'var(--radar-success, #52c41a)' : 'var(--radar-error, #ff4d4f)', color: ok ? 'var(--radar-success, #52c41a)' : 'var(--radar-error, #ff4d4f)' }}>{value}</Tag>;
+  }
+  if (def.type === 'input') {
+    return <span style={{ fontSize: 12 }}>{value || '—'}</span>;
+  }
   return (
-    <div style={{ marginBottom: 8 }}>
-      <div style={{ fontSize: 11, color: 'var(--radar-text-secondary)', marginBottom: 3 }}>{label}</div>
-      {children}
+    <div style={{ fontSize: 12, color: 'var(--radar-ink)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.6 }}>
+      {value || <span style={{ color: 'var(--radar-text-secondary)' }}>—</span>}
     </div>
   );
 }
