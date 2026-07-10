@@ -19,6 +19,7 @@ import { ok, notFound, badRequest } from '../../lib/http.js';
 import { exportXlsx, parseXlsx } from '../../lib/excel.js';
 import { resolveDictAttr, resolveSystemCode, formatAttachments } from '../../lib/resolver.js';
 import { getWorkItem, workItemCodesInReleasePoints, releaseDateMapForCodes } from '../../lib/work-items.js';
+import { formatCoverageText } from '../../lib/impact-schema.js';
 
 // 导入模板列定义
 const IO_COLUMNS = [
@@ -438,9 +439,22 @@ export default async function testTaskRoutes(fastify) {
       { key: 'registrar', title: '登记人' },
       { key: 'register_time', title: '登记时间' },
       { key: 'test_plan', title: '测试方案' },
-      { key: 'test_coverage_design', title: '测试覆盖设计文档' },
+      { key: 'test_coverage_design', title: '测试覆盖性分析' },
       { key: 'test_report', title: '测试报告' },
     ];
+
+    // 测试覆盖性分析按需求/工单级别存储，仅 SIT 展示，按 req_code 缓存
+    const coverageCache = {};
+    const coverageTextFor = async (reqCode) => {
+      if (!reqCode) return '';
+      if (coverageCache[reqCode] === undefined) {
+        const items = await all('SELECT * FROM impact_change_item WHERE req_code = ? ORDER BY sort_order, id', reqCode);
+        const covs = await all('SELECT * FROM coverage_item WHERE req_code = ?', reqCode);
+        const covMap = new Map(covs.map((c) => [c.change_item_id, c]));
+        coverageCache[reqCode] = formatCoverageText(items, covMap);
+      }
+      return coverageCache[reqCode];
+    };
 
     const mappedList = await Promise.all(result.list.map(async row => {
       const attaches = await all("SELECT * FROM attachment WHERE entity_type = 'test' AND entity_id = ?", row.id);
@@ -450,7 +464,7 @@ export default async function testTaskRoutes(fastify) {
         impl_system: sysMap[row.impl_system] || row.impl_system,
         deviation_rate: row.deviation_rate != null ? `${row.deviation_rate}%` : '0%',
         test_plan: formatAttachments(attaches, '测试方案'),
-        test_coverage_design: row.test_type === 'SIT' ? formatAttachments(attaches, '测试覆盖设计文档') : '',
+        test_coverage_design: row.test_type === 'SIT' ? await coverageTextFor(row.req_code) : '',
         test_report: formatAttachments(attaches, '测试报告'),
       };
     }));

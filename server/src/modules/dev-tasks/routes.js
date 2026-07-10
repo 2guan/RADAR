@@ -19,6 +19,7 @@ import { ok, notFound, badRequest } from '../../lib/http.js';
 import { exportXlsx, parseXlsx } from '../../lib/excel.js';
 import { resolveDictAttr, resolveSystemCode, formatAttachments } from '../../lib/resolver.js';
 import { getWorkItem, workItemCodesInReleasePoints, releaseDateMapForCodes } from '../../lib/work-items.js';
+import { formatImpactItemsText } from '../../lib/impact-schema.js';
 
 // 导入模板和常用列定义
 const IO_COLUMNS = [
@@ -379,8 +380,19 @@ export default async function devTaskRoutes(fastify) {
       { key: 'design_detail', title: '详细设计' },
       { key: 'code_review', title: '代码走查' },
       { key: 'unit_test', title: '单元测试报告' },
-      { key: 'impact_analysis', title: '影响性分析文档' },
+      { key: 'impact_analysis', title: '影响性分析' },
     ];
+
+    // 影响性分析按需求/工单级别存储，按 req_code 缓存，避免逐任务重复查询
+    const impactCache = {};
+    const impactTextFor = async (reqCode) => {
+      if (!reqCode) return '';
+      if (impactCache[reqCode] === undefined) {
+        const items = await all('SELECT * FROM impact_change_item WHERE req_code = ? ORDER BY sort_order, id', reqCode);
+        impactCache[reqCode] = formatImpactItemsText(items);
+      }
+      return impactCache[reqCode];
+    };
 
     const mappedList = await Promise.all(result.list.map(async row => {
       const attaches = await all("SELECT * FROM attachment WHERE entity_type = 'dev' AND entity_id = ?", row.id);
@@ -392,7 +404,7 @@ export default async function devTaskRoutes(fastify) {
         design_detail: formatAttachments(attaches, '详细设计'),
         code_review: formatAttachments(attaches, '代码走查'),
         unit_test: formatAttachments(attaches, '单元测试报告'),
-        impact_analysis: formatAttachments(attaches, '影响性分析文档'),
+        impact_analysis: await impactTextFor(row.req_code),
       };
     }));
 

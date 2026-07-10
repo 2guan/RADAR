@@ -32,6 +32,7 @@ import ticketRoutes from './modules/tickets/routes.js';
 import issueRoutes from './modules/issues/routes.js';
 import devTaskRoutes from './modules/dev-tasks/routes.js';
 import testTaskRoutes from './modules/test-tasks/routes.js';
+import analysisRoutes from './modules/analysis/routes.js';
 import releaseRoutes from './modules/release/routes.js';
 import releaseApplyRoutes from './modules/release-apply/routes.js';
 import signatureRoutes from './modules/signatures/routes.js';
@@ -148,6 +149,7 @@ export async function buildApp() {
     await api.register(issueRoutes);
     await api.register(devTaskRoutes);
     await api.register(testTaskRoutes);
+    await api.register(analysisRoutes);
     await api.register(releaseRoutes);
     await api.register(releaseApplyRoutes);
     await api.register(signatureRoutes);

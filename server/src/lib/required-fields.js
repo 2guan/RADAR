@@ -85,7 +85,7 @@ export const REQUIRED_FIELD_MODULES = [
     statusField: 'status',
     statusStage: '开发',
     attachmentEntity: 'dev',
-    attachmentFields: ['概要设计', '详细设计', '代码走查', '单元测试报告', '影响性分析文档'],
+    attachmentFields: ['概要设计', '详细设计', '代码走查', '单元测试报告'],
     fields: [
       { key: 'task_name', label: '开发任务名称' },
       { key: 'content', label: '开发内容概述' },
@@ -105,7 +105,7 @@ export const REQUIRED_FIELD_MODULES = [
     statusField: 'status',
     statusStage: '测试',
     attachmentEntity: 'test',
-    attachmentFields: ['测试方案', '测试报告', '测试覆盖设计文档'],
+    attachmentFields: ['测试方案', '测试报告'],
     fields: [
       { key: 'task_name', label: '测试任务名称' },
       { key: 'status', label: '测试状态' },

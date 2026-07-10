@@ -15,6 +15,8 @@ import DictSelect from '../DictSelect.jsx';
 import SystemSelect from '../SystemSelect.jsx';
 import PersonPicker from '../PersonPicker.jsx';
 import AttachmentField from '../AttachmentField.jsx';
+import ImpactAnalysisModal from './ImpactAnalysisModal.jsx';
+import CoverageAnalysisModal from './CoverageAnalysisModal.jsx';
 import HistoryDrawer from '../HistoryDrawer.jsx';
 import CodeLink from '../CodeLink.jsx';
 import EditorShell from './EditorShell.jsx';
@@ -28,7 +30,7 @@ import { useRequiredFields } from '../../hooks/useRequiredFields.js';
 const CFG = {
   dev: {
     api: '/dev-tasks', entity: 'dev', stage: '开发', title: '开发任务',
-    attachFields: ['概要设计', '详细设计', '代码走查', '单元测试报告', '影响性分析文档'],
+    attachFields: ['概要设计', '详细设计', '代码走查', '单元测试报告'],
     statusLabel: '开发状态', ownerLabel: '开发负责人', orgLabel: '开发实施方',
   },
   test: {
@@ -60,9 +62,24 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
   const readonly = !can(cfg.entity, 'edit');
   const required = useRequiredFields(cfg.entity, getStatusType(statusValue), readonly);
   const linkStyle = { color: 'var(--radar-primary)', cursor: 'pointer' };
-  const attachFields = kind === 'test' && current?.test_type === 'SIT'
-    ? [...cfg.attachFields, '测试覆盖设计文档']
-    : cfg.attachFields;
+  const attachFields = cfg.attachFields;
+  // 结构化分析弹窗（影响性分析 / 测试覆盖性分析）
+  const [impactOpen, setImpactOpen] = useState(false);
+  const [coverageOpen, setCoverageOpen] = useState(false);
+  const [analysisCount, setAnalysisCount] = useState(null);
+  const isSit = kind === 'test' && current?.test_type === 'SIT';
+
+  // 载入结构化分析的已填条目数，用于按钮旁提示
+  const reloadAnalysisCount = React.useCallback(() => {
+    const reqCode = current?.req_code;
+    if (!reqCode) { setAnalysisCount(null); return; }
+    if (kind === 'dev') {
+      apiGet(`/impact-analysis/${encodeURIComponent(reqCode)}`).then((d) => setAnalysisCount(d.items?.length || 0)).catch(() => {});
+    } else if (isSit) {
+      apiGet(`/coverage-analysis/${encodeURIComponent(reqCode)}`).then((d) => setAnalysisCount((d.rows || []).filter((r) => r.result).length)).catch(() => {});
+    }
+  }, [current?.req_code, kind, isSit]);
+  useEffect(() => { reloadAnalysisCount(); }, [reloadAnalysisCount]);
 
   useEffect(() => {
     // 回显数据到表单（弹窗按 id 取，单页按编号取）
@@ -237,6 +254,33 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
 
           {/* ── 右栏：阶段附件 ── */}
           <Col xs={24} md={10}>
+            {/* 影响性分析（开发阶段）/ 测试覆盖性分析（应用组装 SIT）——结构化表单 */}
+            {kind === 'dev' && (
+              <div className="form-section-card" style={{ marginBottom: 12 }}>
+                <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>影响性分析</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <Button size="small" type="primary" ghost onClick={() => setImpactOpen(true)}>
+                    {readonly ? '查看影响性分析' : '填写影响性分析'}
+                  </Button>
+                  <span style={{ fontSize: 11, color: 'var(--radar-text-secondary)' }}>
+                    {analysisCount == null ? '' : `已填写 ${analysisCount} 条`}
+                  </span>
+                </div>
+              </div>
+            )}
+            {isSit && (
+              <div className="form-section-card" style={{ marginBottom: 12 }}>
+                <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>测试覆盖性分析</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <Button size="small" type="primary" ghost onClick={() => setCoverageOpen(true)}>
+                    {readonly ? '查看测试覆盖性分析' : '填写测试覆盖性分析'}
+                  </Button>
+                  <span style={{ fontSize: 11, color: 'var(--radar-text-secondary)' }}>
+                    {analysisCount == null ? '' : `已覆盖登记 ${analysisCount} 条`}
+                  </span>
+                </div>
+              </div>
+            )}
             {attachFields.map((f) => {
               const mode = required.attachmentMode(f);
               return (
@@ -256,6 +300,26 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
       </Form>
 
       <HistoryDrawer open={historyOpen} entityType={cfg.entity} entityId={current?.id} onClose={() => setHistoryOpen(false)} />
+
+      {/* 结构化分析弹窗 */}
+      {kind === 'dev' && (
+        <ImpactAnalysisModal
+          open={impactOpen}
+          reqCode={current?.req_code}
+          readOnly={readonly}
+          onClose={() => setImpactOpen(false)}
+          onSaved={reloadAnalysisCount}
+        />
+      )}
+      {isSit && (
+        <CoverageAnalysisModal
+          open={coverageOpen}
+          reqCode={current?.req_code}
+          readOnly={readonly}
+          onClose={() => setCoverageOpen(false)}
+          onSaved={reloadAnalysisCount}
+        />
+      )}
 
       {/* 联动弹窗：关联需求详情 */}
       <RequirementEditor open={reqOpen} code={current?.req_code} onClose={() => setReqOpen(false)} />
