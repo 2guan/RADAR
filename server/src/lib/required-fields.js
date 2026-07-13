@@ -12,11 +12,18 @@ import { parseJsonObject } from './json.js';
 
 export const REQUIRED_FIELDS_CONFIG_KEY = 'required.fields';
 
-// 必填规则按业务状态粗分为初始态、进行中、终态，供前端配置页和后端校验共同使用。
+// 检查内容规则按业务状态粗分为初始态、进行中、终态，供前端配置页和后端校验共同使用。
 export const REQUIRED_FIELD_STATES = [
   { key: 'initial', label: '初始态' },
   { key: 'inProgress', label: '进行中' },
   { key: 'final', label: '终态' },
+];
+
+export const TEST_FIELD_TYPES = [
+  { key: 'SIT', label: '应用组装测试' },
+  { key: 'UAT', label: '用户测试' },
+  { key: 'NFT', label: '非功能测试' },
+  { key: 'SEC', label: '安全测试' },
 ];
 
 export const ATTACHMENT_INPUT_MODES = [
@@ -142,6 +149,17 @@ export const REQUIRED_FIELD_MODULES = [
   },
 ];
 
+export const REQUIRED_FIELD_CONFIG_MODULES = REQUIRED_FIELD_MODULES.flatMap((mod) => {
+  if (mod.key !== 'test') return [mod];
+  return TEST_FIELD_TYPES.map((type) => ({
+    ...mod,
+    key: `test.${type.key}`,
+    baseKey: 'test',
+    testType: type.key,
+    label: type.label,
+  }));
+});
+
 function allRequired() {
   // 默认三类状态均必填，用于需求/工单等核心登记字段。
   return { initial: true, inProgress: true, final: true };
@@ -184,12 +202,12 @@ export const DEFAULT_REQUIRED_FIELD_CONFIG = {
     actual_start: finalRequired(),
     actual_end: finalRequired(),
   },
-  test: {
+  ...Object.fromEntries(TEST_FIELD_TYPES.map((type) => [`test.${type.key}`, {
     plan_start: finalRequired(),
     plan_end: finalRequired(),
     actual_start: finalRequired(),
     actual_end: finalRequired(),
-  },
+  }])),
   release_apply: {
     ref_codes: allRequired(),
     release_point_id: allRequired(),
@@ -214,24 +232,68 @@ function cloneConfig(config) {
   return JSON.parse(JSON.stringify(config || {}));
 }
 
+function allVisible() {
+  return { initial: true, inProgress: true, final: true };
+}
+
+function pickStateBooleans(input = {}, fallback = false) {
+  return {
+    initial: input.initial === undefined ? fallback : !!input.initial,
+    inProgress: input.inProgress === undefined ? fallback : !!input.inProgress,
+    final: input.final === undefined ? fallback : !!input.final,
+  };
+}
+
+function normalizeConfigCell(cell = {}, defaultRequired = {}) {
+  const visible = cell.visible
+    ? pickStateBooleans(cell.visible, true)
+    : allVisible();
+  const required = cell.required
+    ? pickStateBooleans(cell.required, false)
+    : {
+      initial: !!cell.initial || !!defaultRequired.initial,
+      inProgress: !!cell.inProgress || !!defaultRequired.inProgress,
+      final: !!cell.final || !!defaultRequired.final,
+    };
+
+  if (required.initial) {
+    required.inProgress = true;
+    required.final = true;
+  }
+  for (const state of REQUIRED_FIELD_STATES) {
+    if (!visible[state.key]) required[state.key] = false;
+  }
+
+  return { visible, required };
+}
+
+function configKeyFor(moduleKey, row) {
+  if (moduleKey === 'test') {
+    const testType = row?.test_type;
+    if (TEST_FIELD_TYPES.some((type) => type.key === testType)) return `test.${testType}`;
+  }
+  return moduleKey;
+}
+
 export function normalizeRequiredFieldConfig(input = {}) {
-  // 只保留当前模块允许配置的字段，并补齐每个字段在三个状态下的布尔值。
+  // 只保留当前模块允许配置的字段，并补齐每个字段在三个状态下的显示/必填布尔值。
+  const source = cloneConfig(input);
+  // 兼容旧版测试管理单配置：升级为 SIT/UAT/NFT/SEC 四套相同初值。
+  if (source.test && !source['test.SIT'] && !source['test.UAT'] && !source['test.NFT'] && !source['test.SEC']) {
+    for (const type of TEST_FIELD_TYPES) source[`test.${type.key}`] = cloneConfig(source.test);
+  }
   const out = cloneConfig(DEFAULT_REQUIRED_FIELD_CONFIG);
-  for (const mod of REQUIRED_FIELD_MODULES) {
+  for (const mod of REQUIRED_FIELD_CONFIG_MODULES) {
     const fieldKeys = new Set([
       ...mod.fields.map((f) => f.key),
       ...(mod.attachmentFields || []).map((name) => `attachment:${name}`),
     ]);
-    const moduleInput = input?.[mod.key] || {};
+    const moduleInput = source?.[mod.key] || {};
     out[mod.key] = out[mod.key] || {};
     for (const field of Object.keys(moduleInput)) {
       if (!fieldKeys.has(field)) continue;
       const incomingMode = moduleInput[field]?.mode || {};
-      out[mod.key][field] = {
-        initial: !!moduleInput[field]?.initial,
-        inProgress: !!moduleInput[field]?.inProgress,
-        final: !!moduleInput[field]?.final,
-      };
+      out[mod.key][field] = normalizeConfigCell(moduleInput[field], out[mod.key][field]);
       if (field.startsWith('attachment:')) {
         out[mod.key][field].mode = {
           initial: ATTACHMENT_MODE_KEYS.has(incomingMode.initial) ? incomingMode.initial : 'both',
@@ -252,10 +314,10 @@ export function normalizeRequiredFieldConfig(input = {}) {
           final: ATTACHMENT_MODE_KEYS.has(out[mod.key][field].mode?.final) ? out[mod.key][field].mode.final : 'both',
         };
       }
-      if (out[mod.key][field].initial) {
-        out[mod.key][field].inProgress = true;
-        out[mod.key][field].final = true;
-      }
+      out[mod.key][field] = {
+        ...normalizeConfigCell(out[mod.key][field], out[mod.key][field]?.required || out[mod.key][field]),
+        ...(field.startsWith('attachment:') ? { mode: out[mod.key][field].mode } : {}),
+      };
     }
   }
   return out;
@@ -353,11 +415,11 @@ export async function validateRequiredFields(moduleKey, stateType, row) {
   if (!mod) return;
   const config = await readRequiredFieldConfig();
   const stateKey = stateType === 'final' ? 'final' : (stateType === 'initial' ? 'initial' : 'inProgress');
-  const moduleConfig = config[moduleKey] || {};
+  const moduleConfig = config[configKeyFor(moduleKey, row)] || {};
   const missing = [];
 
   for (const field of mod.fields) {
-    if (!moduleConfig[field.key]?.[stateKey]) continue;
+    if (!moduleConfig[field.key]?.visible?.[stateKey] || !moduleConfig[field.key]?.required?.[stateKey]) continue;
     if (field.valueType === 'deliveryUnit') {
       const childKey = field.key.split('.')[1];
       if (deliveryUnitsMissing(row, childKey)) missing.push(field.label);
@@ -369,7 +431,7 @@ export async function validateRequiredFields(moduleKey, stateType, row) {
   }
   for (const attachmentName of mod.attachmentFields || []) {
     const key = `attachment:${attachmentName}`;
-    if (!moduleConfig[key]?.[stateKey]) continue;
+    if (!moduleConfig[key]?.visible?.[stateKey] || !moduleConfig[key]?.required?.[stateKey]) continue;
     if (!row.id) continue;
     const mode = moduleConfig[key]?.mode?.[stateKey] || 'both';
     if (await countAttachments(mod.attachmentEntity, row.id, attachmentName, mode) === 0) {
@@ -392,9 +454,10 @@ export async function getAttachmentInputMode(moduleKey, stateType, fieldKey) {
 export async function assertAttachmentInputAllowed(entityType, entityId, fieldKey, kind) {
   const meta = ENTITY_MODULE_MAP[entityType];
   if (!meta || !fieldKey || !entityId) return;
-  const row = await get(`SELECT status FROM ${meta.table} WHERE id = ?`, entityId);
+  const selectFields = entityType === 'test' ? 'status, test_type' : 'status';
+  const row = await get(`SELECT ${selectFields} FROM ${meta.table} WHERE id = ?`, entityId);
   if (!row) return;
-  const mode = await getAttachmentInputMode(meta.moduleKey, await statusTypeForProcessStatus(row.status), fieldKey);
+  const mode = await getAttachmentInputMode(configKeyFor(meta.moduleKey, row), await statusTypeForProcessStatus(row.status), fieldKey);
   if (mode === 'path' && kind === 'file') throw badRequest(`${fieldKey}仅允许填写路径`);
   if (mode === 'file' && kind === 'path') throw badRequest(`${fieldKey}仅允许上传文档`);
 }
@@ -403,7 +466,7 @@ export async function requiredFieldCatalogPayload() {
   return {
     states: REQUIRED_FIELD_STATES,
     attachmentModes: ATTACHMENT_INPUT_MODES,
-    modules: REQUIRED_FIELD_MODULES,
+    modules: REQUIRED_FIELD_CONFIG_MODULES,
     config: await readRequiredFieldConfig(),
   };
 }

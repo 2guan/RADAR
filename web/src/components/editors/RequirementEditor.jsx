@@ -205,6 +205,7 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
   const isEdit = !!reqId || !!code || mode === 'page';
   const readonly = isEdit ? !can('requirement', 'edit') : !can('requirement', 'create');
   const required = useRequiredFields('requirement', getStatusType(statusValue), readonly);
+  const visible = (fieldKey) => required.isVisible(fieldKey);
   const initialStatus = useDefaultProcessStatus('需求', 'initial', '需求登记');
   // 已关联开发/测试任务时，需求编号锁定不可改
   const codeLocked = !!current?.has_tasks;
@@ -302,27 +303,31 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
       cancelText={readonly ? '关闭' : '取消'}
       title={(
         <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 10, rowGap: 6, minWidth: 0, width: '100%', paddingRight: 76 }}>
-          {isEdit || current ? (
+          {(isEdit || current) && visible('req_code') ? (
             <CodeLink module="requirement" code={current?.req_code} fallback="REQ" />
-          ) : (
+          ) : !isEdit && !current ? (
             <span className="lc-id big" style={{ margin: 0, background: 'var(--radar-status-in-progress-soft)', color: 'var(--radar-status-in-progress)' }}>NEW</span>
+          ) : (
+            <span style={{ fontSize: 13, fontWeight: 600 }}>需求详情</span>
           )}
-          {/* 需求状态：标题栏内联编辑，点击即可切换；按主题状态色显示，宽度随内容自适应 */}
-          <span className={`status-select status-select-${getStatusType(statusValue)}`}>
-            <DictSelect
-              category="process_status"
-              stage="需求"
-              size="small"
-              allowClear={false}
-              showSearch={false}
-              popupClassName="status-select-dropdown"
-              popupMatchSelectWidth={false}
-              value={statusValue}
-              onChange={(v) => { form.setFieldValue('status', v); if (!readonly) setIsDirty(true); }}
-              placeholder="需求状态"
-              style={{ width: statusSelectWidth(statusValue, '需求状态'), ...(readonly ? { pointerEvents: 'none' } : {}) }}
-            />
-          </span>
+          {/* 状态即使不展示也保留隐藏字段参与保存。 */}
+          {visible('status') && (
+            <span className={`status-select status-select-${getStatusType(statusValue)}`}>
+              <DictSelect
+                category="process_status"
+                stage="需求"
+                size="small"
+                allowClear={false}
+                showSearch={false}
+                popupClassName="status-select-dropdown"
+                popupMatchSelectWidth={false}
+                value={statusValue}
+                onChange={(v) => { form.setFieldValue('status', v); if (!readonly) setIsDirty(true); }}
+                placeholder="需求状态"
+                style={{ width: statusSelectWidth(statusValue, '需求状态'), ...(readonly ? { pointerEvents: 'none' } : {}) }}
+              />
+            </span>
+          )}
           {current && (
             <Tooltip title="变更历史">
               <Button
@@ -358,153 +363,189 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
 
               <Row gutter={8}>
                 {/* 需求编号 + 需求类型 */}
-                <Col span={12}>
-                  <Form.Item
-                    name="req_code"
-                    label={(
-                      <span>
-                        需求编号
-                        {codeLocked && !isMobile && (
-                          <span style={{ marginLeft: 6, fontWeight: 400, fontSize: 11, color: 'var(--radar-text-secondary)' }}>
-                            （已关联，不可改）
-                          </span>
-                        )}
-                      </span>
-                    )}
-                    style={{ marginBottom: 8 }}
-                    rules={[
-                      ...required.rules('req_code', '需求编号', { message: '请填写需求编号' }),
-                      { pattern: /^\S+$/, message: '编号不能包含空格' },
-                      { validator: (_, val) => checkCodeUnique(val) },
-                    ]}
-                    validateTrigger={['onBlur', 'onChange']}
-                  >
-                    <Input
-                      placeholder="手填或点击「生成」"
-                      size="small"
-                      readOnly={readonly || codeLocked}
-                      style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', letterSpacing: '0.3px' }}
-                      suffix={(codeLocked || readonly) ? null : (
-                        <Tooltip title="根据所选投产点自动生成编号">
-                          <Button
-                            type="link"
-                            size="small"
-                            icon={<ThunderboltOutlined />}
-                            loading={genLoading}
-                            onClick={generateCode}
-                            style={{ padding: 0, height: 'auto', fontSize: 13, color: 'var(--radar-primary)' }}
-                          >
-                            生成
-                          </Button>
-                        </Tooltip>
+                {visible('req_code') && (
+                  <Col span={12}>
+                    <Form.Item
+                      name="req_code"
+                      label={(
+                        <span>
+                          需求编号
+                          {codeLocked && !isMobile && (
+                            <span style={{ marginLeft: 6, fontWeight: 400, fontSize: 11, color: 'var(--radar-text-secondary)' }}>
+                              （已关联，不可改）
+                            </span>
+                          )}
+                        </span>
                       )}
-                    />
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item name="req_type" label="需求类型" rules={required.rules('req_type', '需求类型', { action: '请选择' })} style={{ marginBottom: 8 }}>
-                    <DictSelect category="req_type" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} size="small" />
-                  </Form.Item>
-                </Col>
+                      style={{ marginBottom: 8 }}
+                      rules={[
+                        ...required.rules('req_code', '需求编号', { message: '请填写需求编号' }),
+                        { pattern: /^\S+$/, message: '编号不能包含空格' },
+                        { validator: (_, val) => checkCodeUnique(val) },
+                      ]}
+                      validateTrigger={['onBlur', 'onChange']}
+                    >
+                      <Input
+                        placeholder="手填或点击「生成」"
+                        size="small"
+                        readOnly={readonly || codeLocked}
+                        style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', letterSpacing: '0.3px' }}
+                        suffix={(codeLocked || readonly) ? null : (
+                          <Tooltip title="根据所选投产点自动生成编号">
+                            <Button
+                              type="link"
+                              size="small"
+                              icon={<ThunderboltOutlined />}
+                              loading={genLoading}
+                              onClick={generateCode}
+                              style={{ padding: 0, height: 'auto', fontSize: 13, color: 'var(--radar-primary)' }}
+                            >
+                              生成
+                            </Button>
+                          </Tooltip>
+                        )}
+                      />
+                    </Form.Item>
+                  </Col>
+                )}
+                {visible('req_type') && (
+                  <Col span={12}>
+                    <Form.Item name="req_type" label="需求类型" rules={required.rules('req_type', '需求类型', { action: '请选择' })} style={{ marginBottom: 8 }}>
+                      <DictSelect category="req_type" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} size="small" />
+                    </Form.Item>
+                  </Col>
+                )}
                 {/* 计划投产点 + 提出时间 */}
-                <Col span={12}>
-                  <Form.Item name="release_point_id" label="计划投产点" rules={required.rules('release_point_id', '计划投产点', { action: '请选择' })} style={{ marginBottom: 8 }}>
-                    <Select
-                      placeholder="选择计划投产点"
-                      size="small"
-                      style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }}
-                      tabIndex={readonly ? -1 : undefined}
-                      showSearch
-                      optionFilterProp="searchLabel"
-                      options={makeReleasePointOptions(points, { includeVersionType: true })}
-                    />
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item name="propose_time" label="提出时间" rules={required.rules('propose_time', '提出时间', { action: '请选择' })} style={{ marginBottom: 8 }}>
-                    <DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" />
-                  </Form.Item>
-                </Col>
+                {visible('release_point_id') && (
+                  <Col span={12}>
+                    <Form.Item name="release_point_id" label="计划投产点" rules={required.rules('release_point_id', '计划投产点', { action: '请选择' })} style={{ marginBottom: 8 }}>
+                      <Select
+                        placeholder="选择计划投产点"
+                        size="small"
+                        style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }}
+                        tabIndex={readonly ? -1 : undefined}
+                        showSearch
+                        optionFilterProp="searchLabel"
+                        options={makeReleasePointOptions(points, { includeVersionType: true })}
+                      />
+                    </Form.Item>
+                  </Col>
+                )}
+                {visible('propose_time') && (
+                  <Col span={12}>
+                    <Form.Item name="propose_time" label="提出时间" rules={required.rules('propose_time', '提出时间', { action: '请选择' })} style={{ marginBottom: 8 }}>
+                      <DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" />
+                    </Form.Item>
+                  </Col>
+                )}
                 {/* 关联问题/工单编号 + 是否涉账 */}
-                <Col span={12}>
-                  <Form.Item name="issue_no" label="关联问题/工单编号" rules={required.rules('issue_no', '关联问题/工单编号')} style={{ marginBottom: 8 }}>
-                    <Input placeholder="手动输入关联问题/工单编号（选填）" size="small" readOnly={readonly} />
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item name="is_accounting" label="是否涉账" initialValue="否" rules={required.rules('is_accounting', '是否涉账', { action: '请选择' })} style={{ marginBottom: 8 }}>
-                    <Select
-                      size="small"
-                      options={[{ value: '否', label: '否' }, { value: '是', label: '是' }]}
-                      style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }}
-                      tabIndex={readonly ? -1 : undefined}
-                    />
-                  </Form.Item>
-                </Col>
+                {visible('issue_no') && (
+                  <Col span={12}>
+                    <Form.Item name="issue_no" label="关联问题/工单编号" rules={required.rules('issue_no', '关联问题/工单编号')} style={{ marginBottom: 8 }}>
+                      <Input placeholder="手动输入关联问题/工单编号（选填）" size="small" readOnly={readonly} />
+                    </Form.Item>
+                  </Col>
+                )}
+                {visible('is_accounting') && (
+                  <Col span={12}>
+                    <Form.Item name="is_accounting" label="是否涉账" initialValue="否" rules={required.rules('is_accounting', '是否涉账', { action: '请选择' })} style={{ marginBottom: 8 }}>
+                      <Select
+                        size="small"
+                        options={[{ value: '否', label: '否' }, { value: '是', label: '是' }]}
+                        style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }}
+                        tabIndex={readonly ? -1 : undefined}
+                      />
+                    </Form.Item>
+                  </Col>
+                )}
               </Row>
 
               {/* 需求标题 */}
-              <Form.Item name="title" label="需求标题" rules={required.rules('title', '需求标题', { message: '请输入需求标题' })} style={{ marginBottom: 8 }}>
-                <Input placeholder="请输入需求标题" size="small" readOnly={readonly} />
-              </Form.Item>
-              <Form.Item name="summary" label="需求概述" rules={required.rules('summary', '需求概述', { message: '请填写需求概述', extraRules: [{ max: 2000, message: '不超过 2000 字' }] })} style={{ marginBottom: 18 }}>
-                <Input.TextArea rows={7} placeholder="描述该需求的核心背景与业务诉求（2000字以内）" showCount={!readonly} maxLength={2000} style={{ fontSize: 12 }} readOnly={readonly} />
-              </Form.Item>
+              {visible('title') && (
+                <Form.Item name="title" label="需求标题" rules={required.rules('title', '需求标题', { message: '请输入需求标题' })} style={{ marginBottom: 8 }}>
+                  <Input placeholder="请输入需求标题" size="small" readOnly={readonly} />
+                </Form.Item>
+              )}
+              {visible('summary') && (
+                <Form.Item name="summary" label="需求概述" rules={required.rules('summary', '需求概述', { message: '请填写需求概述', extraRules: [{ max: 2000, message: '不超过 2000 字' }] })} style={{ marginBottom: 18 }}>
+                  <Input.TextArea rows={7} placeholder="描述该需求的核心背景与业务诉求（2000字以内）" showCount={!readonly} maxLength={2000} style={{ fontSize: 12 }} readOnly={readonly} />
+                </Form.Item>
+              )}
             </div>
 
             {/* 需求说明书（附件） */}
-            <div className="form-section-card">
-              <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>需求说明书<span style={{ fontWeight: 400, color: 'var(--radar-text-secondary)', marginLeft: 6, fontSize: 11 }}>（{attachmentModeText(required.attachmentMode('需求说明书'))}）</span></div>
-              <AttachmentField entityType="requirement" entityId={current?.id} fieldKey="需求说明书" readOnly={readonly} inputMode={required.attachmentMode('需求说明书')} />
-            </div>
+            {visible('attachment:需求说明书') && (
+              <div className="form-section-card">
+                <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>需求说明书<span style={{ fontWeight: 400, color: 'var(--radar-text-secondary)', marginLeft: 6, fontSize: 11 }}>（{attachmentModeText(required.attachmentMode('需求说明书'))}）</span></div>
+                <AttachmentField entityType="requirement" entityId={current?.id} fieldKey="需求说明书" readOnly={readonly} inputMode={required.attachmentMode('需求说明书')} />
+              </div>
+            )}
           </Col>
 
           {/* ── 右栏 ── */}
           <Col xs={24} md={10}>
 
             {/* 涉及系统 */}
+            {['main_systems', 'collab_dev_systems', 'collab_test_systems'].some(visible) && (
             <div className="form-section-card">
               <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>涉及系统</div>
 
               {/* 主责系统：标题右侧选择框，单选（再选自动替换），已选展示在下方 */}
-              <Form.Item name="main_systems" rules={required.rules('main_systems', '主责系统', { action: '请选择', type: 'array', min: 1 })}>
-                <SystemPickerField title="主责系统" single placeholder="主责系统检索" readonly={readonly} />
-              </Form.Item>
+              {visible('main_systems') && (
+                <Form.Item name="main_systems" rules={required.rules('main_systems', '主责系统', { action: '请选择', type: 'array', min: 1 })}>
+                  <SystemPickerField title="主责系统" single placeholder="主责系统检索" readonly={readonly} />
+                </Form.Item>
+              )}
 
               {/* 协同改造系统：标题右侧选择框，可多选，已选展示在下方 */}
-              <Form.Item name="collab_dev_systems" rules={required.rules('collab_dev_systems', '协同改造系统', { action: '请选择', type: 'array', min: 1 })}>
-                <SystemPickerField title="协同改造系统" placeholder="协同改造系统检索" readonly={readonly} />
-              </Form.Item>
+              {visible('collab_dev_systems') && (
+                <Form.Item name="collab_dev_systems" rules={required.rules('collab_dev_systems', '协同改造系统', { action: '请选择', type: 'array', min: 1 })}>
+                  <SystemPickerField title="协同改造系统" placeholder="协同改造系统检索" readonly={readonly} />
+                </Form.Item>
+              )}
 
               {/* 协同测试系统：标题右侧选择框，可多选，已选展示在下方 */}
-              <Form.Item name="collab_test_systems" rules={required.rules('collab_test_systems', '协同测试系统', { action: '请选择', type: 'array', min: 1 })}>
-                <SystemPickerField title="协同测试系统" placeholder="协同测试系统检索" readonly={readonly} />
-              </Form.Item>
+              {visible('collab_test_systems') && (
+                <Form.Item name="collab_test_systems" rules={required.rules('collab_test_systems', '协同测试系统', { action: '请选择', type: 'array', min: 1 })}>
+                  <SystemPickerField title="协同测试系统" placeholder="协同测试系统检索" readonly={readonly} />
+                </Form.Item>
+              )}
             </div>
+            )}
 
             {/* 相关负责人 */}
+            {['propose_dept', 'proposer', 'yn_owner', 'jk_owner'].some(visible) && (
             <div className="form-section-card">
               <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>相关负责人</div>
               <Row gutter={8}>
                 {/* 提出部门 + 提出人：手机端各占一行（充满），PC 端双栏 */}
-                <Col span={isMobile ? 24 : 12}>
-                  <Form.Item name="propose_dept" label="提出部门" rules={required.rules('propose_dept', '提出部门', { action: '请选择' })} style={{ marginBottom: 8 }}>
-                    <DictSelect category="req_dept" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} size="small" />
-                  </Form.Item>
-                </Col>
-                <Col span={isMobile ? 24 : 12}>
-                  <Form.Item name="proposer" label="提出人" rules={required.rules('proposer', '提出人', { action: '请选择', type: 'array', min: 1 })} style={{ marginBottom: 8 }}>
-                    <PersonPickerField readonly={readonly} placeholder="选择提出人" />
-                  </Form.Item>
-                </Col>
+                {visible('propose_dept') && (
+                  <Col span={isMobile ? 24 : 12}>
+                    <Form.Item name="propose_dept" label="提出部门" rules={required.rules('propose_dept', '提出部门', { action: '请选择' })} style={{ marginBottom: 8 }}>
+                      <DictSelect category="req_dept" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} size="small" />
+                    </Form.Item>
+                  </Col>
+                )}
+                {visible('proposer') && (
+                  <Col span={isMobile ? 24 : 12}>
+                    <Form.Item name="proposer" label="提出人" rules={required.rules('proposer', '提出人', { action: '请选择', type: 'array', min: 1 })} style={{ marginBottom: 8 }}>
+                      <PersonPickerField readonly={readonly} placeholder="选择提出人" />
+                    </Form.Item>
+                  </Col>
+                )}
               </Row>
-              <Form.Item name="yn_owner" label="云南农信业务负责人" rules={required.rules('yn_owner', '云南农信业务负责人', { action: '请选择' })} style={{ marginBottom: 8 }}>
-                <PersonPicker style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择云南农信业务负责人" size="small" />
-              </Form.Item>
-              <Form.Item name="jk_owner" label="建信金科业务负责人" rules={required.rules('jk_owner', '建信金科业务负责人', { action: '请选择' })} style={{ marginBottom: 0 }}>
-                <PersonPicker style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择建信金科业务负责人" size="small" />
-              </Form.Item>
+              {visible('yn_owner') && (
+                <Form.Item name="yn_owner" label="云南农信业务负责人" rules={required.rules('yn_owner', '云南农信业务负责人', { action: '请选择' })} style={{ marginBottom: 8 }}>
+                  <PersonPicker style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择云南农信业务负责人" size="small" />
+                </Form.Item>
+              )}
+              {visible('jk_owner') && (
+                <Form.Item name="jk_owner" label="建信金科业务负责人" rules={required.rules('jk_owner', '建信金科业务负责人', { action: '请选择' })} style={{ marginBottom: 0 }}>
+                  <PersonPicker style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择建信金科业务负责人" size="small" />
+                </Form.Item>
+              )}
             </div>
+            )}
           </Col>
         </Row>
       </Form>

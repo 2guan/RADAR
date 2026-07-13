@@ -33,7 +33,22 @@ export function resetRequiredFieldsCache() {
   cache = null;
 }
 
-export function useRequiredFields(moduleKey, statusType, readonly) {
+function moduleConfigKey(moduleKey, scopeKey) {
+  if (moduleKey === 'test' && scopeKey) return `test.${scopeKey}`;
+  return moduleKey;
+}
+
+function cellVisible(cell, stateKey) {
+  return cell?.visible?.[stateKey] !== false;
+}
+
+function cellRequired(cell, stateKey) {
+  if (!cellVisible(cell, stateKey)) return false;
+  if (cell?.required) return !!cell.required[stateKey];
+  return !!cell?.[stateKey];
+}
+
+export function useRequiredFields(moduleKey, statusType, readonly, scopeKey) {
   const [payload, setPayload] = useState(cache);
 
   useEffect(() => {
@@ -45,8 +60,10 @@ export function useRequiredFields(moduleKey, statusType, readonly) {
   const stateKey = stateKeyFromType(statusType);
 
   return useMemo(() => {
-    const moduleConfig = payload?.config?.[moduleKey] || {};
-    const isRequired = (fieldKey) => !readonly && !!moduleConfig[fieldKey]?.[stateKey];
+    const configKey = moduleConfigKey(moduleKey, scopeKey);
+    const moduleConfig = payload?.config?.[configKey] || payload?.config?.[moduleKey] || {};
+    const isVisible = (fieldKey) => cellVisible(moduleConfig[fieldKey], stateKey);
+    const isRequired = (fieldKey) => !readonly && cellRequired(moduleConfig[fieldKey], stateKey);
     const attachmentMode = (fieldKey) => moduleConfig[`attachment:${fieldKey}`]?.mode?.[stateKey] || 'both';
     const rules = (fieldKey, label, options = {}) => {
       if (!isRequired(fieldKey)) return options.extraRules || [];
@@ -58,6 +75,6 @@ export function useRequiredFields(moduleKey, statusType, readonly) {
       if (options.min !== undefined) requiredRule.min = options.min;
       return [requiredRule, ...(options.extraRules || [])];
     };
-    return { isRequired, attachmentMode, rules, stateKey };
-  }, [moduleKey, payload, readonly, stateKey]);
+    return { isVisible, isRequired, attachmentMode, rules, stateKey };
+  }, [moduleKey, payload, readonly, scopeKey, stateKey]);
 }

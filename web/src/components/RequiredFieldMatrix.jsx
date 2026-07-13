@@ -1,6 +1,6 @@
 /**
  * 文件：components/RequiredFieldMatrix.jsx
- * 用途：系统设置中的字段必填项矩阵配置。
+ * 用途：系统设置中的检查内容矩阵配置。
  * 作者：hengguan
  */
 
@@ -17,14 +17,28 @@ const STATE_COLUMNS = [
 
 function normalizeCell(cell = {}) {
   const next = {
-    initial: !!cell.initial,
-    inProgress: !!cell.inProgress,
-    final: !!cell.final,
+    visible: {
+      initial: cell.visible?.initial !== false,
+      inProgress: cell.visible?.inProgress !== false,
+      final: cell.visible?.final !== false,
+    },
+    required: cell.required ? {
+      initial: !!cell.required.initial,
+      inProgress: !!cell.required.inProgress,
+      final: !!cell.required.final,
+    } : {
+      initial: !!cell.initial,
+      inProgress: !!cell.inProgress,
+      final: !!cell.final,
+    },
   };
   if (cell.mode) next.mode = cell.mode;
-  if (next.initial) {
-    next.inProgress = true;
-    next.final = true;
+  if (next.required.initial) {
+    next.required.inProgress = true;
+    next.required.final = true;
+  }
+  for (const state of STATE_COLUMNS) {
+    if (!next.visible[state.key]) next.required[state.key] = false;
   }
   return next;
 }
@@ -46,12 +60,12 @@ export default function RequiredFieldMatrix() {
 
   useEffect(() => { load().catch(() => {}); }, []);
 
-  const toggle = (moduleKey, fieldKey, stateKey, checked) => {
+  const toggle = (moduleKey, fieldKey, rowType, stateKey, checked) => {
     setConfig((prev) => {
       const next = { ...prev };
       const moduleConfig = { ...(next[moduleKey] || {}) };
       const cell = normalizeCell(moduleConfig[fieldKey]);
-      cell[stateKey] = checked;
+      cell[rowType][stateKey] = checked;
       moduleConfig[fieldKey] = normalizeCell(cell);
       next[moduleKey] = moduleConfig;
       return next;
@@ -81,7 +95,7 @@ export default function RequiredFieldMatrix() {
       const saved = await apiPut('/settings/required-fields', { config });
       setConfig(saved || config);
       resetRequiredFieldsCache();
-      message.success('必填项配置已保存');
+      message.success('检查内容配置已保存');
     } finally {
       setSaving(false);
     }
@@ -89,10 +103,14 @@ export default function RequiredFieldMatrix() {
 
   const renderModule = (mod) => {
     const rows = [
-      ...(mod.fields || []).map((field) => ({ ...field, rowType: 'required', rowKey: field.key, label: field.label })),
+      ...(mod.fields || []).flatMap((field) => [
+        { ...field, key: `${field.key}:visible`, rowType: 'visible', rowKey: field.key, label: `${field.label} · 是否显示` },
+        { ...field, key: `${field.key}:required`, rowType: 'required', rowKey: field.key, label: `${field.label} · 是否必填` },
+      ]),
       ...(mod.attachmentFields || []).flatMap((name) => {
         const fieldKey = `attachment:${name}`;
         return [
+          { key: `${fieldKey}:visible`, rowKey: fieldKey, rowType: 'visible', label: `${name} · 是否显示` },
           { key: `${fieldKey}:required`, rowKey: fieldKey, rowType: 'required', label: `${name} · 是否必填` },
           { key: `${fieldKey}:mode`, rowKey: fieldKey, rowType: 'mode', label: `${name} · 提交方式` },
         ];
@@ -115,16 +133,19 @@ export default function RequiredFieldMatrix() {
                 value={config?.[mod.key]?.[field.rowKey]?.mode?.[state.key] || 'both'}
                 options={attachmentModes.map((m) => ({ value: m.key, label: m.label }))}
                 onChange={(value) => setAttachmentMode(mod.key, field.rowKey, state.key, value)}
+                disabled={!cell.visible[state.key]}
                 style={{ width: 96 }}
               />
             );
           }
-          const disabled = cell.initial && (state.key === 'inProgress' || state.key === 'final');
+          const checked = field.rowType === 'visible' ? cell.visible[state.key] : cell.required[state.key];
+          const disabled = field.rowType === 'required'
+            && (!cell.visible[state.key] || (cell.required.initial && (state.key === 'inProgress' || state.key === 'final')));
           return (
             <Checkbox
-              checked={cell[state.key]}
+              checked={checked}
               disabled={disabled}
-              onChange={(e) => toggle(mod.key, field.rowKey, state.key, e.target.checked)}
+              onChange={(e) => toggle(mod.key, field.rowKey, field.rowType, state.key, e.target.checked)}
             />
           );
         },

@@ -1,5 +1,5 @@
 -- 0021_clear_default_attachment_required.sql
--- 用途：移除旧版内置的附件终态必填默认值，附件必填完全交由“必填项设置”维护。
+-- 用途：移除旧版内置的附件终态必填默认值，附件必填完全交由“检查内容设置”维护。
 -- 作者：hengguan
 
 UPDATE app_config

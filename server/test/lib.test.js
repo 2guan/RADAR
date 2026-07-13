@@ -121,7 +121,7 @@ test('Excel 导出：分析内容在单个单元格内换行显示', async () =>
   assert.equal(cell.alignment.wrapText, true);
 });
 
-test('必填项设置：支持影响性分析与测试覆盖性分析', () => {
+test('检查内容设置：支持影响性分析与测试覆盖性分析', () => {
   const dev = REQUIRED_FIELD_MODULES.find((module) => module.key === 'dev');
   const testModule = REQUIRED_FIELD_MODULES.find((module) => module.key === 'test');
   assert.ok(dev.fields.some((field) => field.key === 'impact_analysis'));
@@ -131,8 +131,31 @@ test('必填项设置：支持影响性分析与测试覆盖性分析', () => {
     dev: { impact_analysis: { final: true } },
     test: { coverage_analysis: { final: true } },
   });
-  assert.equal(config.dev.impact_analysis.final, true);
-  assert.equal(config.test.coverage_analysis.final, true);
+  assert.equal(config.dev.impact_analysis.required.final, true);
+  assert.equal(config['test.SIT'].coverage_analysis.required.final, true);
+  assert.equal(config['test.UAT'].coverage_analysis.required.final, true);
+});
+
+test('检查内容设置：不显示时自动取消必填，测试管理按类型拆分', () => {
+  const config = normalizeRequiredFieldConfig({
+    'test.SIT': {
+      owner: {
+        visible: { initial: true, inProgress: true, final: false },
+        required: { initial: false, inProgress: false, final: true },
+      },
+    },
+    'test.UAT': {
+      owner: {
+        visible: { initial: true, inProgress: true, final: true },
+        required: { initial: false, inProgress: false, final: true },
+      },
+    },
+  });
+
+  assert.equal(config['test.SIT'].owner.visible.final, false);
+  assert.equal(config['test.SIT'].owner.required.final, false);
+  assert.equal(config['test.UAT'].owner.visible.final, true);
+  assert.equal(config['test.UAT'].owner.required.final, true);
 });
 
 import { reqOrg } from '../src/modules/overview/routes.js';

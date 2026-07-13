@@ -51,10 +51,10 @@ export default async function settingsRoutes(fastify) {
     return ok(rows);
   });
 
-  // 必填项配置：业务表单也需要读取，因此只要求登录，不要求系统设置权限
+  // 检查内容配置：业务表单也需要读取，因此只要求登录，不要求系统设置权限
   fastify.get('/settings/required-fields', { preHandler: fastify.authenticate }, async () => ok(await requiredFieldCatalogPayload()));
 
-  // 保存必填项配置
+  // 保存检查内容配置
   fastify.put('/settings/required-fields', { preHandler: fastify.requirePerm('settings', 'edit') }, async (request) => {
     const config = normalizeRequiredFieldConfig(request.body?.config || {});
     await run(
@@ -62,7 +62,7 @@ export default async function settingsRoutes(fastify) {
        ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=datetime('now','localtime')`,
       REQUIRED_FIELDS_CONFIG_KEY,
       JSON.stringify(config),
-      '字段必填项配置（JSON）',
+      '检查内容配置（JSON）',
     );
     return ok(config, '配置已保存');
   });

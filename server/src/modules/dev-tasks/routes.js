@@ -9,7 +9,7 @@
 import { get, all, run, tx } from '../../db/index.js';
 import { listQuery } from '../../lib/query.js';
 import { genDevCode } from '../../lib/code-gen.js';
-import { defaultProcessStatus, isTerminalStatus } from '../../lib/status.js';
+import { defaultProcessStatus } from '../../lib/status.js';
 import { statusTypeForProcessStatus, validateRequiredFields } from '../../lib/required-fields.js';
 import { calcDeviation } from '../../lib/deviation.js';
 import { auditCreate, auditUpdate, auditDelete } from '../../lib/audit.js';
@@ -51,14 +51,6 @@ const LABELS = {
 };
 // 本阶段附件字段
 const ATTACH_FIELDS = ['概要设计', '详细设计', '代码走查', '单元测试报告', '影响性分析文档'];
-
-/** 终态校验：计划/实际起止时间必填 */
-function validateTerminal(id, status, row) {
-  if (!isTerminalStatus(status)) return;
-  if (!row.plan_start || !row.plan_end || !row.actual_start || !row.actual_end) {
-    throw badRequest('开发完成（终态）时，计划/实际的开始与结束时间均必填');
-  }
-}
 
 export default async function devTaskRoutes(fastify) {
   // 列表（可按 req_code 或当前投产窗口过滤）
@@ -310,7 +302,6 @@ export default async function devTaskRoutes(fastify) {
 
     const merged = { ...old, ...data };
     await validateRequiredFields('dev', await statusTypeForProcessStatus(merged.status), merged);
-    validateTerminal(id, merged.status, merged);
     // 重算偏差率
     data.deviation_rate = calcDeviation(merged.plan_start, merged.plan_end, merged.actual_end);
 

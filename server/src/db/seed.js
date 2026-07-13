@@ -219,7 +219,7 @@ const APP_CONFIG = [
   ['code.release_apply', '{版本年月}-10bg{序号}', '投产申请变更编号规则'],
   ['release.signoffRoles', '["安全负责人","架构负责人","机构负责人","项目负责人","测试负责人","配置负责人"]', '投产评审会签角色（JSON 数组）'],
   ['appearance.preset', 'sky', '外观主题预设（默认清新蓝）'],
-  [REQUIRED_FIELDS_CONFIG_KEY, JSON.stringify(DEFAULT_REQUIRED_FIELD_CONFIG), '字段必填项配置（JSON）'],
+  [REQUIRED_FIELDS_CONFIG_KEY, JSON.stringify(DEFAULT_REQUIRED_FIELD_CONFIG), '检查内容配置（JSON）'],
   ['security.password.complexity', 'true', '启用密码复杂度校验'],
   ['security.password.minLength', '8', '密码最小长度'],
   ['security.password.expireDays', '90', '密码有效期（天）'],

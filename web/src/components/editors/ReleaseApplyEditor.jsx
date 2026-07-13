@@ -36,6 +36,13 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
   const isEdit = !!applyId || !!code || mode === 'page';
   const readonly = isEdit ? !can('release_apply', 'edit') : !can('release_apply', 'create');
   const required = useRequiredFields('release_apply', current?.review_status ? getStatusType(current.review_status) : 'initial', readonly);
+  const visible = (fieldKey) => required.isVisible(fieldKey);
+  const hasDeliveryUnitVisible = [
+    'delivery_units.artifact_type',
+    'delivery_units.delivery_unit',
+    'delivery_units.new_version',
+    'delivery_units.ferry_status',
+  ].some(visible);
 
   // 自动生成变更编号并填充
   const autoGenCode = (pointId) => {
@@ -289,10 +296,12 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
       cancelText={readonly ? '关闭' : '取消'}
       title={(
         <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 10, rowGap: 6, minWidth: 0, width: '100%', paddingRight: 76 }}>
-          {isEdit || current ? (
+          {(isEdit || current) && visible('change_code') ? (
             <CodeLink module="release_apply" code={current?.change_code} fallback="CHG" />
-          ) : (
+          ) : !isEdit && !current ? (
             <span className="lc-id big" style={{ margin: 0, background: 'var(--radar-status-in-progress-soft)', color: 'var(--radar-status-in-progress)' }}>NEW</span>
+          ) : (
+            <span style={{ fontSize: 13, fontWeight: 600 }}>投产申请</span>
           )}
           {current?.review_status && (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
@@ -313,6 +322,7 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
         <Row gutter={12}>
           {/* ── 左栏：关联需求/工单 + 变更内容 ── */}
           <Col xs={24} md={12}>
+            {visible('ref_codes') && (
             <div className="form-section-card">
               <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>
                 关联需求/工单
@@ -353,62 +363,76 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
               {/* 已选需求、工单合并展示在带底纹的区域 */}
               <CombinedSelected />
             </div>
+            )}
 
+            {['change_content', 'impact_scope'].some(visible) && (
             <div className="form-section-card">
               <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>变更内容</div>
-              <Form.Item name="change_content" label="变更内容" rules={required.rules('change_content', '变更内容', { message: '请输入变更内容' })} style={{ marginBottom: 8 }}>
-                <Input.TextArea rows={4} placeholder="详细描述本次变更内容" style={{ fontSize: 12 }} readOnly={readonly} />
-              </Form.Item>
-              <Form.Item name="impact_scope" label="影响范围" rules={required.rules('impact_scope', '影响范围')} style={{ marginBottom: 0 }}>
-                <Input.TextArea rows={3} placeholder="描述本次变更的影响范围（非必填）" style={{ fontSize: 12 }} readOnly={readonly} />
-              </Form.Item>
+              {visible('change_content') && (
+                <Form.Item name="change_content" label="变更内容" rules={required.rules('change_content', '变更内容', { message: '请输入变更内容' })} style={{ marginBottom: 8 }}>
+                  <Input.TextArea rows={4} placeholder="详细描述本次变更内容" style={{ fontSize: 12 }} readOnly={readonly} />
+                </Form.Item>
+              )}
+              {visible('impact_scope') && (
+                <Form.Item name="impact_scope" label="影响范围" rules={required.rules('impact_scope', '影响范围')} style={{ marginBottom: 0 }}>
+                  <Input.TextArea rows={3} placeholder="描述本次变更的影响范围（非必填）" style={{ fontSize: 12 }} readOnly={readonly} />
+                </Form.Item>
+              )}
             </div>
+            )}
           </Col>
 
           {/* ── 右栏：变更明细 ── */}
           <Col xs={24} md={12}>
+            {['change_code', 'release_point_id', 'change_system', 'impl_org', 'out_dept', 'deploy_dept'].some(visible) && (
             <div className="form-section-card">
               <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>变更明细</div>
               <Row gutter={8}>
-                <Col span={12}>
-                  <Form.Item name="change_code" label="变更编号"
-                    rules={[
-                      ...required.rules('change_code', '变更编号', { message: '请填写变更编号' }),
-                      { pattern: /^\S+$/, message: '编号不能包含空格' },
-                      { validator: (_, val) => checkCodeUnique(val) },
-                    ]}
-                    validateTrigger={['onBlur', 'onChange']} style={{ marginBottom: 8 }}>
-                    <Input placeholder="手填或点击「生成」" size="small" readOnly={readonly || isEdit}
-                      style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', letterSpacing: '0.3px' }}
-                      suffix={(readonly || isEdit) ? null : (
-                        <Tooltip title="按编号规则自动生成">
-                          <Button type="link" size="small" icon={<ThunderboltOutlined />} loading={genLoading} onClick={generateCode}
-                            style={{ padding: 0, height: 'auto', fontSize: 13, color: 'var(--radar-primary)' }}>生成</Button>
-                        </Tooltip>
-                      )} />
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item name="release_point_id" label="申请投产点" rules={required.rules('release_point_id', '申请投产点', { action: '请选择' })} style={{ marginBottom: (multiReqDiffer || pointMismatch) ? 2 : 8 }}>
-                    <Select placeholder="选择申请投产点" size="small" allowClear showSearch optionFilterProp="searchLabel"
-                      style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined}
-                      options={makeReleasePointOptions(points, { includeVersionType: true })} />
-                  </Form.Item>
-                  {/* 投产点一致性提示（仅提示，不阻断保存） */}
-                  {multiReqDiffer && (
-                    <div style={{ color: 'var(--radar-error, #ff4d4f)', fontSize: 11, lineHeight: 1.4, marginBottom: 4 }}>选择的多个需求/工单不在同一投产点</div>
-                  )}
-                  {pointMismatch && (
-                    <div style={{ color: 'var(--radar-error, #ff4d4f)', fontSize: 11, lineHeight: 1.4, marginBottom: 4 }}>选择投产点与需求/工单计划投产点不一致</div>
-                  )}
-                </Col>
+                {visible('change_code') && (
+                  <Col span={12}>
+                    <Form.Item name="change_code" label="变更编号"
+                      rules={[
+                        ...required.rules('change_code', '变更编号', { message: '请填写变更编号' }),
+                        { pattern: /^\S+$/, message: '编号不能包含空格' },
+                        { validator: (_, val) => checkCodeUnique(val) },
+                      ]}
+                      validateTrigger={['onBlur', 'onChange']} style={{ marginBottom: 8 }}>
+                      <Input placeholder="手填或点击「生成」" size="small" readOnly={readonly || isEdit}
+                        style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', letterSpacing: '0.3px' }}
+                        suffix={(readonly || isEdit) ? null : (
+                          <Tooltip title="按编号规则自动生成">
+                            <Button type="link" size="small" icon={<ThunderboltOutlined />} loading={genLoading} onClick={generateCode}
+                              style={{ padding: 0, height: 'auto', fontSize: 13, color: 'var(--radar-primary)' }}>生成</Button>
+                          </Tooltip>
+                        )} />
+                    </Form.Item>
+                  </Col>
+                )}
+                {visible('release_point_id') && (
+                  <Col span={12}>
+                    <Form.Item name="release_point_id" label="申请投产点" rules={required.rules('release_point_id', '申请投产点', { action: '请选择' })} style={{ marginBottom: (multiReqDiffer || pointMismatch) ? 2 : 8 }}>
+                      <Select placeholder="选择申请投产点" size="small" allowClear showSearch optionFilterProp="searchLabel"
+                        style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined}
+                        options={makeReleasePointOptions(points, { includeVersionType: true })} />
+                    </Form.Item>
+                    {/* 投产点一致性提示（仅提示，不阻断保存） */}
+                    {multiReqDiffer && (
+                      <div style={{ color: 'var(--radar-error, #ff4d4f)', fontSize: 11, lineHeight: 1.4, marginBottom: 4 }}>选择的多个需求/工单不在同一投产点</div>
+                    )}
+                    {pointMismatch && (
+                      <div style={{ color: 'var(--radar-error, #ff4d4f)', fontSize: 11, lineHeight: 1.4, marginBottom: 4 }}>选择投产点与需求/工单计划投产点不一致</div>
+                    )}
+                  </Col>
+                )}
               </Row>
 
-              <Form.Item name="change_system" label="变更系统" rules={required.rules('change_system', '变更系统', { action: '请选择' })} style={{ marginBottom: 4 }}>
-                <SystemSelect single size="small" placeholder="输入系统编号或名称检索"
-                  style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} />
-              </Form.Item>
-              {!readonly && recommendedSystems.length > 0 && (
+              {visible('change_system') && (
+                <Form.Item name="change_system" label="变更系统" rules={required.rules('change_system', '变更系统', { action: '请选择' })} style={{ marginBottom: 4 }}>
+                  <SystemSelect single size="small" placeholder="输入系统编号或名称检索"
+                    style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} />
+                </Form.Item>
+              )}
+              {visible('change_system') && !readonly && recommendedSystems.length > 0 && (
                 <div style={{ marginBottom: 8, display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
                   <span style={{ fontSize: 11, color: 'var(--radar-text-secondary)' }}>快捷选择：</span>
                   {recommendedSystems.map((code) => (
@@ -420,27 +444,35 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
                 </div>
               )}
 
-              <Form.Item name="impl_org" label="实施机构" rules={required.rules('impl_org', '实施机构', { action: '请选择' })} style={{ marginBottom: 8 }}>
-                <DictSelect category="org" size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} />
-              </Form.Item>
+              {visible('impl_org') && (
+                <Form.Item name="impl_org" label="实施机构" rules={required.rules('impl_org', '实施机构', { action: '请选择' })} style={{ marginBottom: 8 }}>
+                  <DictSelect category="org" size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} />
+                </Form.Item>
+              )}
 
               <Row gutter={8}>
-                <Col span={12}>
-                  <Form.Item name="out_dept" label="变更负责部门（输出口径）" rules={required.rules('out_dept', '变更负责部门（输出口径）', { action: '请选择' })} style={{ marginBottom: 0 }}>
-                    <DictSelect category="org" size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} />
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item name="deploy_dept" label="变更负责部门（部署口径）" rules={required.rules('deploy_dept', '变更负责部门（部署口径）', { action: '请选择' })} style={{ marginBottom: 0 }}>
-                    <DictSelect category="org" size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} />
-                  </Form.Item>
-                </Col>
+                {visible('out_dept') && (
+                  <Col span={12}>
+                    <Form.Item name="out_dept" label="变更负责部门（输出口径）" rules={required.rules('out_dept', '变更负责部门（输出口径）', { action: '请选择' })} style={{ marginBottom: 0 }}>
+                      <DictSelect category="org" size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} />
+                    </Form.Item>
+                  </Col>
+                )}
+                {visible('deploy_dept') && (
+                  <Col span={12}>
+                    <Form.Item name="deploy_dept" label="变更负责部门（部署口径）" rules={required.rules('deploy_dept', '变更负责部门（部署口径）', { action: '请选择' })} style={{ marginBottom: 0 }}>
+                      <DictSelect category="org" size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} />
+                    </Form.Item>
+                  </Col>
+                )}
               </Row>
             </div>
+            )}
           </Col>
         </Row>
 
         {/* ── 交付制品（独立整宽模块，PC 端一组一行，可添加多组） ── */}
+        {hasDeliveryUnitVisible && (
         <div className="form-section-card">
           <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>
             交付制品
@@ -452,17 +484,23 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
                 {fields.map((field, idx) => (
                   <div key={field.key} style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap', paddingBottom: idx < fields.length - 1 ? 8 : 0, borderBottom: idx < fields.length - 1 ? '1px dashed var(--radar-border)' : 'none' }}>
                     <div style={{ width: 18, textAlign: 'center', fontSize: 11, fontWeight: 600, color: 'var(--radar-text-secondary)', paddingBottom: 6, flexShrink: 0 }}>{idx + 1}</div>
-                    <Form.Item name={[field.name, 'artifact_type']} label={idx === 0 ? '制品类型' : undefined} rules={required.rules('delivery_units.artifact_type', '制品类型', { action: '请选择' })} style={{ marginBottom: 0, flex: '1 1 130px', minWidth: 120 }}>
-                      <DictSelect category="artifact_type" size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} />
-                    </Form.Item>
-                    <Form.Item name={[field.name, 'delivery_unit']} label={idx === 0 ? '交付单元名称（介质库路径/文件名）' : undefined} rules={required.rules('delivery_units.delivery_unit', '交付单元名称')} style={{ marginBottom: 0, flex: '2 1 220px', minWidth: 180 }}>
-                      <Input size="small" placeholder="介质库路径 / 文件名" readOnly={readonly} />
-                    </Form.Item>
-                    <Form.Item name={[field.name, 'new_version']} label={idx === 0 ? '新版本号' : undefined} rules={required.rules('delivery_units.new_version', '新版本号')} style={{ marginBottom: 0, flex: '1 1 110px', minWidth: 100 }}>
-                      <Input size="small" placeholder="如 V1.2.0" readOnly={readonly} />
-                    </Form.Item>
+                    {visible('delivery_units.artifact_type') && (
+                      <Form.Item name={[field.name, 'artifact_type']} label={idx === 0 ? '制品类型' : undefined} rules={required.rules('delivery_units.artifact_type', '制品类型', { action: '请选择' })} style={{ marginBottom: 0, flex: '1 1 130px', minWidth: 120 }}>
+                        <DictSelect category="artifact_type" size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} />
+                      </Form.Item>
+                    )}
+                    {visible('delivery_units.delivery_unit') && (
+                      <Form.Item name={[field.name, 'delivery_unit']} label={idx === 0 ? '交付单元名称（介质库路径/文件名）' : undefined} rules={required.rules('delivery_units.delivery_unit', '交付单元名称')} style={{ marginBottom: 0, flex: '2 1 220px', minWidth: 180 }}>
+                        <Input size="small" placeholder="介质库路径 / 文件名" readOnly={readonly} />
+                      </Form.Item>
+                    )}
+                    {visible('delivery_units.new_version') && (
+                      <Form.Item name={[field.name, 'new_version']} label={idx === 0 ? '新版本号' : undefined} rules={required.rules('delivery_units.new_version', '新版本号')} style={{ marginBottom: 0, flex: '1 1 110px', minWidth: 100 }}>
+                        <Input size="small" placeholder="如 V1.2.0" readOnly={readonly} />
+                      </Form.Item>
+                    )}
                     {/* 摆渡状态：仅编辑时显示；新增由后端按字典默认值写入 */}
-                    {isEdit && (
+                    {isEdit && visible('delivery_units.ferry_status') && (
                       <Form.Item name={[field.name, 'ferry_status']} label={idx === 0 ? '摆渡状态' : undefined} rules={required.rules('delivery_units.ferry_status', '摆渡状态', { action: '请选择' })} style={{ marginBottom: 0, flex: '1 1 120px', minWidth: 110 }}>
                         <DictSelect category="ferry_status" size="small" allowClear={false} style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} />
                       </Form.Item>
@@ -482,6 +520,7 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
             )}
           </Form.List>
         </div>
+        )}
       </Form>
 
       <HistoryDrawer open={historyOpen} entityType="release_apply" entityId={current?.id} onClose={() => setHistoryOpen(false)} />

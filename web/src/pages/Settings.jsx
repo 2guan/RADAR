@@ -433,7 +433,7 @@ export default function Settings() {
         tabPosition={isMobile ? 'top' : 'left'}
         items={[
           { key: 'base', label: '基础配置', children: baseConfig },
-          { key: 'required', label: '必填项设置', children: <RequiredFieldMatrix /> },
+          { key: 'required', label: '检查内容设置', children: <RequiredFieldMatrix /> },
           { key: 'appearance', label: '外观主题', children: <AppearanceSettings /> },
           { key: 'param', label: '参数配置', children: paramConfig },
           { key: 'rp', label: '投产点设置', children: rpConfig },

@@ -60,7 +60,8 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
   const { can } = useAppStore();
   const { isMobile } = useResponsive();
   const readonly = !can(cfg.entity, 'edit');
-  const required = useRequiredFields(cfg.entity, getStatusType(statusValue), readonly);
+  const required = useRequiredFields(cfg.entity, getStatusType(statusValue), readonly, kind === 'test' ? current?.test_type : undefined);
+  const visible = (fieldKey) => required.isVisible(fieldKey);
   const linkStyle = { color: 'var(--radar-primary)', cursor: 'pointer' };
   const attachFields = cfg.attachFields;
   // 结构化分析弹窗（影响性分析 / 测试覆盖性分析）
@@ -199,11 +200,13 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
             <div className="form-section-card">
               <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>基本信息</div>
 
-              <Form.Item name="task_name" label="任务名称" rules={required.rules('task_name', '任务名称', { message: '请输入任务名称' })} style={{ marginBottom: 8 }}>
-                <Input placeholder="请输入任务名称" size="small" readOnly={readonly} />
-              </Form.Item>
+              {visible('task_name') && (
+                <Form.Item name="task_name" label="任务名称" rules={required.rules('task_name', '任务名称', { message: '请输入任务名称' })} style={{ marginBottom: 8 }}>
+                  <Input placeholder="请输入任务名称" size="small" readOnly={readonly} />
+                </Form.Item>
+              )}
 
-              {kind === 'dev' && (
+              {kind === 'dev' && visible('content') && (
                 <Form.Item name="content" label="开发内容概述" rules={required.rules('content', '开发内容概述')} style={{ marginBottom: 8 }}>
                   <Input.TextArea rows={2} placeholder="简要描述开发内容" style={{ fontSize: 12 }} readOnly={readonly} />
                 </Form.Item>
@@ -211,22 +214,28 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
 
               {/* 负责人/实施系统/实施方：手机端各占一行（充满），PC 端双栏不变；测试详情手机端隐藏「实施机构」 */}
               <Row gutter={8}>
-                <Col span={isMobile ? 24 : 12}>
-                  <Form.Item name="owner" label={cfg.ownerLabel} rules={required.rules('owner', cfg.ownerLabel, { action: '请选择' })} style={{ marginBottom: 8 }}>
-                    <PersonPicker style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} size="small" placeholder="选择负责人" />
-                  </Form.Item>
-                </Col>
-                <Col span={isMobile ? 24 : 12}>
-                  <Form.Item name="impl_system" label="实施系统" rules={required.rules('impl_system', '实施系统', { action: '请选择' })} style={{ marginBottom: 8 }}>
-                    <SystemSelect single size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择实施系统" />
-                  </Form.Item>
-                </Col>
-                <Col span={isMobile ? 24 : 12}>
-                  <Form.Item name="impl_org" label={cfg.orgLabel} rules={required.rules('impl_org', cfg.orgLabel, { action: '请选择' })} style={{ marginBottom: (kind === 'test' && !isMobile) ? 8 : 0 }}>
-                    <DictSelect category="org" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} size="small" />
-                  </Form.Item>
-                </Col>
-                {kind === 'test' && (
+                {visible('owner') && (
+                  <Col span={isMobile ? 24 : 12}>
+                    <Form.Item name="owner" label={cfg.ownerLabel} rules={required.rules('owner', cfg.ownerLabel, { action: '请选择' })} style={{ marginBottom: 8 }}>
+                      <PersonPicker style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} size="small" placeholder="选择负责人" />
+                    </Form.Item>
+                  </Col>
+                )}
+                {visible('impl_system') && (
+                  <Col span={isMobile ? 24 : 12}>
+                    <Form.Item name="impl_system" label="实施系统" rules={required.rules('impl_system', '实施系统', { action: '请选择' })} style={{ marginBottom: 8 }}>
+                      <SystemSelect single size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择实施系统" />
+                    </Form.Item>
+                  </Col>
+                )}
+                {visible('impl_org') && (
+                  <Col span={isMobile ? 24 : 12}>
+                    <Form.Item name="impl_org" label={cfg.orgLabel} rules={required.rules('impl_org', cfg.orgLabel, { action: '请选择' })} style={{ marginBottom: (kind === 'test' && !isMobile) ? 8 : 0 }}>
+                      <DictSelect category="org" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} size="small" />
+                    </Form.Item>
+                  </Col>
+                )}
+                {kind === 'test' && visible('impl_agency') && (
                   isMobile ? (
                     // 手机端隐藏「实施机构」，但保留字段以免保存时丢值
                     <Form.Item name="impl_agency" hidden><Input /></Form.Item>
@@ -241,21 +250,23 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
               </Row>
             </div>
 
-            <div className="form-section-card">
-              <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>排期<span style={{ fontWeight: 400, color: 'var(--radar-text-secondary)', marginLeft: 6, fontSize: 11 }}>（终态必填）</span></div>
-              <Row gutter={8}>
-                <Col span={12}><Form.Item name="plan_start" label="计划开始" rules={required.rules('plan_start', '计划开始', { action: '请选择' })} style={{ marginBottom: 8 }}><DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" /></Form.Item></Col>
-                <Col span={12}><Form.Item name="plan_end" label="计划结束" rules={required.rules('plan_end', '计划结束', { action: '请选择' })} style={{ marginBottom: 8 }}><DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" /></Form.Item></Col>
-                <Col span={12}><Form.Item name="actual_start" label="实际开始" rules={required.rules('actual_start', '实际开始', { action: '请选择' })} style={{ marginBottom: 0 }}><DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" /></Form.Item></Col>
-                <Col span={12}><Form.Item name="actual_end" label="实际结束" rules={required.rules('actual_end', '实际结束', { action: '请选择' })} style={{ marginBottom: 0 }}><DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" /></Form.Item></Col>
-              </Row>
-            </div>
+            {['plan_start', 'plan_end', 'actual_start', 'actual_end'].some(visible) && (
+              <div className="form-section-card">
+                <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>排期<span style={{ fontWeight: 400, color: 'var(--radar-text-secondary)', marginLeft: 6, fontSize: 11 }}>（终态必填）</span></div>
+                <Row gutter={8}>
+                  {visible('plan_start') && <Col span={12}><Form.Item name="plan_start" label="计划开始" rules={required.rules('plan_start', '计划开始', { action: '请选择' })} style={{ marginBottom: 8 }}><DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" /></Form.Item></Col>}
+                  {visible('plan_end') && <Col span={12}><Form.Item name="plan_end" label="计划结束" rules={required.rules('plan_end', '计划结束', { action: '请选择' })} style={{ marginBottom: 8 }}><DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" /></Form.Item></Col>}
+                  {visible('actual_start') && <Col span={12}><Form.Item name="actual_start" label="实际开始" rules={required.rules('actual_start', '实际开始', { action: '请选择' })} style={{ marginBottom: 0 }}><DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" /></Form.Item></Col>}
+                  {visible('actual_end') && <Col span={12}><Form.Item name="actual_end" label="实际结束" rules={required.rules('actual_end', '实际结束', { action: '请选择' })} style={{ marginBottom: 0 }}><DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" /></Form.Item></Col>}
+                </Row>
+              </div>
+            )}
           </Col>
 
           {/* ── 右栏：阶段附件 ── */}
           <Col xs={24} md={10}>
             {/* 影响性分析（开发阶段）/ 测试覆盖性分析（应用组装 SIT）——结构化表单 */}
-            {kind === 'dev' && (
+            {kind === 'dev' && visible('impact_analysis') && (
               <div className="form-section-card" style={{ marginBottom: 12 }}>
                 <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>影响性分析</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -268,7 +279,7 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
                 </div>
               </div>
             )}
-            {isSit && (
+            {isSit && visible('coverage_analysis') && (
               <div className="form-section-card" style={{ marginBottom: 12 }}>
                 <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>测试覆盖性分析</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -281,7 +292,7 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
                 </div>
               </div>
             )}
-            {attachFields.map((f) => {
+            {attachFields.filter((f) => visible(`attachment:${f}`)).map((f) => {
               const mode = required.attachmentMode(f);
               return (
                 <div className="form-section-card" key={f} style={{ marginBottom: 12 }}>
