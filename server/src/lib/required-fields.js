@@ -157,6 +157,9 @@ export const REQUIRED_FIELD_CONFIG_MODULES = REQUIRED_FIELD_MODULES.flatMap((mod
     baseKey: 'test',
     testType: type.key,
     label: type.label,
+    fields: type.key === 'SIT'
+      ? mod.fields
+      : mod.fields.filter((field) => field.key !== 'coverage_analysis'),
   }));
 });
 
@@ -245,7 +248,9 @@ function pickStateBooleans(input = {}, fallback = false) {
 }
 
 function normalizeConfigCell(cell = {}, defaultRequired = {}) {
-  const visible = cell.visible
+  const visible = typeof cell.visible === 'boolean'
+    ? { initial: cell.visible, inProgress: cell.visible, final: cell.visible }
+    : cell.visible
     ? pickStateBooleans(cell.visible, true)
     : allVisible();
   const required = cell.required

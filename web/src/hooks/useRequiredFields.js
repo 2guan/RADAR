@@ -39,6 +39,7 @@ function moduleConfigKey(moduleKey, scopeKey) {
 }
 
 function cellVisible(cell, stateKey) {
+  if (typeof cell?.visible === 'boolean') return cell.visible;
   return cell?.visible?.[stateKey] !== false;
 }
 
