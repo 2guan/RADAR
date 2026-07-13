@@ -128,10 +128,10 @@ async function runBgSyncDetail(codes) {
   }
 
   bgState.running = false;
-  // 本地时间格式：MM-DD HH:MM
+  // 本地时间格式：M-D H:MM
   const now = new Date();
   const pad = (n) => String(n).padStart(2, '0');
-  bgState.lastFinishTime = `${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  bgState.lastFinishTime = `${now.getMonth() + 1}-${now.getDate()} ${now.getHours()}:${pad(now.getMinutes())}`;
 }
 
 export default async function issueRoutes(fastify) {

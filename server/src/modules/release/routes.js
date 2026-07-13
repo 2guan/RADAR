@@ -237,7 +237,7 @@ async function releaseApplicantFor(code, releasePointId, entityType) {
     org: user?.org || null,
     release_apply_id: selected.id,
     change_code: selected.change_code,
-    register_time: selected.register_time,
+    register_time: selected.created_at || selected.register_time,
   } : null;
 }
 

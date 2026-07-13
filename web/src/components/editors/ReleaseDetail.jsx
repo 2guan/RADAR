@@ -27,11 +27,11 @@ import { makeReleasePointOptions, ReleasePointText } from '../ReleasePointText.j
 import { apiGet, apiPost, apiPut, apiDelete, rawClient } from '../../api/client.js';
 import { useAppStore } from '../../stores/app.js';
 
-/** 签署时间缩略：YYYY-MM-DD HH:MM:SS -> MM.DD HH:MM */
+/** 签署时间缩略：YYYY-MM-DD HH:MM:SS -> M-D H:MM */
 function fmtSignTime(s) {
   if (!s) return '—';
-  const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/.exec(String(s));
-  return m ? `${m[2]}.${m[3]} ${m[4]}:${m[5]}` : s;
+  const m = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{1,2}))?/.exec(String(s));
+  return m ? `${Number(m[2])}-${Number(m[3])} ${Number(m[4] || 0)}:${String(m[5] || '0').padStart(2, '0')}` : s;
 }
 
 // 各阶段状态推进顺序（用于取「最弱状态」聚合展示）
@@ -639,7 +639,7 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
                     <span style={{ width: 80 }}>申请人：</span><span>{detail.releaseApplicant?.display || '—'}</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--radar-text-secondary)' }}>
-                    <span style={{ width: 80 }}>发起时间：</span><span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace' }}>{detail.releaseApplicant?.register_time || '—'}</span>
+                    <span style={{ width: 80 }}>发起时间：</span><span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace' }}>{fmtSignTime(detail.releaseApplicant?.register_time)}</span>
                   </div>
                 </div>
               </div>
