@@ -123,15 +123,15 @@ async function classifyEntity(code) {
 /**
  * 惰性获取/创建投产任务：首次打开详情时自动创建投产任务与会签项（无 UAT 终态限制）。
  */
-async function ensureReleaseTask(code, entityType, releasePointId, operatorName) {
+async function ensureReleaseTask(code, entityType, releasePointId) {
   let rt = await releaseTaskByCodePoint(code, releasePointId);
   if (rt) return rt;
   return await tx(async () => {
     const releaseStatus = await defaultDictAttr('release_status', '待投产');
     const reviewStatus = await defaultDictAttr('review_status', '待评审');
     const res = await run(
-      `INSERT INTO release_task (req_code, release_point_id, entity_type, status, review_status, registrar, register_time) VALUES (?,?,?,?,?,?,?)`,
-      code, releasePointId, entityType || 'unknown', releaseStatus, reviewStatus, operatorName || null, new Date().toISOString().slice(0, 10),
+      `INSERT INTO release_task (req_code, release_point_id, entity_type, status, review_status) VALUES (?,?,?,?,?)`,
+      code, releasePointId, entityType || 'unknown', releaseStatus, reviewStatus,
     );
     const rtId = res.lastInsertRowid;
     for (const role of await signoffRoles()) {
@@ -167,6 +167,78 @@ async function entityArtifacts(code, releasePointId, sysMap) {
       units,
     };
   });
+}
+
+async function applicantPrioritySystems(code, entityType) {
+  const systems = [];
+  const item = await getWorkItem(code);
+  if (item?.main_systems?.length) systems.push(...item.main_systems);
+
+  if (entityType === 'issue') {
+    const issue = await get('SELECT system FROM issue WHERE issue_code = ?', code);
+    const issueSystem = String(issue?.system || '').trim();
+    if (issueSystem) {
+      systems.push(issueSystem);
+      const sys = await get('SELECT sys_code, sys_name FROM system WHERE sys_code = ? OR sys_name = ?', issueSystem, issueSystem);
+      if (sys?.sys_code) systems.push(sys.sys_code);
+      if (sys?.sys_name) systems.push(sys.sys_name);
+    }
+  }
+
+  return [...new Set(systems.filter(Boolean).map(String))];
+}
+
+function applicantDisplay(user, fallbackName) {
+  const name = user?.name || fallbackName;
+  if (!name) return null;
+  return `${user?.org || '—'}-${name}(${user?.phone || '—'})`;
+}
+
+async function releaseApplicantFor(code, releasePointId, entityType) {
+  const pointFilter = releasePointId === null
+    ? 'AND ra.release_point_id IS NULL'
+    : 'AND ra.release_point_id = ?';
+  const params = releasePointId === null ? [code] : [code, releasePointId];
+  const applies = await all(
+    `SELECT ra.* FROM release_apply ra
+       WHERE ${dialect.jsonArrayContains('ra.ref_codes')}
+       ${pointFilter}
+     ORDER BY ra.id DESC`,
+    ...params,
+  );
+  if (!applies.length) return null;
+
+  const prioritySystems = await applicantPrioritySystems(code, entityType);
+  const selected = [...applies].sort((a, b) => {
+    const ar = prioritySystems.indexOf(String(a.change_system || ''));
+    const br = prioritySystems.indexOf(String(b.change_system || ''));
+    const ah = ar >= 0;
+    const bh = br >= 0;
+    if (ah !== bh) return ah ? -1 : 1;
+    if (ah && ar !== br) return ar - br;
+    return Number(b.id || 0) - Number(a.id || 0);
+  })[0];
+
+  const registrar = String(selected.registrar || '').trim();
+  const user = registrar
+    ? await get(
+      `SELECT name, phone, org FROM user
+        WHERE name = ?
+        ORDER BY CASE WHEN status = '启用' THEN 0 ELSE 1 END, id
+        LIMIT 1`,
+      registrar,
+    )
+    : null;
+  const display = applicantDisplay(user, registrar);
+  return display ? {
+    display,
+    name: user?.name || registrar,
+    phone: user?.phone || null,
+    org: user?.org || null,
+    release_apply_id: selected.id,
+    change_code: selected.change_code,
+    register_time: selected.register_time,
+  } : null;
 }
 
 function isNewer(a, b) {
@@ -415,13 +487,14 @@ export default async function releaseRoutes(fastify) {
     const code = request.params.code;
     const releasePointId = await resolveReleasePointId(code, request.query?.releasePointId);
     const entityType = await classifyEntity(code);
-    const rt = await ensureReleaseTask(code, entityType, releasePointId, request.currentUser?.name);
+    const rt = await ensureReleaseTask(code, entityType, releasePointId);
     const signoffs = await signoffsWithRoleConfig(rt.id);
 
     const systems = await all('SELECT sys_code, sys_name FROM system');
     const sysMap = {};
     for (const s of systems) sysMap[s.sys_code] = s.sys_name;
     const artifacts = await entityArtifacts(code, releasePointId, sysMap);
+    const releaseApplicant = await releaseApplicantFor(code, releasePointId, entityType);
 
     const rps = await all('SELECT id, release_date FROM release_point');
     const rpMap = {};
@@ -466,7 +539,7 @@ export default async function releaseRoutes(fastify) {
       };
     }
 
-    return ok({ entityType, entity, releaseTask: rt, signoffs, artifacts, taskStatuses });
+    return ok({ entityType, entity, releaseTask: rt, releaseApplicant, signoffs, artifacts, taskStatuses });
   });
 
   // 更新投产任务负责人/投产状态/评审状态
@@ -553,7 +626,7 @@ export default async function releaseRoutes(fastify) {
     const code = request.params.code;
     const releasePointId = await resolveReleasePointId(code, request.query?.releasePointId);
     const entityType = await classifyEntity(code);
-    const rt = await ensureReleaseTask(code, entityType, releasePointId, request.currentUser?.name);
+    const rt = await ensureReleaseTask(code, entityType, releasePointId);
     const signoffs = await signoffsWithRoleConfig(rt.id);
 
     const systems = await all('SELECT sys_code, sys_name FROM system');

@@ -319,42 +319,44 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
           <strong style={{ fontSize: 12, color: 'var(--radar-ink)' }}>{so.role_name}</strong>
           <StatusBadge status={so.result} />
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
-          {/* 左：签署信息 */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 11, color: 'var(--radar-text-secondary)', flex: 1, minWidth: 0 }}>
-            <div><span style={{ display: 'inline-block', width: 55 }}>签署人：</span><span style={{ color: 'var(--radar-ink)' }}>{so.signer_name || '—'}</span></div>
-            <div><span style={{ display: 'inline-block', width: 55 }}>签署时间：</span><span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace' }}>{fmtSignTime(so.sign_time)}</span></div>
-            <div style={{ display: 'flex', alignItems: 'flex-start' }}>
-              <span style={{ display: 'inline-block', width: 55, flexShrink: 0 }}>签署意见：</span>
-              <span
-                title={so.conclusion || ''}
-                style={{
-                  color: 'var(--radar-ink)',
-                  display: '-webkit-box',
-                  flex: 1,
-                  minWidth: 0,
-                  WebkitLineClamp: 3,
-                  WebkitBoxOrient: 'vertical',
-                  overflow: 'hidden',
-                  whiteSpace: 'normal',
-                  wordBreak: 'break-word',
-                  lineHeight: '16px',
-                  maxHeight: 48,
-                }}
-              >
-                {so.conclusion || '—'}
-              </span>
+        {!notApplicable && (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
+            {/* 左：签署信息 */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 11, color: 'var(--radar-text-secondary)', flex: 1, minWidth: 0 }}>
+              <div><span style={{ display: 'inline-block', width: 55 }}>签署人：</span><span style={{ color: 'var(--radar-ink)' }}>{so.signer_name || '—'}</span></div>
+              <div><span style={{ display: 'inline-block', width: 55 }}>签署时间：</span><span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace' }}>{fmtSignTime(so.sign_time)}</span></div>
+              <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+                <span style={{ display: 'inline-block', width: 55, flexShrink: 0 }}>签署意见：</span>
+                <span
+                  title={so.conclusion || ''}
+                  style={{
+                    color: 'var(--radar-ink)',
+                    display: '-webkit-box',
+                    flex: 1,
+                    minWidth: 0,
+                    WebkitLineClamp: 3,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                    whiteSpace: 'normal',
+                    wordBreak: 'break-word',
+                    lineHeight: '16px',
+                    maxHeight: 48,
+                  }}
+                >
+                  {so.conclusion || '—'}
+                </span>
+              </div>
+            </div>
+            {/* 右：评审人签名（夜间模式反色，使深色笔迹可见） */}
+            <div style={{ width: 84, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+              {so.signature_image ? (
+                <img src={so.signature_image} alt="签名" style={{ maxWidth: '100%', maxHeight: 32, objectFit: 'contain', filter: isDark ? 'invert(1)' : 'none' }} />
+              ) : (
+                <span style={{ fontSize: 10, color: '#bbb' }}>未签名</span>
+              )}
             </div>
           </div>
-          {/* 右：评审人签名（夜间模式反色，使深色笔迹可见） */}
-          <div style={{ width: 84, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-            {so.signature_image ? (
-              <img src={so.signature_image} alt="签名" style={{ maxWidth: '100%', maxHeight: 32, objectFit: 'contain', filter: isDark ? 'invert(1)' : 'none' }} />
-            ) : (
-              <span style={{ fontSize: 10, color: '#bbb' }}>未签名</span>
-            )}
-          </div>
-        </div>
+        )}
       </Card>
     );
   };
@@ -634,10 +636,10 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
                     <PersonPicker style={{ flex: 1, ...(!editable ? { pointerEvents: 'none' } : {}) }} placeholder="选择投产负责人" size="small" value={owner} onChange={handleOwnerChange} />
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--radar-text-secondary)' }}>
-                    <span style={{ width: 80 }}>发起人：</span><span>{detail.releaseTask?.registrar || '—'}</span>
+                    <span style={{ width: 80 }}>申请人：</span><span>{detail.releaseApplicant?.display || '—'}</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--radar-text-secondary)' }}>
-                    <span style={{ width: 80 }}>发起时间：</span><span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace' }}>{detail.releaseTask?.register_time || '—'}</span>
+                    <span style={{ width: 80 }}>发起时间：</span><span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace' }}>{detail.releaseApplicant?.register_time || '—'}</span>
                   </div>
                 </div>
               </div>
