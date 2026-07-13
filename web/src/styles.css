@@ -1012,6 +1012,10 @@ body {
   top: 0 !important;
   right: 0 !important;
 }
+.detail-page-title .ant-btn[aria-label="导出 Word"] {
+  top: 0 !important;
+  right: 40px !important;
+}
 .detail-page-actions { flex-shrink: 0; display: flex; align-items: center; gap: 8px; }
 .detail-page-content {
   background: var(--radar-surface);
