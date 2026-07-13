@@ -18,6 +18,7 @@ import { runSeed } from './seed.js';
 import { hashPassword } from '../lib/password.js';
 import { parseJsonArray } from '../lib/json.js';
 import { calcDeviation } from '../lib/deviation.js';
+import { logger } from '../lib/logger.js';
 import {
   genRequirementCode, genDevCode, genTestCode, genReleaseApplyCode, genTicketCode,
 } from '../lib/code-gen.js';
@@ -712,8 +713,8 @@ export async function runMock() {
       评审状态分布: (await all("SELECT review_status, COUNT(*) c FROM release_task GROUP BY review_status"))
         .map((r) => `${r.review_status}:${r.c}`).join('、'),
     };
-    console.log('[模拟数据] 生成完成：');
-    for (const [k, v] of Object.entries(stat)) console.log(`  ${k}：${v}`);
+    logger.info('[模拟数据] 生成完成：');
+    for (const [k, v] of Object.entries(stat)) logger.info(`  ${k}：${v}`);
   });
 }
 
@@ -721,5 +722,5 @@ export async function runMock() {
 if (import.meta.url === `file://${process.argv[1]}`) {
   await runMock();
   db.exec?.('PRAGMA wal_checkpoint(TRUNCATE);');
-  console.log('[模拟数据] 已写入数据库并完成检查点。');
+  logger.info('[模拟数据] 已写入数据库并完成检查点。');
 }

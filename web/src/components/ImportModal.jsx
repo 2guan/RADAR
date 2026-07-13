@@ -10,6 +10,7 @@ import React, { useState } from 'react';
 import { Modal, Radio, Upload, Button, Alert, Tabs, Space, Table, Tag } from 'antd';
 import { InboxOutlined, DownloadOutlined, ReloadOutlined } from '@ant-design/icons';
 import { importXlsx, downloadGet } from '../utils/io.js';
+import { logger } from '../utils/logger.js';
 
 const { Dragger } = Upload;
 
@@ -32,7 +33,7 @@ export default function ImportModal({
     try {
       await downloadGet(templateUrl, extraFields, templateFilename);
     } catch (err) {
-      console.error(err);
+      logger.error(err);
     }
   };
 
@@ -45,7 +46,7 @@ export default function ImportModal({
       setResult(data);
     } catch (err) {
       // 错误一般已经在 Axios 拦截器里处理或报错
-      console.error(err);
+      logger.error(err);
     } finally {
       setUploading(false);
     }

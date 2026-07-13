@@ -46,7 +46,8 @@ import dashboardRoutes from './modules/dashboard/routes.js';
  */
 export async function buildApp() {
   const app = Fastify({
-    logger: { level: config.isProd ? 'info' : 'warn' },
+    logger: { level: config.logging.level },
+    disableRequestLogging: !config.logging.requestLogging,
     bodyLimit: config.upload.maxFileSize + 1024 * 1024,
   });
 

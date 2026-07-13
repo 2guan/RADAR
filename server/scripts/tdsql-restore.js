@@ -18,6 +18,7 @@ import { createGunzip } from 'node:zlib';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import { loadEnvFile } from '../src/lib/env.js';
+import { logger } from '../src/lib/logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
@@ -123,13 +124,13 @@ async function main() {
 
   if (!fs.existsSync(input)) throw new Error(`输入文件不存在：${input}`);
 
-  console.log(`[装数] 目标 TDSQL：${config.host}:${config.port}/${config.database}`);
-  console.log(`[装数] 输入文件：${input}`);
+  logger.info(`[装数] 目标 TDSQL：${config.host}:${config.port}/${config.database}`);
+  logger.info(`[装数] 输入文件：${input}`);
 
   if (args.dropDatabase) {
     // 高风险的删库恢复必须显式加 --force，防止误操作覆盖生产库。
     if (!args.force) throw new Error('执行 --drop-database 必须同时加 --force');
-    console.log('[装数] 正在删除并重建目标库');
+    logger.warn('[装数] 正在删除并重建目标库');
     await runMysql(
       mysqlBin,
       [...mysqlBaseArgs(config), '-e', `DROP DATABASE IF EXISTS \`${config.database.replace(/`/g, '``')}\`; CREATE DATABASE \`${config.database.replace(/`/g, '``')}\` DEFAULT CHARACTER SET utf8mb4;`],
@@ -155,10 +156,10 @@ async function main() {
     : pipeline(inputStream, child.stdin);
 
   await Promise.all([waitForExit(child), pipePromise]);
-  console.log('[装数] 完成');
+  logger.info('[装数] 完成');
 }
 
 main().catch((err) => {
-  console.error('[装数] 失败：', err.message);
+  logger.error('[装数] 失败：', err.message);
   process.exit(1);
 });

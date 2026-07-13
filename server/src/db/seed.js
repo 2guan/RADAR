@@ -11,6 +11,7 @@ import { hashPassword } from '../lib/password.js';
 import { config } from '../config.js';
 import { DEFAULT_REQUIRED_FIELD_CONFIG, REQUIRED_FIELDS_CONFIG_KEY } from '../lib/required-fields.js';
 import { parseJsonObject } from '../lib/json.js';
+import { logger } from '../lib/logger.js';
 
 // 角色定义（角色标识、名称、是否内置、是否会签角色）
 // 会签角色（signoff:1）：安全/架构/机构/项目/测试/配置负责人——投产评审会签由这 6 个角色完成。
@@ -404,5 +405,5 @@ export async function runSeed() {
     }
   });
 
-  console.log('[初始化] 种子数据已就绪');
+  logger.info('[初始化] 种子数据已就绪');
 }

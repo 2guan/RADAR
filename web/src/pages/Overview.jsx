@@ -28,6 +28,7 @@ import { exportXlsx } from '../utils/io.js';
 import Can from '../components/Can.jsx';
 import { makeReleasePointOptions, ReleasePointText } from '../components/ReleasePointText.jsx';
 import { formatBeijingDateTime } from '../utils/time.js';
+import { logger } from '../utils/logger.js';
 
 const TEST_ATTACH = ['测试方案', '测试报告'];
 const SIT_ATTACH = ['测试方案', '测试覆盖设计文档', '测试报告'];
@@ -96,7 +97,7 @@ function AttachList({ attachments, fields }) {
       link.click();
       URL.revokeObjectURL(url);
     } catch (e) {
-      console.error('Download failed', e);
+      logger.error('Download failed', e);
     }
   };
 

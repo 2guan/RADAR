@@ -52,6 +52,7 @@ const STATIC_MAP = {
   // 未开始
   '未发起': 'not-started',
   '未签署': 'not-started',
+  '不涉及': 'not-started',
   '未就绪': 'not-started',
   '未开始': 'not-started',
 };

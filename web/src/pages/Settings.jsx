@@ -329,9 +329,11 @@ function RoleManager() {
           width: 100, 
           render: (v) => (v ? <Tag className="status-tag tag-system" style={{ margin: 0 }}>会签</Tag> : '—') 
         },
+        { title: '会签检查内容', dataIndex: 'signoff_check_content', width: 180, ellipsis: true, render: (v) => v || '—' },
         { title: '内置', dataIndex: 'is_builtin', width: 80, render: (v) => (v ? <Tag>内置</Tag> : '—') },
       ]}
       transformIn={(row) => ({ ...row, is_signoff_role: !!row.is_signoff_role })}
+      transformOut={(v) => ({ ...v, signoff_check_content: v.is_signoff_role ? v.signoff_check_content : null })}
       fields={(form, current) => (
         <>
           <Form.Item name="name" label="角色名称" rules={[{ required: true }]}><Input /></Form.Item>
@@ -344,6 +346,13 @@ function RoleManager() {
           </Form.Item>
           <Form.Item name="is_signoff_role" label="会签角色" valuePropName="checked" extra="打标后该角色将出现在投产管理的评审会签中，且仅该角色人员可签署/驳回">
             <Switch checkedChildren="是" unCheckedChildren="否" />
+          </Form.Item>
+          <Form.Item noStyle shouldUpdate={(prev, next) => prev.is_signoff_role !== next.is_signoff_role}>
+            {({ getFieldValue }) => getFieldValue('is_signoff_role') ? (
+              <Form.Item name="signoff_check_content" label="会签检查内容" extra="填写该角色在投产审批会签时需要关注的检查要点">
+                <Input.TextArea placeholder="请输入会签时的检查要点" autoSize={{ minRows: 3, maxRows: 6 }} />
+              </Form.Item>
+            ) : null}
           </Form.Item>
         </>
       )}
@@ -421,9 +430,9 @@ export default function Settings() {
 
   const personConfig = (
     <Tabs items={[
-      { key: 'org', label: '组织机构', children: <DictManager category="org" title="组织机构" /> },
       { key: 'role', label: '角色配置', children: <RoleManager /> },
       { key: 'perm', label: '权限矩阵', children: <PermissionMatrix /> },
+      { key: 'org', label: '组织机构', children: <DictManager category="org" title="组织机构" /> },
     ]} />
   );
 

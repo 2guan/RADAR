@@ -24,13 +24,39 @@ async function signoffRoles() {
   return await all('SELECT id, name FROM role WHERE is_signoff_role = 1 ORDER BY id');
 }
 
+async function signoffsWithRoleConfig(releaseTaskId) {
+  return (await all(
+    `SELECT rs.*, r.signoff_check_content AS signoff_check_content
+       FROM release_signoff rs
+       LEFT JOIN role r ON r.id = rs.role_id
+      WHERE rs.release_task_id = ?
+      ORDER BY rs.id`,
+    releaseTaskId,
+  )).map((s) => ({ ...s, signature_image: signatureDataUrl(s.signature_path) }));
+}
+
 /** 汇总某投产任务的会签进度 */
 async function signoffSummary(releaseTaskId) {
   const rows = await all('SELECT result FROM release_signoff WHERE release_task_id = ?', releaseTaskId);
-  const total = rows.length;
-  const signed = rows.filter((r) => r.result === '已签署').length;
+  const activeRows = rows.filter((r) => r.result !== '不涉及');
+  const total = activeRows.length;
+  const signed = activeRows.filter((r) => r.result === '已签署').length;
   const rejected = rows.filter((r) => r.result === '已驳回').length;
   return { total, signed, rejected };
+}
+
+async function isAdminUser(user) {
+  if (user?.is_super) return true;
+  if (!user?.id) return false;
+  return !!await get(
+    `SELECT 1
+       FROM user_role ur
+       JOIN role r ON r.id = ur.role_id
+      WHERE ur.user_id = ?
+        AND (r.code IN ('管理员', '超级管理员') OR r.name IN ('管理员', '超级管理员'))
+      LIMIT 1`,
+    user.id,
+  );
 }
 
 function pointWhere(alias = 'release_task') {
@@ -390,8 +416,7 @@ export default async function releaseRoutes(fastify) {
     const releasePointId = await resolveReleasePointId(code, request.query?.releasePointId);
     const entityType = await classifyEntity(code);
     const rt = await ensureReleaseTask(code, entityType, releasePointId, request.currentUser?.name);
-    const signoffs = (await all('SELECT * FROM release_signoff WHERE release_task_id = ? ORDER BY id', rt.id))
-      .map((s) => ({ ...s, signature_image: signatureDataUrl(s.signature_path) }));
+    const signoffs = await signoffsWithRoleConfig(rt.id);
 
     const systems = await all('SELECT sys_code, sys_name FROM system');
     const sysMap = {};
@@ -486,25 +511,28 @@ export default async function releaseRoutes(fastify) {
     const so = await get('SELECT * FROM release_signoff WHERE id = ?', id);
     if (!so) throw notFound('会签项不存在');
     const { result, conclusion, signatureId } = request.body || {};
-    if (!['已签署', '已驳回', '未签署'].includes(result)) throw badRequest('签署状态非法');
-    if (!request.currentUser.is_super && so.role_id) {
+    if (!['已签署', '已驳回', '未签署', '不涉及'].includes(result)) throw badRequest('签署状态非法');
+    const adminUser = await isAdminUser(request.currentUser);
+    if (result === '不涉及' && !adminUser) throw forbidden('仅管理员可将会签项设置为不涉及');
+    if (so.result === '不涉及' && result !== '不涉及' && !adminUser) throw forbidden('仅管理员可调整不涉及的会签项');
+    if (result !== '不涉及' && !request.currentUser.is_super && so.role_id) {
       const hasRole = await get('SELECT 1 FROM user_role WHERE user_id = ? AND role_id = ?', request.currentUser.id, so.role_id);
       if (!hasRole) throw forbidden(`仅【${so.role_name}】角色可签署该项`);
     }
     // 签名：传入 signatureId 时校验归属当前用户并记录其路径；未传则沿用原签名
-    let signaturePath = so.signature_path || null;
-    if (signatureId) {
+    let signaturePath = result === '不涉及' ? null : (so.signature_path || null);
+    if (result !== '不涉及' && signatureId) {
       const sig = await get('SELECT * FROM user_signature WHERE id = ?', signatureId);
       if (!sig || sig.user_id !== request.currentUser.id) throw badRequest('签名无效');
       signaturePath = sig.stored_path;
     }
     await run(
       `UPDATE release_signoff SET result=?, conclusion=?, signature_path=?, signer_user_id=?, signer_name=?, sign_time=datetime('now','localtime'), updated_at=datetime('now','localtime') WHERE id=?`,
-      result, conclusion || null, signaturePath, request.currentUser?.id, request.currentUser?.name, id,
+      result, conclusion || (result === '不涉及' ? '不涉及' : null), signaturePath, request.currentUser?.id, request.currentUser?.name, id,
     );
     await auditUpdate('release', so.release_task_id, so.role_name, request.currentUser?.name,
       { result: so.result, conclusion: so.conclusion },
-      { result, conclusion: conclusion || null },
+      { result, conclusion: conclusion || (result === '不涉及' ? '不涉及' : null) },
       {
         result: `会签-${so.role_name}-签署状态`,
         conclusion: `会签-${so.role_name}-签署意见`,
@@ -526,8 +554,7 @@ export default async function releaseRoutes(fastify) {
     const releasePointId = await resolveReleasePointId(code, request.query?.releasePointId);
     const entityType = await classifyEntity(code);
     const rt = await ensureReleaseTask(code, entityType, releasePointId, request.currentUser?.name);
-    const signoffs = (await all('SELECT * FROM release_signoff WHERE release_task_id = ? ORDER BY id', rt.id))
-      .map((s) => ({ ...s, signature_image: signatureDataUrl(s.signature_path) }));
+    const signoffs = await signoffsWithRoleConfig(rt.id);
 
     const systems = await all('SELECT sys_code, sys_name FROM system');
     const sysMap = {};

@@ -19,6 +19,7 @@ import { createGzip } from 'node:zlib';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import { loadEnvFile } from '../src/lib/env.js';
+import { logger } from '../src/lib/logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
@@ -125,9 +126,9 @@ async function main() {
   if (!args.noGtidPurged) dumpArgs.push('--set-gtid-purged=OFF');
   dumpArgs.push(config.database);
 
-  console.log(`[卸数] 源 TDSQL：${config.host}:${config.port}/${config.database}`);
-  console.log(`[卸数] 输出文件：${output}`);
-  console.log(`[卸数] 压缩：${gzip ? '是' : '否'}`);
+  logger.info(`[卸数] 源 TDSQL：${config.host}:${config.port}/${config.database}`);
+  logger.info(`[卸数] 输出文件：${output}`);
+  logger.info(`[卸数] 压缩：${gzip ? '是' : '否'}`);
 
   const child = spawn(mysqldumpBin, dumpArgs, {
     env: { ...process.env, MYSQL_PWD: config.password },
@@ -141,10 +142,10 @@ async function main() {
 
   await Promise.all([waitForExit(child), pipePromise]);
   const stat = fs.statSync(output);
-  console.log(`[卸数] 完成：${output} (${stat.size} bytes)`);
+  logger.info(`[卸数] 完成：${output} (${stat.size} bytes)`);
 }
 
 main().catch((err) => {
-  console.error('[卸数] 失败：', err.message);
+  logger.error('[卸数] 失败：', err.message);
   process.exit(1);
 });

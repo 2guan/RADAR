@@ -75,7 +75,7 @@ export default async function roleRoutes(fastify) {
 
     return ok(await listQuery({
       table: 'role',
-      columns: ['id', 'name', 'code', 'default_home', 'is_builtin', 'is_signoff_role', 'default_theme', 'created_at'],
+      columns: ['id', 'name', 'code', 'default_home', 'is_builtin', 'is_signoff_role', 'signoff_check_content', 'default_theme', 'created_at'],
       searchColumns: ['name', 'code'],
       query: newBody,
       baseWhere,
@@ -85,18 +85,18 @@ export default async function roleRoutes(fastify) {
 
   // 全部角色（供人员表单多选与会签角色读取）
   fastify.get('/roles/all', { preHandler: fastify.authenticate }, async () => {
-    return ok(await all('SELECT id, name, code, default_home, is_signoff_role, default_theme FROM role ORDER BY id'));
+    return ok(await all('SELECT id, name, code, default_home, is_signoff_role, signoff_check_content, default_theme FROM role ORDER BY id'));
   });
 
   // 新增角色
   fastify.post('/roles', { preHandler: fastify.requirePerm('settings', 'create') }, async (request) => {
-    const { name, code, default_home, is_signoff_role, default_theme } = request.body || {};
+    const { name, code, default_home, is_signoff_role, signoff_check_content, default_theme } = request.body || {};
     if (!name || !code) throw badRequest('角色名称与标识必填');
     if (await get('SELECT id FROM role WHERE code = ?', code)) throw badRequest('角色标识已存在');
     const sign = is_signoff_role ? 1 : 0;
     const res = await run(
-      'INSERT INTO role (name, code, default_home, is_builtin, is_signoff_role, default_theme) VALUES (?,?,?,0,?,?)',
-      name, code, default_home || '/dashboard', sign, default_theme || 'sky',
+      'INSERT INTO role (name, code, default_home, is_builtin, is_signoff_role, signoff_check_content, default_theme) VALUES (?,?,?,0,?,?,?)',
+      name, code, default_home || '/dashboard', sign, sign ? (signoff_check_content || null) : null, default_theme || 'sky',
     );
     const roleId = res.lastInsertRowid;
     if (sign === 1) {
@@ -110,12 +110,12 @@ export default async function roleRoutes(fastify) {
     const id = request.params.id;
     const old = await get('SELECT * FROM role WHERE id = ?', id);
     if (!old) throw notFound();
-    const { name, default_home, is_signoff_role, default_theme } = request.body || {};
+    const { name, default_home, is_signoff_role, signoff_check_content, default_theme } = request.body || {};
     const newSign = is_signoff_role === undefined ? old.is_signoff_role : (is_signoff_role ? 1 : 0);
     const newName = name ?? old.name;
     await run(
-      `UPDATE role SET name=?, default_home=?, is_signoff_role=?, default_theme=?, updated_at=datetime('now','localtime') WHERE id=?`,
-      newName, default_home ?? old.default_home, newSign, default_theme ?? old.default_theme, id,
+      `UPDATE role SET name=?, default_home=?, is_signoff_role=?, signoff_check_content=?, default_theme=?, updated_at=datetime('now','localtime') WHERE id=?`,
+      newName, default_home ?? old.default_home, newSign, newSign ? (signoff_check_content || null) : null, default_theme ?? old.default_theme, id,
     );
     await syncModifySignoffRole(id, newName, newSign, old.is_signoff_role, old.name);
     return ok({ id });
@@ -175,26 +175,28 @@ export default async function roleRoutes(fastify) {
     columns: [
       { key: 'name', title: '角色名称' }, { key: 'code', title: '角色标识' },
       { key: 'default_home', title: '默认首页' }, { key: 'is_signoff_role', title: '会签角色' },
+      { key: 'signoff_check_content', title: '会签检查内容' },
       { key: 'default_theme', title: '默认主题' },
     ],
     list: async (q) => (await listQuery({
-      table: 'role', columns: ['id', 'name', 'code', 'default_home', 'is_signoff_role', 'default_theme'],
+      table: 'role', columns: ['id', 'name', 'code', 'default_home', 'is_signoff_role', 'signoff_check_content', 'default_theme'],
       searchColumns: ['name', 'code'], query: q,
     })).list.map((r) => ({ ...r, is_signoff_role: r.is_signoff_role ? '是' : '' })),
     upsert: async (r, mode) => {
       if (!r.name || !r.code) return 'skipped';
       const sign = truthy(r.is_signoff_role) ? 1 : 0;
       const exists = await get('SELECT id, name, is_signoff_role FROM role WHERE code = ?', r.code);
+      const checkContent = sign ? (r.signoff_check_content || null) : null;
       if (exists) {
         if (mode === 'skip') return 'skipped';
         if (mode === 'rollback') throw badRequest(`角色标识重复：${r.code}，已回滚`);
-        await run('UPDATE role SET name=?, default_home=?, is_signoff_role=?, default_theme=?, updated_at=datetime(\'now\',\'localtime\') WHERE id=?',
-          r.name, r.default_home || '/dashboard', sign, r.default_theme || 'sky', exists.id);
+        await run('UPDATE role SET name=?, default_home=?, is_signoff_role=?, signoff_check_content=?, default_theme=?, updated_at=datetime(\'now\',\'localtime\') WHERE id=?',
+          r.name, r.default_home || '/dashboard', sign, checkContent, r.default_theme || 'sky', exists.id);
         await syncModifySignoffRole(exists.id, r.name, sign, exists.is_signoff_role, exists.name);
         return 'updated';
       }
-      const res = await run('INSERT INTO role (name, code, default_home, is_builtin, is_signoff_role, default_theme) VALUES (?,?,?,0,?,?)',
-        r.name, r.code, r.default_home || '/dashboard', sign, r.default_theme || 'sky');
+      const res = await run('INSERT INTO role (name, code, default_home, is_builtin, is_signoff_role, signoff_check_content, default_theme) VALUES (?,?,?,0,?,?,?)',
+        r.name, r.code, r.default_home || '/dashboard', sign, checkContent, r.default_theme || 'sky');
       if (sign === 1) {
         await syncModifySignoffRole(res.lastInsertRowid, r.name, 1, 0, r.name);
       }

@@ -25,6 +25,7 @@ import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import mysql from 'mysql2/promise';
 import { loadEnvFile } from '../src/lib/env.js';
+import { logger } from '../src/lib/logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER_ROOT = path.resolve(__dirname, '..');
@@ -229,7 +230,7 @@ async function ensureTdsqlSchema(conn, { dryRun = false } = {}) {
   const existingTables = await mysqlTables(conn);
   if (dryRun) {
     if (!hasBusinessTables(existingTables)) {
-      console.log('[迁移] dry-run：目标 TDSQL 为空库，实际执行时将先初始化表结构');
+      logger.info('[迁移] dry-run：目标 TDSQL 为空库，实际执行时将先初始化表结构');
     }
     return;
   }
@@ -253,7 +254,7 @@ async function ensureTdsqlSchema(conn, { dryRun = false } = {}) {
     const tables = await mysqlTables(conn);
     if (hasBusinessTables(tables)) {
       // 目标库已有业务表但缺少迁移记录时，补记迁移，避免后续服务启动重复执行初始化 DDL。
-      console.log(`[迁移] TDSQL 目标库已存在业务表，补记结构迁移：${file}`);
+      logger.info(`[迁移] TDSQL 目标库已存在业务表，补记结构迁移：${file}`);
       if (!dryRun) await conn.execute('INSERT INTO _migrations (name) VALUES (?)', [file]);
       continue;
     }
@@ -261,7 +262,7 @@ async function ensureTdsqlSchema(conn, { dryRun = false } = {}) {
     const sql = fs.readFileSync(path.join(TDSQL_MIGRATIONS_DIR, file), 'utf8');
     await conn.query(sql);
     await conn.execute('INSERT INTO _migrations (name) VALUES (?)', [file]);
-    console.log(`[迁移] TDSQL 已初始化结构：${file}`);
+    logger.info(`[迁移] TDSQL 已初始化结构：${file}`);
   }
 }
 
@@ -309,7 +310,7 @@ function ensureSqliteSchema(db) {
       db.exec(sql);
       db.prepare('INSERT INTO _migrations (name) VALUES (?)').run(file);
       db.exec('COMMIT');
-      console.log(`[迁移] SQLite 已应用结构迁移：${file}`);
+      logger.info(`[迁移] SQLite 已应用结构迁移：${file}`);
     } catch (err) {
       db.exec('ROLLBACK');
       throw err;
@@ -442,11 +443,11 @@ async function migrateSqliteToTdsql(args, sqlitePath, config) {
     throw new Error('没有找到可迁移的业务表：请确认 SQLite 源库路径正确，或目标 TDSQL 已初始化表结构');
   }
 
-  console.log(`[迁移] 方向：SQLite -> TDSQL`);
-  console.log(`[迁移] SQLite 源：${sqlitePath}`);
-  console.log(`[迁移] TDSQL 目标：${config.host}:${config.port}/${config.database}`);
-  console.log(`[迁移] 目标库自动初始化：${initTarget ? '开启' : '关闭'}`);
-  if (args.dryRun) console.log('[迁移] dry-run：仅统计，不写入目标库');
+  logger.info(`[迁移] 方向：SQLite -> TDSQL`);
+  logger.info(`[迁移] SQLite 源：${sqlitePath}`);
+  logger.info(`[迁移] TDSQL 目标：${config.host}:${config.port}/${config.database}`);
+  logger.info(`[迁移] 目标库自动初始化：${initTarget ? '开启' : '关闭'}`);
+  if (args.dryRun) logger.info('[迁移] dry-run：仅统计，不写入目标库');
 
   try {
     await conn.query('SET FOREIGN_KEY_CHECKS = 0');
@@ -458,7 +459,7 @@ async function migrateSqliteToTdsql(args, sqlitePath, config) {
 
     for (const table of tables) {
       const result = await migrateSqliteTableToTdsql({ sqlite, conn, table, dryRun: args.dryRun });
-      console.log(`[迁移] ${result.table}: ${result.rows} 行${result.dryRun ? '（dry-run）' : ''}`);
+      logger.info(`[迁移] ${result.table}: ${result.rows} 行${result.dryRun ? '（dry-run）' : ''}`);
     }
   } finally {
     await conn.query('SET FOREIGN_KEY_CHECKS = 1');
@@ -479,10 +480,10 @@ async function migrateTdsqlToSqlite(args, sqlitePath, config) {
   const targetTables = sqliteTables(sqlite);
   const tables = TABLE_ORDER.filter((table) => sourceTables.has(table) && targetTables.has(table));
 
-  console.log(`[迁移] 方向：TDSQL -> SQLite`);
-  console.log(`[迁移] TDSQL 源：${config.host}:${config.port}/${config.database}`);
-  console.log(`[迁移] SQLite 目标：${sqlitePath}`);
-  if (args.dryRun) console.log('[迁移] dry-run：仅统计，不写入目标库');
+  logger.info(`[迁移] 方向：TDSQL -> SQLite`);
+  logger.info(`[迁移] TDSQL 源：${config.host}:${config.port}/${config.database}`);
+  logger.info(`[迁移] SQLite 目标：${sqlitePath}`);
+  if (args.dryRun) logger.info('[迁移] dry-run：仅统计，不写入目标库');
 
   try {
     sqlite.exec('PRAGMA foreign_keys = OFF;');
@@ -497,7 +498,7 @@ async function migrateTdsqlToSqlite(args, sqlitePath, config) {
     try {
       for (const table of tables) {
         const result = await migrateTdsqlTableToSqlite({ conn, sqlite, table, dryRun: args.dryRun });
-        console.log(`[迁移] ${result.table}: ${result.rows} 行${result.dryRun ? '（dry-run）' : ''}`);
+        logger.info(`[迁移] ${result.table}: ${result.rows} 行${result.dryRun ? '（dry-run）' : ''}`);
       }
       if (!args.dryRun) sqlite.exec('COMMIT');
     } catch (err) {
@@ -525,11 +526,11 @@ async function migrateTdsqlToTdsql(args, sourceConfig, targetConfig) {
   const targetTables = await mysqlTables(targetConn);
   const tables = TABLE_ORDER.filter((table) => sourceTables.has(table) && targetTables.has(table));
 
-  console.log(`[迁移] 方向：TDSQL -> TDSQL`);
-  console.log(`[迁移] TDSQL 源：${tdsqlLabel(sourceConfig)}`);
-  console.log(`[迁移] TDSQL 目标：${tdsqlLabel(targetConfig)}`);
-  console.log(`[迁移] 目标库自动初始化：${initTarget ? '开启' : '关闭'}`);
-  if (args.dryRun) console.log('[迁移] dry-run：仅统计，不写入目标库');
+  logger.info(`[迁移] 方向：TDSQL -> TDSQL`);
+  logger.info(`[迁移] TDSQL 源：${tdsqlLabel(sourceConfig)}`);
+  logger.info(`[迁移] TDSQL 目标：${tdsqlLabel(targetConfig)}`);
+  logger.info(`[迁移] 目标库自动初始化：${initTarget ? '开启' : '关闭'}`);
+  if (args.dryRun) logger.info('[迁移] dry-run：仅统计，不写入目标库');
 
   try {
     await targetConn.query('SET FOREIGN_KEY_CHECKS = 0');
@@ -541,7 +542,7 @@ async function migrateTdsqlToTdsql(args, sourceConfig, targetConfig) {
 
     for (const table of tables) {
       const result = await migrateTdsqlTableToTdsql({ sourceConn, targetConn, table, dryRun: args.dryRun });
-      console.log(`[迁移] ${result.table}: ${result.rows} 行${result.dryRun ? '（dry-run）' : ''}`);
+      logger.info(`[迁移] ${result.table}: ${result.rows} 行${result.dryRun ? '（dry-run）' : ''}`);
     }
   } finally {
     await targetConn.query('SET FOREIGN_KEY_CHECKS = 1');
@@ -568,10 +569,10 @@ async function main() {
     await migrateTdsqlToTdsql(args, sourceConfig, targetConfig);
   }
 
-  console.log('[迁移] 完成。建议登录系统后抽查用户、需求/工单、附件、投产审批与仪表盘。');
+  logger.info('[迁移] 完成。建议登录系统后抽查用户、需求/工单、附件、投产审批与仪表盘。');
 }
 
 main().catch((err) => {
-  console.error('[迁移] 失败：', err.message);
+  logger.error('[迁移] 失败：', err.message);
   process.exit(1);
 });

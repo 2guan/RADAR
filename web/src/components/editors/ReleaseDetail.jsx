@@ -65,6 +65,7 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
   const entityCode = code ?? reqCode;
   const { user, can, theme } = useAppStore();
   const isDark = theme === 'dark';
+  const isAdminUser = !!user?.isSuper || (user?.roles || []).some((r) => ['管理员', '超级管理员'].includes(r.code) || ['管理员', '超级管理员'].includes(r.name));
   const [detail, setDetail] = useState(null);
   const [owner, setOwner] = useState(null);
   const [currentReleasePointId, setCurrentReleasePointId] = useState(releasePointId ?? null);
@@ -177,19 +178,23 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
     if (mode === 'page' || open) apiGet('/release-points/all').then(setPoints).catch(() => {});
   }, [open, mode]);
 
+  const canSignDecision = (so) => !!so && (user?.isSuper || (user?.roles || []).some((r) => r.name === so.role_name));
   const canSign = (so) => can('release', 'release.signoff')
-    && (user?.isSuper || (user?.roles || []).some((r) => r.name === so.role_name));
+    && (canSignDecision(so) || isAdminUser)
+    && (so?.result !== '不涉及' || isAdminUser);
 
   const isSignedSignoff = (so) => so?.result && so.result !== '未签署';
 
   const handleOpenSign = (so, readonly = false) => {
     setCurrentSignoff(so);
-    const result = so.result === '已驳回' ? '已驳回' : '已签署';
+    const adminOnly = isAdminUser && !canSignDecision(so);
+    const result = adminOnly ? '不涉及' : (so.result === '不涉及' ? '不涉及' : (so.result === '已驳回' ? '已驳回' : '已签署'));
     setSignResult(result);
-    setSignConclusion(readonly ? (so.conclusion || '') : (so.conclusion || (result === '已签署' ? '同意投产' : '不同意，[补充具体原因]')));
+    const defaultConclusion = result === '不涉及' ? '不涉及' : (result === '已签署' ? '同意投产' : '不同意，[补充具体原因]');
+    setSignConclusion(readonly ? (so.conclusion || '') : (so.conclusion || defaultConclusion));
     setSignReadonly(readonly);
     setSignOpen(true);
-    if (!readonly) loadSignatures();
+    if (!readonly && result !== '不涉及') loadSignatures();
   };
 
   const handleSignResultChange = (val) => {
@@ -198,6 +203,11 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
       setSignConclusion('同意投产');
     } else if (val === '已驳回' && (!signConclusion || signConclusion === '同意投产')) {
       setSignConclusion('不同意，[补充具体原因]');
+    } else if (val === '不涉及' && (!signConclusion || signConclusion === '同意投产' || signConclusion === '不同意，[补充具体原因]')) {
+      setSignConclusion('不涉及');
+    }
+    if (val !== '不涉及' && !signatures.length) {
+      loadSignatures();
     }
   };
 
@@ -240,11 +250,15 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
   /** 确认签署 */
   const confirmSign = async () => {
     if (!currentSignoff) return;
-    if (!selectedSigId) { message.warning('请选择或新建并保存一枚评审签名'); return; }
+    if (signResult !== '不涉及' && !selectedSigId) { message.warning('请选择或新建并保存一枚评审签名'); return; }
     setSigning(true);
     try {
-      await apiPost(`/release/signoff/${currentSignoff.id}`, { result: signResult, conclusion: signConclusion, signatureId: selectedSigId });
-      message.success('签署完成');
+      await apiPost(`/release/signoff/${currentSignoff.id}`, {
+        result: signResult,
+        conclusion: signConclusion,
+        signatureId: signResult === '不涉及' ? undefined : selectedSigId,
+      });
+      message.success(signResult === '不涉及' ? '已设置为不涉及' : '签署完成');
       setSignOpen(false);
       reload();
       onChanged?.();
@@ -286,9 +300,17 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
     const editableSign = canSign(so);
     const readonlySign = !editableSign && isSignedSignoff(so);
     const clickable = editableSign || readonlySign;
+    const notApplicable = so.result === '不涉及';
     return (
       <Card size="small" hoverable={clickable} styles={{ body: { padding: '6px 8px' } }}
-        style={{ cursor: clickable ? 'pointer' : 'default', borderColor: 'var(--radar-border)', height: '100%', boxShadow: 'none' }}
+        style={{
+          cursor: clickable ? 'pointer' : 'default',
+          borderColor: 'var(--radar-border)',
+          height: '100%',
+          boxShadow: 'none',
+          background: notApplicable ? 'var(--radar-bg)' : undefined,
+          opacity: notApplicable ? 0.62 : 1,
+        }}
         onClick={() => {
           if (editableSign) handleOpenSign(so);
           else if (readonlySign) handleOpenSign(so, true);
@@ -351,6 +373,14 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
         <span style={{ fontWeight: 600, width: 70 }}>签署时间：</span>
         <span style={{ color: 'var(--radar-ink)', fontFamily: 'SFMono-Regular, Consolas, monospace' }}>{fmtSignTime(so?.sign_time)}</span>
       </div>
+      {so?.signoff_check_content && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <span style={{ fontWeight: 600 }}>会签检查内容：</span>
+          <div style={{ padding: '6px 8px', border: '1px solid var(--radar-border)', borderRadius: 2, background: 'var(--radar-primary-soft)', color: 'var(--radar-ink)', lineHeight: '18px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+            {so.signoff_check_content}
+          </div>
+        </div>
+      )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         <span style={{ fontWeight: 600 }}>签署意见：</span>
         <div style={{ minHeight: 64, padding: '6px 8px', border: '1px solid var(--radar-border)', borderRadius: 2, background: 'var(--radar-bg)', color: 'var(--radar-ink)', lineHeight: '18px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
@@ -645,11 +675,20 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 12, fontWeight: 600, width: 70 }}>签署结论：</span>
             <Radio.Group value={signResult} onChange={(e) => handleSignResultChange(e.target.value)} size="small">
-              <Radio value="已签署">同意</Radio>
-              <Radio value="已驳回">拒绝</Radio>
+              {canSignDecision(currentSignoff) && <Radio value="已签署">同意</Radio>}
+              {canSignDecision(currentSignoff) && <Radio value="已驳回">拒绝</Radio>}
+              {isAdminUser && <Radio value="不涉及">不涉及</Radio>}
             </Radio.Group>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {currentSignoff?.signoff_check_content && (
+              <>
+                <span style={{ fontSize: 12, fontWeight: 600 }}>会签检查内容：</span>
+                <div style={{ padding: '6px 8px', border: '1px solid var(--radar-border)', borderRadius: 2, background: 'var(--radar-primary-soft)', color: 'var(--radar-ink)', lineHeight: '18px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                  {currentSignoff.signoff_check_content}
+                </div>
+              </>
+            )}
             <span style={{ fontSize: 12, fontWeight: 600 }}>签署意见：</span>
             <Input.TextArea
               placeholder="请输入签署意见 / 结论"
@@ -661,7 +700,7 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
           </div>
 
           {/* 评审签名：选择已存签名，或新建（手写/上传）并保存 */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {signResult !== '不涉及' && <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: 12, fontWeight: 600 }}>评审签名：</span>
               {!creatingSig && (
@@ -701,7 +740,7 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
                 </div>
               </div>
             )}
-          </div>
+          </div>}
         </div>}
       </Modal>
 

@@ -9,6 +9,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes } from 'node:crypto';
 import { loadEnvFile } from './lib/env.js';
+import { normalizeLogLevel } from './lib/logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
@@ -128,6 +129,11 @@ export const config = {
     rateLimitWindow: strEnv('RATE_LIMIT_WINDOW', '1 minute'),
     compressionThreshold: intEnv('COMPRESSION_THRESHOLD', 1024),
     cspConnectSrc: cspListEnv('CSP_CONNECT_SRC', pamsOrigin ? ["'self'", pamsOrigin] : ["'self'"]),
+  },
+
+  logging: {
+    level: normalizeLogLevel(strEnv('LOG_LEVEL'), isProd ? 'info' : 'warn'),
+    requestLogging: boolEnv('REQUEST_LOGGING', false),
   },
 
   captcha: {

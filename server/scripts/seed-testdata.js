@@ -12,6 +12,7 @@
 import { get, all, run, tx } from '../src/db/index.js';
 import { hashPassword } from '../src/lib/password.js';
 import { calcDeviation } from '../src/lib/deviation.js';
+import { logger } from '../src/lib/logger.js';
 
 /** undefined -> null（SQLite 不能绑定 undefined） */
 const nz = (v) => (v === undefined ? null : v);
@@ -734,20 +735,20 @@ async function main() {
       releaseApplyCount++;
     }
 
-    console.log(`[开发生成完毕] 开发任务总数: ${devTaskCount}`);
-    console.log(`[测试生成完毕] 应用组装/用户测试任务总数: ${testSITUATCount}`);
-    console.log(`[测试生成完毕] 安全/非功能测试任务总数: ${testSECNFTCount}`);
-    console.log(`[投产申请生成完毕] 投产申请总数: ${releaseApplyCount}`);
+    logger.info(`[开发生成完毕] 开发任务总数: ${devTaskCount}`);
+    logger.info(`[测试生成完毕] 应用组装/用户测试任务总数: ${testSITUATCount}`);
+    logger.info(`[测试生成完毕] 安全/非功能测试任务总数: ${testSECNFTCount}`);
+    logger.info(`[投产申请生成完毕] 投产申请总数: ${releaseApplyCount}`);
   });
 
   // 统计
   const c = async (t) => (await get(`SELECT COUNT(*) AS c FROM ${t}`)).c;
   const testUserCount = (await all("SELECT id FROM user WHERE phone LIKE '138%'")).length;
-  console.log('[测试数据] 已写入：',
+  logger.info('[测试数据] 已写入：',
     `投产点 ${await c('release_point')} / 人员 ${testUserCount} / 需求 ${await c('requirement')} / 开发 ${await c('dev_task')} / 测试 ${await c('test_task')} / 投产 ${await c('release_task')} / 会签 ${await c('release_signoff')} / 系统投产 ${await c('release_system')} / 投产申请 ${await c('release_apply')} / 附件 ${await c('attachment')}`);
 }
 
 main().catch((err) => {
-  console.error('[测试数据] 写入失败：', err);
+  logger.error('[测试数据] 写入失败：', err);
   process.exit(1);
 });
