@@ -7,12 +7,12 @@
  * 说明：本脚本独立运行（node src/db/mock.js），用于重置演示环境。会删除除超级管理员外的全部业务数据，请谨慎执行。
  *       数据特征：
  *         - 运行时优先快照当前 issue 表中最近同步的问题，空库时使用内置兜底样例；
- *         - 需求、工单、问题均通过 release_apply.ref_codes 进入投产审批清单；
+ *         - 需求、工单通过 release_apply.ref_codes 进入投产审批清单；问题仅作为工单来源与问题清单数据；
  *         - 评审状态覆盖待评审/评审同意/评审拒绝/应急审批/评审撤销；
  *         - 编号、偏差率、终态附件、投产制品和过程留痕均按平台规则生成，便于逐项验证。
  */
 
-import { db, get, all, run, tx } from './index.js';
+import { db, get, all, run, tx, closeDb } from './index.js';
 import { config } from '../config.js';
 import { runMigrations } from './migrate.js';
 import { runSeed } from './seed.js';
@@ -21,7 +21,7 @@ import { parseJsonArray } from '../lib/json.js';
 import { calcDeviation } from '../lib/deviation.js';
 import { logger } from '../lib/logger.js';
 import {
-  genRequirementCode, genDevCode, genTestCode, genReleaseApplyCode, genTicketCode,
+  genRequirementCode, genDevCode, genTestCode, genReleaseApplyCode,
 } from '../lib/code-gen.js';
 import { auditCreate, auditUpdate } from '../lib/audit.js';
 
@@ -44,6 +44,7 @@ const pickN = (arr, n) => {
   while (out.length < n && pool.length) out.push(pool.splice(Math.floor(rng() * pool.length), 1)[0]);
   return out;
 };
+const uniq = (arr) => [...new Set((arr || []).filter(Boolean))];
 /** 在 base 日期(YYYY-MM-DD)上偏移 days 天，返回 YYYY-MM-DD */
 function shift(base, days) {
   const d = new Date(`${base}T00:00:00`);
@@ -603,7 +604,7 @@ export async function runMock() {
     const tickets = [];
     for (const tspec of TICKET_SPECS) {
       const linkedIssue = issuePool[tspec.issueIdx % issuePool.length];
-      const code = await genTicketCode(tspec.rp.date);
+      const code = linkedIssue.code;
       const tStatus = TICKET_STATUS[tspec.profile];
       const main = pickN(sysCodes, 1);
       const proposeTime = shift(ymd(tspec.rp.date), -40 - Math.floor(rng() * 20));
@@ -688,11 +689,10 @@ export async function runMock() {
     }
 
     // ----------------------------------------------------------------------
-    // 9) 投产申请（≥20 个关联问题）—— 引用需求/问题编号
+    // 9) 投产申请——仅引用需求/工单编号；不模拟纯问题投产场景
     // ----------------------------------------------------------------------
     const ARTIFACTS = ['镜像制品', '二进制制品', '介质库文件', '无制品'];
     const FERRY = ['未摆渡', '待发送', '已摆渡', '摆渡失败'];
-    const issueCodes = issuePool.map((issue) => issue.code);
     /** 评审状态派生（取最弱）——与 release-apply 路由一致 */
     const REVIEW_RANK = { 评审拒绝: 0, 评审撤销: 1, 待评审: 2, 应急审批: 3, 评审同意: 4 };
     async function deriveReview(refCodes, releasePointId) {
@@ -726,8 +726,9 @@ export async function runMock() {
       return out;
     }
     async function makeApply(refCodes, rp, changeSys) {
+      const refs = uniq(refCodes);
       const code = await genReleaseApplyCode(rp.date.slice(0, 6));
-      const review = await deriveReview(refCodes, rp.id);
+      const review = await deriveReview(refs, rp.id);
       const sys = sysByCode[changeSys] || pick(systems);
       const sysCode = sysByCode[changeSys] ? changeSys : sys.sys_code;
       await run(
@@ -736,71 +737,50 @@ export async function runMock() {
             ref_codes, review_status, out_dept, deploy_dept, release_point_id, registrar, register_time)
          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         code,
-        `${sys.sys_name}${pick(DEV_ACTIONS)}投产变更，关联：${refCodes.join('、')}`,
+        `${sys.sys_name}${pick(DEV_ACTIONS)}投产变更，关联：${refs.join('、')}`,
         `影响${sys.sys_name}及其上下游联机交易，变更窗口内需停机约 30 分钟`,
         sysCode, sys.org, JSON.stringify(makeUnits(sysCode)),
-        JSON.stringify(refCodes), review,
+        JSON.stringify(refs), review,
         sys.out_dept || '建信金科', sys.deploy_dept || sys.org, rp.id, pickUser('配置负责人'), ymd(shift(ymd(rp.date), -2)),
       );
       const id = (await get('SELECT id FROM release_apply WHERE change_code = ?', code)).id;
       await auditCreate('release_apply', id, code, '系统初始化');
     }
 
-    // 22 个投产审批需求各一个投产申请；关联问题编号（循环复用当前问题快照）
+    // 22 个投产审批需求各一个投产申请。
     for (const [idx, req] of approvalReqs.entries()) {
-      const refs = [req.code];
-      refs.push(issueCodes[idx % issueCodes.length]);
-      await makeApply(refs, req.rp, req.main[0]);
-    }
-    // 工单也通过投产申请进入审批清单；其中 released 工单已有审批，其他工单用于验证未发起/懒创建。
-    for (const [idx, ticket] of tickets.filter((t) => ['released', 'sit', 'dev'].includes(t.spec.profile)).entries()) {
-      const refs = [ticket.code, ticket.issueCode];
-      if (idx % 3 === 0) refs.push(issueCodes[(idx + 30) % issueCodes.length]);
-      await makeApply(refs, ticket.rp, ticket.main[0]);
+      await makeApply([req.code], req.rp, req.main[0]);
     }
 
-    // 另增 6 个问题+advanced 需求的投产申请，丰富跨实体关联关系。
+    // 工单也通过投产申请进入审批清单；其中 released 工单已有审批，其他工单用于验证未发起/懒创建。
+    // ticket.code 即问题编号，但在工作项表中按工单识别。
+    const releaseTickets = tickets.filter((t) => ['released', 'sit', 'dev'].includes(t.spec.profile));
+    for (const ticket of releaseTickets) {
+      await makeApply([ticket.code], ticket.rp, ticket.main[0]);
+    }
+
+    // 另增 6 个 advanced 需求投产申请，丰富未发起审批的需求样例。
     const advancedReqs = reqs.filter((r) => r.spec.profile === 'advanced');
     for (let i = 0; i < 6; i++) {
-      const issue = issueCodes[(i + 13) % issueCodes.length];
       const req = advancedReqs[i];
-      const refs = req ? [req.code, issue] : [issue];
-      const rp = req ? req.rp : rpIds[5];
-      await makeApply(refs, rp, req ? req.main[0] : pick(sysCodes));
-    }
-
-    // 问题可直接进入投产申请/审批。部分预置审批实例，部分留给详情页首次打开时惰性创建。
-    const issuePlans = [
-      { review: '评审同意', status: '待投产', results: allSigned },
-      { review: '待评审', status: '待投产', results: signRoles.map((_, i) => (i < 2 ? '已签署' : '未签署')) },
-      { review: '评审拒绝', status: '待投产', results: signRoles.map((_, i) => (i === 1 ? '已驳回' : (i === 0 ? '已签署' : '未签署'))) },
-      { review: '应急审批', status: '待投产', results: signRoles.map((_, i) => (i < 1 ? '已签署' : '未签署')) },
-      { review: '评审撤销', status: '待投产', results: signRoles.map(() => '未签署') },
-    ];
-    for (let i = 0; i < 8; i++) {
-      const issue = issuePool[(20 + i) % issuePool.length];
-      const rp = rpIds[5 + (i % 4)];
-      const issueSys = sysByCode[issue.system] ? issue.system : pick(sysCodes);
-      if (i < issuePlans.length) {
-        const plan = issuePlans[i];
-        await makeReleaseTask(issue.code, 'issue', rp.id, plan.status, plan.review, plan.results, shift(ymd(rp.date), -3));
-      }
-      await makeApply([issue.code], rp, issueSys);
+      if (!req) continue;
+      await makeApply([req.code], req.rp, req.main[0]);
     }
 
     // ----------------------------------------------------------------------
     // 输出统计
     // ----------------------------------------------------------------------
-    const issueSet = new Set((await all('SELECT issue_code FROM issue')).map((r) => r.issue_code));
     const applyRows = await all('SELECT ref_codes FROM release_apply');
-    const issueApplyCount = applyRows.filter((r) => {
-      try {
-        const refs = parseJsonArray(r.ref_codes);
-        return Array.isArray(refs) && refs.some((code) => issueSet.has(code));
-      } catch {
-        return false;
+    let requirementApplyRefs = 0;
+    let ticketApplyRefs = 0;
+    let directIssueApplyRefs = 0;
+    for (const row of applyRows) {
+      for (const code of parseJsonArray(row.ref_codes)) {
+        if (await get('SELECT 1 FROM requirement WHERE req_code = ?', code)) requirementApplyRefs++;
+        else if (await get('SELECT 1 FROM ticket WHERE ticket_code = ?', code)) ticketApplyRefs++;
+        else if (await get('SELECT 1 FROM issue WHERE issue_code = ?', code)) directIssueApplyRefs++;
       }
-    }).length;
+    }
 
     const stat = {
       用户: (await get('SELECT COUNT(*) c FROM user')).c,
@@ -820,7 +800,9 @@ export async function runMock() {
       问题: (await get('SELECT COUNT(*) c FROM issue')).c,
       问题快照来源: issuePool.length === FALLBACK_ISSUES.length ? '兜底样例/或同量快照' : `当前库快照 ${issuePool.length} 条`,
       投产申请: (await get('SELECT COUNT(*) c FROM release_apply')).c,
-      关联问题的投产申请: issueApplyCount,
+      投产申请需求引用: requirementApplyRefs,
+      投产申请工单引用: ticketApplyRefs,
+      直接问题投产引用: directIssueApplyRefs,
       评审状态分布: (await all("SELECT review_status, COUNT(*) c FROM release_task GROUP BY review_status"))
         .map((r) => `${r.review_status}:${r.c}`).join('、'),
     };
@@ -831,7 +813,11 @@ export async function runMock() {
 
 // 直接运行：node src/db/mock.js
 if (import.meta.url === `file://${process.argv[1]}`) {
-  await runMock();
-  db.exec?.('PRAGMA wal_checkpoint(TRUNCATE);');
-  logger.info('[模拟数据] 已写入数据库并完成检查点。');
+  try {
+    await runMock();
+    db.exec?.('PRAGMA wal_checkpoint(TRUNCATE);');
+    logger.info('[模拟数据] 已写入数据库并完成检查点。');
+  } finally {
+    await closeDb();
+  }
 }
