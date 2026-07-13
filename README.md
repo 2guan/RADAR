@@ -689,11 +689,10 @@ GET /api/health
 RADAR/
 ├─ server/                              # Fastify 后端
 │  ├─ package.json
-│  ├─ scripts/                          # 数据库迁移、TDSQL 备份恢复、演示数据脚本
+│  ├─ scripts/                          # 数据库迁移、TDSQL 备份恢复脚本
 │  │  ├─ sqlite-to-tdsql.js
 │  │  ├─ tdsql-dump.js
-│  │  ├─ tdsql-restore.js
-│  │  └─ seed-testdata.js
+│  │  └─ tdsql-restore.js
 │  ├─ test/                             # node:test 测试
 │  └─ src/
 │     ├─ server.js                      # 入口：迁移、种子、启动、优雅退出
@@ -1399,12 +1398,3 @@ node src/db/mock.js
 - 会签状态。
 - 问题清单。
 - 附件和过程留痕。
-
-另有脚本：
-
-```bash
-cd server
-node scripts/seed-testdata.js
-```
-
-该脚本用于补充测试数据，具体行为以脚本内说明为准。
