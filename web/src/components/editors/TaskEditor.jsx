@@ -21,6 +21,7 @@ import HistoryDrawer from '../HistoryDrawer.jsx';
 import CodeLink from '../CodeLink.jsx';
 import EditorShell from './EditorShell.jsx';
 import RequirementEditor from './RequirementEditor.jsx';
+import TicketEditor from './TicketEditor.jsx';
 import StatusBadge, { getStatusType, statusSelectWidth } from '../StatusBadge.jsx';
 import { apiGet, apiPut } from '../../api/client.js';
 import { useAppStore } from '../../stores/app.js';
@@ -53,7 +54,7 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
   const statusValue = Form.useWatch('status', form);
   const [current, setCurrent] = useState(null);
   const [historyOpen, setHistoryOpen] = useState(false);
-  // 联动：打开关联需求详情 / 关联开发任务详情
+  // 联动：打开关联需求/工单详情 / 关联开发任务详情
   const [reqOpen, setReqOpen] = useState(false);
   const [relDevId, setRelDevId] = useState(null);
   const [isDirty, setIsDirty] = useState(false);
@@ -64,6 +65,8 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
   const visible = (fieldKey) => required.isVisible(fieldKey);
   const linkStyle = { color: 'var(--radar-primary)', cursor: 'pointer' };
   const attachFields = cfg.attachFields;
+  const workItemLabel = current?.entity_label || (current?.entity_type === 'ticket' ? '工单' : (current?.entity_type === 'requirement' ? '需求' : '需求/工单'));
+  const canOpenWorkItem = !!current?.req_code && ['requirement', 'ticket'].includes(current?.entity_type);
   // 结构化分析弹窗（影响性分析 / 测试覆盖性分析）
   const [impactOpen, setImpactOpen] = useState(false);
   const [coverageOpen, setCoverageOpen] = useState(false);
@@ -163,11 +166,11 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
     >
       {current && (
         <>
-          {/* 关联需求：编号 + 标题（测试详情再加需求状态），点击打开需求详情 */}
+          {/* 关联需求/工单：编号 + 标题（测试详情再加状态），点击打开对应详情 */}
           <div className="meta-bar" style={{ fontSize: 12, marginBottom: kind === 'test' && current.dev_tasks?.length ? 8 : 12 }}>
             <span className="meta-item" style={{ flexWrap: 'wrap' }}>
-              <span className="meta-label">关联需求</span>
-              <span style={current.req_code ? linkStyle : undefined} onClick={() => current.req_code && setReqOpen(true)}>
+              <span className="meta-label">关联{workItemLabel}</span>
+              <span style={canOpenWorkItem ? linkStyle : undefined} onClick={() => canOpenWorkItem && setReqOpen(true)}>
                 <b>{current.req_code || '—'}</b>{current.req_title ? `　${current.req_title}` : ''}
               </span>
               {kind === 'test' && current.req_status && <StatusBadge status={current.req_status} />}
@@ -332,8 +335,9 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
         />
       )}
 
-      {/* 联动弹窗：关联需求详情 */}
-      <RequirementEditor open={reqOpen} code={current?.req_code} onClose={() => setReqOpen(false)} />
+      {/* 联动弹窗：关联需求/工单详情 */}
+      <RequirementEditor open={reqOpen && current?.entity_type === 'requirement'} code={current?.entity_type === 'requirement' ? current?.req_code : undefined} onClose={() => setReqOpen(false)} />
+      <TicketEditor open={reqOpen && current?.entity_type === 'ticket'} code={current?.entity_type === 'ticket' ? current?.req_code : undefined} onClose={() => setReqOpen(false)} />
       {/* 联动弹窗：关联开发任务详情（仅测试详情用） */}
       {kind === 'test' && (
         <TaskEditor open={!!relDevId} kind="dev" taskId={relDevId} onClose={() => setRelDevId(null)} />

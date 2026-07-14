@@ -429,14 +429,32 @@ function IssueDetailCard({ issue, onEdit }) {
 
 const TEST_TYPE_LABEL = { SIT: '应用组装测试', UAT: '用户测试', NFT: '非功能测试', SEC: '安全测试' };
 
-/** 承接弹窗·移动端：已选需求卡片（单条、预选、不可改） */
+function workItemLabel(item) {
+  if (item?.entity_label) return item.entity_label;
+  if (item?.entity_type === 'ticket' || item?.entityType === 'ticket') return '工单';
+  if (item?.entity_type === 'requirement' || item?.entityType === 'requirement') return '需求';
+  return '需求/工单';
+}
+
+function workItemTitleLabel(item) {
+  const label = workItemLabel(item);
+  if (label === '工单') return '工单概述';
+  if (label === '需求') return '需求标题';
+  return '标题/概述';
+}
+
+/** 承接弹窗·移动端：已选需求/工单卡片（单条、预选、不可改） */
 function IntakeReqCard({ requirement }) {
   const r = requirement || {};
+  const label = workItemLabel(r);
   return (
     <Card size="small" style={{ borderColor: 'var(--radar-primary)', background: 'var(--radar-primary-soft)' }}>
       <Space direction="vertical" size={4} style={{ width: '100%' }}>
         <Space style={{ justifyContent: 'space-between', width: '100%' }}>
-          <span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', fontWeight: 600 }}>{r.req_code}</span>
+          <Space size={6}>
+            <span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', fontWeight: 600 }}>{r.req_code}</span>
+            <Tag className="status-tag" style={{ margin: 0 }}>{label}</Tag>
+          </Space>
           <Radio checked />
         </Space>
         <div style={{ fontWeight: 600, fontSize: 13 }}>{r.title}</div>
@@ -514,6 +532,7 @@ function DevIntakeModal({ open, requirement, onClose, onSaved }) {
 
   const [reqColWidths, setReqColWidths] = useState({});
   const [prevColWidths, setPrevColWidths] = useState({});
+  const label = workItemLabel(requirement);
 
   useEffect(() => {
     if (open && requirement) {
@@ -561,7 +580,7 @@ function DevIntakeModal({ open, requirement, onClose, onSaved }) {
 
   const reqColumns = [
     {
-      title: '需求编号',
+      title: `${label}编号`,
       dataIndex: 'req_code',
       key: 'req_code',
       width: 140,
@@ -571,7 +590,7 @@ function DevIntakeModal({ open, requirement, onClose, onSaved }) {
         </span>
       ),
     },
-    { title: '需求标题', dataIndex: 'title', key: 'title', width: 280, ellipsis: true },
+    { title: workItemTitleLabel(requirement), dataIndex: 'title', key: 'title', width: 280, ellipsis: true },
     { title: '计划投产点', dataIndex: 'release_date', key: 'release_date', width: 140, render: (val) => <ReleasePointText value={val} /> },
     {
       title: '主责系统',
@@ -695,7 +714,7 @@ function DevIntakeModal({ open, requirement, onClose, onSaved }) {
       {requirement && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div className="form-section-card" style={{ marginBottom: 0 }}>
-            <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>1. 选择需求</div>
+            <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>1. 选择{label}</div>
             {isMobile ? (
               <IntakeReqCard requirement={requirement} />
             ) : (
@@ -757,6 +776,7 @@ function TestIntakeModal({ open, requirement, testType, onClose, onSaved }) {
 
   const [reqColWidths, setReqColWidths] = useState({});
   const [prevColWidths, setPrevColWidths] = useState({});
+  const label = workItemLabel(requirement);
 
   useEffect(() => {
     if (open && requirement && testType) {
@@ -813,7 +833,7 @@ function TestIntakeModal({ open, requirement, testType, onClose, onSaved }) {
 
   const reqColumns = [
     {
-      title: '需求编号',
+      title: `${label}编号`,
       dataIndex: 'req_code',
       key: 'req_code',
       width: 140,
@@ -823,7 +843,7 @@ function TestIntakeModal({ open, requirement, testType, onClose, onSaved }) {
         </span>
       ),
     },
-    { title: '需求标题', dataIndex: 'title', key: 'title', width: 280, ellipsis: true },
+    { title: workItemTitleLabel(requirement), dataIndex: 'title', key: 'title', width: 280, ellipsis: true },
     { title: '计划投产点', dataIndex: 'release_date', key: 'release_date', width: 140, render: (val) => <ReleasePointText value={val} /> },
     {
       title: '主责系统',
@@ -949,7 +969,7 @@ function TestIntakeModal({ open, requirement, testType, onClose, onSaved }) {
       {requirement && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div className="form-section-card" style={{ marginBottom: 0 }}>
-            <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>1. 选择需求</div>
+            <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>1. 选择{label}</div>
             {isMobile ? (
               <IntakeReqCard requirement={requirement} />
             ) : (
