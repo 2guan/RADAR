@@ -17,6 +17,7 @@ import DictSelect from '../components/DictSelect.jsx';
 import Can from '../components/Can.jsx';
 import FilterPanel from '../components/FilterPanel.jsx';
 import ImportModal from '../components/ImportModal.jsx';
+import { getScopedPopupContainer } from '../components/scopedPopup.js';
 import { apiPost, apiPut, apiDelete, apiGet } from '../api/client.js';
 import { exportXlsx, downloadGet } from '../utils/io.js';
 import { useAppStore } from '../stores/app.js';
@@ -100,6 +101,7 @@ export default function Users() {
     const isMaskClick = e?.target?.classList?.contains('ant-modal-wrap');
     if (isDirty && isMaskClick) {
       Modal.confirm({
+        getContainer: getScopedPopupContainer,
         title: '确认取消',
         content: '检测到您已修改了内容，确认要取消并退出吗？未保存的内容将丢失。',
         okText: '确认取消',
@@ -120,6 +122,7 @@ export default function Users() {
     const minLen = platform['security.password.minLength'] ? Number(platform['security.password.minLength']) : 8;
     const complexityEnabled = platform['security.password.complexity'] !== 'false';
     Modal.confirm({
+      getContainer: getScopedPopupContainer,
       title: `重置 ${row.name} 的密码`,
       content: (
         <div>
@@ -155,6 +158,7 @@ export default function Users() {
   // 解锁用户：重置登录失败计数和锁定时间
   const unlockUser = async (row) => {
     Modal.confirm({
+      getContainer: getScopedPopupContainer,
       title: `确认解锁 ${row.name}？`,
       content: '解锁后将清除该用户的登录失败计数和锁定状态。',
       onOk: async () => {

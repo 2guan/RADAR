@@ -12,7 +12,7 @@ import { UserOutlined, LockOutlined, SafetyOutlined } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { apiPost, apiGet, TOKEN_KEY, rawClient } from '../api/client.js';
 import { useAppStore } from '../stores/app.js';
-import { getHomePath } from '../app.jsx';
+import { getHomePath } from '../router/home.js';
 
 export default function Login() {
   const navigate = useNavigate();

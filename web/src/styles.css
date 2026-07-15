@@ -192,6 +192,17 @@ body {
   background: var(--radar-surface) !important;
   border-bottom: 1px solid var(--radar-border);
 }
+.radar-header-tab-row {
+  position: sticky;
+  top: 60px;
+  z-index: 19;
+  display: flex;
+  align-items: stretch;
+  min-height: 39px;
+  padding: 0 18px;
+  background: var(--radar-surface);
+  border-bottom: 1px solid var(--radar-border);
+}
 .radar-page-title { font-size: 17px; font-weight: 700; color: var(--radar-ink); }
 .radar-rp-pill {
   display: inline-flex; align-items: center; gap: 4px; min-height: 36px; padding: 0 8px 0 12px;
@@ -204,6 +215,120 @@ body {
   background: transparent !important; border: none !important; padding-inline-start: 4px;
 }
 .radar-rp-pill .ant-select-selection-placeholder { font-size: 12px; }
+
+/* ============ 多页签工作区 ============ */
+.radar-tab-workspace {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 100px);
+  background: transparent;
+}
+.radar-tab-workspace.empty {
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100vh - 140px);
+  border: 1px dashed var(--radar-border);
+  background: var(--radar-surface);
+}
+.radar-header-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 120px;
+  overflow: hidden;
+}
+.radar-tab-list {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  flex: 1;
+  overflow-x: auto;
+  align-self: stretch;
+  padding-top: 4px;
+}
+.radar-tab-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 35px;
+  max-width: 230px;
+  padding: 0 8px 0 13px;
+  border: 1px solid transparent;
+  border-bottom-color: transparent;
+  background: transparent;
+  color: var(--radar-text-secondary);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  flex: 0 0 auto;
+  position: relative;
+}
+.radar-tab-button:hover {
+  color: var(--radar-primary);
+  border-color: var(--radar-primary-fade);
+  border-bottom-color: transparent;
+  background: var(--radar-primary-soft);
+}
+.radar-tab-button.active {
+  color: var(--radar-primary);
+  border-color: var(--radar-border);
+  border-bottom-color: var(--radar-surface);
+  background: var(--radar-surface);
+  font-weight: 600;
+  box-shadow: 0 -2px 0 var(--radar-primary) inset, 0 1px 0 var(--radar-surface);
+}
+.radar-tab-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.radar-tab-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  color: inherit;
+  opacity: 0.72;
+}
+.radar-tab-close:hover {
+  opacity: 1;
+  background: rgba(0,0,0,0.06);
+}
+.radar-tab-clear {
+  flex: 0 0 auto;
+  align-self: center;
+  color: var(--radar-text-secondary);
+}
+.radar-tab-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+.radar-tab-pane {
+  position: relative;
+  min-height: calc(100vh - 156px);
+  display: none;
+}
+.radar-tab-pane.active {
+  display: block;
+}
+.radar-tab-popup-root {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 50;
+}
+.radar-tab-popup-root > * {
+  pointer-events: auto;
+}
+.radar-tab-popup-root .ant-modal-root .ant-modal-mask,
+.radar-tab-popup-root .ant-modal-root .ant-modal-wrap {
+  position: absolute;
+}
 
 @media (max-width: 576px) {
   .radar-header {

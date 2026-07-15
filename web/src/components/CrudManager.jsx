@@ -15,6 +15,7 @@ import DataTable from './DataTable.jsx';
 import FilterPanel from './FilterPanel.jsx';
 import ImportModal from './ImportModal.jsx';
 import Can from './Can.jsx';
+import { getScopedPopupContainer } from './scopedPopup.js';
 import { apiPost, apiPut, apiDelete } from '../api/client.js';
 import { exportXlsx } from '../utils/io.js';
 
@@ -56,6 +57,7 @@ export default function CrudManager({
     const isMaskClick = e?.target?.classList?.contains('ant-modal-wrap');
     if (isDirty && isMaskClick) {
       Modal.confirm({
+        getContainer: getScopedPopupContainer,
         title: '确认取消',
         content: '检测到您已修改了内容，确认要取消并退出吗？未保存的内容将丢失。',
         okText: '确认取消',
@@ -180,4 +182,3 @@ export default function CrudManager({
     </>
   );
 }
-

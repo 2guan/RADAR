@@ -12,49 +12,8 @@ import { TOKEN_KEY } from './api/client.js';
 import { useAppStore } from './stores/app.js';
 import MainLayout from './layout/MainLayout.jsx';
 import Login from './pages/Login.jsx';
-import Dashboard from './pages/Dashboard.jsx';
-import Overview from './pages/Overview.jsx';
-import Requirements from './pages/Requirements.jsx';
-import Tickets from './pages/Tickets.jsx';
-import Issues from './pages/Issues.jsx';
-import DevTasks from './pages/DevTasks.jsx';
-import { SitPage, UatPage, NftPage, SecPage } from './pages/TestTasks.jsx';
-import Release from './pages/Release.jsx';
-import ReleaseApply from './pages/ReleaseApply.jsx';
-import Users from './pages/Users.jsx';
-import Settings from './pages/Settings.jsx';
-import {
-  RequirementDetailPage,
-  DevTaskDetailPage,
-  TestTaskDetailPage,
-  ReleaseApplyDetailPage,
-  ReleaseApprovalDetailPage,
-} from './pages/DetailPages.jsx';
-
-export function getHomePath(defaultHome) {
-  const routeMap = {
-    '仪表盘': '/dashboard',
-    '效能仪表盘': '/dashboard',
-    '版本概览': '/overview',
-    '需求分析': '/requirements',
-    '工单分析': '/tickets',
-    '问题管理': '/issues',
-    '开发管理': '/dev',
-    '测试管理': '/test/sit',
-    '应用组装测试': '/test/sit',
-    '用户测试': '/test/uat',
-    '非功能测试': '/test/nft',
-    '安全测试': '/test/sec',
-    '投产管理': '/release/apply',
-    '投产申请': '/release/apply',
-    '投产审批': '/release',
-    '人员管理': '/users',
-    '系统设置': '/settings',
-  };
-  if (!defaultHome) return '/dashboard';
-  if (defaultHome.startsWith('/')) return defaultHome;
-  return routeMap[defaultHome] || '/dashboard';
-}
+import { getHomePath } from './router/home.js';
+import { getRouteModule, renderMainRouteElements } from './router/routes.jsx';
 
 /**
  * 受保护区域容器：首次加载拉取用户/平台/投产窗口；未登录跳转登录页。
@@ -93,25 +52,12 @@ function Protected({ children }) {
   // 采用前缀匹配，兼顾列表页与详情单页（/requirements/:code、/release/apply/:code 等）；
   // 顺序敏感：更具体的前缀须排在前面（/release/apply 先于 /release）。
   const path = location.pathname;
-  const PREFIX_MODULE = [
-    ['/dashboard', 'dashboard'], ['/overview', 'overview'],
-    ['/requirements', 'requirement'], ['/tickets', 'ticket'], ['/issues', 'issue'],
-    ['/dev', 'dev'], ['/test', 'test'],
-    ['/release/apply', 'release_apply'], ['/release', 'release'],
-    ['/users', 'user'], ['/settings', 'settings'],
-  ];
-  const mod = PREFIX_MODULE.find(([p]) => path === p || path.startsWith(p + '/'))?.[1];
+  const mod = getRouteModule(path);
   if (mod && !can(mod, 'view')) {
     const homePath = getHomePath(user?.defaultHome);
     return <Navigate to={homePath} replace />;
   }
   return children;
-}
-
-function IndexRedirect() {
-  const user = useAppStore((s) => s.user);
-  const homePath = getHomePath(user?.defaultHome);
-  return <Navigate to={homePath} replace />;
 }
 
 export default function AppRouter() {
@@ -127,27 +73,7 @@ export default function AppRouter() {
           path="/"
           element={<Protected><MainLayout /></Protected>}
         >
-          <Route index element={<IndexRedirect />} />
-          <Route path="dashboard" element={<Dashboard />} />
-          <Route path="overview" element={<Overview />} />
-          <Route path="requirements" element={<Requirements />} />
-          <Route path="requirements/:code" element={<RequirementDetailPage />} />
-          <Route path="tickets" element={<Tickets />} />
-          <Route path="issues" element={<Issues />} />
-          <Route path="dev" element={<DevTasks />} />
-          <Route path="dev/:code" element={<DevTaskDetailPage />} />
-          <Route path="test" element={<Navigate to="/test/sit" replace />} />
-          <Route path="test/sit" element={<SitPage />} />
-          <Route path="test/uat" element={<UatPage />} />
-          <Route path="test/nft" element={<NftPage />} />
-          <Route path="test/sec" element={<SecPage />} />
-          <Route path="test/detail/:code" element={<TestTaskDetailPage />} />
-          <Route path="release" element={<Release />} />
-          <Route path="release/apply" element={<ReleaseApply />} />
-          <Route path="release/apply/:code" element={<ReleaseApplyDetailPage />} />
-          <Route path="release/detail/:code" element={<ReleaseApprovalDetailPage />} />
-          <Route path="users" element={<Users />} />
-          <Route path="settings" element={<Settings />} />
+          {renderMainRouteElements()}
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

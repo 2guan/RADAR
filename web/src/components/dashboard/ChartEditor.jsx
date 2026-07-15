@@ -15,6 +15,7 @@ import { PlusOutlined, DeleteOutlined, CodeOutlined, CopyOutlined } from '@ant-d
 import dayjs from 'dayjs';
 import ColorPickerField from './ColorPickerField.jsx';
 import { ReleasePointOptionLabel } from '../ReleasePointText.jsx';
+import { getScopedPopupContainer } from '../scopedPopup.js';
 
 // 支持次维度（堆叠/横轴/透视）的图表类型
 const X_TYPES = ['stacked_bar', 'stacked_bar_horizontal', 'line', 'area', 'table'];
@@ -191,6 +192,7 @@ export default function ChartEditor({ open, onClose, onSave, initialData, scope,
     const isMaskClick = e?.target?.classList?.contains('ant-modal-wrap');
     if (isDirty && isMaskClick) {
       Modal.confirm({
+        getContainer: getScopedPopupContainer,
         title: '确认取消',
         content: '检测到您已修改了内容，确认要取消并退出吗？未保存的内容将丢失。',
         okText: '确认取消',

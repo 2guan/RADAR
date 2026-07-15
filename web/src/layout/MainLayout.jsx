@@ -6,34 +6,171 @@
  * 说明：左侧菜单栏、上方导航栏以及内容区的企业风格整体布局，支持抽屉式的移动端自适应。
  */
 
-import React, { useEffect, useState } from 'react';
-import { Layout, Select, Button, Dropdown, Avatar, Drawer, Typography, Form, Input, Modal, message, theme as antdTheme } from 'antd';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Layout, Select, Button, Dropdown, Avatar, Drawer, Form, Input, Modal, message, theme as antdTheme, ConfigProvider, Empty, Tooltip } from 'antd';
 import {
   MenuOutlined, BulbOutlined, BulbFilled, UserOutlined, LogoutOutlined, RocketOutlined, DownOutlined,
-  MenuFoldOutlined, MenuUnfoldOutlined, KeyOutlined,
+  MenuFoldOutlined, MenuUnfoldOutlined, KeyOutlined, AppstoreOutlined, ProfileOutlined, CloseOutlined, ClearOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { useAppStore } from '../stores/app.js';
 import { useResponsive } from '../hooks/useResponsive.js';
 import { MENU } from '../router/menu.js';
+import { getHomePath } from '../router/home.js';
+import { WorkspaceRoutes } from '../router/routes.jsx';
 import { apiGet, apiPost } from '../api/client.js';
 import ThemeSwitcher from '../components/ThemeSwitcher.jsx';
 import { makeReleasePointOptions, releasePointFilter } from '../components/ReleasePointText.jsx';
 import { BRAND_LOGO_SRC } from '../utils/logo.js';
+import { clearScopedPopupContainerGetter, setScopedPopupContainerGetter } from '../components/scopedPopup.js';
 
 const { Header, Sider, Content } = Layout;
+
+function flattenMenu(items = MENU) {
+  return items.flatMap((m) => (m.children ? [m, ...m.children] : [m]));
+}
+
+function normalizeTabPath(pathname, search = '') {
+  const path = pathname || '/';
+  return `${path}${search || ''}`;
+}
+
+function parseTabPath(path) {
+  const [pathname, query = ''] = path.split('?');
+  return {
+    pathname: pathname || '/',
+    search: query ? `?${query}` : '',
+    hash: '',
+    state: null,
+    key: path,
+  };
+}
+
+function routeLabel(path, platformName) {
+  const pathname = path.split('?')[0];
+  const exact = flattenMenu().find((m) => m.key === pathname);
+  if (exact) return exact.label;
+
+  const detailRules = [
+    [/^\/requirements\/(.+)$/, '需求详情'],
+    [/^\/dev\/(.+)$/, '开发详情'],
+    [/^\/test\/detail\/(.+)$/, '测试详情'],
+    [/^\/release\/apply\/(.+)$/, '投产申请详情'],
+    [/^\/release\/detail\/(.+)$/, '投产审批详情'],
+  ];
+  for (const [pattern, prefix] of detailRules) {
+    const matched = pathname.match(pattern);
+    if (matched) return `${prefix} · ${decodeURIComponent(matched[1])}`;
+  }
+  return platformName || '页面';
+}
+
+function TabPane({ tab, active }) {
+  const portalRef = useRef(null);
+  const popupGetter = useCallback(() => portalRef.current || document.body, []);
+
+  useEffect(() => {
+    if (!active) return undefined;
+    setScopedPopupContainerGetter(popupGetter);
+    return () => clearScopedPopupContainerGetter(popupGetter);
+  }, [active, popupGetter]);
+
+  const getPopupContainer = useCallback((node) => node?.parentElement || portalRef.current || document.body, []);
+
+  return (
+    <div className={`radar-tab-pane ${active ? 'active' : ''}`} aria-hidden={!active}>
+      <ConfigProvider getPopupContainer={getPopupContainer}>
+        <WorkspaceRoutes location={tab.location} />
+      </ConfigProvider>
+      <div ref={portalRef} className="radar-tab-popup-root" />
+    </div>
+  );
+}
+
+function HeaderTabStrip({ tabs, activeKey, onActivate, onClose, onCloseAll }) {
+  if (!tabs.length) return null;
+
+  return (
+    <div className="radar-header-tabs">
+      <div className="radar-tab-list">
+        {tabs.map((tab) => (
+          <button
+            type="button"
+            key={tab.key}
+            className={`radar-tab-button ${tab.key === activeKey ? 'active' : ''}`}
+            onClick={() => onActivate(tab.key)}
+            title={tab.title}
+          >
+            <span className="radar-tab-title">{tab.title}</span>
+            <span
+              className="radar-tab-close"
+              role="button"
+              tabIndex={0}
+              title="关闭页签"
+              onClick={(e) => { e.stopPropagation(); onClose(tab.key); }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onClose(tab.key);
+                }
+              }}
+            >
+              <CloseOutlined />
+            </span>
+          </button>
+        ))}
+      </div>
+      <Tooltip title="关闭全部页签">
+        <Button
+          className="radar-tab-clear"
+          size="small"
+          type="text"
+          shape="circle"
+          icon={<ClearOutlined />}
+          onClick={onCloseAll}
+        />
+      </Tooltip>
+    </div>
+  );
+}
+
+function TabbedWorkspace({ tabs, activeKey }) {
+  if (!tabs.length) {
+    return (
+      <div className="radar-tab-workspace empty">
+        <Empty description="暂无打开的页签" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="radar-tab-workspace">
+      <div className="radar-tab-body">
+        {tabs.map((tab) => (
+          <TabPane key={tab.key} tab={tab} active={tab.key === activeKey} />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function MainLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { isMobile } = useResponsive();
   const { token } = antdTheme.useToken();
-  const { user, platform, theme, toggleTheme, can, releasePointIds, setReleasePointIds, loadMe } = useAppStore();
+  const {
+    user, platform, theme, toggleTheme, can, releasePointIds, setReleasePointIds, loadMe,
+    contentMode, setContentMode,
+  } = useAppStore();
 
   const [siderCollapsed, setSiderCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [points, setPoints] = useState([]);
   const [openMenus, setOpenMenus] = useState({});
+  const [tabs, setTabs] = useState([]);
+  const [activeTabKey, setActiveTabKey] = useState(null);
 
   const [changePwdOpen, setChangePwdOpen] = useState(false);
   const [pwdForm] = Form.useForm();
@@ -79,41 +216,126 @@ export default function MainLayout() {
 
   useEffect(() => { apiGet('/release-points/all').then(setPoints).catch(() => {}); }, []);
 
+  useEffect(() => {
+    if (!points.length || !releasePointIds.length) return;
+    const normalized = releasePointIds
+      .map((value) => {
+        const numericValue = Number(value);
+        const matched = points.find((point) => Number(point.id) === numericValue)
+          || points.find((point) => String(point.release_date) === String(value));
+        return matched?.id;
+      })
+      .map(Number)
+      .filter(Number.isFinite)
+      .filter((id, index, arr) => arr.indexOf(id) === index);
+
+    const unchanged = normalized.length === releasePointIds.length
+      && normalized.every((id, index) => id === Number(releasePointIds[index]));
+    if (unchanged) return;
+
+    if (normalized.length) {
+      setReleasePointIds(normalized);
+      return;
+    }
+
+    apiGet('/release-points/current')
+      .then((cur) => setReleasePointIds(cur?.id ? [cur.id] : []))
+      .catch(() => setReleasePointIds([]));
+  }, [points, releasePointIds, setReleasePointIds]);
+
+  const isTabMode = contentMode === 'tabs' && !isMobile;
+  const platformName = platform['platform.name'] || '日常需求研发流程管理';
+
+  const activePath = isTabMode && activeTabKey ? activeTabKey.split('?')[0] : location.pathname;
+  const currentRouteKey = normalizeTabPath(location.pathname, location.search);
+
+  const buildTab = useCallback((path) => ({
+    key: path,
+    title: routeLabel(path, platformName),
+    location: parseTabPath(path),
+  }), [platformName]);
+
+  const openTab = useCallback((path, { syncUrl = true } = {}) => {
+    const nextPath = path === '/' ? getHomePath(user?.defaultHome) : path;
+    const tab = buildTab(nextPath);
+    setTabs((prev) => (prev.some((item) => item.key === tab.key) ? prev : [...prev, tab]));
+    setActiveTabKey(tab.key);
+    if (syncUrl && currentRouteKey !== tab.key) navigate(tab.key);
+  }, [buildTab, currentRouteKey, navigate, user?.defaultHome]);
+
+  useEffect(() => {
+    if (!isTabMode) return;
+    if (location.pathname === '/') {
+      const homePath = getHomePath(user?.defaultHome);
+      openTab(homePath, { syncUrl: true });
+      return;
+    }
+    openTab(currentRouteKey, { syncUrl: false });
+  }, [currentRouteKey, isTabMode, location.pathname, openTab, user?.defaultHome]);
+
   // 当前路径进入某子菜单时，自动展开其父级
   useEffect(() => {
     setOpenMenus((prev) => {
       const next = { ...prev };
       MENU.forEach((m) => {
-        if (m.children?.some((c) => location.pathname === c.key)) next[m.key] = true;
+        if (m.children?.some((c) => activePath === c.key || activePath.startsWith(`${c.key}/`))) next[m.key] = true;
       });
       return next;
     });
-  }, [location.pathname]);
+  }, [activePath]);
 
   const visibleMenu = MENU.filter((m) => can(m.module, 'view'));
   const brand = platform['platform.shortName'] || 'RADAR';
-  // 平台名称（系统设置-基础设置中维护，联动显示于品牌区与登录页）
-  const platformName = platform['platform.name'] || '日常需求研发流程管理';
 
-  const go = (key) => { navigate(key); setDrawerOpen(false); };
+  const go = (key) => {
+    if (isTabMode) openTab(key);
+    else navigate(key);
+    setDrawerOpen(false);
+  };
   const toggleMenu = (key) => setOpenMenus((p) => ({ ...p, [key]: !p[key] }));
 
-  // 当前页面标题（含子菜单查找）
-  const currentLabel = (() => {
-    for (const m of MENU) {
-      if (m.key === location.pathname) return m.label;
-      const c = m.children?.find((x) => x.key === location.pathname);
-      if (c) return c.label;
+  const activateTab = (key) => {
+    setActiveTabKey(key);
+    if (currentRouteKey !== key) navigate(key);
+  };
+
+  const closeTab = (key) => {
+    const idx = tabs.findIndex((tab) => tab.key === key);
+    if (idx < 0) return;
+    const next = tabs.filter((tab) => tab.key !== key);
+    setTabs(next);
+    if (activeTabKey === key) {
+      const fallback = next[Math.min(idx, next.length - 1)];
+      setActiveTabKey(fallback?.key || null);
+      if (fallback && currentRouteKey !== fallback.key) navigate(fallback.key);
     }
-    return platform['platform.name'];
-  })();
+  };
+
+  const closeAllTabs = () => {
+    setTabs([]);
+    setActiveTabKey(null);
+  };
+
+  const toggleContentMode = () => {
+    const next = isTabMode ? 'single' : 'tabs';
+    if (next === 'tabs') {
+      const path = location.pathname === '/' ? getHomePath(user?.defaultHome) : currentRouteKey;
+      openTab(path);
+    } else if (activeTabKey && currentRouteKey !== activeTabKey) {
+      navigate(activeTabKey);
+    }
+    setContentMode(next);
+  };
+
+  // 当前页面标题（含子菜单查找）
+  const currentLabel = useMemo(() => routeLabel(activePath, platformName), [activePath, platformName]);
 
   // 渲染单个菜单项（支持一级子菜单）
   const renderNavItem = (m) => {
     if (!m.children) {
       return (
         <div key={m.key}
-          className={`radar-nav-item ${location.pathname === m.key ? 'active' : ''}`}
+          className={`radar-nav-item ${activePath === m.key ? 'active' : ''}`}
           onClick={() => go(m.key)}>
           {m.icon}<span>{m.label}</span>
         </div>
@@ -121,7 +343,7 @@ export default function MainLayout() {
     }
     const childItems = m.children.filter((c) => can(c.module, 'view'));
     const open = !!openMenus[m.key];
-    const parentActive = location.pathname.startsWith(`${m.key}/`);
+    const parentActive = childItems.some((c) => activePath === c.key || activePath.startsWith(`${c.key}/`));
     return (
       <div key={m.key}>
         <div className={`radar-nav-item ${parentActive && !open ? 'active' : ''}`} onClick={() => toggleMenu(m.key)}>
@@ -130,7 +352,7 @@ export default function MainLayout() {
         </div>
         {open && childItems.map((c) => (
           <div key={c.key}
-            className={`radar-nav-item radar-nav-sub ${location.pathname === c.key ? 'active' : ''}`}
+            className={`radar-nav-item radar-nav-sub ${activePath === c.key ? 'active' : ''}`}
             onClick={() => go(c.key)}>
             <span className="radar-nav-dot" /><span>{c.label}</span>
           </div>
@@ -214,12 +436,39 @@ export default function MainLayout() {
             {rpSelector}
           </div>
           {!isMobile && <ThemeSwitcher />}
+          {!isMobile && <Tooltip title={isTabMode ? '切换为单页模式' : '切换为页签模式'}>
+            <Button
+              type={isTabMode ? 'primary' : 'text'}
+              shape="circle"
+              size="small"
+              icon={isTabMode ? <AppstoreOutlined /> : <ProfileOutlined />}
+              onClick={toggleContentMode}
+            />
+          </Tooltip>}
           <Button type="text" shape="circle" icon={theme === 'dark' ? <BulbFilled /> : <BulbOutlined />} onClick={toggleTheme} title="切换白天/夜间" />
           {/* Global top-right profile removed */}
         </Header>
+        {isTabMode && (
+          <div className="radar-header-tab-row">
+            <HeaderTabStrip
+              tabs={tabs}
+              activeKey={activeTabKey}
+              onActivate={activateTab}
+              onClose={closeTab}
+              onCloseAll={closeAllTabs}
+            />
+          </div>
+        )}
 
         <Content className="radar-content" style={{ margin: isMobile ? 12 : 20, overflow: 'auto hidden' }}>
-          <Outlet />
+          {isTabMode ? (
+            <TabbedWorkspace
+              tabs={tabs}
+              activeKey={activeTabKey}
+            />
+          ) : (
+            <Outlet />
+          )}
         </Content>
       </Layout>
 

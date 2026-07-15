@@ -9,6 +9,7 @@
 import React from 'react';
 import { Modal, Button } from 'antd';
 import { ArrowLeftOutlined } from '@ant-design/icons';
+import { getScopedPopupContainer } from '../scopedPopup.js';
 
 export default function EditorShell({
   mode = 'modal',
@@ -29,6 +30,7 @@ export default function EditorShell({
     const isMaskClick = e?.target?.classList?.contains('ant-modal-wrap');
     if (mode !== 'page' && isDirty && isMaskClick) {
       Modal.confirm({
+        getContainer: getScopedPopupContainer,
         title: '确认取消',
         content: '检测到您已修改了内容，确认要取消并退出吗？未保存的内容将丢失。',
         okText: '确认取消',

@@ -15,6 +15,7 @@ import StatusBadge from '../components/StatusBadge.jsx';
 import FilterPanel from '../components/FilterPanel.jsx';
 import Can from '../components/Can.jsx';
 import IssueDetail from '../components/editors/IssueDetail.jsx';
+import { getScopedPopupContainer } from '../components/scopedPopup.js';
 import { apiDelete, apiGet, apiPost } from '../api/client.js';
 
 export default function Issues() {
@@ -111,6 +112,7 @@ export default function Issues() {
   const onSyncDetail = () => {
     if (bgStatus?.running) { message.warning('后台同步正在进行中，请等待完成'); return; }
     Modal.confirm({
+      getContainer: getScopedPopupContainer,
       title: '后台同步问题详情',
       content: '系统将在后台每秒同步一条问题明细，期间可正常使用页面。确认开始？',
       okText: '开始同步',
@@ -132,6 +134,7 @@ export default function Issues() {
   const onClearIssues = () => {
     if (bgStatus?.running) { message.warning('后台同步正在进行中，请等待完成后再清空'); return; }
     Modal.confirm({
+      getContainer: getScopedPopupContainer,
       title: '清空全部问题数据',
       content: '该操作将删除问题管理表中的全部问题记录，且不可撤销。确认清空？',
       okText: '确认清空',

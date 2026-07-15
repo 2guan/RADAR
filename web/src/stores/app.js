@@ -13,6 +13,7 @@ import { DEFAULT_PRESET } from '../theme/presets.js';
 const THEME_KEY = 'radar_theme';
 const RP_KEY = 'radar_release_point';
 const PRESET_KEY = 'radar_preset';
+const CONTENT_MODE_KEY = 'radar_content_mode';
 
 /** 从 localStorage 解析投产窗口 id 数组（兼容旧的单值存储） */
 function parseRP() {
@@ -29,6 +30,42 @@ function parseRP() {
   }
 }
 
+/** 读取本地投产点偏好原始项，兼容旧版单值、数组，以及曾经保存为投产日期的情况 */
+function parseRPPreference(raw) {
+  if (raw === null) return { exists: false, values: [], explicitAll: false };
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return { exists: true, values: parsed, explicitAll: parsed.length === 0 };
+    }
+    return { exists: true, values: parsed === null || parsed === '' ? [] : [parsed], explicitAll: false };
+  } catch {
+    return { exists: true, values: raw === '' ? [] : [raw], explicitAll: false };
+  }
+}
+
+/** 将本地偏好校验/迁移为当前有效投产点 id：优先按 id 匹配，其次按 release_date 兼容旧存储 */
+function normalizeReleasePointIds(raw, points) {
+  const pref = parseRPPreference(raw);
+  if (!pref.exists) return { exists: false, ids: [], explicitAll: false };
+  if (pref.explicitAll) return { exists: true, ids: [], explicitAll: true };
+
+  const list = Array.isArray(points) ? points : [];
+  const ids = [];
+  for (const value of pref.values) {
+    if (value === undefined || value === null || value === '') continue;
+    const text = String(value);
+    const numberValue = Number(value);
+    const matched = list.find((point) => Number.isFinite(numberValue) && Number(point.id) === numberValue)
+      || list.find((point) => String(point.release_date) === text);
+    if (matched?.id !== undefined && matched?.id !== null) {
+      const id = Number(matched.id);
+      if (Number.isFinite(id) && !ids.includes(id)) ids.push(id);
+    }
+  }
+  return { exists: true, ids, explicitAll: false };
+}
+
 export const useAppStore = create((set, get) => ({
   // 当前用户
   user: null,
@@ -41,6 +78,8 @@ export const useAppStore = create((set, get) => ({
   preset: localStorage.getItem(PRESET_KEY) || DEFAULT_PRESET,
   // 当前所选投产窗口 id 数组（空数组 = 全部投产点）
   releasePointIds: parseRP(),
+  // 内容区模式：single / tabs（默认单页，用户本地选择优先）
+  contentMode: localStorage.getItem(CONTENT_MODE_KEY) === 'tabs' ? 'tabs' : 'single',
 
   /** 切换明暗主题 */
   toggleTheme: () => {
@@ -51,6 +90,13 @@ export const useAppStore = create((set, get) => ({
 
   /** 切换配色预设（本地覆盖平台默认） */
   setPreset: (key) => { localStorage.setItem(PRESET_KEY, key); set({ preset: key }); },
+
+  /** 设置内容区模式 */
+  setContentMode: (mode) => {
+    const next = mode === 'tabs' ? 'tabs' : 'single';
+    localStorage.setItem(CONTENT_MODE_KEY, next);
+    set({ contentMode: next });
+  },
 
   /** 设置所选投产窗口（数组；空=全部投产点） */
   setReleasePointIds: (ids) => {
@@ -86,9 +132,17 @@ export const useAppStore = create((set, get) => ({
     return me;
   },
 
-  /** 初始化投产窗口选择：本地有偏好则沿用（含"全部"），否则默认当前/默认窗口 */
+  /** 初始化投产窗口选择：本地偏好需校验有效；旧日期值自动迁移，失效值回退当前/默认窗口 */
   loadReleasePoint: async () => {
-    if (localStorage.getItem(RP_KEY) !== null) return get().releasePointIds; // 已有偏好（可能为空=全部）
+    const stored = localStorage.getItem(RP_KEY);
+    if (stored !== null) {
+      const points = await apiGet('/release-points/all');
+      const normalized = normalizeReleasePointIds(stored, points);
+      if (normalized.explicitAll || normalized.ids.length > 0) {
+        get().setReleasePointIds(normalized.ids);
+        return normalized.ids;
+      }
+    }
     const cur = await apiGet('/release-points/current');
     const ids = cur?.id ? [cur.id] : [];
     get().setReleasePointIds(ids);
