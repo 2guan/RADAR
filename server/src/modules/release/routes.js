@@ -102,22 +102,6 @@ function fillPersonRow(documentXml, label, person) {
   return documentXml;
 }
 
-function wordTableXml(rows) {
-  const cell = (text) => `<w:tc><w:tcPr><w:tcW w:w="1400" w:type="dxa"/></w:tcPr>${cellTextXml(text)}</w:tc>`;
-  return [
-    '<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/><w:tblBorders>',
-    '<w:top w:val="single" w:sz="4" w:space="0" w:color="auto"/>',
-    '<w:left w:val="single" w:sz="4" w:space="0" w:color="auto"/>',
-    '<w:bottom w:val="single" w:sz="4" w:space="0" w:color="auto"/>',
-    '<w:right w:val="single" w:sz="4" w:space="0" w:color="auto"/>',
-    '<w:insideH w:val="single" w:sz="4" w:space="0" w:color="auto"/>',
-    '<w:insideV w:val="single" w:sz="4" w:space="0" w:color="auto"/>',
-    '</w:tblBorders></w:tblPr>',
-    rows.map((row) => `<w:tr>${row.map(cell).join('')}</w:tr>`).join(''),
-    '</w:tbl>',
-  ].join('');
-}
-
 function replaceParagraphByText(documentXml, text, replacementXml) {
   const paragraphs = documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) || [];
   for (const paragraph of paragraphs) {
@@ -125,6 +109,57 @@ function replaceParagraphByText(documentXml, text, replacementXml) {
     return documentXml.replace(paragraph, replacementXml);
   }
   return documentXml;
+}
+
+function centeredBoldParagraph(text) {
+  return [
+    '<w:p>',
+    '<w:pPr><w:jc w:val="center"/></w:pPr>',
+    '<w:r><w:rPr>',
+    '<w:rFonts w:ascii="微软雅黑" w:hAnsi="微软雅黑" w:eastAsia="微软雅黑" w:cs="微软雅黑"/>',
+    '<w:b/><w:bCs/><w:sz w:val="22"/><w:szCs w:val="22"/>',
+    '</w:rPr>',
+    `<w:t xml:space="preserve">${xmlEscape(text)}</w:t>`,
+    '</w:r>',
+    '</w:p>',
+  ].join('');
+}
+
+function insertParagraphAfterText(documentXml, text, paragraphXml) {
+  const paragraphs = documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) || [];
+  for (const paragraph of paragraphs) {
+    if (!plainTextFromXml(paragraph).includes(text)) continue;
+    return documentXml.replace(paragraph, `${paragraph}${paragraphXml}`);
+  }
+  return documentXml;
+}
+
+function nextRelationshipId(relsXml) {
+  const ids = [...relsXml.matchAll(/Id="rId(\d+)"/g)].map((m) => Number(m[1])).filter(Number.isFinite);
+  return `rId${(ids.length ? Math.max(...ids) : 0) + 1}`;
+}
+
+function addPackageRelationship(relsXml, relId, target) {
+  const rel = `<Relationship Id="${relId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/package" Target="${xmlEscape(target)}"/>`;
+  return relsXml.replace('</Relationships>', `${rel}</Relationships>`);
+}
+
+function ensureXlsxContentType(contentTypesXml) {
+  if (contentTypesXml.includes('Extension="xlsx"')) return contentTypesXml;
+  const def = '<Default Extension="xlsx" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"/>';
+  return contentTypesXml.replace('</Types>', `${def}</Types>`);
+}
+
+function attachmentObjectParagraph(relId, shapeId, filename) {
+  return [
+    '<w:p>',
+    '<w:r><w:object w:dxaOrig="2160" w:dyaOrig="720">',
+    `<v:shape id="${shapeId}" type="#_x0000_t75" style="width:72pt;height:36pt" o:ole=""/>`,
+    `<o:OLEObject Type="Embed" ProgID="Excel.Sheet.12" ShapeID="${shapeId}" DrawAspect="Icon" ObjectID="_${shapeId}" r:id="${relId}"/>`,
+    '</w:object></w:r>',
+    `<w:r>${FILLED_TEXT_RUN_PROPS}<w:t xml:space="preserve"> 附件：${xmlEscape(filename)}</w:t></w:r>`,
+    '</w:p>',
+  ].join('');
 }
 
 /** 读取被打标为"会签角色"的角色列表 */
@@ -451,7 +486,7 @@ function formatChangeContents(applies) {
   return values.map((text, index) => `${index + 1}. ${text}`).join('\n');
 }
 
-async function uploadedControlTableXml(releaseTaskId) {
+async function uploadedControlTableAttachment(releaseTaskId) {
   if (!releaseTaskId) return null;
   const attachment = await get(
     `SELECT * FROM attachment
@@ -465,23 +500,12 @@ async function uploadedControlTableXml(releaseTaskId) {
   );
   if (!attachment?.stored_path) return null;
   const abs = path.join(config.attachmentDir, attachment.stored_path);
-  const workbook = new ExcelJS.Workbook();
   try {
-    await workbook.xlsx.readFile(abs);
+    const buffer = await fs.readFile(abs);
+    return { buffer, filename: attachment.filename || '投产变更控制表.xlsx' };
   } catch {
     return null;
   }
-  const sheet = workbook.worksheets[0];
-  const rows = [];
-  for (let r = 1; r <= sheet.rowCount; r++) {
-    const row = [];
-    for (let c = 1; c <= sheet.columnCount; c++) {
-      const value = sheet.getCell(r, c).text || '';
-      row.push(value);
-    }
-    if (row.some(Boolean)) rows.push(row);
-  }
-  return rows.length ? wordTableXml(rows) : null;
 }
 
 async function buildReleasePlanTemplate(ctx) {
@@ -490,6 +514,7 @@ async function buildReleasePlanTemplate(ctx) {
   const documentPath = 'word/document.xml';
   let xml = await zip.file(documentPath).async('string');
 
+  xml = insertParagraphAfterText(xml, '云南农信投产变更方案', centeredBoldParagraph(ctx.code));
   xml = fillRightCellByLabel(xml, '需求提出单位', ctx.proposeDept);
   xml = fillRightCellByLabel(xml, '变更实施单位', ctx.mainOutputDept);
   xml = fillRightCellByLabel(xml, '变更单号', `${ctx.code}-${ctx.releasePointText || '投产点'}`);
@@ -504,8 +529,22 @@ async function buildReleasePlanTemplate(ctx) {
   xml = fillPersonRow(xml, '开发人员', ctx.devOwner);
   xml = fillPersonRow(xml, '业务人员', ctx.businessOwner);
 
-  const controlTableXml = await uploadedControlTableXml(ctx.rt?.id);
-  if (controlTableXml) xml = replaceParagraphByText(xml, '填写变更控制表。', controlTableXml);
+  const controlAttachment = await uploadedControlTableAttachment(ctx.rt?.id);
+  if (controlAttachment) {
+    const relsPath = 'word/_rels/document.xml.rels';
+    const contentTypesPath = '[Content_Types].xml';
+    let relsXml = await zip.file(relsPath).async('string');
+    let contentTypesXml = await zip.file(contentTypesPath).async('string');
+    const relId = nextRelationshipId(relsXml);
+    const shapeId = `_x0000_i${Date.now()}`;
+    const embeddedName = `release_control_${ctx.rt.id}.xlsx`;
+    zip.file(`word/embeddings/${embeddedName}`, controlAttachment.buffer);
+    relsXml = addPackageRelationship(relsXml, relId, `embeddings/${embeddedName}`);
+    contentTypesXml = ensureXlsxContentType(contentTypesXml);
+    zip.file(relsPath, relsXml);
+    zip.file(contentTypesPath, contentTypesXml);
+    xml = replaceParagraphByText(xml, '填写变更控制表。', attachmentObjectParagraph(relId, shapeId, controlAttachment.filename));
+  }
 
   zip.file(documentPath, xml);
   return await zip.generateAsync({ type: 'nodebuffer' });
