@@ -144,18 +144,25 @@ function addPackageRelationship(relsXml, relId, target) {
   return relsXml.replace('</Relationships>', `${rel}</Relationships>`);
 }
 
-function ensureXlsxContentType(contentTypesXml) {
-  if (contentTypesXml.includes('Extension="xlsx"')) return contentTypesXml;
-  const def = '<Default Extension="xlsx" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"/>';
+function addImageRelationship(relsXml, relId, target) {
+  const rel = `<Relationship Id="${relId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="${xmlEscape(target)}"/>`;
+  return relsXml.replace('</Relationships>', `${rel}</Relationships>`);
+}
+
+function ensureDefaultContentType(contentTypesXml, extension, contentType) {
+  if (contentTypesXml.includes(`Extension="${extension}"`)) return contentTypesXml;
+  const def = `<Default Extension="${extension}" ContentType="${contentType}"/>`;
   return contentTypesXml.replace('</Types>', `${def}</Types>`);
 }
 
-function attachmentObjectParagraph(relId, shapeId, filename) {
+function attachmentObjectParagraph(packageRelId, imageRelId, shapeId, filename) {
   return [
     '<w:p>',
     '<w:r><w:object w:dxaOrig="2160" w:dyaOrig="720">',
-    `<v:shape id="${shapeId}" type="#_x0000_t75" style="width:72pt;height:36pt" o:ole=""/>`,
-    `<o:OLEObject Type="Embed" ProgID="Excel.Sheet.12" ShapeID="${shapeId}" DrawAspect="Icon" ObjectID="_${shapeId}" r:id="${relId}"/>`,
+    `<v:shape id="${shapeId}" type="#_x0000_t75" style="width:48pt;height:48pt" o:ole="">`,
+    `<v:imagedata r:id="${imageRelId}" o:title="Excel附件"/>`,
+    '</v:shape>',
+    `<o:OLEObject Type="Embed" ProgID="Excel.Sheet.12" ShapeID="${shapeId}" DrawAspect="Icon" ObjectID="_${shapeId}" r:id="${packageRelId}"/>`,
     '</w:object></w:r>',
     `<w:r>${FILLED_TEXT_RUN_PROPS}<w:t xml:space="preserve"> 附件：${xmlEscape(filename)}</w:t></w:r>`,
     '</w:p>',
@@ -535,15 +542,20 @@ async function buildReleasePlanTemplate(ctx) {
     const contentTypesPath = '[Content_Types].xml';
     let relsXml = await zip.file(relsPath).async('string');
     let contentTypesXml = await zip.file(contentTypesPath).async('string');
-    const relId = nextRelationshipId(relsXml);
+    const packageRelId = nextRelationshipId(relsXml);
+    relsXml = addPackageRelationship(relsXml, packageRelId, `embeddings/release_control_${ctx.rt.id}.xlsx`);
+    const imageRelId = nextRelationshipId(relsXml);
     const shapeId = `_x0000_i${Date.now()}`;
     const embeddedName = `release_control_${ctx.rt.id}.xlsx`;
+    const iconName = 'excel-attachment-icon.png';
     zip.file(`word/embeddings/${embeddedName}`, controlAttachment.buffer);
-    relsXml = addPackageRelationship(relsXml, relId, `embeddings/${embeddedName}`);
-    contentTypesXml = ensureXlsxContentType(contentTypesXml);
+    zip.file(`word/media/${iconName}`, await fs.readFile(await templatePath(iconName)));
+    relsXml = addImageRelationship(relsXml, imageRelId, `media/${iconName}`);
+    contentTypesXml = ensureDefaultContentType(contentTypesXml, 'xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    contentTypesXml = ensureDefaultContentType(contentTypesXml, 'png', 'image/png');
     zip.file(relsPath, relsXml);
     zip.file(contentTypesPath, contentTypesXml);
-    xml = replaceParagraphByText(xml, '填写变更控制表。', attachmentObjectParagraph(relId, shapeId, controlAttachment.filename));
+    xml = replaceParagraphByText(xml, '填写变更控制表。', attachmentObjectParagraph(packageRelId, imageRelId, shapeId, controlAttachment.filename));
   }
 
   zip.file(documentPath, xml);
