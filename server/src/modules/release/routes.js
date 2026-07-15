@@ -8,7 +8,11 @@
  *       「各系统投产登记」改为「关联制品情况」：读取引用了该需求/工单/问题的投产申请制品信息。
  */
 
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { get, all, run, tx, dialect } from '../../db/index.js';
+import { config } from '../../config.js';
 import { auditUpdate } from '../../lib/audit.js';
 import { windowIds } from '../../lib/window.js';
 import { ok, notFound, badRequest, forbidden } from '../../lib/http.js';
@@ -20,6 +24,100 @@ import { defaultDictAttr } from '../../lib/status.js';
 import { formatAttachments } from '../../lib/resolver.js';
 import { parseJsonArray } from '../../lib/json.js';
 import { statusTypeForReleaseStatus, validateRequiredFields } from '../../lib/required-fields.js';
+import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
+
+const RELEASE_TEMPLATE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../templates/release-documents');
+
+async function templatePath(filename) {
+  const fullPath = path.join(RELEASE_TEMPLATE_DIR, filename);
+  try {
+    await fs.access(fullPath);
+    return fullPath;
+  } catch {
+    throw notFound(`模板文件不存在：${filename}`);
+  }
+}
+
+function filenameSafe(text) {
+  return String(text || '未命名').replace(/[\\/:*?"<>|]/g, '_').trim() || '未命名';
+}
+
+function unique(list) {
+  return [...new Set((list || []).map((v) => String(v || '').trim()).filter(Boolean))];
+}
+
+function xmlEscape(text) {
+  return String(text ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function plainTextFromXml(xml) {
+  return xml.replace(/<[^>]+>/g, '');
+}
+
+function cellTextXml(text) {
+  return String(text || '').split(/\r?\n/).map((line) => (
+    `<w:p><w:r><w:t xml:space="preserve">${xmlEscape(line)}</w:t></w:r></w:p>`
+  )).join('');
+}
+
+function replaceCellText(cellXml, text) {
+  const props = cellXml.match(/<w:tcPr[\s\S]*?<\/w:tcPr>/)?.[0] || '';
+  return cellXml.replace(/(<w:tc\b[^>]*>)[\s\S]*(<\/w:tc>)/, `$1${props}${cellTextXml(text)}$2`);
+}
+
+function fillRightCellByLabel(documentXml, label, value) {
+  const rows = documentXml.match(/<w:tr\b[\s\S]*?<\/w:tr>/g) || [];
+  for (const row of rows) {
+    const cells = row.match(/<w:tc\b[\s\S]*?<\/w:tc>/g) || [];
+    if (cells.length < 2 || !plainTextFromXml(cells[0]).includes(label)) continue;
+    return documentXml.replace(row, row.replace(cells[1], replaceCellText(cells[1], value)));
+  }
+  return documentXml;
+}
+
+function fillPersonRow(documentXml, label, person) {
+  const rows = documentXml.match(/<w:tr\b[\s\S]*?<\/w:tr>/g) || [];
+  for (const row of rows) {
+    const cells = row.match(/<w:tc\b[\s\S]*?<\/w:tc>/g) || [];
+    if (cells.length < 5 || !plainTextFromXml(cells[0]).includes(label)) continue;
+    let next = row;
+    next = next.replace(cells[1], replaceCellText(cells[1], person?.org || ''));
+    next = next.replace(cells[2], replaceCellText(cells[2], person?.name || ''));
+    next = next.replace(cells[3], replaceCellText(cells[3], person?.phone || ''));
+    return documentXml.replace(row, next);
+  }
+  return documentXml;
+}
+
+function wordTableXml(rows) {
+  const cell = (text) => `<w:tc><w:tcPr><w:tcW w:w="1400" w:type="dxa"/></w:tcPr>${cellTextXml(text)}</w:tc>`;
+  return [
+    '<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/><w:tblBorders>',
+    '<w:top w:val="single" w:sz="4" w:space="0" w:color="auto"/>',
+    '<w:left w:val="single" w:sz="4" w:space="0" w:color="auto"/>',
+    '<w:bottom w:val="single" w:sz="4" w:space="0" w:color="auto"/>',
+    '<w:right w:val="single" w:sz="4" w:space="0" w:color="auto"/>',
+    '<w:insideH w:val="single" w:sz="4" w:space="0" w:color="auto"/>',
+    '<w:insideV w:val="single" w:sz="4" w:space="0" w:color="auto"/>',
+    '</w:tblBorders></w:tblPr>',
+    rows.map((row) => `<w:tr>${row.map(cell).join('')}</w:tr>`).join(''),
+    '</w:tbl>',
+  ].join('');
+}
+
+function replaceParagraphByText(documentXml, text, replacementXml) {
+  const paragraphs = documentXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) || [];
+  for (const paragraph of paragraphs) {
+    if (!plainTextFromXml(paragraph).includes(text)) continue;
+    return documentXml.replace(paragraph, replacementXml);
+  }
+  return documentXml;
+}
 
 /** 读取被打标为"会签角色"的角色列表 */
 async function signoffRoles() {
@@ -241,6 +339,168 @@ async function releaseApplicantFor(code, releasePointId, entityType) {
     change_code: selected.change_code,
     register_time: selected.created_at || selected.register_time,
   } : null;
+}
+
+async function releaseApplyRowsFor(code, releasePointId) {
+  const pointFilter = releasePointId === null
+    ? 'AND ra.release_point_id IS NULL'
+    : 'AND ra.release_point_id = ?';
+  const params = releasePointId === null ? [code] : [code, releasePointId];
+  return await all(
+    `SELECT ra.* FROM release_apply ra
+       WHERE ${dialect.jsonArrayContains('ra.ref_codes')}
+       ${pointFilter}
+     ORDER BY ra.id`,
+    ...params,
+  );
+}
+
+async function personByName(name) {
+  const val = String(name || '').trim();
+  if (!val) return null;
+  const row = await get(
+    `SELECT name, org, phone FROM user
+      WHERE name = ?
+      ORDER BY CASE WHEN status = '启用' THEN 0 ELSE 1 END, id
+      LIMIT 1`,
+    val,
+  );
+  return row || { name: val, org: '', phone: '' };
+}
+
+async function peopleByNames(names) {
+  const people = [];
+  for (const name of unique(names)) {
+    const person = await personByName(name);
+    if (person) people.push(person);
+  }
+  if (!people.length) return null;
+  return {
+    org: unique(people.map((p) => p.org)).join('、'),
+    name: people.map((p) => p.name).join('、'),
+    phone: unique(people.map((p) => p.phone)).join('、'),
+  };
+}
+
+async function releaseTemplateContext(code, releasePointId, entityType, rt) {
+  const item = await getWorkItem(code);
+  const issue = item ? null : await get('SELECT * FROM issue WHERE issue_code = ?', code);
+  const applies = await releaseApplyRowsFor(code, releasePointId);
+  const releasePoint = releasePointId ? await get('SELECT release_date FROM release_point WHERE id = ?', releasePointId) : null;
+  const rawSystemCodes = item
+    ? [...(item.main_systems || []), ...(item.collab_dev_systems || []), ...(item.collab_test_systems || [])]
+    : [issue?.system];
+  const applySystemCodes = applies.map((row) => row.change_system);
+  const systemCodes = unique([...rawSystemCodes, ...applySystemCodes]);
+  const systems = [];
+  for (const codeValue of systemCodes) {
+    const sys = await get('SELECT * FROM system WHERE sys_code = ? OR sys_name = ?', codeValue, codeValue);
+    systems.push(sys || { sys_code: codeValue, sys_name: codeValue, out_dept: '' });
+  }
+
+  const outputDeptBySystem = new Map(applies.map((row) => [String(row.change_system || ''), row.out_dept || '']));
+  const systemOutDept = (sys) => sys?.out_dept || outputDeptBySystem.get(String(sys?.sys_code || '')) || '';
+  const mainSystemCodes = item ? item.main_systems || [] : [issue?.system].filter(Boolean);
+  const mainSystems = systems.filter((sys) => mainSystemCodes.includes(sys.sys_code) || mainSystemCodes.includes(sys.sys_name));
+  const title = item?.title || issue?.summary || code;
+  const summary = item?.summary || issue?.details || issue?.summary || '';
+  const proposeDept = item?.propose_dept || issue?.reporter_org || issue?.business_group || '';
+  const devOwners = (await all('SELECT owner FROM dev_task WHERE req_code = ? ORDER BY id', code)).map((row) => row.owner);
+  const businessOwner = item?.yn_owner || issue?.reporter_name || '';
+
+  return {
+    code,
+    rt,
+    item,
+    issue,
+    applies,
+    releasePointText: releasePoint?.release_date || '',
+    title,
+    summary,
+    proposeDept,
+    systemCodes: systems.map((sys) => sys.sys_code || sys.sys_name),
+    systemNames: systems.map((sys) => sys.sys_name || sys.sys_code),
+    systemOutDepts: unique(systems.map(systemOutDept)),
+    mainOutputDept: unique((mainSystems.length ? mainSystems : systems).map(systemOutDept))[0] || '',
+    releaseOwner: await personByName(rt?.owner),
+    devOwner: await peopleByNames(devOwners),
+    businessOwner: await personByName(businessOwner),
+  };
+}
+
+async function buildReleaseControlTemplate(ctx) {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.readFile(await templatePath('变更控制表模板.xlsx'));
+  const sheet = workbook.worksheets[0];
+  const systemNameText = ctx.systemNames.join('、');
+  for (let row = 4; row <= 15; row++) sheet.getCell(`C${row}`).value = systemNameText;
+  return await workbook.xlsx.writeBuffer();
+}
+
+function formatChangeContents(applies) {
+  const values = (applies || []).map((row) => row.change_content).filter(Boolean);
+  if (values.length <= 1) return values[0] || '';
+  return values.map((text, index) => `${index + 1}. ${text}`).join('\n');
+}
+
+async function uploadedControlTableXml(releaseTaskId) {
+  if (!releaseTaskId) return null;
+  const attachment = await get(
+    `SELECT * FROM attachment
+      WHERE entity_type = 'release'
+        AND entity_id = ?
+        AND field_key = ?
+        AND kind = 'file'
+      ORDER BY id DESC
+      LIMIT 1`,
+    releaseTaskId, '投产变更控制表',
+  );
+  if (!attachment?.stored_path) return null;
+  const abs = path.join(config.attachmentDir, attachment.stored_path);
+  const workbook = new ExcelJS.Workbook();
+  try {
+    await workbook.xlsx.readFile(abs);
+  } catch {
+    return null;
+  }
+  const sheet = workbook.worksheets[0];
+  const rows = [];
+  for (let r = 1; r <= sheet.rowCount; r++) {
+    const row = [];
+    for (let c = 1; c <= sheet.columnCount; c++) {
+      const value = sheet.getCell(r, c).text || '';
+      row.push(value);
+    }
+    if (row.some(Boolean)) rows.push(row);
+  }
+  return rows.length ? wordTableXml(rows) : null;
+}
+
+async function buildReleasePlanTemplate(ctx) {
+  const template = await fs.readFile(await templatePath('投产变更方案模版.docx'));
+  const zip = await JSZip.loadAsync(template);
+  const documentPath = 'word/document.xml';
+  let xml = await zip.file(documentPath).async('string');
+
+  xml = fillRightCellByLabel(xml, '需求提出单位', ctx.proposeDept);
+  xml = fillRightCellByLabel(xml, '变更实施单位', ctx.mainOutputDept);
+  xml = fillRightCellByLabel(xml, '变更单号', `${ctx.code}-${ctx.releasePointText || '投产点'}`);
+  xml = fillRightCellByLabel(xml, '变更目的', ctx.title);
+  xml = fillRightCellByLabel(xml, '需求描述', ctx.summary);
+  xml = fillRightCellByLabel(xml, '变更内容', formatChangeContents(ctx.applies));
+  xml = fillRightCellByLabel(xml, '系统编号', ctx.systemCodes.join('、'));
+  xml = fillRightCellByLabel(xml, '系统名称', ctx.systemNames.join('、'));
+  xml = fillRightCellByLabel(xml, '系统运维部门', ctx.systemOutDepts.join('、'));
+  xml = fillRightCellByLabel(xml, '业务功能', ctx.title);
+  xml = fillPersonRow(xml, '运维人员', ctx.releaseOwner);
+  xml = fillPersonRow(xml, '开发人员', ctx.devOwner);
+  xml = fillPersonRow(xml, '业务人员', ctx.businessOwner);
+
+  const controlTableXml = await uploadedControlTableXml(ctx.rt?.id);
+  if (controlTableXml) xml = replaceParagraphByText(xml, '填写变更控制表。', controlTableXml);
+
+  zip.file(documentPath, xml);
+  return await zip.generateAsync({ type: 'nodebuffer' });
 }
 
 function isNewer(a, b) {
@@ -546,6 +806,29 @@ export default async function releaseRoutes(fastify) {
     }
 
     return ok({ entityType, entity, releaseTask: rt, releaseApplicant, signoffs, artifacts, taskStatuses });
+  });
+
+  // 阶段附件模板下载：按当前投产审批实例预填业务信息
+  fastify.get('/release/:code/attachment-template', { preHandler: fastify.requirePerm('release', 'view') }, async (request, reply) => {
+    const code = request.params.code;
+    const fieldKey = String(request.query?.fieldKey || '').trim();
+    if (!['投产变更方案', '投产变更控制表'].includes(fieldKey)) throw badRequest('不支持的模板类型');
+
+    const releasePointId = await resolveReleasePointId(code, request.query?.releasePointId);
+    const entityType = await classifyEntity(code);
+    const rt = await ensureReleaseTask(code, entityType, releasePointId);
+    const ctx = await releaseTemplateContext(code, releasePointId, entityType, rt);
+    const isControl = fieldKey === '投产变更控制表';
+    const filename = isControl
+      ? `变更控制表-${filenameSafe(code)}.xlsx`
+      : `投产变更方案-${filenameSafe(code)}.docx`;
+    const buf = isControl ? await buildReleaseControlTemplate(ctx) : await buildReleasePlanTemplate(ctx);
+
+    reply.header('Content-Type', isControl
+      ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    reply.header('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
+    return reply.send(Buffer.from(buf));
   });
 
   // 更新投产任务负责人/投产状态/评审状态

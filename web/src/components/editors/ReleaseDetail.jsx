@@ -105,6 +105,7 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
 
   const [historyOpen, setHistoryOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [templateDownloading, setTemplateDownloading] = useState(null);
   const [impactOpen, setImpactOpen] = useState(false);
   const [coverageOpen, setCoverageOpen] = useState(false);
   const [analysisSummary, setAnalysisSummary] = useState(null);
@@ -130,6 +131,31 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
       message.error(e.message || '导出失败');
     } finally {
       setExporting(false);
+    }
+  };
+
+  const handleDownloadAttachmentTemplate = async (fieldKey) => {
+    if (!entityCode) return;
+    setTemplateDownloading(fieldKey);
+    try {
+      const resp = await rawClient.get(`/release/${entityCode}/attachment-template${releasePointQuery()}`, {
+        params: { fieldKey },
+        responseType: 'blob',
+      });
+      const url = URL.createObjectURL(resp.data);
+      const cd = resp.headers?.['content-disposition'] || '';
+      const match = cd.match(/filename\*=UTF-8''([^;]+)/);
+      const filename = match ? decodeURIComponent(match[1]) : `${fieldKey}模板.${fieldKey === '投产变更控制表' ? 'xlsx' : 'docx'}`;
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      message.success('模板已下载');
+    } catch (e) {
+      message.error(e.message || '模板下载失败');
+    } finally {
+      setTemplateDownloading(null);
     }
   };
 
@@ -672,12 +698,25 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
                 const mode = required.attachmentMode(f);
                 return (
                   <div className="form-section-card" key={f}>
-                    <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>
-                      {f}
-                      {required.isRequired(`attachment:${f}`) && <span style={{ color: '#ff4d4f', marginLeft: 2 }}>*</span>}
-                      <span style={{ fontWeight: 400, color: 'var(--radar-text-secondary)', marginLeft: 6, fontSize: 11 }}>
-                        （{attachmentModeText(mode)}）
+                    <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <span>
+                        {f}
+                        {required.isRequired(`attachment:${f}`) && <span style={{ color: '#ff4d4f', marginLeft: 2 }}>*</span>}
+                        <span style={{ fontWeight: 400, color: 'var(--radar-text-secondary)', marginLeft: 6, fontSize: 11 }}>
+                          （{attachmentModeText(mode)}）
+                        </span>
                       </span>
+                      <Tooltip title="下载模板">
+                        <Button
+                          type="text"
+                          size="small"
+                          aria-label={`下载${f}模板`}
+                          icon={<DownloadOutlined style={{ fontSize: 12 }} />}
+                          loading={templateDownloading === f}
+                          onClick={() => handleDownloadAttachmentTemplate(f)}
+                          style={{ width: 24, height: 24, borderRadius: 2, flexShrink: 0 }}
+                        />
+                      </Tooltip>
                     </div>
                     <AttachmentField entityType="release" entityId={detail.releaseTask?.id} fieldKey={f} readOnly={!editable} inputMode={mode} />
                   </div>
