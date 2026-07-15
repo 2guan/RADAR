@@ -14,6 +14,7 @@ import dayjs from 'dayjs';
 import 'dayjs/locale/zh-cn';
 import { useAppStore } from './stores/app.js';
 import { getPreset } from './theme/presets.js';
+import { syncFaviconLogo } from './utils/logo.js';
 import AppRouter from './app.jsx';
 import './styles.css';
 
@@ -32,6 +33,10 @@ function Root() {
 
   const colors = isDark ? preset.dark : preset.light;
   const primary = colors.primary;
+
+  useEffect(() => {
+    syncFaviconLogo(presetKey);
+  }, [presetKey]);
 
   // 同步 CSS 变量（供 styles.css 使用）
   useEffect(() => {

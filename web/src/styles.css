@@ -139,6 +139,18 @@ body {
   display: flex; align-items: center; justify-content: center; color: #fff; font-size: 20px;
   box-shadow: 0 6px 16px var(--radar-primary-fade);
 }
+.radar-brand-logo img {
+  width: 72%;
+  height: 72%;
+  display: block;
+  object-fit: contain;
+}
+.radar-inline-logo {
+  width: 72%;
+  height: 72%;
+  display: block;
+  object-fit: contain;
+}
 .radar-brand-name { color: var(--radar-ink); font-weight: 800; font-size: 18px; letter-spacing: 1px; line-height: 1.1; }
 .radar-brand-sub {
   color: var(--radar-text-secondary); font-size: 11px; letter-spacing: .3px; font-weight: 600;

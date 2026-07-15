@@ -9,7 +9,7 @@
 import React, { useEffect, useState } from 'react';
 import { Layout, Select, Button, Dropdown, Avatar, Drawer, Typography, Form, Input, Modal, message, theme as antdTheme } from 'antd';
 import {
-  MenuOutlined, BulbOutlined, BulbFilled, UserOutlined, LogoutOutlined, RocketOutlined, RadarChartOutlined, DownOutlined,
+  MenuOutlined, BulbOutlined, BulbFilled, UserOutlined, LogoutOutlined, RocketOutlined, DownOutlined,
   MenuFoldOutlined, MenuUnfoldOutlined, KeyOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
@@ -19,6 +19,7 @@ import { MENU } from '../router/menu.js';
 import { apiGet, apiPost } from '../api/client.js';
 import ThemeSwitcher from '../components/ThemeSwitcher.jsx';
 import { makeReleasePointOptions, releasePointFilter } from '../components/ReleasePointText.jsx';
+import { BRAND_LOGO_SRC } from '../utils/logo.js';
 
 const { Header, Sider, Content } = Layout;
 
@@ -142,7 +143,7 @@ export default function MainLayout() {
   const siderInner = (
     <>
       <div className="radar-brand">
-        <div className="radar-brand-logo"><RadarChartOutlined /></div>
+        <div className="radar-brand-logo"><img src={BRAND_LOGO_SRC} alt="RADAR" /></div>
         <div style={{ minWidth: 0 }}>
           <div className="radar-brand-name">{brand}</div>
           <div className="radar-brand-sub" title={platformName}>{platformName}</div>

@@ -12,7 +12,6 @@ import {
   ProjectOutlined, 
   GlobalOutlined, 
   CopyrightOutlined, 
-  RadarChartOutlined, 
   LockOutlined, 
   ClockCircleOutlined, 
   SafetyOutlined, 
@@ -22,6 +21,7 @@ import {
 } from '@ant-design/icons';
 import { apiGet, apiPut } from '../api/client.js';
 import { useAppStore } from '../stores/app.js';
+import { BRAND_LOGO_SRC } from '../utils/logo.js';
 
 export default function AppConfigForm({ mode, items }) {
   const [form] = Form.useForm();
@@ -178,7 +178,7 @@ export default function AppConfigForm({ mode, items }) {
                   boxShadow: 'var(--radar-card-shadow)'
                 }}>
                   <div className="radar-brand-logo" style={{ width: 32, height: 32, fontSize: 18, boxShadow: 'none' }}>
-                    <RadarChartOutlined />
+                    <img src={BRAND_LOGO_SRC} alt="RADAR" />
                   </div>
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div className="radar-brand-name" style={{ fontSize: 15 }}>{watchShortName || 'RADAR'}</div>
@@ -208,7 +208,7 @@ export default function AppConfigForm({ mode, items }) {
                       width: 30, height: 30, borderRadius: 8,
                       background: 'linear-gradient(135deg, var(--radar-primary), var(--radar-primary-fade, #52C41A))',
                       display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 18
-                    }}><RadarChartOutlined /></span>
+                    }}><img src={BRAND_LOGO_SRC} alt="RADAR" className="radar-inline-logo" /></span>
                     <span style={{ fontWeight: 800, fontSize: 18, color: 'var(--radar-ink)' }}>{watchShortName || 'RADAR'}</span>
                   </div>
                   <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--radar-ink)', marginBottom: 4 }}>
