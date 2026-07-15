@@ -147,6 +147,16 @@ export const REQUIRED_FIELD_MODULES = [
       { key: 'delivery_units.ferry_status', label: '摆渡状态', valueType: 'deliveryUnit' },
     ],
   },
+  {
+    key: 'release',
+    label: '投产审批',
+    statusField: 'status',
+    attachmentEntity: 'release',
+    attachmentFields: ['投产变更方案', '投产变更控制表'],
+    fields: [
+      { key: 'owner', label: '投产负责人' },
+    ],
+  },
 ];
 
 export const REQUIRED_FIELD_CONFIG_MODULES = REQUIRED_FIELD_MODULES.flatMap((mod) => {
@@ -228,6 +238,7 @@ const ENTITY_MODULE_MAP = {
   requirement: { moduleKey: 'requirement', table: 'requirement' },
   dev: { moduleKey: 'dev', table: 'dev_task' },
   test: { moduleKey: 'test', table: 'test_task' },
+  release: { moduleKey: 'release', table: 'release_task' },
 };
 
 function cloneConfig(config) {
@@ -361,6 +372,12 @@ export function statusTypeForReleaseApply(reviewStatus) {
   return 'inProgress';
 }
 
+export function statusTypeForReleaseStatus(status) {
+  if (!status || String(status).includes('待') || String(status).includes('未')) return 'initial';
+  if (String(status).includes('已投产') || String(status).includes('取消')) return 'final';
+  return 'inProgress';
+}
+
 function isEmptyValue(value) {
   if (value === undefined || value === null) return true;
   if (typeof value === 'string') return value.trim() === '';
@@ -462,7 +479,10 @@ export async function assertAttachmentInputAllowed(entityType, entityId, fieldKe
   const selectFields = entityType === 'test' ? 'status, test_type' : 'status';
   const row = await get(`SELECT ${selectFields} FROM ${meta.table} WHERE id = ?`, entityId);
   if (!row) return;
-  const mode = await getAttachmentInputMode(configKeyFor(meta.moduleKey, row), await statusTypeForProcessStatus(row.status), fieldKey);
+  const stateType = meta.moduleKey === 'release'
+    ? statusTypeForReleaseStatus(row.status)
+    : await statusTypeForProcessStatus(row.status);
+  const mode = await getAttachmentInputMode(configKeyFor(meta.moduleKey, row), stateType, fieldKey);
   if (mode === 'path' && kind === 'file') throw badRequest(`${fieldKey}仅允许填写路径`);
   if (mode === 'file' && kind === 'path') throw badRequest(`${fieldKey}仅允许上传文档`);
 }

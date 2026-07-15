@@ -26,6 +26,10 @@ async function getEntityCode(entityType, entityId) {
     const row = await get('SELECT task_code FROM test_task WHERE id = ?', entityId);
     return row?.task_code || null;
   }
+  if (entityType === 'release') {
+    const row = await get('SELECT req_code FROM release_task WHERE id = ?', entityId);
+    return row?.req_code || null;
+  }
   return null;
 }
 

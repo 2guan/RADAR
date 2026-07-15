@@ -683,10 +683,15 @@ export default async function overviewRoutes(fastify) {
       let releaseInfo = {
         release_status: rtRow?.status || '未发起',
         release_owner: rtRow?.owner || '',
+        release_change_plan: '',
+        release_change_control: '',
         signoff_details: '无',
       };
       if (rtRow) {
         const signoffs = await all('SELECT * FROM release_signoff WHERE release_task_id = ? ORDER BY id', rtRow.id);
+        const releaseAttaches = await all("SELECT * FROM attachment WHERE entity_type = 'release' AND entity_id = ?", rtRow.id);
+        releaseInfo.release_change_plan = formatAttachments(releaseAttaches, '投产变更方案');
+        releaseInfo.release_change_control = formatAttachments(releaseAttaches, '投产变更控制表');
         releaseInfo.signoff_details = signoffs.map(s => `${s.role_name}·${s.signer_name || '未签署'}(${s.result}${s.conclusion ? ':' + s.conclusion : ''})`).join('; ') || '无会签记录';
       }
 
@@ -917,6 +922,8 @@ export default async function overviewRoutes(fastify) {
       // 投产
       { key: 'release_status', title: '投产状态' },
       { key: 'release_owner', title: '投产负责人' },
+      { key: 'release_change_plan', title: '投产变更方案' },
+      { key: 'release_change_control', title: '投产变更控制表' },
       { key: 'signoff_details', title: '会签决议详情' },
       { key: 'sys_release_time', title: '系统上线实际时间' },
       { key: 'sys_release_status', title: '系统上线状态' },

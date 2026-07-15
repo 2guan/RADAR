@@ -11,6 +11,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Modal, Card, Space, Button, Input, message, Empty, Row, Col, Radio, Tooltip, Tag, Upload, Popconfirm, Select } from 'antd';
 import { HistoryOutlined, UploadOutlined, DeleteOutlined, PlusOutlined, HighlightOutlined, DownloadOutlined } from '@ant-design/icons';
 import HistoryDrawer from '../HistoryDrawer.jsx';
+import AttachmentField from '../AttachmentField.jsx';
 import SignaturePad from '../SignaturePad.jsx';
 import CodeLink from '../CodeLink.jsx';
 import EditorShell from './EditorShell.jsx';
@@ -26,6 +27,22 @@ import PersonPicker from '../PersonPicker.jsx';
 import { makeReleasePointOptions, ReleasePointText } from '../ReleasePointText.jsx';
 import { apiGet, apiPost, apiPut, apiDelete, rawClient } from '../../api/client.js';
 import { useAppStore } from '../../stores/app.js';
+import { useRequiredFields } from '../../hooks/useRequiredFields.js';
+
+const RELEASE_ATTACH_FIELDS = ['投产变更方案', '投产变更控制表'];
+
+function attachmentModeText(mode) {
+  if (mode === 'path') return '路径';
+  if (mode === 'file') return '上传文档';
+  return '附件或路径';
+}
+
+function releaseRequiredStatusType(status) {
+  const val = String(status || '');
+  if (!val || val.includes('待') || val.includes('未')) return 'initial';
+  if (val.includes('已投产') || val.includes('取消')) return 'final';
+  return 'inProgress';
+}
 
 /** 签署时间缩略：YYYY-MM-DD HH:MM:SS -> M-D H:MM */
 function fmtSignTime(s) {
@@ -278,6 +295,7 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
       onChanged?.();
     } catch (e) {
       message.error(e.message || '更新失败');
+      reload();
     }
   };
 
@@ -440,6 +458,8 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
   const statusValue = detail?.releaseTask?.status;
   const reviewStatus = detail?.releaseTask?.review_status;
   const editable = can('release', 'edit');
+  const required = useRequiredFields('release', releaseRequiredStatusType(statusValue), !editable);
+  const visible = (fieldKey) => required.isVisible(fieldKey);
 
   // 打开某条任务详情（按阶段类型分发到开发/测试详情弹窗）
   const openTask = (kind, id) => { if (kind === 'dev') setDevTaskId(id); else setTestTaskId(id); };
@@ -631,10 +651,14 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
                       tabIndex={editable ? undefined : -1}
                     />
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--radar-ink)', width: 80 }}>投产负责人</span>
-                    <PersonPicker style={{ flex: 1, ...(!editable ? { pointerEvents: 'none' } : {}) }} placeholder="选择投产负责人" size="small" value={owner} onChange={handleOwnerChange} />
-                  </div>
+                  {visible('owner') && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--radar-ink)', width: 80 }}>
+                        投产负责人{required.isRequired('owner') && <span style={{ color: '#ff4d4f', marginLeft: 2 }}>*</span>}
+                      </span>
+                      <PersonPicker style={{ flex: 1, ...(!editable ? { pointerEvents: 'none' } : {}) }} placeholder="选择投产负责人" size="small" value={owner} onChange={handleOwnerChange} />
+                    </div>
+                  )}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--radar-text-secondary)' }}>
                     <span style={{ width: 80 }}>申请人：</span><span>{detail.releaseApplicant?.display || '—'}</span>
                   </div>
@@ -643,6 +667,22 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
                   </div>
                 </div>
               </div>
+
+              {RELEASE_ATTACH_FIELDS.filter((f) => visible(`attachment:${f}`)).map((f) => {
+                const mode = required.attachmentMode(f);
+                return (
+                  <div className="form-section-card" key={f}>
+                    <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>
+                      {f}
+                      {required.isRequired(`attachment:${f}`) && <span style={{ color: '#ff4d4f', marginLeft: 2 }}>*</span>}
+                      <span style={{ fontWeight: 400, color: 'var(--radar-text-secondary)', marginLeft: 6, fontSize: 11 }}>
+                        （{attachmentModeText(mode)}）
+                      </span>
+                    </div>
+                    <AttachmentField entityType="release" entityId={detail.releaseTask?.id} fieldKey={f} readOnly={!editable} inputMode={mode} />
+                  </div>
+                );
+              })}
 
               {/* 关联制品情况 */}
               <div className="form-section-card">

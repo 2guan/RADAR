@@ -17,7 +17,9 @@ import { signatureDataUrl } from '../../lib/signature.js';
 import { buildReleaseWordDoc } from '../../lib/release-word.js';
 import { getWorkItem } from '../../lib/work-items.js';
 import { defaultDictAttr } from '../../lib/status.js';
+import { formatAttachments } from '../../lib/resolver.js';
 import { parseJsonArray } from '../../lib/json.js';
+import { statusTypeForReleaseStatus, validateRequiredFields } from '../../lib/required-fields.js';
 
 /** 读取被打标为"会签角色"的角色列表 */
 async function signoffRoles() {
@@ -409,10 +411,12 @@ async function computeEntities(windowIdList) {
     const releaseDate = rpMap[pointId] || null;
 
     const rt = await releaseTaskByCodePoint(code, pointId);
+    const releaseAttaches = rt ? await all("SELECT * FROM attachment WHERE entity_type = 'release' AND entity_id = ?", rt.id) : [];
     // 未发起时按默认基线展示：投产/评审状态取字典默认值，会签进度=签0/角色数
     const summary = rt ? await signoffSummary(rt.id) : { total: signoffRoleCount, signed: 0, rejected: 0 };
 
     list.push({
+      release_task_id: rt?.id || null,
       entity_type: type,
       code,
       change_codes: [...(info.changeCodes || [])].sort((a, b) => String(a).localeCompare(String(b))),
@@ -424,6 +428,8 @@ async function computeEntities(windowIdList) {
       review_status: rt?.review_status || defaultReviewStatus,
       signoff: summary,
       initiated: !!rt,
+      release_change_plan: formatAttachments(releaseAttaches, '投产变更方案'),
+      release_change_control: formatAttachments(releaseAttaches, '投产变更控制表'),
     });
   }
 
@@ -568,6 +574,8 @@ export default async function releaseRoutes(fastify) {
 
     const keys = Object.keys(updateData);
     if (keys.length > 0) {
+      const merged = { ...rt, ...updateData };
+      await validateRequiredFields('release', statusTypeForReleaseStatus(merged.status), merged);
       await run(
         `UPDATE release_task SET ${keys.map((k) => `${k}=?`).join(',')}, updated_at=datetime('now','localtime') WHERE id=?`,
         ...keys.map((k) => updateData[k]), rt.id,
@@ -709,6 +717,8 @@ export default async function releaseRoutes(fastify) {
       { key: 'release_status', title: '投产状态' },
       { key: 'review_status', title: '评审状态' },
       { key: 'signoff_progress', title: '会签进度' },
+      { key: 'release_change_plan', title: '投产变更方案' },
+      { key: 'release_change_control', title: '投产变更控制表' },
     ];
 
     const mapped = rows.map((r) => ({
@@ -721,6 +731,8 @@ export default async function releaseRoutes(fastify) {
       release_status: r.release_status,
       review_status: r.review_status || '',
       signoff_progress: r.signoff.total ? `签 ${r.signoff.signed} 驳 ${r.signoff.rejected} / ${r.signoff.total}` : '未发起',
+      release_change_plan: r.release_change_plan || '',
+      release_change_control: r.release_change_control || '',
     }));
 
     const buf = await exportXlsx(cols, mapped, '投产审批清单');
