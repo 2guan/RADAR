@@ -246,7 +246,7 @@ export default function MainLayout() {
   const isTabMode = contentMode === 'tabs' && !isMobile;
   const platformName = platform['platform.name'] || '日常需求研发流程管理';
 
-  const activePath = isTabMode && activeTabKey ? activeTabKey.split('?')[0] : location.pathname;
+  const activePath = isTabMode ? (activeTabKey ? activeTabKey.split('?')[0] : '') : location.pathname;
   const currentRouteKey = normalizeTabPath(location.pathname, location.search);
 
   const buildTab = useCallback((path) => ({
@@ -398,7 +398,7 @@ export default function MainLayout() {
       showSearch
       optionFilterProp="searchLabel"
       filterOption={releasePointFilter}
-      style={isMobile ? { width: 170, minWidth: 0, maxWidth: '50vw', fontSize: 12 } : { minWidth: 260, fontSize: 12 }}
+      style={isMobile ? { width: '100%', minWidth: 0, fontSize: 12 } : { minWidth: 260, fontSize: 12 }}
       className="radar-rp-select"
       classNames={{ popup: { root: 'radar-rp-select-dropdown' } }}
       suffixIcon={<DownOutlined style={{ color: token.colorPrimary }} />}
@@ -428,9 +428,15 @@ export default function MainLayout() {
               style={{ fontSize: 16, marginRight: 12 }}
             />
           )}
-          {isMobile && <Button type="text" icon={<MenuOutlined />} onClick={() => setDrawerOpen(true)} />}
-          <div className="radar-page-title">{isMobile ? brand : currentLabel}</div>
-          <div style={{ flex: 1 }} />
+          {isMobile && <Button className="radar-mobile-menu-btn" type="text" icon={<MenuOutlined />} onClick={() => setDrawerOpen(true)} />}
+          {isMobile ? (
+            <div className="radar-header-logo" aria-label={brand}>
+              <img src={BRAND_LOGO_SRC} alt={brand} />
+            </div>
+          ) : (
+            <div className="radar-page-title">{currentLabel}</div>
+          )}
+          {!isMobile && <div style={{ flex: 1 }} />}
           <div className="radar-rp-pill" style={{ paddingRight: 2 }}>
             {!isMobile && <RocketOutlined />}
             {rpSelector}
@@ -448,7 +454,7 @@ export default function MainLayout() {
           <Button type="text" shape="circle" icon={theme === 'dark' ? <BulbFilled /> : <BulbOutlined />} onClick={toggleTheme} title="切换白天/夜间" />
           {/* Global top-right profile removed */}
         </Header>
-        {isTabMode && (
+        {isTabMode && tabs.length > 0 && (
           <div className="radar-header-tab-row">
             <HeaderTabStrip
               tabs={tabs}
@@ -460,7 +466,7 @@ export default function MainLayout() {
           </div>
         )}
 
-        <Content className="radar-content" style={{ margin: isMobile ? 12 : 20, overflow: 'auto hidden' }}>
+        <Content className="radar-content" style={{ margin: isMobile ? 12 : (isTabMode ? 0 : 20), overflow: 'auto hidden' }}>
           {isTabMode ? (
             <TabbedWorkspace
               tabs={tabs}

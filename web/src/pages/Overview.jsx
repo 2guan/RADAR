@@ -32,7 +32,7 @@ import { logger } from '../utils/logger.js';
 
 const TEST_ATTACH = ['测试方案', '测试报告'];
 const SIT_ATTACH = ['测试方案', '测试覆盖设计文档', '测试报告'];
-const DEV_ATTACH = ['概要设计', '详细设计', '代码走查', '单元测试报告'];
+const DEV_ATTACH = ['概要设计', '详细设计', '代码走查', '单元测试报告', '编码检查表', '技术方案确认单'];
 const AV_COLORS = ['#2E6BFF', '#22C55E', '#F59E0B', '#8B5CF6', '#06B6D4', '#EC4899', '#F1683C'];
 
 /** 由姓名稳定地取一个头像颜色 */

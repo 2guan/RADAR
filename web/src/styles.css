@@ -55,7 +55,7 @@ body {
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: rgba(140,148,168,0.32); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(140,148,168,0.55); }
-.radar-content { overflow-x: hidden; }
+.radar-content { overflow-x: hidden; position: relative; z-index: 1; }
 
 /* AntD 容器透明，露出页面渐变背景 */
 .ant-layout { background: transparent !important; }
@@ -188,14 +188,14 @@ body {
 /* ============ 顶栏 ============ */
 .radar-header {
   display: flex; align-items: center; gap: 10px; padding: 0 20px;
-  position: sticky; top: 0; z-index: 20;
+  position: sticky; top: 0; z-index: 80;
   background: var(--radar-surface) !important;
   border-bottom: 1px solid var(--radar-border);
 }
 .radar-header-tab-row {
   position: sticky;
   top: 60px;
-  z-index: 19;
+  z-index: 79;
   display: flex;
   align-items: stretch;
   min-height: 39px;
@@ -204,6 +204,23 @@ body {
   border-bottom: 1px solid var(--radar-border);
 }
 .radar-page-title { font-size: 17px; font-weight: 700; color: var(--radar-ink); }
+.radar-header-logo {
+  width: 31px;
+  height: 31px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--radar-primary), var(--radar-blob2));
+  box-shadow: 0 4px 12px var(--radar-primary-fade);
+}
+.radar-header-logo img {
+  width: 72%;
+  height: 72%;
+  display: block;
+  object-fit: contain;
+}
 .radar-rp-pill {
   display: inline-flex; align-items: center; gap: 4px; min-height: 36px; padding: 0 8px 0 12px;
   border-radius: 0; background: transparent; color: var(--radar-primary); font-weight: 600; font-size: 12px;
@@ -220,15 +237,15 @@ body {
 .radar-tab-workspace {
   display: flex;
   flex-direction: column;
-  min-height: calc(100vh - 100px);
+  min-height: calc(100vh - 139px);
   background: transparent;
 }
 .radar-tab-workspace.empty {
   align-items: center;
   justify-content: center;
-  min-height: calc(100vh - 140px);
-  border: 1px dashed var(--radar-border);
-  background: var(--radar-surface);
+  min-height: calc(100vh - 100px);
+  border: none;
+  background: transparent;
 }
 .radar-header-tabs {
   display: flex;
@@ -254,8 +271,8 @@ body {
   height: 35px;
   max-width: 230px;
   padding: 0 8px 0 13px;
-  border: 1px solid transparent;
-  border-bottom-color: transparent;
+  border: 1px solid var(--radar-border);
+  border-bottom-color: var(--radar-border);
   background: transparent;
   color: var(--radar-text-secondary);
   font: inherit;
@@ -268,16 +285,16 @@ body {
 .radar-tab-button:hover {
   color: var(--radar-primary);
   border-color: var(--radar-primary-fade);
-  border-bottom-color: transparent;
+  border-bottom-color: var(--radar-border);
   background: var(--radar-primary-soft);
 }
 .radar-tab-button.active {
   color: var(--radar-primary);
   border-color: var(--radar-border);
-  border-bottom-color: var(--radar-surface);
+  border-bottom-color: var(--radar-primary);
   background: var(--radar-surface);
   font-weight: 600;
-  box-shadow: 0 -2px 0 var(--radar-primary) inset, 0 1px 0 var(--radar-surface);
+  box-shadow: 0 -2px 0 var(--radar-primary) inset;
 }
 .radar-tab-title {
   min-width: 0;
@@ -307,10 +324,12 @@ body {
   position: relative;
   flex: 1;
   min-height: 0;
+  min-height: inherit;
 }
 .radar-tab-pane {
   position: relative;
-  min-height: calc(100vh - 156px);
+  min-height: inherit;
+  padding: 20px;
   display: none;
 }
 .radar-tab-pane.active {
@@ -319,15 +338,22 @@ body {
 .radar-tab-popup-root {
   position: absolute;
   inset: 0;
+  min-height: 100%;
   pointer-events: none;
   z-index: 50;
 }
 .radar-tab-popup-root > * {
   pointer-events: auto;
 }
+.radar-tab-popup-root .ant-modal-root {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
 .radar-tab-popup-root .ant-modal-root .ant-modal-mask,
 .radar-tab-popup-root .ant-modal-root .ant-modal-wrap {
   position: absolute;
+  inset: 0;
 }
 
 @media (max-width: 576px) {
@@ -335,8 +361,23 @@ body {
     padding: 0 10px !important;
     gap: 6px !important;
   }
+  .radar-mobile-menu-btn {
+    width: 22px !important;
+    min-width: 22px !important;
+    padding: 0 !important;
+    flex: 0 0 auto !important;
+  }
+  .radar-header-logo {
+    margin-right: 2px;
+  }
   .radar-rp-pill {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
     padding: 0 4px 0 8px !important;
+  }
+  .radar-rp-pill .radar-rp-select {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
   }
   .radar-rp-pill .ant-select-selection-item {
     font-size: 12px !important;

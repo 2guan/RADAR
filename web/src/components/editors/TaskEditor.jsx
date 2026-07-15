@@ -31,7 +31,7 @@ import { useRequiredFields } from '../../hooks/useRequiredFields.js';
 const CFG = {
   dev: {
     api: '/dev-tasks', entity: 'dev', stage: '开发', title: '开发任务',
-    attachFields: ['概要设计', '详细设计', '代码走查', '单元测试报告'],
+    attachFields: ['概要设计', '详细设计', '代码走查', '单元测试报告', '编码检查表', '技术方案确认单'],
     statusLabel: '开发状态', ownerLabel: '开发负责人', orgLabel: '开发实施方',
   },
   test: {

@@ -129,6 +129,8 @@ test('检查内容设置：支持影响性分析与测试覆盖性分析', () =>
   const nftModule = REQUIRED_FIELD_CONFIG_MODULES.find((module) => module.key === 'test.NFT');
   const secModule = REQUIRED_FIELD_CONFIG_MODULES.find((module) => module.key === 'test.SEC');
   assert.ok(dev.fields.some((field) => field.key === 'impact_analysis'));
+  assert.ok(dev.attachmentFields.includes('编码检查表'));
+  assert.ok(dev.attachmentFields.includes('技术方案确认单'));
   assert.ok(testModule.fields.some((field) => field.key === 'coverage_analysis'));
   assert.ok(sitModule.fields.some((field) => field.key === 'coverage_analysis'));
   assert.ok(!uatModule.fields.some((field) => field.key === 'coverage_analysis'));
@@ -136,10 +138,15 @@ test('检查内容设置：支持影响性分析与测试覆盖性分析', () =>
   assert.ok(!secModule.fields.some((field) => field.key === 'coverage_analysis'));
 
   const config = normalizeRequiredFieldConfig({
-    dev: { impact_analysis: { final: true } },
+    dev: {
+      impact_analysis: { final: true },
+      'attachment:编码检查表': { final: true, mode: { final: 'path' } },
+    },
     test: { coverage_analysis: { final: true } },
   });
   assert.equal(config.dev.impact_analysis.required.final, true);
+  assert.equal(config.dev['attachment:编码检查表'].required.final, true);
+  assert.equal(config.dev['attachment:编码检查表'].mode.final, 'path');
   assert.equal(config['test.SIT'].coverage_analysis.required.final, true);
   assert.equal(config['test.UAT'].coverage_analysis, undefined);
   assert.equal(config['test.NFT'].coverage_analysis, undefined);

@@ -703,7 +703,8 @@ export default async function overviewRoutes(fastify) {
           dev_code: '', dev_name: '', dev_content: '', dev_status: '', dev_owner: '',
           dev_system: '', dev_org: '', dev_plan_start: '', dev_plan_end: '',
           dev_actual_start: '', dev_actual_end: '', dev_deviation_rate: '',
-          dev_design_brief: '', dev_design_detail: '', dev_code_review: '', dev_unit_test: '', dev_impact_analysis: '',
+          dev_design_brief: '', dev_design_detail: '', dev_code_review: '', dev_unit_test: '',
+          dev_coding_checklist: '', dev_tech_solution_confirm: '', dev_impact_analysis: '',
         };
         let sysReleaseTime = '无';
         let sysReleaseStatus = '无';
@@ -733,6 +734,8 @@ export default async function overviewRoutes(fastify) {
             dev_design_detail: formatAttachments(devAttaches, '详细设计'),
             dev_code_review: formatAttachments(devAttaches, '代码走查'),
             dev_unit_test: formatAttachments(devAttaches, '单元测试报告'),
+            dev_coding_checklist: formatAttachments(devAttaches, '编码检查表'),
+            dev_tech_solution_confirm: formatAttachments(devAttaches, '技术方案确认单'),
             dev_impact_analysis: analysisText.impact,
           };
 
@@ -889,6 +892,8 @@ export default async function overviewRoutes(fastify) {
       { key: 'dev_design_detail', title: '详细设计' },
       { key: 'dev_code_review', title: '代码走查' },
       { key: 'dev_unit_test', title: '单元测试报告' },
+      { key: 'dev_coding_checklist', title: '编码检查表' },
+      { key: 'dev_tech_solution_confirm', title: '技术方案确认单' },
       { key: 'dev_impact_analysis', title: '影响性分析', width: 60, wrapText: true },
       // 应用组装测试 (SIT)
       { key: 'sit_code', title: '应用组装测试任务编号' },

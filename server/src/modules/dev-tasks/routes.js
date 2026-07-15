@@ -50,7 +50,7 @@ const LABELS = {
   actual_start: '实际开始时间', actual_end: '实际结束时间', deviation_rate: '排期偏差率',
 };
 // 本阶段附件字段
-const ATTACH_FIELDS = ['概要设计', '详细设计', '代码走查', '单元测试报告', '影响性分析文档'];
+const ATTACH_FIELDS = ['概要设计', '详细设计', '代码走查', '单元测试报告', '编码检查表', '技术方案确认单', '影响性分析文档'];
 
 export default async function devTaskRoutes(fastify) {
   // 列表（可按 req_code 或当前投产窗口过滤）
@@ -371,6 +371,8 @@ export default async function devTaskRoutes(fastify) {
       { key: 'design_detail', title: '详细设计' },
       { key: 'code_review', title: '代码走查' },
       { key: 'unit_test', title: '单元测试报告' },
+      { key: 'coding_checklist', title: '编码检查表' },
+      { key: 'tech_solution_confirm', title: '技术方案确认单' },
       { key: 'impact_analysis', title: '影响性分析', width: 60, wrapText: true },
     ];
 
@@ -395,6 +397,8 @@ export default async function devTaskRoutes(fastify) {
         design_detail: formatAttachments(attaches, '详细设计'),
         code_review: formatAttachments(attaches, '代码走查'),
         unit_test: formatAttachments(attaches, '单元测试报告'),
+        coding_checklist: formatAttachments(attaches, '编码检查表'),
+        tech_solution_confirm: formatAttachments(attaches, '技术方案确认单'),
         impact_analysis: await impactTextFor(row.req_code),
       };
     }));

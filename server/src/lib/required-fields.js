@@ -92,7 +92,7 @@ export const REQUIRED_FIELD_MODULES = [
     statusField: 'status',
     statusStage: '开发',
     attachmentEntity: 'dev',
-    attachmentFields: ['概要设计', '详细设计', '代码走查', '单元测试报告'],
+    attachmentFields: ['概要设计', '详细设计', '代码走查', '单元测试报告', '编码检查表', '技术方案确认单'],
     fields: [
       { key: 'task_name', label: '开发任务名称' },
       { key: 'content', label: '开发内容概述' },
