@@ -59,15 +59,23 @@ function plainTextFromXml(xml) {
   return xml.replace(/<[^>]+>/g, '');
 }
 
-function cellTextXml(text) {
+const FILLED_TEXT_RUN_PROPS = [
+  '<w:rPr>',
+  '<w:rFonts w:ascii="微软雅黑" w:hAnsi="微软雅黑" w:eastAsia="微软雅黑" w:cs="微软雅黑"/>',
+  '<w:sz w:val="18"/><w:szCs w:val="18"/>',
+  '</w:rPr>',
+].join('');
+
+function cellTextXml(text, paragraphProps = '') {
   return String(text || '').split(/\r?\n/).map((line) => (
-    `<w:p><w:r><w:t xml:space="preserve">${xmlEscape(line)}</w:t></w:r></w:p>`
+    `<w:p>${paragraphProps}<w:r>${FILLED_TEXT_RUN_PROPS}<w:t xml:space="preserve">${xmlEscape(line)}</w:t></w:r></w:p>`
   )).join('');
 }
 
 function replaceCellText(cellXml, text) {
-  const props = cellXml.match(/<w:tcPr[\s\S]*?<\/w:tcPr>/)?.[0] || '';
-  return cellXml.replace(/(<w:tc\b[^>]*>)[\s\S]*(<\/w:tc>)/, `$1${props}${cellTextXml(text)}$2`);
+  const cellProps = cellXml.match(/<w:tcPr[\s\S]*?<\/w:tcPr>/)?.[0] || '';
+  const paragraphProps = cellXml.match(/<w:pPr[\s\S]*?<\/w:pPr>/)?.[0] || '';
+  return cellXml.replace(/(<w:tc\b[^>]*>)[\s\S]*(<\/w:tc>)/, `$1${cellProps}${cellTextXml(text, paragraphProps)}$2`);
 }
 
 function fillRightCellByLabel(documentXml, label, value) {
