@@ -56,7 +56,17 @@ const LABELS = {
 };
 // 本阶段附件字段
 const ATTACH_FIELDS = ['概要设计', '详细设计', '代码走查', '单元测试报告', '编码检查表', '技术方案确认单', '影响性分析文档'];
-const TEMPLATE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../temp');
+const TEMPLATE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../templates/dev-documents');
+
+async function templatePath(filename) {
+  const fullPath = path.join(TEMPLATE_DIR, filename);
+  try {
+    await fs.access(fullPath);
+    return fullPath;
+  } catch {
+    throw notFound(`模板文件不存在：${filename}`);
+  }
+}
 
 function formatLocalMinute(d = new Date()) {
   const pad = (n) => String(n).padStart(2, '0');
@@ -92,7 +102,7 @@ async function devTemplateContext(taskId) {
 
 async function buildCodingChecklistTemplate(ctx, userName) {
   const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.readFile(path.join(TEMPLATE_DIR, '编码检查表模版.xlsx'));
+  await workbook.xlsx.readFile(await templatePath('编码检查表模版.xlsx'));
   const sheet = workbook.worksheets[0];
   sheet.getCell('B3').value = ctx.workItemTitle;
   sheet.getCell('B4').value = ctx.workItemCode;
@@ -153,7 +163,7 @@ function techSolutionText(items) {
 }
 
 async function buildTechSolutionTemplate(ctx) {
-  const template = await fs.readFile(path.join(TEMPLATE_DIR, '技术方案确认单模版.docx'));
+  const template = await fs.readFile(await templatePath('技术方案确认单模版.docx'));
   const zip = await JSZip.loadAsync(template);
   const documentPath = 'word/document.xml';
   const items = await all('SELECT * FROM impact_change_item WHERE req_code = ? ORDER BY sort_order, id', ctx.workItemCode);
