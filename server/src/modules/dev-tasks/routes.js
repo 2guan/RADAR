@@ -6,6 +6,9 @@
  * 说明：再次承接时仅为尚未建立开发任务的系统补建，避免重复。
  */
 
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { get, all, run, tx } from '../../db/index.js';
 import { listQuery } from '../../lib/query.js';
 import { genDevCode } from '../../lib/code-gen.js';
@@ -19,7 +22,9 @@ import { ok, notFound, badRequest } from '../../lib/http.js';
 import { exportXlsx, parseXlsx } from '../../lib/excel.js';
 import { resolveDictAttr, resolveSystemCode, formatAttachments } from '../../lib/resolver.js';
 import { getWorkItem, workItemCodesInReleasePoints, releaseDateMapForCodes } from '../../lib/work-items.js';
-import { formatImpactItemsText } from '../../lib/impact-schema.js';
+import { decodeChangeItem, formatImpactItemsText } from '../../lib/impact-schema.js';
+import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
 
 // 导入模板和常用列定义
 const IO_COLUMNS = [
@@ -51,6 +56,113 @@ const LABELS = {
 };
 // 本阶段附件字段
 const ATTACH_FIELDS = ['概要设计', '详细设计', '代码走查', '单元测试报告', '编码检查表', '技术方案确认单', '影响性分析文档'];
+const TEMPLATE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../temp');
+
+function formatLocalMinute(d = new Date()) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()} ${d.getHours()}:${pad(d.getMinutes())}`;
+}
+
+function filenameSafe(text) {
+  return String(text || '未命名').replace(/[\\/:*?"<>|]/g, '_').trim() || '未命名';
+}
+
+function taskSeq(taskCode, id) {
+  const m = String(taskCode || '').match(/(\d+)$/);
+  return m ? m[1] : String(id || '001');
+}
+
+function attachmentFilename({ systemName, docName, reqCode, taskCode, id, ext }) {
+  return `${filenameSafe(systemName)}-${docName}-${filenameSafe(reqCode)}-${taskSeq(taskCode, id)}.${ext}`;
+}
+
+async function devTemplateContext(taskId) {
+  const task = await get('SELECT * FROM dev_task WHERE id = ?', taskId);
+  if (!task) throw notFound('开发任务不存在');
+  const item = await getWorkItem(task.req_code);
+  const sys = task.impl_system ? await get('SELECT sys_name FROM system WHERE sys_code = ?', task.impl_system) : null;
+  return {
+    task,
+    item,
+    systemName: sys?.sys_name || task.impl_system || '未配置系统',
+    workItemTitle: item?.title || '',
+    workItemCode: item?.req_code || task.req_code || '',
+  };
+}
+
+async function buildCodingChecklistTemplate(ctx, userName) {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.readFile(path.join(TEMPLATE_DIR, '编码检查表模版.xlsx'));
+  const sheet = workbook.worksheets[0];
+  sheet.getCell('B3').value = ctx.workItemTitle;
+  sheet.getCell('B4').value = ctx.workItemCode;
+  sheet.getCell('D5').value = userName || '';
+  sheet.getCell('B6').value = userName || '';
+  sheet.getCell('D6').value = formatLocalMinute();
+  return await workbook.xlsx.writeBuffer();
+}
+
+function xmlEscape(text) {
+  return String(text ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function plainTextFromXml(xml) {
+  return xml.replace(/<[^>]+>/g, '');
+}
+
+function cellTextXml(text) {
+  const lines = String(text || '').split(/\r?\n/);
+  return lines.map((line) => `<w:p><w:r><w:t xml:space="preserve">${xmlEscape(line)}</w:t></w:r></w:p>`).join('');
+}
+
+function replaceCellText(cellXml, text) {
+  const props = cellXml.match(/<w:tcPr[\s\S]*?<\/w:tcPr>/)?.[0] || '';
+  return cellXml.replace(/(<w:tc\b[^>]*>)[\s\S]*(<\/w:tc>)/, `$1${props}${cellTextXml(text)}$2`);
+}
+
+function fillRightCellByLabel(documentXml, label, value) {
+  const rows = documentXml.match(/<w:tr\b[\s\S]*?<\/w:tr>/g) || [];
+  for (const row of rows) {
+    if (!plainTextFromXml(row).includes(label)) continue;
+    const cells = row.match(/<w:tc\b[\s\S]*?<\/w:tc>/g) || [];
+    if (cells.length < 2) continue;
+    const nextRow = row.replace(cells[1], replaceCellText(cells[1], value));
+    return documentXml.replace(row, nextRow);
+  }
+  return documentXml;
+}
+
+function techSolutionText(items) {
+  return (items || []).map((row, index) => {
+    const item = decodeChangeItem(row);
+    const impact = item.impact_analysis
+      || [item.upstream_impact, item.data_impact, item.job_chain_change_detail, item.updown_dep_change_detail, item.runtime_change_detail].filter(Boolean).join('；')
+      || '—';
+    return [
+      `${index + 1}. 变更模块：${item.category || '—'}`,
+      `系统名称：${item.system || '—'}`,
+      `变更类型：${item.change_kind || '—'}`,
+      `变更内容：${item.change_content || '—'}`,
+      `影响分析：${impact}`,
+    ].join('\n');
+  }).join('\n\n');
+}
+
+async function buildTechSolutionTemplate(ctx) {
+  const template = await fs.readFile(path.join(TEMPLATE_DIR, '技术方案确认单模版.docx'));
+  const zip = await JSZip.loadAsync(template);
+  const documentPath = 'word/document.xml';
+  const items = await all('SELECT * FROM impact_change_item WHERE req_code = ? ORDER BY sort_order, id', ctx.workItemCode);
+  let xml = await zip.file(documentPath).async('string');
+  xml = fillRightCellByLabel(xml, '*需求系统流水号', ctx.workItemTitle);
+  xml = fillRightCellByLabel(xml, '*技术实现方案简述', techSolutionText(items));
+  zip.file(documentPath, xml);
+  return await zip.generateAsync({ type: 'nodebuffer' });
+}
 
 export default async function devTaskRoutes(fastify) {
   // 列表（可按 req_code 或当前投产窗口过滤）
@@ -171,6 +283,31 @@ export default async function devTaskRoutes(fastify) {
     const row = await get('SELECT * FROM dev_task WHERE task_code = ?', request.params.code);
     if (!row) throw notFound();
     return ok(await buildDevDetail(row));
+  });
+
+  // 阶段附件模板下载：按当前开发任务预填业务信息
+  fastify.get('/dev-tasks/:id/attachment-template', { preHandler: fastify.requirePerm('dev', 'view') }, async (request, reply) => {
+    const fieldKey = String(request.query?.fieldKey || '').trim();
+    if (!['编码检查表', '技术方案确认单'].includes(fieldKey)) throw badRequest('不支持的模板类型');
+    const ctx = await devTemplateContext(request.params.id);
+    const isCodingChecklist = fieldKey === '编码检查表';
+    const filename = attachmentFilename({
+      systemName: ctx.systemName,
+      docName: fieldKey,
+      reqCode: ctx.workItemCode,
+      taskCode: ctx.task.task_code,
+      id: ctx.task.id,
+      ext: isCodingChecklist ? 'xlsx' : 'docx',
+    });
+    const buf = isCodingChecklist
+      ? await buildCodingChecklistTemplate(ctx, request.currentUser?.name)
+      : await buildTechSolutionTemplate(ctx);
+
+    reply.header('Content-Type', isCodingChecklist
+      ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    reply.header('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
+    return reply.send(Buffer.from(buf));
   });
 
   // 开发承接预览

@@ -9,7 +9,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Form, Input, DatePicker, Row, Col, Button, Tooltip, message } from 'antd';
-import { HistoryOutlined } from '@ant-design/icons';
+import { DownloadOutlined, HistoryOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import DictSelect from '../DictSelect.jsx';
 import SystemSelect from '../SystemSelect.jsx';
@@ -23,7 +23,7 @@ import EditorShell from './EditorShell.jsx';
 import RequirementEditor from './RequirementEditor.jsx';
 import TicketEditor from './TicketEditor.jsx';
 import StatusBadge, { getStatusType, statusSelectWidth } from '../StatusBadge.jsx';
-import { apiGet, apiPut } from '../../api/client.js';
+import { apiGet, apiPut, rawClient } from '../../api/client.js';
 import { useAppStore } from '../../stores/app.js';
 import { useResponsive } from '../../hooks/useResponsive.js';
 import { useRequiredFields } from '../../hooks/useRequiredFields.js';
@@ -40,6 +40,7 @@ const CFG = {
     statusLabel: '测试状态', ownerLabel: '测试负责人', orgLabel: '测试实施方',
   },
 };
+const TEMPLATE_ATTACH_FIELDS = new Set(['编码检查表', '技术方案确认单']);
 
 function attachmentModeText(mode) {
   if (mode === 'path') return '路径';
@@ -71,6 +72,7 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
   const [impactOpen, setImpactOpen] = useState(false);
   const [coverageOpen, setCoverageOpen] = useState(false);
   const [analysisCount, setAnalysisCount] = useState(null);
+  const [templateDownloading, setTemplateDownloading] = useState(null);
   const isSit = kind === 'test' && current?.test_type === 'SIT';
 
   // 载入结构化分析的已填条目数，用于按钮旁提示
@@ -118,6 +120,31 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
     message.success('已保存');
     onSaved?.();
     onClose?.();   // 保存成功后关闭弹窗 / 返回
+  };
+
+  const downloadAttachmentTemplate = async (fieldKey) => {
+    if (!current?.id) { message.warning('请先打开开发任务详情'); return; }
+    setTemplateDownloading(fieldKey);
+    try {
+      const resp = await rawClient.get(`/dev-tasks/${current.id}/attachment-template`, {
+        params: { fieldKey },
+        responseType: 'blob',
+      });
+      const url = URL.createObjectURL(resp.data);
+      const cd = resp.headers?.['content-disposition'] || '';
+      const match = cd.match(/filename\*=UTF-8''([^;]+)/);
+      const filename = match ? decodeURIComponent(match[1]) : `${fieldKey}模板.${fieldKey === '编码检查表' ? 'xlsx' : 'docx'}`;
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      message.success('模板已下载');
+    } catch (e) {
+      message.error(e.message || '模板下载失败');
+    } finally {
+      setTemplateDownloading(null);
+    }
   };
 
   return (
@@ -299,11 +326,26 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
               const mode = required.attachmentMode(f);
               return (
                 <div className="form-section-card" key={f} style={{ marginBottom: 12 }}>
-                  <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>
-                    {f}
-                    <span style={{ fontWeight: 400, color: 'var(--radar-text-secondary)', marginLeft: 6, fontSize: 11 }}>
-                      （{attachmentModeText(mode)}）
+                  <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <span>
+                      {f}
+                      <span style={{ fontWeight: 400, color: 'var(--radar-text-secondary)', marginLeft: 6, fontSize: 11 }}>
+                        （{attachmentModeText(mode)}）
+                      </span>
                     </span>
+                    {kind === 'dev' && TEMPLATE_ATTACH_FIELDS.has(f) && (
+                      <Tooltip title="下载模板">
+                        <Button
+                          type="text"
+                          size="small"
+                          aria-label={`下载${f}模板`}
+                          icon={<DownloadOutlined style={{ fontSize: 12 }} />}
+                          loading={templateDownloading === f}
+                          onClick={() => downloadAttachmentTemplate(f)}
+                          style={{ width: 24, height: 24, borderRadius: 2, flexShrink: 0 }}
+                        />
+                      </Tooltip>
+                    )}
                   </div>
                   <AttachmentField entityType={cfg.entity} entityId={current?.id} fieldKey={f} readOnly={readonly} inputMode={mode} />
                 </div>
