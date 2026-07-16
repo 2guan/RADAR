@@ -13,7 +13,9 @@ services:
         # 国内服务器如无法访问 Docker Hub，可通过 .env 覆盖为其他可用镜像源。
         NODE_IMAGE: ${NODE_IMAGE:-docker.m.daocloud.io/library/node:22-alpine}
         NPM_CONFIG_REGISTRY: ${NPM_CONFIG_REGISTRY:-https://registry.npmmirror.com}
-    image: radar:latest
+        # 前端生产构建需要的 Node 堆内存上限；低内存服务器可在 .env 中调小或配合 swap 使用。
+        WEB_BUILD_NODE_OPTIONS: ${WEB_BUILD_NODE_OPTIONS:---max-old-space-size=2048}
+    image: ${RADAR_IMAGE:-radar:latest}
     container_name: ${RADAR_CONTAINER_NAME:-radar}
     restart: unless-stopped
     env_file:

@@ -1053,8 +1053,10 @@ npm run dev
 | `PORT` | `3000` | 后端监听端口 |
 | `RADAR_HTTP_PORT` | `3510` | Docker Compose 暴露到宿主机的端口 |
 | `RADAR_CONTAINER_NAME` | `radar` | Docker 容器名称 |
+| `RADAR_IMAGE` | `radar:latest` | Docker 镜像名称；使用 GHCR 等远端镜像时改为完整镜像地址 |
 | `NODE_IMAGE` | `docker.m.daocloud.io/library/node:22-alpine` | Docker 构建基础镜像 |
 | `NPM_CONFIG_REGISTRY` | `https://registry.npmmirror.com` | Docker 构建时 npm registry |
+| `WEB_BUILD_NODE_OPTIONS` | `--max-old-space-size=2048` | Docker 前端构建阶段 Node 参数，用于设置 Vite 构建堆内存 |
 
 ### JWT 与初始管理员
 
@@ -1159,6 +1161,50 @@ RADAR_HTTP_PORT=3510
 docker compose up -d --build
 ```
 
+如果是新机器，必须先从 `.env.example` 复制出 `.env`。缺少 `.env` 时，Compose 会直接提示 `env file .../.env not found` 并停止。
+
+低内存服务器上，前端构建可能出现 `JavaScript heap out of memory`。可先确认 `.env` 中有：
+
+```env
+WEB_BUILD_NODE_OPTIONS=--max-old-space-size=2048
+```
+
+如果机器物理内存较小但有 swap，可保持 2048；如果总内存不足，可临时改为 1024，但构建会更慢。内存充足时可改为 4096。
+
+如果镜像已在 GitHub Actions 或其他机器构建完成并推送到镜像仓库，可在 `.env` 中把 `RADAR_IMAGE` 改为远端镜像地址，然后在服务器执行：
+
+```bash
+docker compose pull radar
+docker compose up -d --no-build
+```
+
+### GitHub Actions 构建镜像
+
+仓库内置 `.github/workflows/docker-image.yml`。推送到 `main` 或手动运行 Actions 后，会构建 `linux/amd64` 镜像并推送到 GitHub Container Registry：
+
+```text
+ghcr.io/2guan/radar:latest
+```
+
+服务器使用 GitHub 构建好的镜像时，修改 `.env`：
+
+```env
+RADAR_IMAGE=ghcr.io/2guan/radar:latest
+```
+
+如果 GHCR 包是私有的，服务器需要先登录：
+
+```bash
+echo "<GitHub Personal Access Token>" | docker login ghcr.io -u <GitHub 用户名> --password-stdin
+```
+
+然后拉取并启动：
+
+```bash
+docker compose pull radar
+docker compose up -d --no-build
+```
+
 访问：
 
 ```text
@@ -1182,6 +1228,8 @@ Dockerfile 采用两阶段构建：
 
 1. `web-builder`：安装前端依赖并执行 `npm run build`。
 2. 运行阶段：安装后端生产依赖，拷贝后端源码和前端 `dist`。
+
+前端构建阶段默认使用 `WEB_BUILD_NODE_OPTIONS=--max-old-space-size=2048`，用于避免 Vite 在受限内存环境中被 Node 默认堆上限中断。
 
 默认启动命令：
 

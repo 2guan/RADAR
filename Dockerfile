@@ -12,10 +12,12 @@ ARG NPM_CONFIG_REGISTRY=https://registry.npmjs.org/
 # ---- 阶段一：构建前端 ----
 FROM ${NODE_IMAGE} AS web-builder
 ARG NPM_CONFIG_REGISTRY
+ARG WEB_BUILD_NODE_OPTIONS=--max-old-space-size=2048
 WORKDIR /build/web
 COPY web/package*.json ./
 RUN npm config set registry "${NPM_CONFIG_REGISTRY}" && npm ci
 COPY web/ ./
+ENV NODE_OPTIONS=${WEB_BUILD_NODE_OPTIONS}
 RUN npm run build
 
 # ---- 阶段二：后端运行环境 ----
