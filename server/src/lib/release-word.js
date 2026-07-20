@@ -10,7 +10,7 @@
 import {
   Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
   HeadingLevel, AlignmentType, WidthType, BorderStyle, ShadingType,
-  ImageRun, VerticalAlign, convertInchesToTwip,
+  ImageRun, VerticalAlign, TableLayoutType, convertInchesToTwip,
 } from 'docx';
 import { coverageItemExportLines, decodeChangeItem, impactItemExportLines } from './impact-schema.js';
 
@@ -19,6 +19,19 @@ const FONT = '微软雅黑';
 const COLOR_BLACK = '000000';
 const FILL_GRAY = 'D9D9D9';   // 标签/表头灰色底纹
 const FILL_WHITE = 'FFFFFF';
+
+// A4 纵向页面：210 × 297 mm（11906 × 16838 twip）。左右页边距沿用 1.2 英寸，
+// 表格可用宽度为 8450 twip。Word/WPS 移动端会按此固定网格渲染，不再自动挤压列宽。
+const A4_PAGE_WIDTH = 11906;
+const A4_PAGE_HEIGHT = 16838;
+const PAGE_MARGIN_HORIZONTAL = 1728;
+const TABLE_WIDTH = A4_PAGE_WIDTH - PAGE_MARGIN_HORIZONTAL * 2;
+
+const KV_COL = [1950, 6500];
+const FOUR_COL = [1650, 2575, 1650, 2575];
+const ARTIFACT_COL = [2100, 1700, 4650];
+const ANALYSIS_COL = [1950, 6500];
+const SIGNOFF_COL = [1350, 1050, 1300, 2100, 2650];
 
 /** 全量单元格边框 */
 const CELL_BORDER = {
@@ -134,29 +147,36 @@ export function formatWordDateTime(value) {
 
 // ── 表格构建辅助 ─────────────────────────────────────────────────────────
 
-/** 两列 key-value 行（label 宽 2000，value 宽 6500） */
+/** 两列 key-value 行（标签列 1950，内容列 6500） */
 function kvRow(label, value) {
-  return new TableRow({ children: [thCell(label, 2000), tdCell(value, 6500)] });
+  return new TableRow({ children: [thCell(label, KV_COL[0]), tdCell(value, KV_COL[1])] });
 }
 
 /** 4 列基本信息行：[label1, val1, label2, val2] */
 function fourColRow(label1, val1, label2, val2) {
   return new TableRow({
     children: [
-      thCell(label1, 1700),
-      tdCell(val1,   2700),
-      thCell(label2, 1700),
-      tdCell(val2,   2700),
+      thCell(label1, FOUR_COL[0]),
+      tdCell(val1,   FOUR_COL[1]),
+      thCell(label2, FOUR_COL[2]),
+      tdCell(val2,   FOUR_COL[3]),
     ],
+  });
+}
+
+/** A4 正文宽度的固定布局表格，避免移动端 Word/WPS 自动重算列宽。 */
+function fixedTable(columnWidths, rows) {
+  return new Table({
+    width: { size: TABLE_WIDTH, type: WidthType.DXA },
+    columnWidths,
+    layout: TableLayoutType.FIXED,
+    rows,
   });
 }
 
 /** 构建标准两列 kv 表格 */
 function kvTable(rows) {
-  return new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
-    rows,
-  });
+  return fixedTable(KV_COL, rows);
 }
 
 /** 左侧灰底：序号与变更分类，垂直/水平居中。 */
@@ -176,21 +196,18 @@ function analysisTitleCell(index, category, width) {
 /** 分析导出内容：每条影响项单独成行，右侧字段顺序与 Excel 导出一致。 */
 function analysisTable(items, lineOf, emptyText) {
   if (!items?.length) return para(run(emptyText, { size: 18 }));
-  return new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
-    rows: items.map((item, index) => {
+  return fixedTable(ANALYSIS_COL, items.map((item, index) => {
       const impact = decodeChangeItem(item);
       return new TableRow({
         children: [
-          analysisTitleCell(index + 1, impact.category, 2000),
-          tdCell('', 6500, {
+          analysisTitleCell(index + 1, impact.category, ANALYSIS_COL[0]),
+          tdCell('', ANALYSIS_COL[1], {
             vAlign: VerticalAlign.TOP,
             children: lineOf(item).map((line) => para(run(line, { size: 20 }), { alignment: AlignmentType.LEFT, spaceAfter: 30 })),
           }),
         ],
       });
-    }),
-  });
+    }));
 }
 
 // ── 主入口 ───────────────────────────────────────────────────────────────
@@ -217,26 +234,22 @@ export async function buildReleaseWordDoc(detail, devTasksFull, testTasksFull, a
     children: [run('云南农信同业输出项目版本发布评审单', { bold: true, size: 46 })],
   }));
 
-  // 副标题：编号 + 标题/概述
-  const entityLabel = isWorkItem ? (entity.title || '') : (entity.summary || '');
+  // 副标题：仅保留需求/工单/问题编号，便于评审单归档与检索。
   children.push(new Paragraph({
     alignment: AlignmentType.CENTER,
     spacing: { after: 300 },
-    children: [run(`${entity.code || ''}  ${entityLabel}`, { size: 24 })],
+    children: [run(entity.code || '', { size: 24 })],
   }));
 
   // ── 一、投产基本信息 ──────────────────────────────────────────────────
   children.push(section('一、投产基本信息'));
 
   // 4 列基础信息表
-  children.push(new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
-    rows: [
+  children.push(fixedTable(FOUR_COL, [
       fourColRow('投产负责人', releaseTask?.owner, '投产状态', releaseTask?.status),
       fourColRow('申请投产点', entity?.apply_release_date || entity?.release_date, '评审状态', releaseTask?.review_status),
       fourColRow('发起人', releaseTask?.registrar, '发起时间', releaseTask?.register_time),
-    ],
-  }));
+    ]));
 
   // 每条关联制品申请
   if (artifacts && artifacts.length > 0) {
@@ -258,25 +271,22 @@ export async function buildReleaseWordDoc(detail, devTasksFull, testTasksFull, a
           spacing: { before: 100, after: 60 },
           children: [run('制品清单：', { bold: true, size: 20 })],
         }));
-        children.push(new Table({
-          width: { size: 100, type: WidthType.PERCENTAGE },
-          rows: [
+        children.push(fixedTable(ARTIFACT_COL, [
             new TableRow({
               children: [
-                thCell('制品类型', 2200),
-                thCell('新版本号', 1800),
-                thCell('交付单元名称', 4800),
+                thCell('制品类型', ARTIFACT_COL[0]),
+                thCell('新版本号', ARTIFACT_COL[1]),
+                thCell('交付单元名称', ARTIFACT_COL[2]),
               ],
             }),
             ...units.map((u) => new TableRow({
               children: [
-                tdCell(u.artifact_type, 2200),
-                tdCell(u.new_version,   1800),
-                tdCell(u.delivery_unit, 4800),
+                tdCell(u.artifact_type, ARTIFACT_COL[0]),
+                tdCell(u.new_version,   ARTIFACT_COL[1]),
+                tdCell(u.delivery_unit, ARTIFACT_COL[2]),
               ],
             })),
-          ],
-        }));
+          ]));
       }
     });
   } else {
@@ -378,7 +388,7 @@ export async function buildReleaseWordDoc(detail, devTasksFull, testTasksFull, a
     children.push(para(run('未配置会签角色', { size: 18 })));
   } else {
     // 列宽：签署角色 | 签署结论 | 签署时间 | 签署意见 | 签署人及签名
-    const COL = [1400, 1100, 1350, 2150, 2800];
+    const COL = SIGNOFF_COL;
 
     const headerRow = new TableRow({
       children: [
@@ -421,10 +431,7 @@ export async function buildReleaseWordDoc(detail, devTasksFull, testTasksFull, a
       });
     });
 
-    children.push(new Table({
-      width: { size: 100, type: WidthType.PERCENTAGE },
-      rows: [headerRow, ...dataRows],
-    }));
+    children.push(fixedTable(COL, [headerRow, ...dataRows]));
   }
 
   // ── 组装 Document ─────────────────────────────────────────────────────
@@ -452,11 +459,15 @@ export async function buildReleaseWordDoc(detail, devTasksFull, testTasksFull, a
     sections: [{
       properties: {
         page: {
+          size: {
+            width: A4_PAGE_WIDTH,
+            height: A4_PAGE_HEIGHT,
+          },
           margin: {
             top:    convertInchesToTwip(1),
-            right:  convertInchesToTwip(1.2),
+            right:  PAGE_MARGIN_HORIZONTAL,
             bottom: convertInchesToTwip(1),
-            left:   convertInchesToTwip(1.2),
+            left:   PAGE_MARGIN_HORIZONTAL,
           },
         },
       },

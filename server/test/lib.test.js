@@ -13,6 +13,7 @@ import { buildReleaseWordDoc, formatWordDateTime } from '../src/lib/release-word
 import { formatCoverageText, formatImpactItemsText } from '../src/lib/impact-schema.js';
 import { exportXlsx } from '../src/lib/excel.js';
 import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
 import { normalizeRequiredFieldConfig, REQUIRED_FIELD_CONFIG_MODULES, REQUIRED_FIELD_MODULES } from '../src/lib/required-fields.js';
 
 test('密码哈希：正确密码校验通过、错误密码失败', () => {
@@ -60,6 +61,33 @@ test('投产评审 Word：包含影响性分析与测试覆盖分析章节时可
 
   assert.ok(Buffer.isBuffer(buffer));
   assert.ok(buffer.length > 1000);
+});
+
+test('投产评审 Word：按 A4 正文宽度固定所有表格列宽', async () => {
+  const buffer = await buildReleaseWordDoc({
+    entityType: 'requirement',
+    entity: { code: 'RQ_001', title: '测试需求', summary: '需求说明' },
+    releaseTask: {},
+    signoffs: [{ role_name: '项目经理', result: '同意', sign_time: '2026-05-05 08:15:00' }],
+    artifacts: [{
+      change_code: 'CHG_001',
+      units: [{ artifact_type: '应用包', new_version: '1.0.0', delivery_unit: 'radar.jar' }],
+    }],
+  }, [], [], {
+    impactItems: [{ id: 1, category: '前端P2', detail: '{}' }],
+    coverageMap: new Map(),
+  });
+
+  const zip = await JSZip.loadAsync(buffer);
+  const documentXml = await zip.file('word/document.xml').async('string');
+
+  assert.match(documentXml, /<w:pgSz\b[^>]*w:w="11906"[^>]*w:h="16838"[^>]*\/>/);
+  assert.match(documentXml, /<w:t xml:space="preserve">RQ_001<\/w:t>/);
+  assert.doesNotMatch(documentXml, /RQ_001  测试需求/);
+  assert.equal((documentXml.match(/<w:tblLayout w:type="fixed"\/>/g) || []).length, 7);
+  assert.equal((documentXml.match(/<w:tblW w:type="dxa" w:w="8450"\/>/g) || []).length, 7);
+  assert.match(documentXml, /<w:tblGrid><w:gridCol w:w="1650"\/><w:gridCol w:w="2575"\/><w:gridCol w:w="1650"\/><w:gridCol w:w="2575"\/><\/w:tblGrid>/);
+  assert.match(documentXml, /<w:tblGrid><w:gridCol w:w="1350"\/><w:gridCol w:w="1050"\/><w:gridCol w:w="1300"\/><w:gridCol w:w="2100"\/><w:gridCol w:w="2650"\/><\/w:tblGrid>/);
 });
 
 test('影响性分析导出：一个单元格内输出全部适用字段', () => {
