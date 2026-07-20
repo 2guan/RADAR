@@ -961,7 +961,9 @@ body {
 .dash-section-head .title::before {
   content: ""; width: 4px; height: 16px; background: var(--radar-primary);
 }
-.dash-chart-card { position: relative; height: 100%; }
+.dash-chart-card { position: relative; height: 100%; display: flex; flex-direction: column; }
+.dash-chart-card > .ant-card-head { flex: 0 0 auto; }
+.dash-chart-card > .ant-card-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 .dash-chart-card .dash-chart-title {
   position: relative; font-size: 14px; font-weight: 600; color: var(--radar-ink);
   padding-bottom: 6px;
@@ -985,7 +987,53 @@ body {
   background: var(--radar-primary-soft) !important;
   color: var(--radar-ink); font-weight: 600;
 }
+.dash-pivot.ant-table-wrapper .ant-table,
+.dash-pivot .ant-table-container,
+.dash-pivot .ant-table-container table > thead > tr:first-child > *:first-child,
+.dash-pivot .ant-table-container table > tbody > tr > *:first-child {
+  border-color: color-mix(in srgb, var(--radar-border) 82%, var(--radar-ink)) !important;
+}
+.dash-pivot .ant-table-thead > tr > th,
+.dash-pivot .ant-table-tbody > tr > td {
+  border-inline-end-color: color-mix(in srgb, var(--radar-border) 78%, var(--radar-ink)) !important;
+  border-bottom-color: color-mix(in srgb, var(--radar-border) 78%, var(--radar-ink)) !important;
+  text-align: center !important;
+}
+.dash-pivot .ant-table-thead > tr > th .ant-table-column-title,
+.dash-pivot .ant-table-tbody > tr > td > * {
+  text-align: center;
+}
+.dash-pivot .ant-table-thead > tr > th {
+  white-space: normal;
+  word-break: break-word;
+}
+/* 固定在右侧的“合计”列由 Ant Design 单独绘制 30px 阴影层；移除该层，直接使用普通边框。 */
+.dash-pivot .ant-table-cell-fix-right-first::after,
+.dash-pivot .ant-table-ping-right .ant-table-cell-fix-right-first::after {
+  box-shadow: none !important;
+}
+.dash-pivot .ant-table-cell-fix-right-first {
+  border-inline-start: 1px solid color-mix(in srgb, var(--radar-border) 78%, var(--radar-ink)) !important;
+}
+.dash-pivot .ant-table-cell,
+.dash-pivot .ant-table-thead > tr > th,
+.dash-pivot .ant-table-tbody > tr > td {
+  padding: 5px 7px !important;
+  font-size: 11px !important;
+  line-height: 1.3 !important;
+}
+.dash-pivot .ant-table-thead > tr > th { font-size: 10.5px !important; }
 .dash-pivot .pivot-total-row > td { font-weight: 700; background: var(--radar-primary-soft); }
+.dash-pivot-zero { color: #bfbfbf; }
+.dash-pivot-sub-label { color: var(--radar-text-secondary); font-size: 10.5px; }
+.dash-group-children {
+  margin: 8px 0 0 14px; padding: 8px 0 0 10px;
+  border-left: 2px solid var(--radar-border);
+}
+.dash-group-child-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 6px; color: var(--radar-text-secondary); font-size: 12px;
+}
 /* 表格手机端紧凑：缩小字号与单元格内边距，使列自适应容器、不出横向滚动条 */
 .dash-pivot-compact .ant-table-cell,
 .dash-pivot-compact .ant-table-thead > tr > th,

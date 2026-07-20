@@ -26,12 +26,11 @@ export default function ChartEditor({ open, onClose, onSave, initialData, scope,
   const [codeOpen, setCodeOpen] = useState(false);
   const [codeText, setCodeText] = useState('');
   const { message } = App.useApp();
-  const source = Form.useWatch('source', form);
   const chartType = Form.useWatch('chart_type', form);
   const dimension = Form.useWatch('dimension', form);
   const xAxisDimension = Form.useWatch('xAxisDimension', form);
 
-  const dims = meta.dimsOf(source);
+  const dims = meta.dimsOf('analytics');
   const dimOptions = dims.map((d) => ({ value: d.key, label: d.label }));
   const supportsX = X_TYPES.includes(chartType);
 
@@ -51,7 +50,8 @@ export default function ChartEditor({ open, onClose, onSave, initialData, scope,
         chart_type: initialData.chart_type,
         col_span: initialData.col_span || 12,
         height: initialData.height !== undefined && initialData.height !== null ? initialData.height : 320,
-        source: cfg.source || 'requirement',
+        statDimension: cfg.statDimension || ({ requirement: 'requirement', ticket: 'ticket' }[cfg.source] || 'all'),
+        statStage: cfg.statStage || ({ requirement: 'analysis', ticket: 'analysis', dev: 'dev', sit: 'sit', uat: 'uat', nft: 'nft', sec: 'sec', releaseSystem: 'release' }[cfg.source] || 'all'),
         dimension: cfg.dimension,
         xAxisDimension: cfg.xAxisDimension,
         filterList,
@@ -61,7 +61,7 @@ export default function ChartEditor({ open, onClose, onSave, initialData, scope,
     } else {
       form.setFieldsValue({
         title: '新图表', chart_type: 'pie', col_span: 12, height: 320,
-        source: 'requirement', dimension: 'status', xAxisDimension: undefined,
+        statDimension: 'all', statStage: 'all', dimension: 'implementation_type', xAxisDimension: undefined,
         filterList: [], groups: [], xAxisGroups: [],
       });
     }
@@ -97,10 +97,15 @@ export default function ChartEditor({ open, onClose, onSave, initialData, scope,
       }
     });
     const clean = (arr) => (arr || []).filter((g) => g?.label && g.values?.length)
-      .map((g) => ({ label: g.label, values: g.values, ...(g.color ? { color: g.color } : {}) }));
+      .map((g) => ({
+        label: g.label, values: g.values, ...(g.color ? { color: g.color } : {}),
+        ...(g.subDimension ? { subDimension: g.subDimension, subGroups: clean(g.subGroups) } : {}),
+      }));
     const nextSupportsX = X_TYPES.includes(v.chart_type);
     const config = {
-      source: v.source,
+      source: 'analytics',
+      statDimension: v.statDimension,
+      statStage: v.statStage,
       dimension: v.dimension,
       xAxisDimension: nextSupportsX ? (v.xAxisDimension || undefined) : undefined,
       filters,
@@ -148,7 +153,8 @@ export default function ChartEditor({ open, onClose, onSave, initialData, scope,
       chart_type: parsed.chart_type ?? current.chart_type,
       col_span: parsed.col_span ?? current.col_span,
       height: parsed.height ?? current.height,
-      source: cfg.source ?? current.source,
+      statDimension: cfg.statDimension ?? current.statDimension,
+      statStage: cfg.statStage ?? current.statStage,
       dimension: cfg.dimension ?? current.dimension,
       xAxisDimension: cfg.xAxisDimension,
       filterList: filtersToList(cfg.filters),
@@ -160,8 +166,8 @@ export default function ChartEditor({ open, onClose, onSave, initialData, scope,
     message.success('配置代码已应用到表单');
   };
 
-  // 分组列表（主/次维度共用渲染）
-  const renderGroups = (name, dim) => (
+  // PAMS 同款分组树：主/次维度各自的一级分组可设置二级维度，二级分组还能设置三级维度。
+  const renderGroups = (name, dim, depth = 1, rootPath = null) => (
     <Form.List name={name}>
       {(fields, { add, remove }) => (
         <>
@@ -180,9 +186,33 @@ export default function ChartEditor({ open, onClose, onSave, initialData, scope,
                 <Select mode="tags" size="small" placeholder="包含的原始值" options={optionsOf(dim)} maxTagCount="responsive" showSearch
                   optionFilterProp="searchLabel" optionRender={renderValueOption} filterOption={filterValueOption} />
               </Form.Item>
+              {chartType === 'table' && depth < 3 && (
+                <>
+                  <Form.Item {...rest} name={[n, 'subDimension']} label={<span style={{ fontSize: 12, color: '#666' }}>{depth === 1 ? '二级维度' : '三级维度'}</span>}
+                    style={{ margin: '8px 0 6px' }}>
+                    <Select size="small" placeholder={`无${depth === 1 ? '二级' : '三级'}维度`} options={dimOptions} allowClear />
+                  </Form.Item>
+                  <Form.Item noStyle shouldUpdate>
+                    {() => {
+                      const groupPath = rootPath ? [...rootPath, n] : [name, n];
+                      const subDim = form.getFieldValue([...groupPath, 'subDimension']);
+                      if (!subDim) return null;
+                      return (
+                        <div className="dash-group-children">
+                          <div className="dash-group-child-head">
+                            <span>{depth === 1 ? '二级维度分组归并（必填）' : '三级维度分组归并（必填）'}</span>
+                            <Button type="link" size="small" onClick={() => loadPresets(subDim, [...groupPath, 'subGroups'])}>加载预设</Button>
+                          </div>
+                          {renderGroups([n, 'subGroups'], subDim, depth + 1, [...groupPath, 'subGroups'])}
+                        </div>
+                      );
+                    }}
+                  </Form.Item>
+                </>
+              )}
             </Card>
           ))}
-          <Button type="dashed" size="small" block icon={<PlusOutlined />} onClick={() => add()}>添加分组</Button>
+          <Button type="dashed" size="small" block icon={<PlusOutlined />} onClick={() => add()}>{depth === 1 ? '添加分组' : `添加${depth === 2 ? '二级' : '三级'}分组`}</Button>
         </>
       )}
     </Form.List>
@@ -218,20 +248,26 @@ export default function ChartEditor({ open, onClose, onSave, initialData, scope,
           <Input placeholder="如 各机构需求分布" />
         </Form.Item>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-          <Form.Item name="source" label="数据源" rules={[{ required: true }]}>
-            <Select options={meta.sources} onChange={() => form.setFieldsValue({ dimension: undefined, xAxisDimension: undefined, filterList: [], groups: [], xAxisGroups: [] })} />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <Form.Item name="statDimension" label="统计维度" rules={[{ required: true }]}>
+            <Select options={meta.statDimensions} />
           </Form.Item>
+          <Form.Item name="statStage" label="统计阶段" rules={[{ required: true }]}>
+            <Select options={meta.statStages} />
+          </Form.Item>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <Form.Item name="chart_type" label="图表类型" rules={[{ required: true }]}>
             <Select options={meta.chartTypes} onChange={(t) => { if (!X_TYPES.includes(t)) form.setFieldsValue({ xAxisDimension: undefined, xAxisGroups: [] }); }} />
           </Form.Item>
-          <Form.Item name="dimension" label="主维度" rules={[{ required: true }]}>
-            <Select options={dimOptions} placeholder="主维度" />
+          <Form.Item name="dimension" label="主要维度（纵轴）" rules={[{ required: true }]}>
+            <Select options={dimOptions} placeholder="主要维度" />
           </Form.Item>
         </div>
 
         {supportsX && (
-          <Form.Item name="xAxisDimension" label="次维度（堆叠/表格列/横轴）" tooltip="用于堆叠柱、折线多系列或表格的列">
+          <Form.Item name="xAxisDimension" label="次要维度（横轴）" tooltip="用于堆叠柱、折线多系列或表格列">
             <Select options={dimOptions} placeholder="无（单一维度）" allowClear />
           </Form.Item>
         )}
@@ -273,14 +309,14 @@ export default function ChartEditor({ open, onClose, onSave, initialData, scope,
         </Form.List>
 
         <Divider style={{ margin: '12px 0 8px' }}>
-          <Space>主维度分组归并<Button type="link" size="small" onClick={() => loadPresets(dimension, 'groups')}>加载预设</Button></Space>
+          <Space>主要维度分组归并（纵轴）<Button type="link" size="small" onClick={() => loadPresets(dimension, 'groups')}>加载预设</Button></Space>
         </Divider>
         {renderGroups('groups', dimension)}
 
         {supportsX && xAxisDimension && (
           <>
             <Divider style={{ margin: '12px 0 8px' }}>
-              <Space>次维度分组归并<Button type="link" size="small" onClick={() => loadPresets(xAxisDimension, 'xAxisGroups')}>加载预设</Button></Space>
+              <Space>次要维度分组归并（横轴）<Button type="link" size="small" onClick={() => loadPresets(xAxisDimension, 'xAxisGroups')}>加载预设</Button></Space>
             </Divider>
             {renderGroups('xAxisGroups', xAxisDimension)}
           </>
@@ -291,6 +327,8 @@ export default function ChartEditor({ open, onClose, onSave, initialData, scope,
           <Form.Item name="col_span" label="布局" rules={[{ required: true }]}>
             <Radio.Group>
               <Radio.Button value={12}>半宽</Radio.Button>
+              <Radio.Button value={18}>3/4宽</Radio.Button>
+              <Radio.Button value={6}>1/4宽</Radio.Button>
               <Radio.Button value={24}>全宽</Radio.Button>
             </Radio.Group>
           </Form.Item>

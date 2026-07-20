@@ -15,6 +15,12 @@ import { isTerminalStatus } from './status.js';
 //   dict:<cat> 取字典；system 取系统列表；release_point 取投产点；date 时间；free 自由文本
 // ---------------------------------------------------------------------------
 export const DIMENSIONS = {
+  implementation_type: { label: '实施类型', optionSource: 'implementation_type', isDate: false },
+  current_stage: { label: '当前任务阶段', optionSource: 'stage', isDate: false },
+  current_task_status: { label: '当前任务状态', optionSource: 'dict:process_status', isDate: false },
+  stage_status: { label: '阶段状态', optionSource: 'dict:process_status', isDate: false },
+  work_item_type: { label: '需求类型', optionSource: 'work_item_type', isDate: false },
+  apply_release_point: { label: '申请投产点', optionSource: 'release_point', isDate: false },
   status: { label: '状态', optionSource: 'dict:process_status', isDate: false },
   req_type: { label: '需求类型', optionSource: 'dict:req_type', isDate: false },
   ticket_type: { label: '工单类型', optionSource: 'dict:ticket_type', isDate: false },
@@ -44,6 +50,12 @@ const DATE_FIELD = {
 // 数据源注册表：label、加载 SQL、可用维度集合
 // ---------------------------------------------------------------------------
 export const SOURCES = {
+  // 新效能仪表盘统一数据源。实际记录集由“统计维度 × 统计阶段”在路由层装载，
+  // 本注册项只声明该统一口径下允许使用的维度。
+  analytics: {
+    label: '效能统计',
+    dims: ['implementation_type', 'current_stage', 'current_task_status', 'stage_status', 'release_point', 'apply_release_point', 'org', 'propose_dept', 'work_item_type', 'system'],
+  },
   requirement: {
     label: '业务需求',
     dims: ['status', 'req_type', 'propose_dept', 'org', 'sector', 'system', 'release_point', 'propose_time_day', 'stage', 'task_status'],
@@ -78,7 +90,38 @@ export const CHART_TYPES = [
   { value: 'table', label: '表格' },
 ];
 
+/** 效能仪表盘的两栏数据源选项，供接口和路由共同使用。 */
+export const ANALYTICS_DIMENSIONS = [
+  { value: 'requirement', label: '需求' },
+  { value: 'ticket', label: '工单' },
+  { value: 'all', label: '需求和工单' },
+];
+
+export const ANALYTICS_STAGES = [
+  { value: 'all', label: '全部' },
+  { value: 'analysis', label: '需求/工单分析' },
+  { value: 'dev', label: '开发任务' },
+  { value: 'sit', label: '应用组装测试' },
+  { value: 'uat', label: '用户测试' },
+  { value: 'nft', label: '非功能测试' },
+  { value: 'sec', label: '安全测试' },
+  { value: 'release', label: '投产审批' },
+];
+
 const TEST_TYPE_OF = { sit: 'SIT', uat: 'UAT', nft: 'NFT', sec: 'SEC' };
+
+/** 当前任务阶段在仪表盘中的固定业务顺序（不按数量或字母排序）。 */
+const CURRENT_STAGE_ORDER = ['需求/工单分析', '开发', '应用组装测试', '用户测试', '非功能测试', '安全测试', '投产审批'];
+
+function compareDimensionName(dim, a, b) {
+  if (dim !== 'current_stage') return 0;
+  const ia = CURRENT_STAGE_ORDER.indexOf(a);
+  const ib = CURRENT_STAGE_ORDER.indexOf(b);
+  if (ia !== -1 && ib !== -1) return ia - ib;
+  if (ia !== -1) return -1;
+  if (ib !== -1) return 1;
+  return 0;
+}
 
 /** 计算一组任务的节点状态（含单一代表状态 status，供阶段标签展示） */
 function nodeState(tasks) {
@@ -91,9 +134,9 @@ function nodeState(tasks) {
 }
 
 /** 构建单需求/工单链路概要 */
-function buildChain(req, devMap = {}, testMap = {}, rtMap = {}) {
+function buildChain(req, devMap = {}, testMap = {}, rtMap = {}, unifiedLabels = false) {
   const code = req.req_code || req.ticket_code;
-  const firstLabel = req.ticket_code ? '工单' : '需求';
+  const firstLabel = unifiedLabels ? '需求/工单' : (req.ticket_code ? '工单' : '需求');
   const dev = devMap[code] || [];
   const t = testMap[code] || {};
   const sit = t.SIT || [];
@@ -103,16 +146,16 @@ function buildChain(req, devMap = {}, testMap = {}, rtMap = {}) {
   const rtStatus = rtMap[code];
   const rt = rtStatus ? { status: rtStatus } : null;
 
-  // 阶段顺序：需求/工单 / 开发 / 应用组装 / 非功能测试(按需) / 安全测试(按需) / 用户测试 / 投产
+  // 阶段顺序：需求/工单分析 / 开发 / 应用组装 / 用户测试 / 非功能测试(按需) / 安全测试(按需) / 投产
   const nodes = [
-    { key: firstLabel, label: firstLabel, ...nodeState([{ status: req.status }]) },
+    { key: firstLabel, label: unifiedLabels ? '需求/工单分析' : firstLabel, ...nodeState([{ status: req.status }]) },
     { key: '开发', label: '开发', ...nodeState(dev) },
-    { key: 'SIT', label: '应用组装', ...nodeState(sit) },
+    { key: 'SIT', label: unifiedLabels ? '应用组装测试' : '应用组装', ...nodeState(sit) },
   ];
+  nodes.push({ key: 'UAT', label: '用户测试', ...nodeState(uat) });
   if (nft.length) nodes.push({ key: 'NFT', label: '非功能测试', ...nodeState(nft) });
   if (sec.length) nodes.push({ key: 'SEC', label: '安全测试', ...nodeState(sec) });
-  nodes.push({ key: 'UAT', label: '用户测试', ...nodeState(uat) });
-  nodes.push({ key: '投产', label: '投产', ...nodeState(rt ? [{ status: rt.status === '已投产' ? '已上线' : '待评审' }] : []) });
+  nodes.push({ key: '投产', label: unifiedLabels ? '投产审批' : '投产', ...nodeState(rt ? [{ status: rt.status === '已投产' ? '已上线' : '待评审' }] : []) });
 
   return { nodes };
 }
@@ -137,12 +180,13 @@ export async function buildContext() {
     (bucket[t.test_type] ||= []).push({ status: t.status });
   }
 
-  const rtMap = {};
-  for (const rt of await all('SELECT req_code, status FROM release_task')) {
+  const rtMap = {}; const applyPointMap = {};
+  for (const rt of await all('SELECT req_code, status, release_point_id FROM release_task')) {
     rtMap[rt.req_code] = rt.status;
+    if (rt.release_point_id != null) (applyPointMap[rt.req_code] ||= []).push(String(rt.release_point_id));
   }
 
-  return { sysMap, devMap, testMap, rtMap };
+  return { sysMap, devMap, testMap, rtMap, applyPointMap };
 }
 
 /** 取一条记录涉及的系统编号数组（随源不同字段） */
@@ -158,12 +202,81 @@ function systemCodes(source, row) {
 function uniq(arr) { return Array.from(new Set(arr)); }
 
 /**
+ * 当“阶段状态”被放在“当前任务阶段”的下级时，取该阶段自己的任务状态。
+ * 例如当前任务阶段分组为“开发”，二级维度的阶段状态应来自 dev_task，
+ * 而不是需求/工单分析记录本身的 status。
+ */
+function statusesOfCurrentStages(item, stages, ctx) {
+  const code = item.req_code || item.ticket_code;
+  const result = [];
+  const push = (statuses) => result.push(...(statuses?.filter(Boolean) || []));
+  (stages || []).forEach((stage) => {
+    switch (stage) {
+      case '需求/工单分析': case '需求/工单':
+        push([item.status]); break;
+      case '开发': case '开发任务':
+        push((ctx.devMap[code] || []).map((task) => task.status)); break;
+      case '应用组装测试':
+        push((ctx.testMap[code]?.SIT || []).map((task) => task.status)); break;
+      case '用户测试':
+        push((ctx.testMap[code]?.UAT || []).map((task) => task.status)); break;
+      case '非功能测试':
+        push((ctx.testMap[code]?.NFT || []).map((task) => task.status)); break;
+      case '安全测试':
+        push((ctx.testMap[code]?.SEC || []).map((task) => task.status)); break;
+      case '投产审批': case '投产':
+        push([ctx.rtMap[code]]); break;
+      default:
+        break;
+    }
+  });
+  return uniq(result.length ? result : ['未开始']);
+}
+
+/**
  * 维度取值抽取器：返回该记录在某维度上的原始值数组（可能多值）。
  * @returns {string[]}
  */
-export function extract(source, dim, row, ctx) {
+export function extract(source, dim, row, ctx, filters) {
   const realSource = source === 'all' ? row._source : source;
   const { sysMap } = ctx;
+  // 统一效能统计记录保留其所属需求/工单；阶段记录本身只用于“阶段状态”。
+  if (source === 'analytics') {
+    const item = row._workItem || row;
+    const chain = buildChain(item, ctx.devMap, ctx.testMap, ctx.rtMap, true);
+    let current = chain.nodes.find((n) => n.state === 'doing');
+    if (!current) current = chain.nodes.filter((n) => n.state === 'done').at(-1) || chain.nodes[0];
+    switch (dim) {
+      case 'implementation_type': return [row._entityType === 'ticket' ? 'ticket' : 'requirement'];
+      case 'current_stage': return [current?.label || '需求/工单'];
+      case 'current_task_status': return [current?.status || '未开始'];
+      case 'stage_status': {
+        const selectedStages = filters?.current_stage;
+        const stageValues = Array.isArray(selectedStages) ? selectedStages : (selectedStages ? [selectedStages] : []);
+        // 仅在“当前任务阶段”的分组/过滤上下文中按该阶段回溯状态；其余场景保持原有统计阶段口径。
+        return stageValues.length
+          ? statusesOfCurrentStages(item, stageValues, ctx)
+          : [row.status || item.status || '未开始'];
+      }
+      case 'work_item_type': return [row._entityType === 'ticket' ? '生产工单' : (item.req_type || '未分类')];
+      case 'apply_release_point': return ctx.applyPointMap[item.req_code || item.ticket_code]?.length
+        ? uniq(ctx.applyPointMap[item.req_code || item.ticket_code]) : ['未分配'];
+      case 'release_point': return [item.release_point_id != null ? String(item.release_point_id) : '未分配'];
+      case 'propose_dept': return [item.propose_dept || '未分配'];
+      case 'system': {
+        const codes = row.impl_system ? [row.impl_system] : systemCodes(row._entityType, item);
+        return codes.length ? uniq(codes) : ['未指定'];
+      }
+      case 'org': {
+        if (row.impl_org) return [row.impl_org];
+        const devOrg = (ctx.devMap[item.req_code || item.ticket_code] || []).find((d) => d.impl_org)?.impl_org;
+        if (devOrg) return [devOrg];
+        const orgs = uniq(systemCodes(row._entityType, item).map((c) => sysMap[c]?.org).filter(Boolean));
+        return orgs.length ? orgs : ['未分配'];
+      }
+      default: return [item[dim] != null ? String(item[dim]) : '未知'];
+    }
+  }
   switch (dim) {
     case 'status': return [row.status || '未知'];
     case 'req_type': return [row.req_type || '未分类'];
@@ -229,7 +342,7 @@ export function matchFilters(source, row, filters, ctx) {
     if (raw == null) continue;
     const val = Array.isArray(raw) ? raw : [raw];
     if (!val.length) continue;
-    const vals = extract(realSource, dim, row, ctx);
+    const vals = extract(realSource, dim, row, ctx, filters);
     if (DIMENSIONS[dim]?.isDate && val.length === 2) {
       const [start, end] = val;
       const hit = vals.some((v) => v !== '未分配' && v >= start && v <= end);
@@ -248,7 +361,7 @@ function mergeGroups1D(buckets, groups, dim) {
   if (!groups || !groups.length) {
     return Object.entries(buckets)
       .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => (isDate ? a.name.localeCompare(b.name) : b.value - a.value));
+      .sort((a, b) => compareDimensionName(dim, a.name, b.name) || (isDate ? a.name.localeCompare(b.name) : b.value - a.value));
   }
   const result = {};
   groups.forEach((g) => { result[g.label] = 0; });
@@ -269,7 +382,7 @@ function mergeGroups1D(buckets, groups, dim) {
       if (ia !== -1 && ib !== -1) return ia - ib;
       if (ia !== -1) return -1;
       if (ib !== -1) return 1;
-      return isDate ? a.name.localeCompare(b.name) : b.value - a.value;
+      return compareDimensionName(dim, a.name, b.name) || (isDate ? a.name.localeCompare(b.name) : b.value - a.value);
     });
 }
 
@@ -306,41 +419,89 @@ function mergeGroups2D(buckets, groups, xGroups, dim, xDim) {
     if (iya !== -1 && iyb !== -1) yc = iya - iyb;
     else if (iya !== -1) yc = -1;
     else if (iyb !== -1) yc = 1;
-    else if (isYDate) yc = a.name_y.localeCompare(b.name_y);
+    else yc = compareDimensionName(dim, a.name_y, b.name_y) || (isYDate ? a.name_y.localeCompare(b.name_y) : 0);
     if (yc !== 0) return yc;
     const ixa = xOrder.indexOf(a.name_x); const ixb = xOrder.indexOf(b.name_x);
     if (ixa !== -1 && ixb !== -1) return ixa - ixb;
     if (ixa !== -1) return -1;
     if (ixb !== -1) return 1;
-    if (isXDate) return a.name_x.localeCompare(b.name_x);
-    return 0;
+    return compareDimensionName(xDim, a.name_x, b.name_x) || (isXDate ? a.name_x.localeCompare(b.name_x) : 0);
   });
 }
 
-/**
- * 聚合主入口。
- * @param {object} p { source, dimension, xAxisDimension?, filters?, groups?, xAxisGroups?, rows, ctx }
- * @returns 1D: [{name,value}] | 2D: [{name_y,name_x,value}]
- */
-export function aggregate({ source, dimension, xAxisDimension, filters, groups, xAxisGroups, rows, ctx }) {
+/** 基础聚合：单一主/次维度组合。 */
+function aggregateBase({ source, dimension, xAxisDimension, filters, groups, xAxisGroups, rows, ctx }) {
   const filtered = rows.filter((r) => matchFilters(source, r, filters, ctx));
   if (!xAxisDimension) {
     const buckets = {};
     for (const r of filtered) {
-      for (const v of extract(source, dimension, r, ctx)) buckets[v] = (buckets[v] || 0) + 1;
+      for (const v of extract(source, dimension, r, ctx, filters)) buckets[v] = (buckets[v] || 0) + 1;
     }
     return mergeGroups1D(buckets, groups, dimension);
   }
   const buckets = {};
   for (const r of filtered) {
-    const ys = extract(source, dimension, r, ctx);
-    const xs = extract(source, xAxisDimension, r, ctx);
+    const ys = extract(source, dimension, r, ctx, filters);
+    const xs = extract(source, xAxisDimension, r, ctx, filters);
     for (const y of ys) for (const x of xs) {
       const key = `${y}\u0000${x}`;
       buckets[key] = (buckets[key] || 0) + 1;
     }
   }
   return mergeGroups2D(buckets, groups, xAxisGroups, dimension, xAxisDimension);
+}
+
+/**
+ * 按 PAMS 的分组树展开一个维度：一级分组可切换至二级维度，二级分组可再切换至三级维度。
+ * 每个返回项表示一次独立统计及其展示路径；路径由表格渲染为嵌套行/列。
+ */
+function traverseDimension(source, dim, groups, filters) {
+  const result = [{ dim, groups, filters, path: [] }];
+  (groups || []).forEach((group) => {
+    if (!group?.subDimension || !isValidDim(source, group.subDimension)) return;
+    const current = filters?.[dim];
+    const currentVals = Array.isArray(current) ? current : (current == null ? null : [current]);
+    const values = currentVals ? group.values.filter((v) => currentVals.includes(v)) : group.values;
+    if (!values.length) return;
+    const nextFilters = { ...(filters || {}), [dim]: values };
+    traverseDimension(source, group.subDimension, group.subGroups, nextFilters).forEach((child) => {
+      result.push({ ...child, path: [group.label, ...child.path] });
+    });
+  });
+  return result;
+}
+
+/**
+ * 聚合主入口。除原有 1D/2D 聚合外，表格支持 PAMS 同款分组树：
+ * 主、次维度的每个一级分组均可指定二级维度，二级分组还可指定三级维度。
+ * @param {object} p { source, dimension, xAxisDimension?, filters?, groups?, xAxisGroups?, rows, ctx }
+ * @returns 1D: [{name,value,parent_y?,parent_y_2?}] | 2D: [{name_y,name_x,value,parent_y?,parent_x?}]
+ */
+export function aggregate({ source, dimension, xAxisDimension, filters = {}, groups, xAxisGroups, rows, ctx }) {
+  const yConfigs = traverseDimension(source, dimension, groups, filters);
+  const xConfigs = xAxisDimension
+    ? traverseDimension(source, xAxisDimension, xAxisGroups, filters)
+    : [{ dim: undefined, groups: undefined, filters, path: [] }];
+  const out = [];
+  yConfigs.forEach((y) => xConfigs.forEach((x) => {
+    const data = aggregateBase({
+      source, dimension: y.dim, xAxisDimension: x.dim,
+      filters: { ...y.filters, ...x.filters }, groups: y.groups, xAxisGroups: x.groups, rows, ctx,
+    });
+    data.forEach((entry) => {
+      const item = { ...entry };
+      if (y.path.length) {
+        item.parent_y = y.path[0];
+        if (y.path.length > 1) item.parent_y_2 = y.path[1];
+      }
+      if (x.path.length) {
+        item.parent_x = x.path[0];
+        if (x.path.length > 1) item.parent_x_2 = x.path[1];
+      }
+      out.push(item);
+    });
+  }));
+  return out;
 }
 
 /** 校验维度是否属于该源（防注入/越权维度） */

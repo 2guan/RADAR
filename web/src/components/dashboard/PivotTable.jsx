@@ -1,118 +1,214 @@
 /**
- * 文件：components/dashboard/PivotTable.jsx
- * 用途：表格渲染。支持 1D（维度/数量）与 2D（主维度×次维度）两种；含合计行、合计列、
- *       全零列隐藏、0 值灰显、单元格按次维度分组色淡着色。
- * 作者：hengguan
- * 说明：支持动态交叉汇总统计的表格组件，可基于多维度展示数据指标，便于管理决策与趋势观察。
+ * PAMS 同款层级透视表：主维度（纵轴）和次维度（横轴）各自支持两层子维度。
+ * 后端将分组树展开为 parent_y / parent_y_2、parent_x / parent_x_2；此处再还原为树行和多级表头。
  */
 
 import React from 'react';
 import { Table } from 'antd';
 import { useResponsive } from '../../hooks/useResponsive.js';
 
-const groupLabelSet = (groups) => new Set([...(groups || []).map((g) => g.label), '其它']);
-const colorOf = (groups, label) => (groups || []).find((g) => g.label === label)?.color;
+const uniq = (arr) => [...new Set(arr.filter((x) => x != null))];
+const groupOf = (groups, label) => (groups || []).find((g) => g.label === label);
+const labelFor = (label, dim, groups, labelOf) => (groupOf(groups, label) ? label : labelOf(dim, label));
 
-// Background tint removed. Color is now applied directly to text.
+function filtersForPath(dim, groups, path) {
+  if (!path?.length) return {};
+  const filters = {};
+  let currentDim = dim;
+  let currentGroups = groups || [];
+  path.forEach((value) => {
+    const group = groupOf(currentGroups, value);
+    filters[currentDim] = group ? group.values : [value];
+    if (group?.subDimension) {
+      currentDim = group.subDimension;
+      currentGroups = group.subGroups || [];
+    }
+  });
+  return filters;
+}
 
-/** @param {object} p { cfg, data, labelOf, dimName, onCell } onCell(filters) 触发钻取 */
-export default function PivotTable({ cfg, data, labelOf, dimName = (d) => d, onCell }) {
+function mergeFilters(...list) {
+  const result = {};
+  list.forEach((filters) => Object.entries(filters || {}).forEach(([dim, values]) => {
+    result[dim] = values;
+  }));
+  return result;
+}
+
+function xHierarchy(data) {
+  return uniq(data.filter((d) => !d.parent_x).map((d) => d.name_x)).map((main) => ({
+    main,
+    subs: uniq(data.filter((d) => d.parent_x === main && !d.parent_x_2).map((d) => d.name_x)).map((sub) => ({
+      sub,
+      subSubs: uniq(data.filter((d) => d.parent_x === main && d.parent_x_2 === sub).map((d) => d.name_x)),
+    })),
+  }));
+}
+
+function yHierarchy(data) {
+  return uniq(data.filter((d) => !d.parent_y).map((d) => d.name_y ?? d.name)).map((main) => ({
+    main,
+    subs: uniq(data.filter((d) => d.parent_y === main && !d.parent_y_2).map((d) => d.name_y ?? d.name)).map((sub) => ({
+      sub,
+      subSubs: uniq(data.filter((d) => d.parent_y === main && d.parent_y_2 === sub).map((d) => d.name_y ?? d.name)),
+    })),
+  }));
+}
+
+function groupColor(groups, path) {
+  const main = groupOf(groups, path[0]);
+  const sub = main && groupOf(main.subGroups, path[1]);
+  const subSub = sub && groupOf(sub.subGroups, path[2]);
+  return subSub?.color || sub?.color || main?.color;
+}
+
+/** @param {object} p { cfg, data, labelOf, dimName, onCell } */
+export default function PivotTable({ cfg, data = [], labelOf, dimName = (d) => d, onCell }) {
   const { isMobile } = useResponsive();
-  // 手机端表格：去掉横向滚动、改用紧凑样式（小字号/窄间距），令表格自适应容器宽度
   const pivotClass = `dash-pivot${isMobile ? ' dash-pivot-compact' : ''}`;
-  const rows = data || [];
-  const is2D = rows[0] && 'name_y' in rows[0];
+  const is2D = data[0] && 'name_y' in data[0];
+  const click = (filters, dimensionLabel) => onCell?.(filters, dimensionLabel);
 
   if (!is2D) {
-    // 1D：维度 / 数量
-    const gset = groupLabelSet(cfg.groups);
-    const total = rows.reduce((s, r) => s + r.value, 0);
-    const ds = rows.map((r, i) => ({
-      key: i, raw: r.name,
-      __name: gset.has(r.name) ? r.name : labelOf(cfg.dimension, r.name),
-      value: r.value,
-    }));
-    ds.push({ key: '__total', __name: '合计', value: total, __isTotal: true });
+    const hierarchy = yHierarchy(data);
+    const makeRow = (main, sub, subSub, index) => {
+      const path = [main, sub, subSub].filter(Boolean);
+      const entry = data.find((d) => d.name === path.at(-1)
+        && (d.parent_y || undefined) === (main === path.at(-1) ? undefined : main)
+        && (d.parent_y_2 || undefined) === (sub && sub !== path.at(-1) ? sub : undefined));
+      return { key: path.join('::') || index, name: path.at(-1), path, value: entry?.value || 0 };
+    };
+    const rows = hierarchy.map((node, index) => {
+      const row = makeRow(node.main, null, null, index);
+      row.children = node.subs.map((s, childIndex) => {
+        const child = makeRow(node.main, s.sub, null, `${index}-${childIndex}`);
+        child.children = s.subSubs.map((leaf, leafIndex) => makeRow(node.main, s.sub, leaf, `${index}-${childIndex}-${leafIndex}`));
+        if (!child.children.length) delete child.children;
+        return child;
+      });
+      if (!row.children.length) delete row.children;
+      return row;
+    });
+    const total = rows.reduce((sum, r) => sum + r.value, 0);
+    rows.push({ key: '__total', name: '合计', value: total, total: true, path: [] });
     return (
-      <Table className={pivotClass} size="small" pagination={false} dataSource={ds}
-        rowClassName={(r) => (r.__isTotal ? 'pivot-total-row' : '')}
+      <Table className={pivotClass} size="small" pagination={false} bordered tableLayout="fixed" dataSource={rows}
+        expandable={{ defaultExpandAllRows: true, indentSize: 12 }} rowClassName={(r) => (r.total ? 'pivot-total-row' : '')}
         columns={[
-          { title: dimName(cfg.dimension), dataIndex: '__name', align: 'center' },
-          {
-            title: '数量', dataIndex: 'value', align: 'center', width: 120,
-            render: (v, r) => {
-              if (v === 0) return <span style={{ color: '#bfbfbf' }}>0</span>;
-              if (r.__isTotal) return v;
-              const color = colorOf(cfg.groups, r.raw);
-              const style = color ? { color } : {};
-              if (!onCell) return <span style={style}>{v}</span>;
-              return <a style={style} onClick={() => onCell({ [cfg.dimension]: groupValues(cfg.groups, r.raw, cfg.dimension) })}>{v}</a>;
-            },
-          },
+          { title: dimName(cfg.dimension), dataIndex: 'name', align: 'center', render: (value, row) => {
+            if (row.total) return value;
+            let dim = cfg.dimension; let groups = cfg.groups;
+            if (row.path.length > 1) { const group = groupOf(groups, row.path[0]); dim = group?.subDimension || dim; groups = group?.subGroups; }
+            if (row.path.length > 2) { const group = groupOf(groups, row.path[1]); dim = group?.subDimension || dim; groups = group?.subGroups; }
+            return <span className={row.path.length > 1 ? 'dash-pivot-sub-label' : ''}>{labelFor(value, dim, groups, labelOf)}</span>;
+          } },
+          { title: '数量', dataIndex: 'value', align: 'center', width: 88, render: (value, row) => {
+            if (!value) return <span className="dash-pivot-zero">0</span>;
+            if (row.total) return onCell ? <a style={{ color: 'inherit' }} onClick={() => click({}, '统计')}><b>{value}</b></a> : <b>{value}</b>;
+            if (!onCell) return <b>{value}</b>;
+            return <a onClick={() => click(filtersForPath(cfg.dimension, cfg.groups, row.path), dimName(cfg.dimension))}>{value}</a>;
+          } },
         ]} />
     );
   }
 
-  // 2D 透视
-  const yset = groupLabelSet(cfg.groups);
-  const xset = groupLabelSet(cfg.xAxisGroups);
-  const ys = [...new Set(rows.map((r) => r.name_y))];
-  let xs = [...new Set(rows.map((r) => r.name_x))];
-  const matrix = {};
-  rows.forEach((r) => { (matrix[r.name_y] = matrix[r.name_y] || {})[r.name_x] = r.value; });
-  // 隐藏全零列
-  xs = xs.filter((x) => ys.some((y) => (matrix[y]?.[x] || 0) > 0));
-
-  const dispY = (y) => (yset.has(y) ? y : labelOf(cfg.dimension, y));
-  const dispX = (x) => (xset.has(x) ? x : labelOf(cfg.xAxisDimension, x));
-
-  const ds = ys.map((y, i) => {
-    const row = { key: i, raw_y: y, __name: dispY(y) };
-    let t = 0;
-    xs.forEach((x) => { const v = matrix[y]?.[x] || 0; row[x] = v; t += v; });
-    row.__total = t;
+  const xNodes = xHierarchy(data);
+  const yNodes = yHierarchy(data);
+  const leaves = xNodes.flatMap((x) => x.subs.length
+    ? x.subs.flatMap((s) => s.subSubs.length ? s.subSubs.map((ss) => ({ x, sub: s.sub, subSub: ss })) : [{ x, sub: s.sub }])
+    : [{ x }]);
+  // 优先压缩列宽；只有所有叶子列的紧凑最小宽度仍超出容器时，才启用横向滚动。
+  const valueColumnWidth = leaves.length >= 8 ? 56 : (leaves.length >= 6 ? 60 : (leaves.length >= 4 ? 66 : 78));
+  const nameColumnWidth = 112;
+  const totalColumnWidth = 66;
+  const tableMinWidth = nameColumnWidth + totalColumnWidth + leaves.length * valueColumnWidth;
+  const getValue = (yPath, leaf) => data.find((d) => d.name_y === yPath.at(-1)
+    && (d.parent_y || undefined) === (yPath.length > 1 ? yPath[0] : undefined)
+    && (d.parent_y_2 || undefined) === (yPath.length > 2 ? yPath[1] : undefined)
+    && d.name_x === (leaf.subSub || leaf.sub || leaf.x.main)
+    && (d.parent_x || undefined) === (leaf.sub ? leaf.x.main : undefined)
+    && (d.parent_x_2 || undefined) === (leaf.subSub ? leaf.sub : undefined))?.value || 0;
+  const makeRow = (main, sub, subSub, index) => {
+    const path = [main, sub, subSub].filter(Boolean);
+    const row = { key: path.join('::') || index, name: path.at(-1), path };
+    leaves.forEach((leaf, i) => { row[`v${i}`] = getValue(path, leaf); });
+    row.total = leaves.reduce((sum, _, i) => sum + row[`v${i}`], 0);
+    return row;
+  };
+  const rows = yNodes.map((node, index) => {
+    const row = makeRow(node.main, null, null, index);
+    row.children = node.subs.map((s, childIndex) => {
+      const child = makeRow(node.main, s.sub, null, `${index}-${childIndex}`);
+      child.children = s.subSubs.map((leaf, leafIndex) => makeRow(node.main, s.sub, leaf, `${index}-${childIndex}-${leafIndex}`));
+      if (!child.children.length) delete child.children;
+      return child;
+    });
+    if (!row.children.length) delete row.children;
     return row;
   });
-  const totalRow = { key: '__total', __name: '合计', __isTotal: true };
-  let grand = 0;
-  xs.forEach((x) => { const s = ys.reduce((a, y) => a + (matrix[y]?.[x] || 0), 0); totalRow[x] = s; grand += s; });
-  totalRow.__total = grand;
-  ds.push(totalRow);
+  const summary = { key: '__total', name: '合计', total: 0, totalRow: true, path: [] };
+  leaves.forEach((_, i) => { summary[`v${i}`] = rows.reduce((sum, row) => sum + row[`v${i}`], 0); summary.total += summary[`v${i}`]; });
+  rows.push(summary);
 
-  const cell = (x) => (v, r) => {
-    if (!v) return <span style={{ color: '#bfbfbf' }}>0</span>;
-    if (r.__isTotal) return v;
-    const color = colorOf(cfg.xAxisGroups, dispX(x));
-    const style = color ? { color } : {};
-    if (!onCell) return <span style={style}>{v}</span>;
-    return (
-      <a style={style} onClick={() => onCell({
-        [cfg.dimension]: groupValues(cfg.groups, r.raw_y, cfg.dimension),
-        [cfg.xAxisDimension]: groupValues(cfg.xAxisGroups, x, cfg.xAxisDimension),
-      })}>{v}</a>
-    );
+  const cell = (leaf, index) => (value, row) => {
+    if (!value) return <span className="dash-pivot-zero">0</span>;
+    const xPath = [leaf.x.main, leaf.sub, leaf.subSub].filter(Boolean);
+    if (row.totalRow) {
+      return onCell ? <a style={{ color: 'inherit' }} onClick={() => click(
+        filtersForPath(cfg.xAxisDimension, cfg.xAxisGroups, xPath), dimName(cfg.xAxisDimension),
+      )}><b>{value}</b></a> : <b>{value}</b>;
+    }
+    if (!onCell) return <b>{value}</b>;
+    return <a style={{ color: groupColor(cfg.xAxisGroups, xPath) }} onClick={() => click(mergeFilters(
+      filtersForPath(cfg.dimension, cfg.groups, row.path), filtersForPath(cfg.xAxisDimension, cfg.xAxisGroups, xPath),
+    ), dimName(cfg.xAxisDimension))}>{value}</a>;
   };
-
-  const columns = [
-    { title: dimName(cfg.dimension), dataIndex: '__name', align: 'center', fixed: 'left', width: 160 },
-    ...xs.map((x) => ({
-      title: dispX(x), dataIndex: x, align: 'center',
-      width: 120,
-      render: cell(x),
-    })),
-    { title: '合计', dataIndex: '__total', align: 'center', width: 120, render: (v) => <b>{v}</b> },
-  ];
-
+  const xColumns = xNodes.map((x) => {
+    const mainLabel = labelFor(x.main, cfg.xAxisDimension, cfg.xAxisGroups, labelOf);
+    if (!x.subs.length) {
+      const index = leaves.findIndex((l) => l.x.main === x.main && !l.sub);
+      return { title: mainLabel, dataIndex: `v${index}`, align: 'center', width: valueColumnWidth, render: cell(leaves[index], index) };
+    }
+    return {
+      title: mainLabel,
+      children: x.subs.map((s) => {
+        const parentGroup = groupOf(cfg.xAxisGroups, x.main);
+        const subDim = parentGroup?.subDimension || cfg.xAxisDimension;
+        const subLabel = labelFor(s.sub, subDim, parentGroup?.subGroups, labelOf);
+        if (!s.subSubs.length) {
+          const index = leaves.findIndex((l) => l.x.main === x.main && l.sub === s.sub && !l.subSub);
+          return { title: subLabel, dataIndex: `v${index}`, align: 'center', width: valueColumnWidth, render: cell(leaves[index], index) };
+        }
+        return {
+          title: subLabel,
+          children: s.subSubs.map((ss) => {
+            const subGroup = groupOf(parentGroup?.subGroups, s.sub);
+            const dim = subGroup?.subDimension || subDim;
+            const index = leaves.findIndex((l) => l.x.main === x.main && l.sub === s.sub && l.subSub === ss);
+            return { title: labelFor(ss, dim, subGroup?.subGroups, labelOf), dataIndex: `v${index}`, align: 'center', width: valueColumnWidth, render: cell(leaves[index], index) };
+          }),
+        };
+      }),
+    };
+  });
   return (
-    <Table className={pivotClass} size="small" pagination={false}
-      scroll={isMobile ? undefined : { x: 'max-content' }}
-      dataSource={ds} columns={columns} rowClassName={(r) => (r.__isTotal ? 'pivot-total-row' : '')} />
+    <Table className={pivotClass} size="small" pagination={false} bordered tableLayout="fixed" dataSource={rows}
+      scroll={isMobile ? undefined : { x: tableMinWidth }} expandable={{ defaultExpandAllRows: true, indentSize: 12 }}
+      rowClassName={(r) => (r.totalRow ? 'pivot-total-row' : '')}
+      columns={[
+        { title: dimName(cfg.dimension), dataIndex: 'name', fixed: isMobile ? undefined : 'left', width: nameColumnWidth, align: 'center', render: (value, row) => {
+          if (row.totalRow) return value;
+          let dim = cfg.dimension; let groups = cfg.groups;
+          if (row.path.length > 1) { const group = groupOf(groups, row.path[0]); dim = group?.subDimension || dim; groups = group?.subGroups; }
+          if (row.path.length > 2) { const group = groupOf(groups, row.path[1]); dim = group?.subDimension || dim; groups = group?.subGroups; }
+          return <span className={row.path.length > 1 ? 'dash-pivot-sub-label' : ''}>{labelFor(value, dim, groups, labelOf)}</span>;
+        } },
+        ...xColumns,
+        { title: '合计', dataIndex: 'total', fixed: isMobile ? undefined : 'right', width: totalColumnWidth, align: 'center', render: (value, row) => {
+          if (!value) return <span className="dash-pivot-zero">0</span>;
+          if (row.totalRow) return onCell ? <a style={{ color: 'inherit' }} onClick={() => click({}, '统计')}><b>{value}</b></a> : <b>{value}</b>;
+          return <a style={{ color: 'inherit' }} onClick={() => click(filtersForPath(cfg.dimension, cfg.groups, row.path), dimName(cfg.dimension))}><b>{value}</b></a>;
+        } },
+      ]} />
   );
-}
-
-/** 把点击的展示值还原为底层原始值集合（用于钻取过滤） */
-function groupValues(groups, raw, dim) {
-  const g = (groups || []).find((x) => x.label === raw);
-  if (g) return g.values;
-  return [raw];
 }

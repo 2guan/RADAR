@@ -13,7 +13,7 @@ import {
 import { SafetyCertificateOutlined, DeploymentUnitOutlined, DownloadOutlined, DownOutlined, UpOutlined, HistoryOutlined, ExportOutlined } from '@ant-design/icons';
 import { useResponsive } from '../hooks/useResponsive.js';
 import ChainBar from '../components/ChainBar.jsx';
-import StatusBadge from '../components/StatusBadge.jsx';
+import StatusBadge, { getStatusType } from '../components/StatusBadge.jsx';
 import RequirementEditor from '../components/editors/RequirementEditor.jsx';
 import TicketEditor from '../components/editors/TicketEditor.jsx';
 import TaskEditor from '../components/editors/TaskEditor.jsx';
@@ -1125,6 +1125,63 @@ function TaskGrid({ items, moduleKey, scopeKey, onEdit, emptyText, onIntake, has
   return <div className="lc-tab-grid">{items.map((t) => <TaskDetailCard key={t.id} t={t} moduleKey={moduleKey} scopeKey={scopeKey} onEdit={() => onEdit(t)} />)}</div>;
 }
 
+/**
+ * 需求/工单全生命周期详情内容。版本概览与效能仪表盘共用，确保两处展示结构一致。
+ */
+export function VersionOverviewWorkItemDetail({
+  detail, isTabMode, can, onEditRequirement, onEditTask, onDevIntake, onTestIntake, onRelease,
+}) {
+  const editTask = onEditTask || (() => {});
+  const editRequirement = onEditRequirement || (() => {});
+  const openRelease = onRelease || (() => {});
+  const openDevIntake = onDevIntake || (() => {});
+  const openTestIntake = onTestIntake || (() => {});
+  const hasPermission = can || (() => false);
+
+  if (isTabMode) {
+    return (
+      <Tabs
+        items={[
+          { key: 'req', label: detail.entityType === 'ticket' ? '工单' : '需求', children: <ReqDetailCard req={detail.requirement} entityType={detail.entityType} onEdit={editRequirement} /> },
+          { key: 'dev', label: '开发', children: <TaskGrid items={detail.dev} moduleKey="dev" onEdit={(t) => editTask('dev', t)} emptyText="点击承接开发" onIntake={openDevIntake} hasIntakePermission={hasPermission('dev', 'dev.intake')} /> },
+          { key: 'sit', label: '应用组装测试', children: <TaskGrid items={detail.sit} moduleKey="test" scopeKey="SIT" onEdit={(t) => editTask('test', t)} emptyText="点击承接测试" onIntake={() => openTestIntake('SIT')} hasIntakePermission={hasPermission('test', 'test.intake')} /> },
+          ...(detail.nft.length ? [{ key: 'nft', label: '非功能测试', children: <TaskGrid items={detail.nft} moduleKey="test" scopeKey="NFT" onEdit={(t) => editTask('test', t)} /> }] : []),
+          ...(detail.sec.length ? [{ key: 'sec', label: '安全测试', children: <TaskGrid items={detail.sec} moduleKey="test" scopeKey="SEC" onEdit={(t) => editTask('test', t)} /> }] : []),
+          { key: 'uat', label: '用户测试', children: <TaskGrid items={detail.uat} moduleKey="test" scopeKey="UAT" onEdit={(t) => editTask('test', t)} emptyText="点击承接测试" onIntake={() => openTestIntake('UAT')} hasIntakePermission={hasPermission('test', 'test.intake')} /> },
+          { key: 'rel', label: '投产', children: <ReleaseDetailCard release={detail.release} onEdit={openRelease} /> },
+        ]}
+      />
+    );
+  }
+
+  return (
+    <div className="lc-columns-container">
+      <div className="lc-column">
+        <div className="lc-column-header"><span>{detail.entityType === 'ticket' ? '工单' : '需求'}</span></div>
+        <ReqDetailCard req={detail.requirement} entityType={detail.entityType} onEdit={editRequirement} />
+      </div>
+      <div className="lc-column">
+        <div className="lc-column-header"><span>开发</span><span className="lc-column-header-count">{detail.dev.length}</span></div>
+        <TaskGrid items={detail.dev} moduleKey="dev" onEdit={(t) => editTask('dev', t)} emptyText="点击承接开发" onIntake={openDevIntake} hasIntakePermission={hasPermission('dev', 'dev.intake')} />
+      </div>
+      <div className="lc-column">
+        <div className="lc-column-header"><span>应用组装测试</span></div>
+        <TaskGrid items={detail.sit} moduleKey="test" scopeKey="SIT" onEdit={(t) => editTask('test', t)} emptyText="点击承接测试" onIntake={() => openTestIntake('SIT')} hasIntakePermission={hasPermission('test', 'test.intake')} />
+        {detail.nft.length > 0 && <><div className="lc-column-header" style={{ marginTop: 16 }}><span>非功能测试</span></div><TaskGrid items={detail.nft} moduleKey="test" scopeKey="NFT" onEdit={(t) => editTask('test', t)} /></>}
+        {detail.sec.length > 0 && <><div className="lc-column-header" style={{ marginTop: 16 }}><span>安全测试</span></div><TaskGrid items={detail.sec} moduleKey="test" scopeKey="SEC" onEdit={(t) => editTask('test', t)} /></>}
+      </div>
+      <div className="lc-column">
+        <div className="lc-column-header"><span>用户测试</span></div>
+        <TaskGrid items={detail.uat} moduleKey="test" scopeKey="UAT" onEdit={(t) => editTask('test', t)} emptyText="点击承接测试" onIntake={() => openTestIntake('UAT')} hasIntakePermission={hasPermission('test', 'test.intake')} />
+      </div>
+      <div className="lc-column">
+        <div className="lc-column-header"><span>投产</span></div>
+        <ReleaseDetailCard release={detail.release} onEdit={openRelease} />
+      </div>
+    </div>
+  );
+}
+
 export default function Overview() {
   const releasePointIds = useAppStore((s) => s.releasePointIds);
   const [groups, setGroups] = useState([]);
@@ -1403,80 +1460,16 @@ export default function Overview() {
             </div>
           )
         ) : (
-          isTabMode ? (
-            <Tabs
-              items={[
-                { key: 'req', label: detail.entityType === 'ticket' ? '工单' : '需求', children: <ReqDetailCard req={detail.requirement} entityType={detail.entityType} onEdit={() => setEditor({ type: detail.entityType === 'ticket' ? 'ticket' : 'requirement', id: detail.requirement.id })} /> },
-                { key: 'dev', label: '开发', children: <TaskGrid items={detail.dev} moduleKey="dev" onEdit={(t) => setEditor({ type: 'dev', id: t.id })} emptyText="点击承接开发" onIntake={() => setDevIntakeReq(detail.requirement)} hasIntakePermission={can('dev', 'dev.intake')} /> },
-                { key: 'sit', label: '应用组装测试', children: <TaskGrid items={detail.sit} moduleKey="test" scopeKey="SIT" onEdit={(t) => setEditor({ type: 'test', id: t.id })} emptyText="点击承接测试" onIntake={() => setTestIntakeReq({ req: detail.requirement, testType: 'SIT' })} hasIntakePermission={can('test', 'test.intake')} /> },
-                ...(detail.nft.length ? [{ key: 'nft', label: '非功能测试', children: <TaskGrid items={detail.nft} moduleKey="test" scopeKey="NFT" onEdit={(t) => setEditor({ type: 'test', id: t.id })} /> }] : []),
-                ...(detail.sec.length ? [{ key: 'sec', label: '安全测试', children: <TaskGrid items={detail.sec} moduleKey="test" scopeKey="SEC" onEdit={(t) => setEditor({ type: 'test', id: t.id })} /> }] : []),
-                { key: 'uat', label: '用户测试', children: <TaskGrid items={detail.uat} moduleKey="test" scopeKey="UAT" onEdit={(t) => setEditor({ type: 'test', id: t.id })} emptyText="点击承接测试" onIntake={() => setTestIntakeReq({ req: detail.requirement, testType: 'UAT' })} hasIntakePermission={can('test', 'test.intake')} /> },
-                { key: 'rel', label: '投产', children: <ReleaseDetailCard release={detail.release} onEdit={openReleaseCard} /> },
-              ]}
-            />
-          ) : (
-            <div className="lc-columns-container">
-              {/* 第一列：需求/工单 */}
-              <div className="lc-column">
-                <div className="lc-column-header">
-                  <span>{detail.entityType === 'ticket' ? '工单' : '需求'}</span>
-                </div>
-                <ReqDetailCard req={detail.requirement} entityType={detail.entityType} onEdit={() => setEditor({ type: detail.entityType === 'ticket' ? 'ticket' : 'requirement', id: detail.requirement.id })} />
-              </div>
-
-              {/* 第二列：开发 */}
-              <div className="lc-column">
-                <div className="lc-column-header">
-                  <span>开发</span>
-                  <span className="lc-column-header-count">{detail.dev.length}</span>
-                </div>
-                <TaskGrid items={detail.dev} moduleKey="dev" onEdit={(t) => setEditor({ type: 'dev', id: t.id })} emptyText="点击承接开发" onIntake={() => setDevIntakeReq(detail.requirement)} hasIntakePermission={can('dev', 'dev.intake')} />
-              </div>
-
-              {/* 第三列：应用组装测试、非功能测试、安全测试 */}
-              <div className="lc-column">
-                <div className="lc-column-header">
-                  <span>应用组装测试</span>
-                </div>
-                <TaskGrid items={detail.sit} moduleKey="test" scopeKey="SIT" onEdit={(t) => setEditor({ type: 'test', id: t.id })} emptyText="点击承接测试" onIntake={() => setTestIntakeReq({ req: detail.requirement, testType: 'SIT' })} hasIntakePermission={can('test', 'test.intake')} />
-
-                {detail.nft.length > 0 && (
-                  <>
-                    <div className="lc-column-header" style={{ marginTop: 16 }}>
-                      <span>非功能测试</span>
-                    </div>
-                    <TaskGrid items={detail.nft} moduleKey="test" scopeKey="NFT" onEdit={(t) => setEditor({ type: 'test', id: t.id })} />
-                  </>
-                )}
-
-                {detail.sec.length > 0 && (
-                  <>
-                    <div className="lc-column-header" style={{ marginTop: 16 }}>
-                      <span>安全测试</span>
-                    </div>
-                    <TaskGrid items={detail.sec} moduleKey="test" scopeKey="SEC" onEdit={(t) => setEditor({ type: 'test', id: t.id })} />
-                  </>
-                )}
-              </div>
-
-              {/* 第四列：用户测试 */}
-              <div className="lc-column">
-                <div className="lc-column-header">
-                  <span>用户测试</span>
-                </div>
-                <TaskGrid items={detail.uat} moduleKey="test" scopeKey="UAT" onEdit={(t) => setEditor({ type: 'test', id: t.id })} emptyText="点击承接测试" onIntake={() => setTestIntakeReq({ req: detail.requirement, testType: 'UAT' })} hasIntakePermission={can('test', 'test.intake')} />
-              </div>
-
-              {/* 第五列：投产 */}
-              <div className="lc-column">
-                <div className="lc-column-header">
-                  <span>投产</span>
-                </div>
-                <ReleaseDetailCard release={detail.release} onEdit={openReleaseCard} />
-              </div>
-            </div>
-          )
+          <VersionOverviewWorkItemDetail
+            detail={detail}
+            isTabMode={isTabMode}
+            can={can}
+            onEditRequirement={() => setEditor({ type: detail.entityType === 'ticket' ? 'ticket' : 'requirement', id: detail.requirement.id })}
+            onEditTask={(type, task) => setEditor({ type, id: task.id })}
+            onDevIntake={() => setDevIntakeReq(detail.requirement)}
+            onTestIntake={(testType) => setTestIntakeReq({ req: detail.requirement, testType })}
+            onRelease={openReleaseCard}
+          />
         )}
       </Modal>
 

@@ -20,6 +20,7 @@ import { useDimensionMeta } from '../components/dashboard/useDimensionMeta.js';
 import { useResponsive } from '../hooks/useResponsive.js';
 import ChartEditor from '../components/dashboard/ChartEditor.jsx';
 import DashboardChart from '../components/dashboard/DashboardChart.jsx';
+import { VersionOverviewWorkItemDetail } from './Overview.jsx';
 
 const { useBreakpoint } = Grid;
 
@@ -52,6 +53,7 @@ export default function Dashboard() {
   const [chartLoading, setChartLoading] = useState(true);
   const [editor, setEditor] = useState({ open: false, chart: null, scope: 'user' });
   const [drill, setDrill] = useState({ open: false, title: '', rows: [], loading: false });
+  const [overviewDetail, setOverviewDetail] = useState({ open: false, code: '', systemName: '', data: null, loading: false });
 
   const canManage = can('dashboard', 'manage');
 
@@ -104,10 +106,23 @@ export default function Dashboard() {
   };
 
   // ---- 钻取 ----
-  const onDrill = async (source, filters, title) => {
-    setDrill({ open: true, title, rows: [], loading: true });
-    const d = await apiPost('/dashboard/chart-drilldown', { source, filters, releasePointIds });
-    setDrill({ open: true, title, rows: d?.data || [], loading: false });
+  const onDrill = async (config, filters, title, dimensionLabel) => {
+    setDrill({ open: true, title: `${title}-${dimensionLabel || '统计'}维度明细`, rows: [], loading: true });
+    const d = await apiPost('/dashboard/chart-drilldown', { ...config, filters, releasePointIds });
+    setDrill((current) => ({ ...current, rows: d?.data || [], loading: false }));
+  };
+
+  // 仪表盘内直接打开版本概览的同一套生命周期详情内容。
+  const openOverviewDetail = async (row) => {
+    const code = row.req_code || row.code;
+    if (!code) return;
+    setOverviewDetail({ open: true, code, systemName: row.system, data: null, loading: true });
+    try {
+      const data = await apiGet(`/overview/${code}/detail`);
+      setOverviewDetail((current) => ({ ...current, data: { entityType: data.entityType || 'requirement', ...data }, loading: false }));
+    } catch {
+      setOverviewDetail((current) => ({ ...current, loading: false }));
+    }
   };
 
   const cards = [
@@ -212,7 +227,7 @@ export default function Dashboard() {
             locale={{ emptyText: <Empty description="暂无数据" /> }}
             pagination={{ pageSize: 8, size: 'small', showSizeChanger: false }}
             renderItem={(r) => (
-              <Card size="small" style={{ marginBottom: 10 }}>
+              <Card size="small" hoverable style={{ marginBottom: 10, cursor: 'pointer' }} onClick={() => openOverviewDetail(r)}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
                   <span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', fontWeight: 600, fontSize: 12 }}>{r.code || '—'}</span>
                   {r.status && <span style={{ fontSize: 11, color: 'var(--radar-text-secondary)', whiteSpace: 'nowrap' }}>{r.status}</span>}
@@ -226,6 +241,7 @@ export default function Dashboard() {
           />
         ) : (
           <Table size="small" rowKey={(r, i) => `${r.code}_${i}`} loading={drill.loading} dataSource={drill.rows}
+            onRow={(r) => ({ onClick: () => openOverviewDetail(r), style: { cursor: 'pointer' } })}
             pagination={{ pageSize: 10, showSizeChanger: true }}
             columns={[
               { title: '编号', dataIndex: 'code', width: 160 },
@@ -235,6 +251,31 @@ export default function Dashboard() {
               { title: '机构', dataIndex: 'org', width: 120 },
               { title: '负责人', dataIndex: 'owner', width: 90 },
             ]} />
+        )}
+      </Modal>
+
+      <Modal
+        open={overviewDetail.open}
+        width={screens.xl ? '96%' : '86%'}
+        footer={null}
+        onCancel={() => setOverviewDetail((current) => ({ ...current, open: false }))}
+        style={{ top: 20, maxWidth: screens.xl ? '1700px' : '1000px' }}
+        styles={{ body: { minHeight: 360, overflowX: 'hidden' } }}
+        title={overviewDetail.data && (
+          <div className="lc-modal-title" style={{ paddingRight: 24 }}>
+            <span className="lc-id big">{overviewDetail.data.requirement.req_code}</span>
+            <span className="lc-modal-name">{overviewDetail.data.requirement.title}</span>
+            {overviewDetail.systemName && overviewDetail.systemName !== '—' && <span className="tag-system">{overviewDetail.systemName}</span>}
+          </div>
+        )}
+      >
+        {overviewDetail.loading || !overviewDetail.data ? (
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 360 }}><Spin size="large" /></div>
+        ) : (
+          <VersionOverviewWorkItemDetail
+            detail={overviewDetail.data}
+            isTabMode={!screens.xl}
+          />
         )}
       </Modal>
     </div>

@@ -12,7 +12,8 @@ import { isTerminalStatus } from '../../lib/status.js';
 import { windowIds, inClause } from '../../lib/window.js';
 import { ok, badRequest, notFound, forbidden } from '../../lib/http.js';
 import {
-  SOURCES, DIMENSIONS, CHART_TYPES, buildContext, aggregate, extract, matchFilters, isValidDim, testTypeOf,
+  SOURCES, DIMENSIONS, CHART_TYPES, ANALYTICS_DIMENSIONS, ANALYTICS_STAGES,
+  buildContext, aggregate, extract, matchFilters, isValidDim, testTypeOf,
 } from '../../lib/chart-dims.js';
 import { parseJsonArray } from '../../lib/json.js';
 
@@ -63,11 +64,70 @@ async function loadRows(source, codes) {
   return rows.filter((r) => set.has(r.req_code || r.ticket_code));
 }
 
+/**
+ * 新效能仪表盘：以需求/工单为关联主线，根据“统计维度 × 统计阶段”取数。
+ * 每条阶段记录都携带所属工作项，保证计划/申请投产点、提出部门、需求类型等维度在所有阶段可用。
+ */
+async function loadAnalyticsRows(statDimension = 'requirement', statStage = 'all', codes, ctx) {
+  const codeSet = codes ? new Set(codes) : null;
+  const inWindow = (row) => !codeSet || codeSet.has(row.req_code || row.ticket_code);
+  const requirements = (await all('SELECT * FROM requirement')).map((r) => ({ ...r, _entityType: 'requirement' }));
+  const tickets = (await all('SELECT *, ticket_code AS req_code FROM ticket')).map((r) => ({ ...r, _entityType: 'ticket' }));
+  const items = [...requirements, ...tickets].filter(inWindow);
+  const itemMap = Object.fromEntries(items.map((r) => [r.req_code, r]));
+  const keepType = (item) => item && (statDimension === 'all' || item._entityType === statDimension);
+  const withItem = (row, stage) => {
+    const item = itemMap[row.req_code];
+    return keepType(item) ? { ...row, _workItem: item, _entityType: item._entityType, _analyticsStage: stage } : null;
+  };
+  const analysis = items.filter((r) => keepType(r)).map((r) => ({ ...r, _workItem: r, _analyticsStage: 'analysis' }));
+  const dev = (await all('SELECT * FROM dev_task')).filter(inWindow).map((r) => withItem(r, 'dev')).filter(Boolean);
+  const tests = await all('SELECT * FROM test_task');
+  const stageRows = {
+    analysis,
+    dev,
+    sit: tests.filter((r) => r.test_type === 'SIT' && inWindow(r)).map((r) => withItem(r, 'sit')).filter(Boolean),
+    uat: tests.filter((r) => r.test_type === 'UAT' && inWindow(r)).map((r) => withItem(r, 'uat')).filter(Boolean),
+    nft: tests.filter((r) => r.test_type === 'NFT' && inWindow(r)).map((r) => withItem(r, 'nft')).filter(Boolean),
+    sec: tests.filter((r) => r.test_type === 'SEC' && inWindow(r)).map((r) => withItem(r, 'sec')).filter(Boolean),
+    release: (await all('SELECT * FROM release_task')).filter(inWindow).map((r) => withItem(r, 'release')).filter(Boolean),
+  };
+  // “全部”是全量需求/工单的统计口径，不应将同一工作项在开发、测试、审批阶段重复累加。
+  // 阶段明细仅在用户明确选择某一统计阶段时作为该阶段的数据集。
+  if (statStage === 'all') return analysis;
+  return stageRows[statStage] || [];
+}
+
+function normalizeAnalyticsConfig(cfg = {}) {
+  // 新图表使用统一口径；历史图表继续走原数据源，首次编辑/保存后才转换，避免已有看板失效。
+  if (cfg.source === 'analytics') return {
+    statDimension: cfg.statDimension || 'requirement', statStage: cfg.statStage || 'all', source: 'analytics',
+  };
+  if (cfg.statDimension || cfg.statStage) {
+    const legacy = {
+    requirement: ['requirement', 'analysis'], ticket: ['ticket', 'analysis'], dev: ['all', 'dev'],
+    sit: ['all', 'sit'], uat: ['all', 'uat'], nft: ['all', 'nft'], sec: ['all', 'sec'], releaseSystem: ['all', 'release'],
+    all: ['all', 'all'],
+    }[cfg.source] || ['all', 'all'];
+    return { statDimension: cfg.statDimension || legacy[0], statStage: cfg.statStage || legacy[1], source: 'analytics' };
+  }
+  return null;
+}
+
 /** 钻取：把一条记录投影成列表展示行 */
 function projectRecord(source, row, ctx) {
   const realSource = source === 'all' ? row._source : source;
   const sysName = (code) => ctx.sysMap[code]?.name || code;
   const systems = extract(realSource, 'system', row, ctx).map(sysName).join('、');
+  if (realSource === 'analytics') {
+    const item = row._workItem || row;
+    const code = item.req_code || item.ticket_code;
+    return {
+      req_code: code, code: row.task_code || code, name: row.task_name || item.title || code,
+      status: row.status || item.status, system: systems,
+      org: extract(realSource, 'org', row, ctx).join('、'), owner: row.owner || '',
+    };
+  }
   if (realSource === 'requirement' || realSource === 'ticket') {
     const proposerNames = parseJsonArray(row.proposer).join('、');
     const code = realSource === 'ticket' ? row.ticket_code : row.req_code;
@@ -144,27 +204,32 @@ export default async function dashboardRoutes(fastify) {
   // 免去逐源 7 次往返（公网下尤为关键）。
   fastify.get('/dashboard/dimensions', { preHandler: fastify.requirePerm('dashboard', 'view') }, async (request) => {
     const source = request.query.source;
-    const sources = Object.entries(SOURCES).map(([value, v]) => ({ value, label: v.label }));
+    const sources = [{ value: 'analytics', label: '效能统计' }];
     const chartTypes = CHART_TYPES;
     const dimsOf = (src) => SOURCES[src].dims.map((key) => ({ key, ...DIMENSIONS[key] }));
     if (!source || !SOURCES[source]) {
       const dimsBySource = {};
-      for (const src of Object.keys(SOURCES)) dimsBySource[src] = dimsOf(src);
-      return ok({ sources, chartTypes, dimensions: [], dimsBySource });
+      dimsBySource.analytics = dimsOf('analytics');
+      return ok({ sources, chartTypes, dimensions: [], dimsBySource, statDimensions: ANALYTICS_DIMENSIONS, statStages: ANALYTICS_STAGES });
     }
-    return ok({ sources, chartTypes, dimensions: dimsOf(source) });
+    return ok({ sources, chartTypes, dimensions: dimsOf(source), statDimensions: ANALYTICS_DIMENSIONS, statStages: ANALYTICS_STAGES });
   });
 
   // 分析图表数据聚合（1D/2D + 过滤 + 分组归并）
   fastify.post('/dashboard/chart-data', { preHandler: fastify.requirePerm('dashboard', 'view') }, async (request) => {
-    const { source = 'requirement', dimension, xAxisDimension, filters, groups, xAxisGroups } = request.body || {};
+    const cfg = request.body || {};
+    const analytics = normalizeAnalyticsConfig(cfg);
+    const { dimension, xAxisDimension, filters, groups, xAxisGroups } = cfg;
+    const source = analytics?.source || cfg.source;
     if (!SOURCES[source]) throw badRequest('未知数据源');
     if (!isValidDim(source, dimension)) throw badRequest('非法的统计维度');
     const xDim = xAxisDimension && isValidDim(source, xAxisDimension) ? xAxisDimension : undefined;
 
     const codes = await workItemCodesInWindow(windowIds(request.body));
     const ctx = await buildContext();
-    const rows = await loadRows(source, codes);
+    const rows = source === 'analytics'
+      ? await loadAnalyticsRows(analytics.statDimension, analytics.statStage, codes, ctx)
+      : await loadRows(source, codes);
     const data = aggregate({ source, dimension, xAxisDimension: xDim, filters, groups, xAxisGroups, rows, ctx });
     return ok({ data });
   });
@@ -184,7 +249,8 @@ export default async function dashboardRoutes(fastify) {
     const result = {};
     for (const ch of charts) {
       const cfg = ch?.config || {};
-      const source = cfg.source || 'requirement';
+      const analytics = normalizeAnalyticsConfig(cfg);
+      const source = analytics?.source || cfg.source || 'analytics';
       // 非法配置返回空数据而非整体失败，保证其余图表正常
       if (!SOURCES[source] || !isValidDim(source, cfg.dimension)) { result[ch.id] = []; continue; }
       const xDim = cfg.xAxisDimension && isValidDim(source, cfg.xAxisDimension) ? cfg.xAxisDimension : undefined;
@@ -192,7 +258,9 @@ export default async function dashboardRoutes(fastify) {
         result[ch.id] = aggregate({
           source, dimension: cfg.dimension, xAxisDimension: xDim,
           filters: cfg.filters, groups: cfg.groups, xAxisGroups: cfg.xAxisGroups,
-          rows: await loadOnce(source), ctx,
+          rows: source === 'analytics'
+            ? await loadAnalyticsRows(analytics.statDimension, analytics.statStage, codes, ctx)
+            : await loadOnce(source), ctx,
         });
       } catch { result[ch.id] = []; }
     }
@@ -201,11 +269,16 @@ export default async function dashboardRoutes(fastify) {
 
   // 钻取：返回与图元对应的底层记录列表
   fastify.post('/dashboard/chart-drilldown', { preHandler: fastify.requirePerm('dashboard', 'view') }, async (request) => {
-    const { source = 'requirement', filters } = request.body || {};
+    const cfg = request.body || {};
+    const analytics = normalizeAnalyticsConfig(cfg);
+    const { filters } = cfg;
+    const source = analytics?.source || cfg.source || 'analytics';
     if (!SOURCES[source]) throw badRequest('未知数据源');
     const codes = await workItemCodesInWindow(windowIds(request.body));
     const ctx = await buildContext();
-    const rows = await loadRows(source, codes);
+    const rows = source === 'analytics'
+      ? await loadAnalyticsRows(analytics.statDimension, analytics.statStage, codes, ctx)
+      : await loadRows(source, codes);
     // 复用聚合的过滤规则筛出明细
     const data = rows
       .filter((r) => matchFilters(source, r, filters, ctx))

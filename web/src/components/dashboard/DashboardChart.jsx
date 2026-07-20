@@ -33,6 +33,8 @@ export default function DashboardChart({
   const cfg = typeof chart.config === 'string' ? JSON.parse(chart.config) : (chart.config || {});
   const isDark = theme === 'dark';
   const height = forcedHeight != null ? forcedHeight : (chart.height ?? 320);
+  // 同行存在自适应高度表格时，卡片会被表格撑高；图表画布随卡片内容区弹性填满。
+  const fillRowHeight = forcedHeight != null && chart.height !== 0;
 
   // 图表点击钻取：将用户点击的图元（系列名/数据名）反解为原始维度过滤条件，回调 onDrill。
   // 兼容两种数据形态——二维交叉表（含 name_y，需同时还原 X/Y 两个维度）与一维分组（仅还原单维度）；
@@ -43,13 +45,13 @@ export default function DashboardChart({
     if (is2D) {
       const ys = [...new Set(data.map((d) => d.name_y))];
       const xs = [...new Set(data.map((d) => d.name_x))];
-      onDrill(cfg.source, {
+      onDrill(cfg, {
         [cfg.dimension]: reverse(cfg.groups, p.name, cfg.dimension, ys, labelOf),
         [cfg.xAxisDimension]: reverse(cfg.xAxisGroups, p.seriesName, cfg.xAxisDimension, xs, labelOf),
-      }, chart.title);
+      }, chart.title, dimName(cfg.dimension));
     } else {
       const raws = [...new Set(data.map((d) => d.name))];
-      onDrill(cfg.source, { [cfg.dimension]: reverse(cfg.groups, p.name, cfg.dimension, raws, labelOf) }, chart.title);
+      onDrill(cfg, { [cfg.dimension]: reverse(cfg.groups, p.name, cfg.dimension, raws, labelOf) }, chart.title, dimName(cfg.dimension));
     }
   };
 
@@ -68,13 +70,18 @@ export default function DashboardChart({
     if (chart.chart_type === 'table') {
       return (
         <div style={{ maxHeight: height ? height : undefined, overflow: 'auto' }}>
-          <PivotTable cfg={cfg} data={data} labelOf={labelOf} dimName={dimName} onCell={(filters) => onDrill?.(cfg.source, filters, chart.title)} />
+          <PivotTable cfg={cfg} data={data} labelOf={labelOf} dimName={dimName}
+            onCell={(filters, dimensionLabel) => onDrill?.(cfg, filters, chart.title, dimensionLabel)} />
         </div>
       );
     }
     const option = buildOption({ chartType: chart.chart_type, cfg, data, labelOf, isDark, activeColors });
     return (
-      <ReactECharts option={option} style={{ height: height || 300 }} opts={{ renderer: 'svg' }} notMerge
+      <ReactECharts option={option} style={{
+        height: fillRowHeight ? '100%' : (height || 300),
+        minHeight: fillRowHeight ? (height || 300) : undefined,
+        flex: fillRowHeight ? '1 1 auto' : undefined,
+      }} opts={{ renderer: 'svg' }} notMerge
         onEvents={{ click: handleEchartClick }} />
     );
   };
