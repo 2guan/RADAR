@@ -310,6 +310,23 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
     }
   };
 
+  /** 取消已签署的会签：恢复未签署，并由服务端重新计算评审与投产状态。 */
+  const cancelSignedSignoff = async () => {
+    if (!currentSignoff || currentSignoff.result !== '已签署') return;
+    setSigning(true);
+    try {
+      await apiPost(`/release/signoff/${currentSignoff.id}`, { result: '未签署' });
+      message.success('已取消签署');
+      setSignOpen(false);
+      reload();
+      onChanged?.();
+    } catch (e) {
+      message.error(e.message || '取消签署失败');
+    } finally {
+      setSigning(false);
+    }
+  };
+
   const handleOwnerChange = async (val) => {
     setOwner(val);
     try {
@@ -751,7 +768,17 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
         onOk={signReadonly ? undefined : confirmSign}
         confirmLoading={signing}
         width={460} destroyOnHidden okText="确认签署" cancelText="取消"
-        footer={signReadonly ? null : undefined}
+        footer={signReadonly ? null : (
+          <Space>
+            {currentSignoff?.result === '已签署' && (
+              <Popconfirm title="确认取消本角色的签署？" onConfirm={cancelSignedSignoff} okText="确认取消" cancelText="保留签署">
+                <Button danger loading={signing}>取消签署</Button>
+              </Popconfirm>
+            )}
+            <Button onClick={() => setSignOpen(false)}>取消</Button>
+            <Button type="primary" loading={signing} onClick={confirmSign}>确认签署</Button>
+          </Space>
+        )}
       >
         {signReadonly ? <ReadonlySignoffView so={currentSignoff} /> : <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 12, fontSize: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

@@ -264,16 +264,21 @@ async function recomputeReviewStatus(releaseTaskId) {
 }
 
 /**
- * 评审通过后自动推进投产状态。仅推进“待评审”，不覆盖人工已调整过的后续状态。
+ * 会签结果变化时同步投产状态：评审同意推进至待投产；撤回同意后恢复待评审。
+ * 仅在这两个相邻状态间联动，不覆盖已投产、已取消等后续状态。
  */
-async function advanceReleaseStatusAfterApproval(releaseTaskId) {
+async function syncReleaseStatusWithReview(releaseTaskId) {
   const rt = await get('SELECT id, req_code, status, review_status FROM release_task WHERE id = ?', releaseTaskId);
-  if (!rt || rt.review_status !== '评审同意' || rt.status !== '待评审') return null;
+  if (!rt) return null;
+  const nextStatus = rt.review_status === '评审同意' && rt.status === '待评审'
+    ? '待投产'
+    : (rt.review_status !== '评审同意' && rt.status === '待投产' ? '待评审' : null);
+  if (!nextStatus) return null;
   await run(
     `UPDATE release_task SET status=?, updated_at=datetime('now','localtime') WHERE id=?`,
-    '待投产', rt.id,
+    nextStatus, rt.id,
   );
-  return { ...rt, nextStatus: '待投产' };
+  return { ...rt, nextStatus };
 }
 
 /** 判定实体类型：需求 / 工单 / 问题 / 未知 */
@@ -937,10 +942,14 @@ export default async function releaseRoutes(fastify) {
     if (owner !== undefined) updateData.owner = owner;
     if (status !== undefined) updateData.status = status;
     if (review_status !== undefined) updateData.review_status = review_status;
-    // 评审同意是投产状态从“待评审”进入“待投产”的唯一自动推进条件。
-    // 即使调用方同时回填了待评审，也始终以该联动规则为准。
-    if ((updateData.review_status ?? rt.review_status) === '评审同意'
-      && (updateData.status ?? rt.status) === '待评审') updateData.status = '待投产';
+    // 评审状态调整时保持投产状态一致；不覆盖已投产、已取消等后续状态。
+    const effectiveReviewStatus = updateData.review_status ?? rt.review_status;
+    const effectiveReleaseStatus = updateData.status ?? rt.status;
+    if (effectiveReviewStatus === '评审同意' && effectiveReleaseStatus === '待评审') {
+      updateData.status = '待投产';
+    } else if (review_status !== undefined && effectiveReviewStatus !== '评审同意' && effectiveReleaseStatus === '待投产') {
+      updateData.status = '待评审';
+    }
 
     const keys = Object.keys(updateData);
     if (keys.length > 0) {
@@ -970,20 +979,25 @@ export default async function releaseRoutes(fastify) {
       const hasRole = await get('SELECT 1 FROM user_role WHERE user_id = ? AND role_id = ?', request.currentUser.id, so.role_id);
       if (!hasRole) throw forbidden(`仅【${so.role_name}】角色可签署该项`);
     }
-    // 签名：传入 signatureId 时校验归属当前用户并记录其路径；未传则沿用原签名
-    let signaturePath = result === '不涉及' ? null : (so.signature_path || null);
+    const cancelSigned = result === '未签署';
+    // 签名：取消签署时必须清空签名、签署人、时间和意见；其他情况保留或更新签名。
+    let signaturePath = (result === '不涉及' || cancelSigned) ? null : (so.signature_path || null);
     if (result !== '不涉及' && signatureId) {
       const sig = await get('SELECT * FROM user_signature WHERE id = ?', signatureId);
       if (!sig || sig.user_id !== request.currentUser.id) throw badRequest('签名无效');
       signaturePath = sig.stored_path;
     }
+    const nextConclusion = cancelSigned ? null : (conclusion || (result === '不涉及' ? '不涉及' : null));
     await run(
-      `UPDATE release_signoff SET result=?, conclusion=?, signature_path=?, signer_user_id=?, signer_name=?, sign_time=datetime('now','localtime'), updated_at=datetime('now','localtime') WHERE id=?`,
-      result, conclusion || (result === '不涉及' ? '不涉及' : null), signaturePath, request.currentUser?.id, request.currentUser?.name, id,
+      `UPDATE release_signoff SET result=?, conclusion=?, signature_path=?, signer_user_id=?, signer_name=?, sign_time=${cancelSigned ? 'NULL' : "datetime('now','localtime')"}, updated_at=datetime('now','localtime') WHERE id=?`,
+      result, nextConclusion, signaturePath,
+      cancelSigned ? null : request.currentUser?.id,
+      cancelSigned ? null : request.currentUser?.name,
+      id,
     );
     await auditUpdate('release', so.release_task_id, so.role_name, request.currentUser?.name,
       { result: so.result, conclusion: so.conclusion },
-      { result, conclusion: conclusion || (result === '不涉及' ? '不涉及' : null) },
+      { result, conclusion: nextConclusion },
       {
         result: `会签-${so.role_name}-签署状态`,
         conclusion: `会签-${so.role_name}-签署意见`,
@@ -996,12 +1010,12 @@ export default async function releaseRoutes(fastify) {
       await auditUpdate('release', so.release_task_id, rt?.req_code, request.currentUser?.name,
         { v: beforeReview }, { v: afterReview }, { v: '评审状态' });
     }
-    const advanced = await advanceReleaseStatusAfterApproval(so.release_task_id);
-    if (advanced) {
-      await auditUpdate('release', advanced.id, advanced.req_code, request.currentUser?.name,
-        { status: advanced.status }, { status: advanced.nextStatus }, { status: '投产状态' });
+    const statusSynced = await syncReleaseStatusWithReview(so.release_task_id);
+    if (statusSynced) {
+      await auditUpdate('release', statusSynced.id, statusSynced.req_code, request.currentUser?.name,
+        { status: statusSynced.status }, { status: statusSynced.nextStatus }, { status: '投产状态' });
     }
-    return ok(null, '签署完成');
+    return ok(null, cancelSigned ? '已取消签署' : '签署完成');
   });
 
   // 导出 Word 详情（单条审批对象的完整信息）

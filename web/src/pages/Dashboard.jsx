@@ -22,6 +22,9 @@ import ChartEditor from '../components/dashboard/ChartEditor.jsx';
 import DashboardChart from '../components/dashboard/DashboardChart.jsx';
 import ReleaseDetail from '../components/editors/ReleaseDetail.jsx';
 import ReleaseApplyEditor from '../components/editors/ReleaseApplyEditor.jsx';
+import RequirementEditor from '../components/editors/RequirementEditor.jsx';
+import TicketEditor from '../components/editors/TicketEditor.jsx';
+import TaskEditor from '../components/editors/TaskEditor.jsx';
 import { DevIntakeModal, TestIntakeModal, VersionOverviewWorkItemDetail } from './Overview.jsx';
 
 const { useBreakpoint } = Grid;
@@ -60,6 +63,7 @@ export default function Dashboard() {
   const [testIntakeReq, setTestIntakeReq] = useState(null);
   const [releaseDetailCode, setReleaseDetailCode] = useState(null);
   const [releaseApply, setReleaseApply] = useState(null);
+  const [workItemEditor, setWorkItemEditor] = useState(null);
 
   const canManage = can('dashboard', 'manage');
 
@@ -298,9 +302,21 @@ export default function Dashboard() {
             onDevIntake={() => setDevIntakeReq(overviewDetail.data.requirement)}
             onTestIntake={(testType) => setTestIntakeReq({ req: overviewDetail.data.requirement, testType })}
             onRelease={openOverviewRelease}
+            onEditRequirement={() => setWorkItemEditor({
+              type: overviewDetail.data.entityType === 'ticket' ? 'ticket' : 'requirement',
+              id: overviewDetail.data.requirement.id,
+            })}
+            onEditTask={(type, task) => setWorkItemEditor({ type, id: task.id })}
           />
         )}
       </Modal>
+      <RequirementEditor open={workItemEditor?.type === 'requirement'} reqId={workItemEditor?.type === 'requirement' ? workItemEditor.id : null}
+        onClose={() => setWorkItemEditor(null)} onSaved={refreshOverviewDetail} />
+      <TicketEditor open={workItemEditor?.type === 'ticket'} reqId={workItemEditor?.type === 'ticket' ? workItemEditor.id : null}
+        onClose={() => setWorkItemEditor(null)} onSaved={refreshOverviewDetail} />
+      <TaskEditor open={workItemEditor?.type === 'dev' || workItemEditor?.type === 'test'} kind={workItemEditor?.type === 'test' ? 'test' : 'dev'}
+        taskId={workItemEditor?.type === 'dev' || workItemEditor?.type === 'test' ? workItemEditor.id : null}
+        onClose={() => setWorkItemEditor(null)} onSaved={refreshOverviewDetail} />
       <DevIntakeModal open={!!devIntakeReq} requirement={devIntakeReq}
         onClose={() => setDevIntakeReq(null)} onSaved={refreshOverviewDetail} />
       <TestIntakeModal open={!!testIntakeReq} requirement={testIntakeReq?.req} testType={testIntakeReq?.testType}
