@@ -16,6 +16,11 @@ const RP_KEY = 'radar_release_point';
 const PRESET_KEY = 'radar_preset';
 const CONTENT_MODE_KEY = 'radar_content_mode';
 
+/** 用户外观偏好按用户隔离，避免同一浏览器切换账号时互相覆盖。 */
+function userPreferenceKey(key, userId) {
+  return userId === undefined || userId === null ? null : `${key}:${userId}`;
+}
+
 /** 从 localStorage 解析投产窗口 id 数组（兼容旧的单值存储） */
 function parseRP() {
   const v = localStorage.getItem(RP_KEY);
@@ -73,10 +78,9 @@ export const useAppStore = create((set, get) => ({
   permissions: [],          // ['module:action', ...] 或 ['*']
   // 平台公开信息
   platform: {},
-  // 主题：light / dark（默认蔚蓝白天；用户本地选择优先，登出后仍保留上次选择）
-  theme: localStorage.getItem(THEME_KEY) || 'light',
-  // 主题配色预设（用户本地优先，其次平台默认）
-  preset: localStorage.getItem(PRESET_KEY) || DEFAULT_PRESET,
+  // 未登录时使用默认外观；登录后会应用该用户自己的偏好或角色默认值。
+  theme: 'light',
+  preset: DEFAULT_PRESET,
   // 当前所选投产窗口 id 数组（空数组 = 全部投产点）
   releasePointIds: parseRP(),
   // 内容区模式：single / tabs（默认单页，用户本地选择优先）
@@ -86,12 +90,17 @@ export const useAppStore = create((set, get) => ({
   /** 切换明暗主题 */
   toggleTheme: () => {
     const next = get().theme === 'dark' ? 'light' : 'dark';
-    localStorage.setItem(THEME_KEY, next);
+    const key = userPreferenceKey(THEME_KEY, get().user?.id);
+    if (key) localStorage.setItem(key, next);
     set({ theme: next });
   },
 
-  /** 切换配色预设（本地覆盖平台默认） */
-  setPreset: (key) => { localStorage.setItem(PRESET_KEY, key); set({ preset: key }); },
+  /** 切换配色预设（仅覆盖当前用户的角色默认主题） */
+  setPreset: (preset) => {
+    const key = userPreferenceKey(PRESET_KEY, get().user?.id);
+    if (key) localStorage.setItem(key, preset);
+    set({ preset });
+  },
 
   /** 设置内容区模式 */
   setContentMode: (mode) => {
@@ -107,13 +116,12 @@ export const useAppStore = create((set, get) => ({
     set({ releasePointIds: arr });
   },
 
-  /** 加载平台公开信息（登录页/标题用），并应用平台默认主题（用户未本地覆盖时） */
+  /** 加载平台公开信息（登录页/标题用）；仅在未登录时应用平台默认主题。 */
   loadPlatform: async () => {
     const p = await apiGet('/settings/public');
     set({ platform: p || {} });
     if (p?.['platform.name']) document.title = p['platform.name'];
-    // 平台默认配色：仅当用户本地未覆盖时采用
-    if (localStorage.getItem(PRESET_KEY) === null && p?.['appearance.preset']) {
+    if (!get().user && p?.['appearance.preset']) {
       set({ preset: p['appearance.preset'] });
     }
     return p;
@@ -122,14 +130,20 @@ export const useAppStore = create((set, get) => ({
   /** 加载当前用户信息与权限 */
   loadMe: async () => {
     const me = await apiGet('/auth/me');
-    set({ user: me, permissions: me?.permissions || [] });
     if (me) {
-      if (localStorage.getItem(PRESET_KEY) === null && me.defaultTheme) {
-        set({ preset: me.defaultTheme });
-      }
-      if (localStorage.getItem(THEME_KEY) === null) {
-        set({ theme: 'light' });
-      }
+      const presetKey = userPreferenceKey(PRESET_KEY, me.id);
+      const themeKey = userPreferenceKey(THEME_KEY, me.id);
+      const savedPreset = presetKey ? localStorage.getItem(presetKey) : null;
+      const savedTheme = themeKey ? localStorage.getItem(themeKey) : null;
+      set({
+        user: me,
+        permissions: me.permissions || [],
+        // 用户自己选过的主题优先；未选择时使用角色的默认主题。
+        preset: savedPreset || me.defaultTheme || DEFAULT_PRESET,
+        theme: savedTheme || 'light',
+      });
+    } else {
+      set({ user: null, permissions: [] });
     }
     return me;
   },
@@ -166,7 +180,12 @@ export const useAppStore = create((set, get) => ({
   logout: () => {
     localStorage.removeItem(TOKEN_KEY);
     sessionStorage.removeItem('radar_redirect_hash');
-    set({ user: null, permissions: [] });
+    set({
+      user: null,
+      permissions: [],
+      theme: 'light',
+      preset: get().platform['appearance.preset'] || DEFAULT_PRESET,
+    });
     location.hash = '#/login';
   },
 

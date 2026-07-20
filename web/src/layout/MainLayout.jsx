@@ -11,6 +11,7 @@ import { Layout, Select, Button, Dropdown, Avatar, Drawer, Form, Input, Modal, m
 import {
   MenuOutlined, BulbOutlined, BulbFilled, UserOutlined, LogoutOutlined, RocketOutlined, DownOutlined,
   MenuFoldOutlined, MenuUnfoldOutlined, KeyOutlined, AppstoreOutlined, ProfileOutlined, CloseOutlined, ClearOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { useAppStore } from '../stores/app.js';
@@ -87,7 +88,7 @@ function TabPane({ tab, active }) {
   );
 }
 
-function HeaderTabStrip({ tabs, activeKey, onActivate, onClose, onCloseAll }) {
+function HeaderTabStrip({ tabs, activeKey, onActivate, onClose, onCloseAll, onRefresh }) {
   if (!tabs.length) return null;
 
   return (
@@ -121,16 +122,26 @@ function HeaderTabStrip({ tabs, activeKey, onActivate, onClose, onCloseAll }) {
           </button>
         ))}
       </div>
-      <Tooltip title="关闭全部页签">
-        <Button
-          className="radar-tab-clear"
-          size="small"
-          type="text"
-          shape="circle"
-          icon={<ClearOutlined />}
-          onClick={onCloseAll}
-        />
-      </Tooltip>
+      <div className="radar-tab-actions">
+        <Tooltip title="刷新当前页签">
+          <Button
+            size="small"
+            type="text"
+            shape="circle"
+            icon={<ReloadOutlined />}
+            onClick={onRefresh}
+          />
+        </Tooltip>
+        <Tooltip title="关闭全部页签">
+          <Button
+            size="small"
+            type="text"
+            shape="circle"
+            icon={<ClearOutlined />}
+            onClick={onCloseAll}
+          />
+        </Tooltip>
+      </div>
     </div>
   );
 }
@@ -148,7 +159,7 @@ function TabbedWorkspace({ tabs, activeKey }) {
     <div className="radar-tab-workspace">
       <div className="radar-tab-body">
         {tabs.map((tab) => (
-          <TabPane key={tab.key} tab={tab} active={tab.key === activeKey} />
+          <TabPane key={`${tab.key}:${tab.refreshVersion || 0}`} tab={tab} active={tab.key === activeKey} />
         ))}
       </div>
     </div>
@@ -316,6 +327,15 @@ export default function MainLayout() {
     setActiveTabKey(null);
   };
 
+  const refreshActiveTab = () => {
+    if (!activeTabKey) return;
+    setTabs((prev) => prev.map((tab) => (
+      tab.key === activeTabKey
+        ? { ...tab, refreshVersion: (tab.refreshVersion || 0) + 1 }
+        : tab
+    )));
+  };
+
   const toggleContentMode = () => {
     const next = isTabMode ? 'single' : 'tabs';
     if (next === 'tabs') {
@@ -462,6 +482,7 @@ export default function MainLayout() {
               onActivate={activateTab}
               onClose={closeTab}
               onCloseAll={closeAllTabs}
+              onRefresh={refreshActiveTab}
             />
           </div>
         )}

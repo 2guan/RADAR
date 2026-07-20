@@ -315,9 +315,15 @@ body {
   opacity: 1;
   background: rgba(0,0,0,0.06);
 }
-.radar-tab-clear {
+.radar-tab-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
   flex: 0 0 auto;
   align-self: center;
+  color: var(--radar-text-secondary);
+}
+.radar-tab-actions .ant-btn {
   color: var(--radar-text-secondary);
 }
 .radar-tab-body {
