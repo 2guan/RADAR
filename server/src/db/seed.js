@@ -41,19 +41,22 @@ const SIGNOFF_ROLE_CODES = ROLES.filter((r) => r.signoff).map((r) => r.code);
 const MODULE_ACTIONS = {
   dashboard: ['view', 'manage'],
   overview: ['view'],
-  requirement: ['view', 'create', 'edit', 'delete', 'import', 'export'],
-  ticket: ['view', 'create', 'edit', 'delete', 'import', 'export'],
+  requirement: ['view', 'create', 'edit', 'status.edit', 'delete', 'import', 'export'],
+  ticket: ['view', 'create', 'edit', 'status.edit', 'delete', 'import', 'export'],
   issue: ['view', 'sync', 'delete'],
-  dev: ['view', 'create', 'edit', 'delete', 'import', 'export', 'dev.intake'],
-  test: ['view', 'create', 'edit', 'delete', 'import', 'export', 'test.intake'],
-  release: ['view', 'edit', 'export', 'release.signoff', 'release.register'],
+  dev: ['view', 'create', 'edit', 'status.edit', 'delete', 'import', 'export'],
+  'test.SIT': ['view', 'create', 'edit', 'status.edit', 'delete', 'import', 'export'],
+  'test.UAT': ['view', 'create', 'edit', 'status.edit', 'delete', 'import', 'export'],
+  'test.NFT': ['view', 'create', 'edit', 'status.edit', 'delete', 'import', 'export'],
+  'test.SEC': ['view', 'create', 'edit', 'status.edit', 'delete', 'import', 'export'],
+  release: ['view', 'edit', 'status.edit', 'export', 'release.signoff', 'release.register'],
   release_apply: ['view', 'create', 'edit', 'delete', 'import', 'export'],
   user: ['view', 'create', 'edit', 'delete', 'import', 'export'],
   settings: ['view', 'create', 'edit', 'delete', 'import', 'export', 'settings.permission.edit'],
 };
 
 // 业务主链路模块（非管理类角色默认可见）
-const CHAIN_MODULES = ['dashboard', 'overview', 'requirement', 'ticket', 'issue', 'dev', 'test', 'release', 'release_apply'];
+const CHAIN_MODULES = ['dashboard', 'overview', 'requirement', 'ticket', 'issue', 'dev', 'test.SIT', 'test.UAT', 'test.NFT', 'test.SEC', 'release', 'release_apply'];
 
 // 流程状态字典：[阶段, 属性值, 显示值, 排序, 是否终态]
 const PROCESS_STATUS = [
@@ -428,7 +431,10 @@ export async function runSeed() {
       requirement: ['金科业务', '农信业务'],
       ticket: ['金科业务', '农信业务'],
       dev: ['金科开发', '农信开发'],
-      test: ['金科测试', '农信测试', '金科业务', '农信业务'], // UAT 涉及业务
+      'test.SIT': ['金科测试', '农信测试'],
+      'test.UAT': ['金科测试', '农信测试', '金科业务', '农信业务'],
+      'test.NFT': ['金科测试', '农信测试'],
+      'test.SEC': ['金科测试', '农信测试'],
       release: ['金科运维', '农信运维'],
       release_apply: ['金科运维', '农信运维'],
     };

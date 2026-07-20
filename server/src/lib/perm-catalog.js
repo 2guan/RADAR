@@ -2,7 +2,7 @@
  * 文件：lib/perm-catalog.js
  * 用途：权限矩阵目录定义——模块与操作的中文标签，供权限矩阵 UI 渲染与后端校验复用。
  * 作者：hengguan
- * 说明：action 同时覆盖页面级(view)与页面内功能级(create/edit/intake/signoff...)。
+ * 说明：action 同时覆盖页面级(view)与页面内功能级(create/edit/signoff...)。
  */
 
 export const PERM_CATALOG = [
@@ -12,14 +12,14 @@ export const PERM_CATALOG = [
     key: 'requirement', label: '需求分析',
     actions: [
       { key: 'view', label: '查看' }, { key: 'create', label: '新增' }, { key: 'edit', label: '编辑' },
-      { key: 'delete', label: '删除' }, { key: 'import', label: '导入' }, { key: 'export', label: '导出' },
+      { key: 'status.edit', label: '调整状态' }, { key: 'delete', label: '删除' }, { key: 'import', label: '导入' }, { key: 'export', label: '导出' },
     ],
   },
   {
     key: 'ticket', label: '工单分析',
     actions: [
       { key: 'view', label: '查看' }, { key: 'create', label: '新增' }, { key: 'edit', label: '编辑' },
-      { key: 'delete', label: '删除' }, { key: 'import', label: '导入' }, { key: 'export', label: '导出' },
+      { key: 'status.edit', label: '调整状态' }, { key: 'delete', label: '删除' }, { key: 'import', label: '导入' }, { key: 'export', label: '导出' },
     ],
   },
   {
@@ -32,18 +32,21 @@ export const PERM_CATALOG = [
     key: 'dev', label: '开发管理',
     actions: [
       { key: 'view', label: '查看' }, { key: 'create', label: '新增' }, { key: 'edit', label: '编辑' },
-      { key: 'delete', label: '删除' }, { key: 'dev.intake', label: '承接开发' },
-      { key: 'import', label: '导入' }, { key: 'export', label: '导出' },
+      { key: 'status.edit', label: '调整状态' }, { key: 'delete', label: '删除' }, { key: 'import', label: '导入' }, { key: 'export', label: '导出' },
     ],
   },
-  {
-    key: 'test', label: '测试管理',
+  ...[
+    ['SIT', '应用组装测试'],
+    ['UAT', '用户测试'],
+    ['NFT', '非功能测试'],
+    ['SEC', '安全测试'],
+  ].map(([type, label]) => ({
+    key: `test.${type}`, label,
     actions: [
       { key: 'view', label: '查看' }, { key: 'create', label: '新增' }, { key: 'edit', label: '编辑' },
-      { key: 'delete', label: '删除' }, { key: 'test.intake', label: '承接测试' },
-      { key: 'import', label: '导入' }, { key: 'export', label: '导出' },
+      { key: 'status.edit', label: '调整状态' }, { key: 'delete', label: '删除' }, { key: 'import', label: '导入' }, { key: 'export', label: '导出' },
     ],
-  },
+  })),
   {
     key: 'release_apply', label: '投产申请',
     actions: [
@@ -55,6 +58,7 @@ export const PERM_CATALOG = [
     key: 'release', label: '投产审批',
     actions: [
       { key: 'view', label: '查看' }, { key: 'edit', label: '编辑' },
+      { key: 'status.edit', label: '调整状态' },
       { key: 'release.signoff', label: '评审会签' }, { key: 'release.register', label: '投产登记' },
       { key: 'export', label: '导出' },
     ],

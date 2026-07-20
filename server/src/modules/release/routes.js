@@ -16,6 +16,7 @@ import { config } from '../../config.js';
 import { auditUpdate } from '../../lib/audit.js';
 import { windowIds } from '../../lib/window.js';
 import { ok, notFound, badRequest, forbidden } from '../../lib/http.js';
+import { assertStatusChangePermission } from '../../lib/status-permission.js';
 import { exportXlsx } from '../../lib/excel.js';
 import { signatureDataUrl } from '../../lib/signature.js';
 import { buildReleaseWordDoc } from '../../lib/release-word.js';
@@ -891,11 +892,12 @@ export default async function releaseRoutes(fastify) {
   });
 
   // 更新投产任务负责人/投产状态/评审状态
-  fastify.put('/release/:code', { preHandler: fastify.requirePerm('release', 'edit') }, async (request) => {
+  fastify.put('/release/:code', { preHandler: fastify.requireAnyPerm('release', ['edit', 'status.edit']) }, async (request) => {
     const releasePointId = await resolveReleasePointId(request.params.code, request.query?.releasePointId ?? request.body?.releasePointId);
     let rt = await releaseTaskByCodePoint(request.params.code, releasePointId);
     if (!rt) throw notFound('投产任务未发起');
     const { owner, status, review_status, release_point_id } = request.body || {};
+    await assertStatusChangePermission(fastify, request, 'release', rt.status, { owner, status, review_status, release_point_id });
 
     if (review_status !== undefined) {
       const valid = await get('SELECT 1 FROM dict_item WHERE category = ? AND attr_value = ?', 'review_status', review_status);

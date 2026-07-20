@@ -25,8 +25,10 @@ import ImportModal from '../components/ImportModal.jsx';
 import { makeReleasePointOptions, ReleasePointText } from '../components/ReleasePointText.jsx';
 
 const TYPE_LABEL = { SIT: '应用组装测试', UAT: '用户测试', NFT: '非功能测试', SEC: '安全测试' };
+const moduleForTestType = (testType) => `test.${testType}`;
 
 const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
+  const moduleKey = moduleForTestType(testType);
   const tableRef = useRef();
   const { isMobile } = useResponsive();
   const releasePointIds = useAppStore((s) => s.releasePointIds);
@@ -74,7 +76,6 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
   const systemOptions = systems.map(s => ({ value: s.sys_code, label: `${s.sys_code} - ${s.sys_name}` }));
 
   const filterConfigs = [
-    { field: 'org', label: '实施机构', type: 'select', op: 'in', options: orgOptions, isPrimary: true },
     { field: 'task_code', label: '测试任务编号', type: 'input', isPrimary: true, op: 'like', placeholder: '测试任务编号检索' },
     { field: 'content', label: '测试内容', type: 'input', isPrimary: true, op: 'like', placeholder: '测试任务名称检索' },
     { field: 'release_point_id', label: '计划投产点', type: 'select', op: 'in', options: pointOptions },
@@ -226,8 +227,8 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
       title: '操作', key: 'op', width: 80, fixed: 'right',
       render: (_, row) => (
         <Space size={0} onClick={(e) => e.stopPropagation()}>
-          <Can module="test" action="edit"><Button type="link" size="small" icon={<EditOutlined />} onClick={() => setEditId(row.id)} /></Can>
-          <Can module="test" action="delete"><Popconfirm title="确认删除？" onConfirm={() => onDelete(row)}><Button type="link" size="small" danger icon={<DeleteOutlined />} /></Popconfirm></Can>
+          <Can module={moduleKey} action="edit"><Button type="link" size="small" icon={<EditOutlined />} onClick={() => setEditId(row.id)} /></Can>
+          <Can module={moduleKey} action="delete"><Popconfirm title="确认删除？" onConfirm={() => onDelete(row)}><Button type="link" size="small" danger icon={<DeleteOutlined />} /></Popconfirm></Can>
         </Space>
       ),
     },
@@ -384,10 +385,10 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
         configs={filterConfigs}
         onChange={handleFilterChange}
         actions={[
-          <Can key="imp" module="test" action="import">
+          <Can key="imp" module={moduleKey} action="import">
             <Button icon={<ImportOutlined />} onClick={() => setImportOpen(true)} style={{ width: 88 }}>导入</Button>
           </Can>,
-          <Can key="exp" module="test" action="export">
+          <Can key="exp" module={moduleKey} action="export">
             <Button icon={<ExportOutlined />} onClick={() => exportXlsx('/test-tasks/export', { releasePointIds, test_type: testType, filters: filterQuery }, `${TYPE_LABEL[testType]}清单.xlsx`)} style={{ width: 88 }}>导出</Button>
           </Can>,
         ]}
@@ -627,6 +628,7 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
         importUrl="/test-tasks/import"
         templateUrl="/test-tasks/template"
         templateFilename="测试任务导入模板.xlsx"
+        extraFields={{ testType }}
       />
     </>
   );
@@ -640,7 +642,7 @@ export function SitPage() {
       title={
         <Space size={12}>
           <span>应用组装测试（SIT）</span>
-          <Can module="test" action="test.intake">
+          <Can module="test.SIT" action="create">
             <Button type="primary" icon={<ExperimentOutlined />} onClick={() => ref.current?.openIntake()}>
               测试承接
             </Button>
@@ -660,7 +662,7 @@ export function UatPage() {
       title={
         <Space size={12}>
           <span>用户测试（UAT）</span>
-          <Can module="test" action="test.intake">
+          <Can module="test.UAT" action="create">
             <Button type="primary" icon={<ExperimentOutlined />} onClick={() => ref.current?.openIntake()}>
               测试承接
             </Button>
@@ -680,7 +682,7 @@ export function NftPage() {
       title={
         <Space size={12}>
           <span>非功能测试（NFT）</span>
-          <Can module="test" action="test.intake">
+          <Can module="test.NFT" action="create">
             <Button type="primary" icon={<ExperimentOutlined />} onClick={() => ref.current?.openIntake()}>
               测试承接
             </Button>
@@ -700,7 +702,7 @@ export function SecPage() {
       title={
         <Space size={12}>
           <span>安全测试（SEC）</span>
-          <Can module="test" action="test.intake">
+          <Can module="test.SEC" action="create">
             <Button type="primary" icon={<ExperimentOutlined />} onClick={() => ref.current?.openIntake()}>
               测试承接
             </Button>

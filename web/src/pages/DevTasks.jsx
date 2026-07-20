@@ -382,7 +382,7 @@ export default function DevTasks() {
       title={
         <Space size={12}>
           <span>开发管理</span>
-          <Can module="dev" action="dev.intake">
+          <Can module="dev" action="create">
             <Button type="primary" icon={<ToolOutlined />} onClick={openIntake}>
               开发承接
             </Button>

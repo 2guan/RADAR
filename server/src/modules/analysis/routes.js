@@ -114,7 +114,7 @@ export default async function analysisRoutes(fastify) {
   // ---- 测试覆盖性分析 ----
 
   // 读取某需求/工单的测试覆盖性分析（头部 + 逐条影响条目及其覆盖登记）
-  fastify.get('/coverage-analysis/:reqCode', { preHandler: requireAnalysisView('test') }, async (request) => {
+  fastify.get('/coverage-analysis/:reqCode', { preHandler: requireAnalysisView('test.SIT') }, async (request) => {
     const reqCode = request.params.reqCode;
     const header = await buildHeader(reqCode, 'collab_test_systems');
     const items = await all('SELECT * FROM impact_change_item WHERE req_code = ? ORDER BY sort_order, id', reqCode);
@@ -134,7 +134,7 @@ export default async function analysisRoutes(fastify) {
   });
 
   // 保存（新增/修改）一条覆盖登记
-  fastify.put('/coverage-analysis/items/:changeItemId', { preHandler: fastify.requirePerm('test', 'edit') }, async (request) => {
+  fastify.put('/coverage-analysis/items/:changeItemId', { preHandler: fastify.requirePerm('test.SIT', 'edit') }, async (request) => {
     const cid = Number(request.params.changeItemId);
     const impact = await get('SELECT * FROM impact_change_item WHERE id = ?', cid);
     if (!impact) throw notFound('变更条目不存在');

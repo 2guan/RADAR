@@ -71,6 +71,16 @@ async function authPlugin(fastify) {
     }
   });
 
+  /** 要求具备同一模块中的任一操作权限。 */
+  fastify.decorate('requireAnyPerm', (moduleKey, actionKeys) => async (request) => {
+    await fastify.authenticate(request);
+    if (request.currentUser.is_super) return;
+    const perms = await loadUserPermissions(request.currentUser.id);
+    if (!actionKeys.some((actionKey) => perms.has(`${moduleKey}:${actionKey}`))) {
+      throw forbidden(`无【${moduleKey}/${actionKeys.join('|')}】操作权限`);
+    }
+  });
+
   // 暴露权限加载函数，供 /auth/me 返回前端用于菜单/按钮控制
   fastify.decorate('loadUserPermissions', loadUserPermissions);
 }

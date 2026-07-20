@@ -16,6 +16,7 @@ import { auditCreate, auditUpdate, auditDelete } from '../../lib/audit.js';
 import { listByEntity } from '../../lib/attachment.js';
 import { windowIds, inClause } from '../../lib/window.js';
 import { ok, notFound, badRequest } from '../../lib/http.js';
+import { assertStatusChangePermission } from '../../lib/status-permission.js';
 import { exportXlsx, parseXlsx } from '../../lib/excel.js';
 import { resolveDictAttr, resolveSystemCode, formatAttachments } from '../../lib/resolver.js';
 import { getWorkItem, workItemCodesInReleasePoints, releaseDateMapForCodes } from '../../lib/work-items.js';
@@ -31,7 +32,6 @@ const IO_COLUMNS = [
   { key: 'owner', title: '测试负责人' },
   { key: 'impl_system', title: '测试实施系统' },
   { key: 'impl_org', title: '测试实施方' },
-  { key: 'impl_agency', title: '实施机构' },
   { key: 'plan_start', title: '计划开始时间' },
   { key: 'plan_end', title: '计划结束时间' },
   { key: 'actual_start', title: '实际开始时间' },
@@ -41,20 +41,30 @@ const IO_COLUMNS = [
 const TYPE_NAME = { SIT: '应用组装测试', UAT: '用户测试', NFT: '非功能测试', SEC: '安全测试' };
 const COLUMNS = [
   'id', 'req_code', 'task_code', 'task_name', 'test_type', 'status', 'owner', 'impl_system', 'impl_org',
-  'impl_agency', 'plan_start', 'plan_end', 'actual_start', 'actual_end', 'deviation_rate', 'created_at',
+  'plan_start', 'plan_end', 'actual_start', 'actual_end', 'deviation_rate', 'created_at',
 ];
 const SEARCH = ['task_code', 'task_name', 'owner', 'impl_system'];
-const WRITABLE = ['task_name', 'status', 'owner', 'impl_system', 'impl_org', 'impl_agency',
+const WRITABLE = ['task_name', 'status', 'owner', 'impl_system', 'impl_org',
   'plan_start', 'plan_end', 'actual_start', 'actual_end'];
 const LABELS = {
   task_name: '测试任务名称', test_type: '测试类型', status: '测试状态', owner: '测试负责人', impl_system: '测试实施系统',
-  impl_org: '测试实施方', impl_agency: '实施机构', plan_start: '计划开始时间', plan_end: '计划结束时间',
+  impl_org: '测试实施方', plan_start: '计划开始时间', plan_end: '计划结束时间',
   actual_start: '实际开始时间', actual_end: '实际结束时间', deviation_rate: '排期偏差率',
 };
 export default async function testTaskRoutes(fastify) {
+  const requireTestPerm = async (request, action, testType) => {
+    if (!TYPE_NAME[testType]) throw badRequest('测试类型非法');
+    await fastify.requirePerm(`test.${testType}`, action)(request);
+  };
+  const requireAnyTestPerm = async (request, actions, testType) => {
+    if (!TYPE_NAME[testType]) throw badRequest('测试类型非法');
+    await fastify.requireAnyPerm(`test.${testType}`, actions)(request);
+  };
+
   // 列表（按 test_type / req_code / 投产窗口过滤）
-  fastify.post('/test-tasks/list', { preHandler: fastify.requirePerm('test', 'view') }, async (request) => {
+  fastify.post('/test-tasks/list', async (request) => {
     const body = request.body || {};
+    await requireTestPerm(request, 'view', body.testType);
     const wh = [];
     const params = [];
 
@@ -162,8 +172,10 @@ export default async function testTaskRoutes(fastify) {
     for (const s of await all('SELECT sys_code, sys_name FROM system')) sysMap[s.sys_code] = s.sys_name;
     const dev_tasks = (await all('SELECT id, task_code, impl_system, status FROM dev_task WHERE req_code = ? ORDER BY id', row.req_code))
       .map((t) => ({ ...t, impl_system_name: sysMap[t.impl_system] || t.impl_system || null }));
+    // 实施机构已从测试任务业务字段中下线，历史库列不再对外返回。
+    const { impl_agency: _implAgency, ...task } = row;
     return {
-      ...row,
+      ...task,
       req_title: item?.title || null,
       req_status: item?.status || null,
       entity_type: item?.entity_type || null,
@@ -173,22 +185,25 @@ export default async function testTaskRoutes(fastify) {
     };
   };
 
-  fastify.get('/test-tasks/:id', { preHandler: fastify.requirePerm('test', 'view') }, async (request) => {
+  fastify.get('/test-tasks/:id', async (request) => {
     const row = await get('SELECT * FROM test_task WHERE id = ?', request.params.id);
     if (!row) throw notFound();
+    await requireTestPerm(request, 'view', row.test_type);
     return ok(await buildTestDetail(row));
   });
 
   // 按测试任务编号查询（供详情单页通过 URL 编号直达）
-  fastify.get('/test-tasks/by-code/:code', { preHandler: fastify.requirePerm('test', 'view') }, async (request) => {
+  fastify.get('/test-tasks/by-code/:code', async (request) => {
     const row = await get('SELECT * FROM test_task WHERE task_code = ?', request.params.code);
     if (!row) throw notFound();
+    await requireTestPerm(request, 'view', row.test_type);
     return ok(await buildTestDetail(row));
   });
 
   // 测试承接预览
-  fastify.post('/test-tasks/intake-preview', { preHandler: fastify.requirePerm('test', 'test.intake') }, async (request) => {
+  fastify.post('/test-tasks/intake-preview', async (request) => {
     const { reqCode, testType } = request.body || {};
+    await requireTestPerm(request, 'create', testType);
     if (!reqCode) throw badRequest('请选择需求/工单');
     if (!testType) throw badRequest('请选择测试类型');
     const req = await getWorkItem(reqCode);
@@ -296,8 +311,9 @@ export default async function testTaskRoutes(fastify) {
   });
 
   // 测试承接
-  fastify.post('/test-tasks/intake', { preHandler: fastify.requirePerm('test', 'test.intake') }, async (request) => {
+  fastify.post('/test-tasks/intake', async (request) => {
     const { reqCode, testType, systems, splitMode } = request.body || {};
+    await requireTestPerm(request, 'create', testType);
     if (!reqCode) throw badRequest('请选择需求/工单');
     if (!TYPE_NAME[testType]) throw badRequest('测试类型非法');
     const req = await getWorkItem(reqCode);
@@ -346,13 +362,15 @@ export default async function testTaskRoutes(fastify) {
   });
 
   // 修改
-  fastify.put('/test-tasks/:id', { preHandler: fastify.requirePerm('test', 'edit') }, async (request) => {
+  fastify.put('/test-tasks/:id', async (request) => {
     const id = request.params.id;
     const old = await get('SELECT * FROM test_task WHERE id = ?', id);
     if (!old) throw notFound();
+    await requireAnyTestPerm(request, ['edit', 'status.edit'], old.test_type);
     const body = request.body || {};
     const data = {};
     for (const k of WRITABLE) if (body[k] !== undefined) data[k] = body[k];
+    await assertStatusChangePermission(fastify, request, `test.${old.test_type}`, old.status, data);
 
     const merged = { ...old, ...data };
     await validateRequiredFields('test', await statusTypeForProcessStatus(merged.status), merged);
@@ -368,18 +386,20 @@ export default async function testTaskRoutes(fastify) {
   });
 
   // 删除
-  fastify.delete('/test-tasks/:id', { preHandler: fastify.requirePerm('test', 'delete') }, async (request) => {
+  fastify.delete('/test-tasks/:id', async (request) => {
     const id = request.params.id;
     const row = await get('SELECT * FROM test_task WHERE id = ?', id);
     if (!row) throw notFound();
+    await requireTestPerm(request, 'delete', row.test_type);
     await run('DELETE FROM test_task WHERE id = ?', id);
     await auditDelete('test', id, row.task_code, request.currentUser?.name);
     return ok(null, '删除成功');
   });
 
   // 导出
-  fastify.post('/test-tasks/export', { preHandler: fastify.requirePerm('test', 'export') }, async (request, reply) => {
+  fastify.post('/test-tasks/export', async (request, reply) => {
     const body = request.body || {};
+    await requireTestPerm(request, 'export', body.test_type);
     const { where: baseWhere, params: baseParams } = inClause('req_code', body.req_code ? [body.req_code] : []);
 
     // 如果没有指定 req_code，根据窗口过滤
@@ -420,7 +440,6 @@ export default async function testTaskRoutes(fastify) {
       { key: 'owner', title: '测试负责人' },
       { key: 'impl_system', title: '测试实施系统' },
       { key: 'impl_org', title: '测试实施方' },
-      { key: 'impl_agency', title: '实施机构' },
       { key: 'plan_start', title: '计划开始时间' },
       { key: 'plan_end', title: '计划结束时间' },
       { key: 'actual_start', title: '实际开始时间' },
@@ -466,7 +485,8 @@ export default async function testTaskRoutes(fastify) {
   });
 
   // 模板下载
-  fastify.get('/test-tasks/template', { preHandler: fastify.requirePerm('test', 'import') }, async (request, reply) => {
+  fastify.get('/test-tasks/template', async (request, reply) => {
+    await requireTestPerm(request, 'import', request.query?.testType);
     const buf = await exportXlsx(IO_COLUMNS, [], '测试任务模板');
     reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     reply.header('Content-Disposition', 'attachment; filename=test_tasks_template.xlsx');
@@ -474,10 +494,12 @@ export default async function testTaskRoutes(fastify) {
   });
 
   // 导入
-  fastify.post('/test-tasks/import', { preHandler: fastify.requirePerm('test', 'import') }, async (request) => {
+  fastify.post('/test-tasks/import', async (request) => {
     const data = await request.file();
     if (!data) throw badRequest('请上传文件');
     const mode = data.fields?.mode?.value || 'skip';
+    const testType = data.fields?.testType?.value;
+    await requireTestPerm(request, 'import', testType);
     const buffer = await data.toBuffer();
     const rows = await parseXlsx(buffer, IO_COLUMNS);
     if (!rows.length) throw badRequest('文件中无有效数据');
@@ -513,11 +535,11 @@ export default async function testTaskRoutes(fastify) {
           if (!testTypeCode) {
             throw new Error(`测试类型 [${r.test_type}] 不合法，必须为 应用组装测试、用户测试、非功能测试、安全测试 之一`);
           }
+          if (testTypeCode !== testType) throw new Error('导入数据的测试类型与当前页面不一致');
 
           // 兼容性字典/系统转换
           const status = await resolveDictAttr('process_status', r.status) || await defaultProcessStatus('测试', 'initial', '测试承接');
           const implOrg = await resolveDictAttr('org', r.impl_org);
-          const implAgency = await resolveDictAttr('org', r.impl_agency);
           const implSystem = await resolveSystemCode(r.impl_system);
 
           let code = String(r.task_code || '').trim();
@@ -553,7 +575,6 @@ export default async function testTaskRoutes(fastify) {
             compareAndPush('owner', '测试负责人', exists.owner || '', r.owner || '');
             compareAndPush('impl_system', '测试实施系统', sysMap[exists.impl_system] || exists.impl_system || '', sysMap[implSystem] || implSystem || '');
             compareAndPush('impl_org', '测试实施方', exists.impl_org || '', implOrg || '');
-            compareAndPush('impl_agency', '实施机构', exists.impl_agency || '', implAgency || '');
             compareAndPush('plan_start', '计划开始时间', exists.plan_start || '', r.plan_start || '');
             compareAndPush('plan_end', '计划结束时间', exists.plan_end || '', r.plan_end || '');
             compareAndPush('actual_start', '实际开始时间', exists.actual_start || '', r.actual_start || '');
@@ -563,16 +584,16 @@ export default async function testTaskRoutes(fastify) {
               const devRate = calcDeviation(r.plan_start || exists.plan_start, r.plan_end || exists.plan_end, r.actual_end || exists.actual_end);
               await run(
                 `UPDATE test_task SET 
-                   task_name=?, test_type=?, status=?, owner=?, impl_system=?, impl_org=?, impl_agency=?,
+                   task_name=?, test_type=?, status=?, owner=?, impl_system=?, impl_org=?,
                    plan_start=?, plan_end=?, actual_start=?, actual_end=?, deviation_rate=?, 
                    updated_at=datetime('now','localtime') 
                  WHERE id=?`,
-                r.task_name, testTypeCode, status, r.owner || null, implSystem || null, implOrg || null, implAgency || null,
+                r.task_name, testTypeCode, status, r.owner || null, implSystem || null, implOrg || null,
                 r.plan_start || null, r.plan_end || null, r.actual_start || null, r.actual_end || null, devRate, exists.id
               );
               await auditUpdate('test', exists.id, code, request.currentUser?.name, exists, {
                 task_name: r.task_name, test_type: testTypeCode, status, owner: r.owner || null,
-                impl_system: implSystem, impl_org: implOrg, impl_agency: implAgency, plan_start: r.plan_start || null, plan_end: r.plan_end || null,
+                impl_system: implSystem, impl_org: implOrg, plan_start: r.plan_start || null, plan_end: r.plan_end || null,
                 actual_start: r.actual_start || null, actual_end: r.actual_end || null, deviation_rate: devRate
               }, LABELS);
             }
@@ -593,10 +614,10 @@ export default async function testTaskRoutes(fastify) {
             const devRate = calcDeviation(r.plan_start, r.plan_end, r.actual_end);
             const res = await run(
               `INSERT INTO test_task 
-                 (req_code, task_code, task_name, test_type, status, owner, impl_system, impl_org, impl_agency,
+                 (req_code, task_code, task_name, test_type, status, owner, impl_system, impl_org,
                   plan_start, plan_end, actual_start, actual_end, deviation_rate, registrar, register_time)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-              r.req_code, code, r.task_name, testTypeCode, status, r.owner || null, implSystem || null, implOrg || null, implAgency || null,
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+              r.req_code, code, r.task_name, testTypeCode, status, r.owner || null, implSystem || null, implOrg || null,
               r.plan_start || null, r.plan_end || null, r.actual_start || null, r.actual_end || null, devRate,
               request.currentUser?.name, new Date().toISOString().slice(0, 10)
             );

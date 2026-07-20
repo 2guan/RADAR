@@ -30,7 +30,7 @@ import { getHomePath } from './home.js';
 export const ROUTE_MODULE_PREFIXES = [
   ['/dashboard', 'dashboard'], ['/overview', 'overview'],
   ['/requirements', 'requirement'], ['/tickets', 'ticket'], ['/issues', 'issue'],
-  ['/dev', 'dev'], ['/test', 'test'],
+  ['/dev', 'dev'], ['/test/sit', 'test.SIT'], ['/test/uat', 'test.UAT'], ['/test/nft', 'test.NFT'], ['/test/sec', 'test.SEC'],
   ['/release/apply', 'release_apply'], ['/release', 'release'],
   ['/users', 'user'], ['/settings', 'settings'],
 ];

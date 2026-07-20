@@ -1123,11 +1123,11 @@ export function VersionOverviewWorkItemDetail({
         className="lc-lifecycle-tabs"
         items={[
           { key: 'req', label: detail.entityType === 'ticket' ? '工单' : '需求', children: <ReqDetailCard req={detail.requirement} entityType={detail.entityType} onEdit={editRequirement} /> },
-          { key: 'dev', label: '开发', children: <TaskGrid items={detail.dev} moduleKey="dev" onEdit={(t) => editTask('dev', t)} emptyText="点击承接开发" onIntake={openDevIntake} hasIntakePermission={hasPermission('dev', 'dev.intake')} /> },
-          { key: 'sit', label: 'SIT', children: <TaskGrid items={detail.sit} moduleKey="test" scopeKey="SIT" onEdit={(t) => editTask('test', t)} emptyText="点击承接测试" onIntake={() => openTestIntake('SIT')} hasIntakePermission={hasPermission('test', 'test.intake')} /> },
-          ...(detail.nft.length ? [{ key: 'nft', label: 'NFT', children: <TaskGrid items={detail.nft} moduleKey="test" scopeKey="NFT" onEdit={(t) => editTask('test', t)} /> }] : []),
-          ...(detail.sec.length ? [{ key: 'sec', label: 'SEC', children: <TaskGrid items={detail.sec} moduleKey="test" scopeKey="SEC" onEdit={(t) => editTask('test', t)} /> }] : []),
-          { key: 'uat', label: 'UAT', children: <TaskGrid items={detail.uat} moduleKey="test" scopeKey="UAT" onEdit={(t) => editTask('test', t)} emptyText="点击承接测试" onIntake={() => openTestIntake('UAT')} hasIntakePermission={hasPermission('test', 'test.intake')} /> },
+          { key: 'dev', label: '开发', children: <TaskGrid items={detail.dev} moduleKey="dev" onEdit={(t) => editTask('dev', t)} emptyText="点击承接开发" onIntake={openDevIntake} hasIntakePermission={hasPermission('dev', 'create')} /> },
+          { key: 'sit', label: 'SIT', children: <TaskGrid items={detail.sit} moduleKey="test.SIT" scopeKey="SIT" onEdit={(t) => editTask('test', t)} emptyText="点击承接测试" onIntake={() => openTestIntake('SIT')} hasIntakePermission={hasPermission('test.SIT', 'create')} /> },
+          ...(detail.nft.length ? [{ key: 'nft', label: 'NFT', children: <TaskGrid items={detail.nft} moduleKey="test.NFT" scopeKey="NFT" onEdit={(t) => editTask('test', t)} /> }] : []),
+          ...(detail.sec.length ? [{ key: 'sec', label: 'SEC', children: <TaskGrid items={detail.sec} moduleKey="test.SEC" scopeKey="SEC" onEdit={(t) => editTask('test', t)} /> }] : []),
+          { key: 'uat', label: 'UAT', children: <TaskGrid items={detail.uat} moduleKey="test.UAT" scopeKey="UAT" onEdit={(t) => editTask('test', t)} emptyText="点击承接测试" onIntake={() => openTestIntake('UAT')} hasIntakePermission={hasPermission('test.UAT', 'create')} /> },
           { key: 'rel', label: '投产', children: <ReleaseDetailCard release={detail.release} onEdit={openRelease} /> },
         ]}
       />
@@ -1142,17 +1142,17 @@ export function VersionOverviewWorkItemDetail({
       </div>
       <div className="lc-column">
         <div className="lc-column-header"><span>开发</span><span className="lc-column-header-count">{detail.dev.length}</span></div>
-        <TaskGrid items={detail.dev} moduleKey="dev" onEdit={(t) => editTask('dev', t)} emptyText="点击承接开发" onIntake={openDevIntake} hasIntakePermission={hasPermission('dev', 'dev.intake')} />
+        <TaskGrid items={detail.dev} moduleKey="dev" onEdit={(t) => editTask('dev', t)} emptyText="点击承接开发" onIntake={openDevIntake} hasIntakePermission={hasPermission('dev', 'create')} />
       </div>
       <div className="lc-column">
         <div className="lc-column-header"><span>应用组装测试</span></div>
-        <TaskGrid items={detail.sit} moduleKey="test" scopeKey="SIT" onEdit={(t) => editTask('test', t)} emptyText="点击承接测试" onIntake={() => openTestIntake('SIT')} hasIntakePermission={hasPermission('test', 'test.intake')} />
-        {detail.nft.length > 0 && <><div className="lc-column-header" style={{ marginTop: 16 }}><span>非功能测试</span></div><TaskGrid items={detail.nft} moduleKey="test" scopeKey="NFT" onEdit={(t) => editTask('test', t)} /></>}
-        {detail.sec.length > 0 && <><div className="lc-column-header" style={{ marginTop: 16 }}><span>安全测试</span></div><TaskGrid items={detail.sec} moduleKey="test" scopeKey="SEC" onEdit={(t) => editTask('test', t)} /></>}
+        <TaskGrid items={detail.sit} moduleKey="test.SIT" scopeKey="SIT" onEdit={(t) => editTask('test', t)} emptyText="点击承接测试" onIntake={() => openTestIntake('SIT')} hasIntakePermission={hasPermission('test.SIT', 'create')} />
+        {detail.nft.length > 0 && <><div className="lc-column-header" style={{ marginTop: 16 }}><span>非功能测试</span></div><TaskGrid items={detail.nft} moduleKey="test.NFT" scopeKey="NFT" onEdit={(t) => editTask('test', t)} /></>}
+        {detail.sec.length > 0 && <><div className="lc-column-header" style={{ marginTop: 16 }}><span>安全测试</span></div><TaskGrid items={detail.sec} moduleKey="test.SEC" scopeKey="SEC" onEdit={(t) => editTask('test', t)} /></>}
       </div>
       <div className="lc-column">
         <div className="lc-column-header"><span>用户测试</span></div>
-        <TaskGrid items={detail.uat} moduleKey="test" scopeKey="UAT" onEdit={(t) => editTask('test', t)} emptyText="点击承接测试" onIntake={() => openTestIntake('UAT')} hasIntakePermission={hasPermission('test', 'test.intake')} />
+        <TaskGrid items={detail.uat} moduleKey="test.UAT" scopeKey="UAT" onEdit={(t) => editTask('test', t)} emptyText="点击承接测试" onIntake={() => openTestIntake('UAT')} hasIntakePermission={hasPermission('test.UAT', 'create')} />
       </div>
       <div className="lc-column">
         <div className="lc-column-header"><span>投产</span></div>

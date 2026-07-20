@@ -1,7 +1,7 @@
 /**
  * 文件：components/PermissionMatrix.jsx
  * 用途：权限矩阵配置。选择角色后以"模块 × 操作"矩阵形式展示复选框，
- *       覆盖页面级(查看)与页面内功能级(承接/会签/导入导出等)权限，保存整体覆盖。
+ *       覆盖页面级(查看)与页面内功能级(会签/导入导出等)权限，保存整体覆盖。
  * 作者：hengguan
  * 说明：超级管理员拥有全部权限，不可配置。
  */
@@ -43,8 +43,8 @@ export default function PermissionMatrix() {
   // 所有可能的操作列（取目录中操作并集，按常见顺序）
   const allActions = [
     { key: 'view', label: '查看' }, { key: 'create', label: '新增' }, { key: 'edit', label: '编辑' },
+    { key: 'status.edit', label: '调整状态' },
     { key: 'delete', label: '删除' }, { key: 'import', label: '导入' }, { key: 'export', label: '导出' },
-    { key: 'dev.intake', label: '承接开发' }, { key: 'test.intake', label: '承接测试' },
     { key: 'release.signoff', label: '评审会签' }, { key: 'release.register', label: '投产登记' },
     { key: 'settings.permission.edit', label: '编辑权限矩阵' },
   ];

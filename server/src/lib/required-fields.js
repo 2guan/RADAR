@@ -121,7 +121,6 @@ export const REQUIRED_FIELD_MODULES = [
       { key: 'owner', label: '测试负责人' },
       { key: 'impl_system', label: '测试实施系统' },
       { key: 'impl_org', label: '测试实施方' },
-      { key: 'impl_agency', label: '实施机构' },
       { key: 'plan_start', label: '计划开始时间' },
       { key: 'plan_end', label: '计划结束时间' },
       { key: 'actual_start', label: '实际开始时间' },

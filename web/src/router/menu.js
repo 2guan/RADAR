@@ -19,12 +19,12 @@ export const MENU = [
   { key: '/tickets', label: '工单分析', module: 'ticket', icon: React.createElement(FileTextOutlined) },
   { key: '/dev', label: '开发管理', module: 'dev', icon: React.createElement(CodeOutlined) },
   {
-    key: '/test', label: '测试管理', module: 'test', icon: React.createElement(ExperimentOutlined),
+    key: '/test', label: '测试管理', module: 'test.SIT', icon: React.createElement(ExperimentOutlined),
     children: [
-      { key: '/test/sit', label: '应用组装测试', module: 'test' },
-      { key: '/test/uat', label: '用户测试', module: 'test' },
-      { key: '/test/nft', label: '非功能测试', module: 'test' },
-      { key: '/test/sec', label: '安全测试', module: 'test' },
+      { key: '/test/sit', label: '应用组装测试', module: 'test.SIT' },
+      { key: '/test/uat', label: '用户测试', module: 'test.UAT' },
+      { key: '/test/nft', label: '非功能测试', module: 'test.NFT' },
+      { key: '/test/sec', label: '安全测试', module: 'test.SEC' },
     ],
   },
   {

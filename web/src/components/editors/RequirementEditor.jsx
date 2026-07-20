@@ -204,6 +204,7 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
   // 既有需求（按 id 或编号加载）即为编辑/查看态；其余为新增
   const isEdit = !!reqId || !!code || mode === 'page';
   const readonly = isEdit ? !can('requirement', 'edit') : !can('requirement', 'create');
+  const statusEditable = can('requirement', 'status.edit');
   const required = useRequiredFields('requirement', getStatusType(statusValue), readonly);
   const visible = (fieldKey) => required.isVisible(fieldKey);
   const initialStatus = useDefaultProcessStatus('需求', 'initial', '需求登记');
@@ -248,6 +249,26 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
     }
     onSaved?.();
     onClose?.();   // 保存成功后关闭弹窗
+  };
+
+  const changeStatus = async (status) => {
+    if (!statusEditable) return;
+    if (!readonly) {
+      form.setFieldValue('status', status);
+      setIsDirty(true);
+      return;
+    }
+    const id = reqId ?? current?.id;
+    if (!id) return;
+    try {
+      await apiPut(`/requirements/${id}`, { status });
+      form.setFieldValue('status', status);
+      setCurrent((prev) => ({ ...prev, status }));
+      message.success('状态已更新');
+      onSaved?.();
+    } catch (err) {
+      message.error(err.message || '更新失败');
+    }
   };
 
   /** 点击「生成编号」按钮 */
@@ -322,9 +343,10 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
                 popupClassName="status-select-dropdown"
                 popupMatchSelectWidth={false}
                 value={statusValue}
-                onChange={(v) => { form.setFieldValue('status', v); if (!readonly) setIsDirty(true); }}
+                onChange={changeStatus}
                 placeholder="需求状态"
-                style={{ width: statusSelectWidth(statusValue, '需求状态'), ...(readonly ? { pointerEvents: 'none' } : {}) }}
+                style={{ width: statusSelectWidth(statusValue, '需求状态'), ...(!statusEditable ? { pointerEvents: 'none' } : {}) }}
+                tabIndex={statusEditable ? undefined : -1}
               />
             </span>
           )}

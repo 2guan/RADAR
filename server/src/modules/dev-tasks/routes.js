@@ -19,6 +19,7 @@ import { auditCreate, auditUpdate, auditDelete } from '../../lib/audit.js';
 import { listByEntity } from '../../lib/attachment.js';
 import { windowIds, inClause } from '../../lib/window.js';
 import { ok, notFound, badRequest } from '../../lib/http.js';
+import { assertStatusChangePermission } from '../../lib/status-permission.js';
 import { exportXlsx, parseXlsx } from '../../lib/excel.js';
 import { resolveDictAttr, resolveSystemCode, formatAttachments } from '../../lib/resolver.js';
 import { getWorkItem, workItemCodesInReleasePoints, releaseDateMapForCodes } from '../../lib/work-items.js';
@@ -319,7 +320,7 @@ export default async function devTaskRoutes(fastify) {
   });
 
   // 开发承接预览
-  fastify.post('/dev-tasks/intake-preview', { preHandler: fastify.requirePerm('dev', 'dev.intake') }, async (request) => {
+  fastify.post('/dev-tasks/intake-preview', { preHandler: fastify.requirePerm('dev', 'create') }, async (request) => {
     const { reqCode } = request.body || {};
     if (!reqCode) throw badRequest('请选择需求/工单');
     const req = await getWorkItem(reqCode);
@@ -398,7 +399,7 @@ export default async function devTaskRoutes(fastify) {
   });
 
   // 开发承接（按系统拆分）
-  fastify.post('/dev-tasks/intake', { preHandler: fastify.requirePerm('dev', 'dev.intake') }, async (request) => {
+  fastify.post('/dev-tasks/intake', { preHandler: fastify.requirePerm('dev', 'create') }, async (request) => {
     const { reqCode, systems } = request.body || {};
     if (!reqCode) throw badRequest('请选择需求/工单');
     const req = await getWorkItem(reqCode);
@@ -437,13 +438,14 @@ export default async function devTaskRoutes(fastify) {
   });
 
   // 修改
-  fastify.put('/dev-tasks/:id', { preHandler: fastify.requirePerm('dev', 'edit') }, async (request) => {
+  fastify.put('/dev-tasks/:id', { preHandler: fastify.requireAnyPerm('dev', ['edit', 'status.edit']) }, async (request) => {
     const id = request.params.id;
     const old = await get('SELECT * FROM dev_task WHERE id = ?', id);
     if (!old) throw notFound();
     const body = request.body || {};
     const data = {};
     for (const k of WRITABLE) if (body[k] !== undefined) data[k] = body[k];
+    await assertStatusChangePermission(fastify, request, 'dev', old.status, data);
 
     const merged = { ...old, ...data };
     await validateRequiredFields('dev', await statusTypeForProcessStatus(merged.status), merged);

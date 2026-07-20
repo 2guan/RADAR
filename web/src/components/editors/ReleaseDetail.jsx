@@ -482,6 +482,7 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
   const statusValue = detail?.releaseTask?.status;
   const reviewStatus = detail?.releaseTask?.review_status;
   const editable = can('release', 'edit');
+  const statusEditable = can('release', 'status.edit');
   const required = useRequiredFields('release', releaseRequiredStatusType(statusValue), !editable);
   const visible = (fieldKey) => required.isVisible(fieldKey);
 
@@ -519,11 +520,13 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
                 popupClassName="status-select-dropdown" popupMatchSelectWidth={false}
                 value={statusValue}
                 onChange={async (v) => {
+                  if (!statusEditable) return;
                   try { await apiPut(`/release/${entityCode}${releasePointQuery()}`, { status: v }); message.success('已更新投产状态'); reload(); onChanged?.(); }
                   catch (e) { message.error(e.message || '更新失败'); }
                 }}
                 placeholder="投产状态"
-                style={{ width: statusSelectWidth(statusValue, '投产状态'), ...(!editable ? { pointerEvents: 'none' } : {}) }}
+                style={{ width: statusSelectWidth(statusValue, '投产状态'), ...(!statusEditable ? { pointerEvents: 'none' } : {}) }}
+                tabIndex={statusEditable ? undefined : -1}
               />
             </span>
           )}

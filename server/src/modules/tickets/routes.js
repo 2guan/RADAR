@@ -15,6 +15,7 @@ import { auditCreate, auditUpdate, auditDelete } from '../../lib/audit.js';
 import { exportXlsx, parseXlsx } from '../../lib/excel.js';
 import { windowIds, inClause } from '../../lib/window.js';
 import { ok, notFound, badRequest } from '../../lib/http.js';
+import { assertStatusChangePermission } from '../../lib/status-permission.js';
 import { parseJsonArray, parseJsonObject } from '../../lib/json.js';
 import {
   resolveDictAttr,
@@ -334,12 +335,13 @@ export default async function ticketRoutes(fastify) {
   });
 
   // 修改（终态校验 + 留痕）
-  fastify.put('/tickets/:id', { preHandler: fastify.requirePerm('ticket', 'edit') }, async (request) => {
+  fastify.put('/tickets/:id', { preHandler: fastify.requireAnyPerm('ticket', ['edit', 'status.edit']) }, async (request) => {
     const id = request.params.id;
     const old = await get('SELECT * FROM ticket WHERE id = ?', id);
     if (!old) throw notFound();
     const body = request.body || {};
     const picked = pick(body);
+    await assertStatusChangePermission(fastify, request, 'ticket', old.status, picked);
 
     // 如果提交了新编号，校验唯一性（排除自身）
     if (picked.ticket_code && picked.ticket_code !== old.ticket_code) {

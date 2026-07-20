@@ -59,7 +59,9 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
   const [isDirty, setIsDirty] = useState(false);
   const { can } = useAppStore();
   const { isMobile } = useResponsive();
-  const readonly = !can(cfg.entity, 'edit');
+  const permissionModule = kind === 'test' && current?.test_type ? `test.${current.test_type}` : cfg.entity;
+  const readonly = !can(permissionModule, 'edit');
+  const statusEditable = can(permissionModule, 'status.edit');
   const required = useRequiredFields(cfg.entity, getStatusType(statusValue), readonly, kind === 'test' ? current?.test_type : undefined);
   const visible = (fieldKey) => required.isVisible(fieldKey);
   const linkStyle = { color: 'var(--radar-primary)', cursor: 'pointer' };
@@ -120,6 +122,26 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
     onClose?.();   // 保存成功后关闭弹窗 / 返回
   };
 
+  const changeStatus = async (status) => {
+    if (!statusEditable) return;
+    if (!readonly) {
+      form.setFieldValue('status', status);
+      setIsDirty(true);
+      return;
+    }
+    const id = taskId ?? current?.id;
+    if (!id) return;
+    try {
+      await apiPut(`${cfg.api}/${id}`, { status });
+      form.setFieldValue('status', status);
+      setCurrent((prev) => ({ ...prev, status }));
+      message.success('状态已更新');
+      onSaved?.();
+    } catch (err) {
+      message.error(err.message || '更新失败');
+    }
+  };
+
   const downloadAttachmentTemplate = async (fieldKey) => {
     if (!current?.id) { message.warning('请先打开开发任务详情'); return; }
     setTemplateDownloading(fieldKey);
@@ -170,9 +192,10 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
               popupClassName="status-select-dropdown"
               popupMatchSelectWidth={false}
               value={statusValue}
-              onChange={(val) => { form.setFieldValue('status', val); if (!readonly) setIsDirty(true); }}
+              onChange={changeStatus}
               placeholder={cfg.statusLabel}
-              style={{ width: statusSelectWidth(statusValue, cfg.statusLabel), ...(readonly ? { pointerEvents: 'none' } : {}) }}
+              style={{ width: statusSelectWidth(statusValue, cfg.statusLabel), ...(!statusEditable ? { pointerEvents: 'none' } : {}) }}
+              tabIndex={statusEditable ? undefined : -1}
             />
           </span>
           {current && (
@@ -240,7 +263,7 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
                 </Form.Item>
               )}
 
-              {/* 负责人/实施系统/实施方：手机端各占一行（充满），PC 端双栏不变；测试详情手机端隐藏「实施机构」 */}
+              {/* 负责人、实施系统、实施方：手机端各占一行（充满），PC 端双栏不变。 */}
               <Row gutter={8}>
                 {visible('owner') && (
                   <Col span={isMobile ? 24 : 12}>
@@ -262,18 +285,6 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
                       <DictSelect category="org" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} size="small" />
                     </Form.Item>
                   </Col>
-                )}
-                {kind === 'test' && visible('impl_agency') && (
-                  isMobile ? (
-                    // 手机端隐藏「实施机构」，但保留字段以免保存时丢值
-                    <Form.Item name="impl_agency" hidden><Input /></Form.Item>
-                  ) : (
-                    <Col span={12}>
-                      <Form.Item name="impl_agency" label="实施机构" rules={required.rules('impl_agency', '实施机构', { action: '请选择' })} style={{ marginBottom: 0 }}>
-                        <DictSelect category="org" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} size="small" />
-                      </Form.Item>
-                    </Col>
-                  )
                 )}
               </Row>
             </div>

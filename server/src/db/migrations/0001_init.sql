@@ -65,7 +65,7 @@ CREATE TABLE permission (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   role_id     INTEGER NOT NULL REFERENCES role(id) ON DELETE CASCADE,
   module_key  TEXT NOT NULL,             -- 模块：dashboard/overview/requirement/dev/test/release/user/settings
-  action_key  TEXT NOT NULL,             -- 操作：view/create/edit/delete/import/export/dev.intake/test.intake/release.signoff/release.register/settings.permission.edit
+  action_key  TEXT NOT NULL,             -- 操作：view/create/edit/delete/import/export/release.signoff/release.register/settings.permission.edit
   allowed     INTEGER NOT NULL DEFAULT 0,
   UNIQUE(role_id, module_key, action_key)
 );

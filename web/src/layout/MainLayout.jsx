@@ -295,7 +295,9 @@ export default function MainLayout() {
     });
   }, [activePath]);
 
-  const visibleMenu = MENU.filter((m) => can(m.module, 'view'));
+  const visibleMenu = MENU.filter((m) => (
+    m.children ? m.children.some((child) => can(child.module, 'view')) : can(m.module, 'view')
+  ));
   const brand = platform['platform.shortName'] || 'RADAR';
 
   const go = (key) => {
