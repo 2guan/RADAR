@@ -6,6 +6,7 @@
 import React from 'react';
 import { Table } from 'antd';
 import { useResponsive } from '../../hooks/useResponsive.js';
+import { resolveChartColor } from './ColorPickerField.jsx';
 
 const uniq = (arr) => [...new Set(arr.filter((x) => x != null))];
 const groupOf = (groups, label) => (groups || []).find((g) => g.label === label);
@@ -55,15 +56,15 @@ function yHierarchy(data) {
   }));
 }
 
-function groupColor(groups, path) {
+function groupColor(groups, path, activeColors) {
   const main = groupOf(groups, path[0]);
   const sub = main && groupOf(main.subGroups, path[1]);
   const subSub = sub && groupOf(sub.subGroups, path[2]);
-  return subSub?.color || sub?.color || main?.color;
+  return resolveChartColor(subSub?.color || sub?.color || main?.color, activeColors);
 }
 
 /** @param {object} p { cfg, data, labelOf, dimName, onCell } */
-export default function PivotTable({ cfg, data = [], labelOf, dimName = (d) => d, onCell }) {
+export default function PivotTable({ cfg, data = [], labelOf, dimName = (d) => d, onCell, activeColors }) {
   const { isMobile } = useResponsive();
   const pivotClass = `dash-pivot${isMobile ? ' dash-pivot-compact' : ''}`;
   const is2D = data[0] && 'name_y' in data[0];
@@ -159,7 +160,7 @@ export default function PivotTable({ cfg, data = [], labelOf, dimName = (d) => d
       )}><b>{value}</b></a> : <b>{value}</b>;
     }
     if (!onCell) return <b>{value}</b>;
-    return <a style={{ color: groupColor(cfg.xAxisGroups, xPath) }} onClick={() => click(mergeFilters(
+    return <a style={{ color: groupColor(cfg.xAxisGroups, xPath, activeColors) }} onClick={() => click(mergeFilters(
       filtersForPath(cfg.dimension, cfg.groups, row.path), filtersForPath(cfg.xAxisDimension, cfg.xAxisGroups, xPath),
     ), dimName(cfg.xAxisDimension))}>{value}</a>;
   };

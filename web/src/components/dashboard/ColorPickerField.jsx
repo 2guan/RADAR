@@ -8,6 +8,8 @@
 
 import React from 'react';
 import { ColorPicker } from 'antd';
+import { useAppStore } from '../../stores/app.js';
+import { getPreset } from '../../theme/presets.js';
 
 // 翡翠绿为首的语义调色盘
 export const CHART_PRESET_COLORS = [
@@ -15,21 +17,47 @@ export const CHART_PRESET_COLORS = [
   '#F59E0B', '#F77F00', '#EF4444', '#14B8A6', '#64748B', '#0F766E',
 ];
 
-const PRESETS = [{ label: '推荐', colors: CHART_PRESET_COLORS }];
+const THEME_COLOR_KEYS = [
+  ['primary', '主题色'], ['primaryDeep', '主题深色'], ['highlight', '主题高亮'], ['accent', '主题强调'],
+  ['statusInProgress', '进行中'], ['statusFinal', '已完成'], ['statusInitial', '初始'],
+];
+
+/** 解析持久化的主题关联色；普通十六进制色保持不变。 */
+export function resolveChartColor(color, activeColors, fallback) {
+  if (!color) return fallback;
+  if (String(color).startsWith('theme:')) return activeColors?.[String(color).slice(6)] || fallback;
+  return color;
+}
 
 /**
- * @param {string|undefined} value 十六进制色
- * @param {(hex:string|undefined)=>void} onChange
+ * @param {string|undefined} value 十六进制色或 theme:primary 等主题关联色
+ * @param {(color:string|undefined)=>void} onChange
  */
 export default function ColorPickerField({ value, onChange, size = 'small' }) {
+  const { theme, preset } = useAppStore();
+  const themePreset = getPreset(preset);
+  const activeColors = theme === 'dark' ? themePreset.dark : themePreset.light;
+  const themeColors = THEME_COLOR_KEYS
+    .map(([key, label]) => ({ key, label, color: activeColors[key] }))
+    .filter((item) => item.color);
+  const presets = [
+    { label: '主题推荐（随主题切换）', colors: themeColors.map((item) => item.color) },
+    { label: '固定颜色', colors: CHART_PRESET_COLORS },
+  ];
+  const displayColor = resolveChartColor(value, activeColors);
+
   return (
     <ColorPicker
       size={size}
-      value={value || null}
-      presets={PRESETS}
+      value={displayColor || null}
+      presets={presets}
       allowClear
       disabledAlpha
-      onChange={(c) => onChange?.(c ? c.toHexString() : undefined)}
+      onChange={(c) => {
+        const hex = c?.toHexString();
+        const themeColor = themeColors.find((item) => item.color.toLowerCase() === hex?.toLowerCase());
+        onChange?.(themeColor ? `theme:${themeColor.key}` : hex);
+      }}
       onClear={() => onChange?.(undefined)}
     />
   );

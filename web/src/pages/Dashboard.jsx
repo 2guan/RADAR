@@ -229,27 +229,23 @@ export default function Dashboard() {
             renderItem={(r) => (
               <Card size="small" hoverable style={{ marginBottom: 10, cursor: 'pointer' }} onClick={() => openOverviewDetail(r)}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
-                  <span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', fontWeight: 600, fontSize: 12 }}>{r.code || '—'}</span>
-                  {r.status && <span style={{ fontSize: 11, color: 'var(--radar-text-secondary)', whiteSpace: 'nowrap' }}>{r.status}</span>}
+                  <span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', fontWeight: 600, fontSize: 12 }}>{r.req_code || r.code || '—'}</span>
+                  {r.status && <span style={{ fontSize: 11, color: 'var(--radar-text-secondary)', whiteSpace: 'nowrap' }}>任务状态：{r.status}</span>}
                 </div>
-                {r.name && <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>{r.name}</div>}
-                <div className="crud-card-row"><span className="crud-card-label">系统</span><span className="crud-card-value">{r.system || '—'}</span></div>
-                <div className="crud-card-row"><span className="crud-card-label">机构</span><span className="crud-card-value">{r.org || '—'}</span></div>
-                <div className="crud-card-row"><span className="crud-card-label">负责人</span><span className="crud-card-value">{r.owner || '—'}</span></div>
+                {r.name && <div style={{ fontWeight: 600, fontSize: 12, lineHeight: 1.45, marginBottom: 6 }}>{r.name}</div>}
+                <div className="crud-card-row"><span className="crud-card-label">主责系统</span><span className="crud-card-value">{r.system || '—'}</span></div>
               </Card>
             )}
           />
         ) : (
-          <Table size="small" rowKey={(r, i) => `${r.code}_${i}`} loading={drill.loading} dataSource={drill.rows}
+          <Table className="dash-drill-table" size="small" rowKey={(r, i) => `${r.code}_${i}`} loading={drill.loading} dataSource={drill.rows}
             onRow={(r) => ({ onClick: () => openOverviewDetail(r), style: { cursor: 'pointer' } })}
             pagination={{ pageSize: 10, showSizeChanger: true }}
             columns={[
-              { title: '编号', dataIndex: 'code', width: 160 },
-              { title: '名称', dataIndex: 'name', ellipsis: true },
-              { title: '状态', dataIndex: 'status', width: 96 },
-              { title: '系统', dataIndex: 'system', ellipsis: true },
-              { title: '机构', dataIndex: 'org', width: 120 },
-              { title: '负责人', dataIndex: 'owner', width: 90 },
+              { title: '需求/工单编号', dataIndex: 'req_code', width: 160, render: (value, row) => value || row.code || '—' },
+              { title: '名称', dataIndex: 'name', render: (value) => <span className="dash-drill-name">{value || '—'}</span> },
+              { title: '任务状态', dataIndex: 'status', width: 112 },
+              { title: '主责系统', dataIndex: 'system', ellipsis: true },
             ]} />
         )}
       </Modal>

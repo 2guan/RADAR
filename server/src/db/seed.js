@@ -229,6 +229,60 @@ const APP_CONFIG = [
   ['security.lockout.durationMinutes', '15', '账号锁定时长（分钟）'],
 ];
 
+// 系统默认仪表盘图表；只在同名系统图表不存在时插入，避免覆盖用户后续调整。
+const DEFAULT_DASHBOARD_CHARTS = [
+  {
+    title: '本期投产类型分布',
+    chart_type: 'pie',
+    config: {
+      source: 'analytics',
+      statDimension: 'all',
+      statStage: 'all',
+      dimension: 'implementation_type',
+      filters: {},
+      groups: [],
+      xAxisGroups: [],
+    },
+    sort: 0,
+    scope: 'system',
+    col_span: 6,
+    height: 220,
+  },
+  {
+    title: '本期投产类型明细',
+    chart_type: 'table',
+    config: {
+      source: 'analytics',
+      statDimension: 'all',
+      statStage: 'all',
+      dimension: 'org',
+      xAxisDimension: 'implementation_type',
+      filters: {},
+      groups: [],
+      xAxisGroups: [
+        {
+          label: '需求',
+          values: ['requirement'],
+          color: '#ef4444',
+          subDimension: 'current_stage',
+          subGroups: [],
+        },
+        {
+          label: '工单',
+          values: ['ticket'],
+          color: '#2e6bff',
+          subDimension: 'current_stage',
+          subGroups: [],
+        },
+      ],
+    },
+    sort: 1,
+    scope: 'system',
+    col_span: 18,
+    height: 0,
+  },
+];
+
 /**
  * 插入字典项（不存在才插）。
  */
@@ -269,6 +323,29 @@ async function seedDict(category, attrValue, displayValue, sort, extra) {
 }
 
 /**
+ * 插入系统默认仪表盘图表（不存在才插）。
+ */
+async function seedDashboardChart(chart) {
+  const exists = await get(
+    'SELECT id FROM dashboard_chart WHERE scope = ? AND title = ?',
+    chart.scope,
+    chart.title,
+  );
+  if (exists) return;
+  await run(
+    'INSERT INTO dashboard_chart (user_id, title, chart_type, config, sort, scope, col_span, height) VALUES (?,?,?,?,?,?,?,?)',
+    null,
+    chart.title,
+    chart.chart_type,
+    JSON.stringify(chart.config),
+    chart.sort,
+    chart.scope,
+    chart.col_span,
+    chart.height,
+  );
+}
+
+/**
  * 为指定角色授予某模块的若干操作权限。
  */
 async function grant(roleId, moduleKey, actions) {
@@ -292,6 +369,7 @@ export async function runSeed() {
         await run('INSERT INTO app_config (key, value, remark) VALUES (?,?,?)', key, value, remark);
       }
     }
+    for (const chart of DEFAULT_DASHBOARD_CHARTS) await seedDashboardChart(chart);
 
     // 2) 字典
     for (const [stage, attr, disp, sort, stateType] of PROCESS_STATUS) {

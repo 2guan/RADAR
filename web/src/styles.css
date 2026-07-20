@@ -983,6 +983,20 @@ body {
   display: inline-flex; align-items: center; justify-content: center;
   line-height: 22px; font-size: 16px;
 }
+.dash-drill-table .ant-table-thead > tr > th,
+.dash-drill-table .ant-table-tbody > tr > td {
+  font-size: 12px;
+  line-height: 1.4;
+}
+.dash-drill-table .ant-table-thead > tr > th { font-size: 11.5px; }
+.dash-drill-name {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-height: 1.4;
+  word-break: break-word;
+}
 .dash-pivot .ant-table-thead > tr > th {
   background: var(--radar-primary-soft) !important;
   color: var(--radar-ink); font-weight: 600;

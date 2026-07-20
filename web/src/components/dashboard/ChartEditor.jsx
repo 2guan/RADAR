@@ -29,6 +29,8 @@ export default function ChartEditor({ open, onClose, onSave, initialData, scope,
   const chartType = Form.useWatch('chart_type', form);
   const dimension = Form.useWatch('dimension', form);
   const xAxisDimension = Form.useWatch('xAxisDimension', form);
+  const statDimension = Form.useWatch('statDimension', form);
+  const statStage = Form.useWatch('statStage', form);
 
   const dims = meta.dimsOf('analytics');
   const dimOptions = dims.map((d) => ({ value: d.key, label: d.label }));
@@ -80,7 +82,7 @@ export default function ChartEditor({ open, onClose, onSave, initialData, scope,
 
   // 一键加载预设：用某维度的全部选项生成分组
   const loadPresets = (dim, field) => {
-    const opts = optionsOf(dim);
+    const opts = meta.getPresetOptions(dim, { statDimension, statStage });
     if (!opts.length) { message.info('该维度无可加载的预设（时间/自由文本维度请手动添加）'); return; }
     form.setFieldValue(field, opts.map((o) => ({ label: o.searchLabel || o.label, values: [o.value] })));
     message.success(`已加载 ${opts.length} 条预设`);

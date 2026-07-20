@@ -6,7 +6,7 @@
  * 说明：根据给定的数据源维度、指标与图表类型，动态生成适合 ECharts 或 Chart.js 的渲染配置项。
  */
 
-import { CHART_PRESET_COLORS } from './ColorPickerField.jsx';
+import { CHART_PRESET_COLORS, resolveChartColor } from './ColorPickerField.jsx';
 
 export const CHART_PALETTE = CHART_PRESET_COLORS;
 
@@ -28,7 +28,8 @@ function fade(hex, alpha) {
 }
 
 const groupLabelSet = (groups) => new Set([...(groups || []).map((g) => g.label), '其它']);
-const groupColorMap = (groups) => Object.fromEntries((groups || []).filter((g) => g.color).map((g) => [g.label, g.color]));
+const groupColorMap = (groups, activeColors) => Object.fromEntries((groups || []).filter((g) => g.color)
+  .map((g) => [g.label, resolveChartColor(g.color, activeColors)]));
 const colorAt = (label, idx, gmap, base) => gmap[label] || base || CHART_PALETTE[idx % CHART_PALETTE.length];
 
 /**
@@ -57,7 +58,7 @@ export function buildOption({ chartType, cfg, data, labelOf, isDark, activeColor
   // ---- 饼图（始终 1D）----
   if (chartType === 'pie') {
     const gset = groupLabelSet(cfg.groups);
-    const gmap = groupColorMap(cfg.groups);
+    const gmap = groupColorMap(cfg.groups, activeColors);
     return {
       ...base,
       tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
@@ -78,7 +79,7 @@ export function buildOption({ chartType, cfg, data, labelOf, isDark, activeColor
   if (is2D) {
     const yset = groupLabelSet(cfg.groups);
     const xset = groupLabelSet(cfg.xAxisGroups);
-    const xColorMap = groupColorMap(cfg.xAxisGroups);
+    const xColorMap = groupColorMap(cfg.xAxisGroups, activeColors);
     const cats = [...new Set(data.map((d) => d.name_y))];
     const stacks = [...new Set(data.map((d) => d.name_x))];
     const catLabels = cats.map((c) => (yset.has(c) ? c : labelOf(cfg.dimension, c)));
@@ -132,12 +133,12 @@ export function buildOption({ chartType, cfg, data, labelOf, isDark, activeColor
 
   // ---- 1D：柱 / 横柱 / 折线 / 面积 ----
   const gset = groupLabelSet(cfg.groups);
-  const gmap = groupColorMap(cfg.groups);
+  const gmap = groupColorMap(cfg.groups, activeColors);
   const horizontal = chartType === 'horizontal_bar';
   const isLine = chartType === 'line' || chartType === 'area';
   let rows = (data || []).map((d, i) => {
     const name = gset.has(d.name) ? d.name : labelOf(cfg.dimension, d.name);
-    return { name, value: d.value, color: colorAt(name, i, gmap, cfg.color) };
+    return { name, value: d.value, color: colorAt(name, i, gmap, resolveChartColor(cfg.color, activeColors)) };
   });
   if (horizontal) rows = rows.reverse();
   const labels = rows.map((r) => r.name);

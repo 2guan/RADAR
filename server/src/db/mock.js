@@ -166,6 +166,32 @@ async function loadIssueSnapshot(limit = 80) {
   return out;
 }
 
+async function loadPendingVerifyIssues(limit = 20) {
+  const rows = await all(
+    `SELECT issue_code, round, urgency, handling_method, version_codes, business_group, module, system, work_order_no,
+            create_time, plan_resolve_time, status, category, detailed_classification, summary, details,
+            tracker_name, tracker_org, reporter_name, reporter_org, handler_name, handler_org,
+            is_major, is_common, root_cause, solution, release_status, synced_at, created_at
+       FROM issue
+      WHERE status = '待验证'
+        AND issue_code IS NOT NULL AND issue_code <> ''
+      ORDER BY COALESCE(synced_at, created_at) DESC, id DESC
+      LIMIT ${limit}`,
+  ).catch(() => []);
+  return rows.map((row, idx) => normalizeIssue(row, idx)).filter(Boolean);
+}
+
+function mergeIssuePools(primary, fallback) {
+  const seen = new Set();
+  const out = [];
+  for (const issue of [...(primary || []), ...(fallback || [])]) {
+    if (!issue?.code || seen.has(issue.code)) continue;
+    seen.add(issue.code);
+    out.push(issue);
+  }
+  return out;
+}
+
 // 12 个投产点（投产窗口）：YYYYMMDD、版本类型、是否默认、是否归档
 const RELEASE_POINTS = [
   ['20260116', '常规版本', 0, 1], ['20260220', '常规版本', 0, 0], ['20260320', '重大版本', 0, 0],
@@ -198,12 +224,12 @@ const SIGNOFF_CHECK_CONTENT = {
   配置负责人: '检查变更编号、制品清单、版本号、摆渡状态、部署部门和配置参数，确认投产介质与申请单一致。',
 };
 
-// 清空业务/人员数据（保留字典/系统/角色/权限/超级管理员）
+// 清空业务/人员数据（保留字典/系统/角色/权限/超级管理员/仪表盘图表配置）
 async function wipe() {
   const tables = [
     'release_signoff', 'release_system', 'release_task', 'release_apply',
     'test_task', 'dev_task', 'requirement', 'ticket', 'issue',
-    'attachment', 'audit_log', 'saved_filter', 'dashboard_chart',
+    'attachment', 'audit_log', 'saved_filter',
   ];
   for (const t of tables) await run(`DELETE FROM ${t}`);
   // 删除除引导超管(admin)外的全部人员（含名单内的超管薛潇，保证可重复执行；user_role 随级联删除）
@@ -225,7 +251,8 @@ export async function runMock() {
   await runMigrations();
   await runSeed();
   await ensureSignoffCheckContent();
-  const issuePool = await loadIssueSnapshot();
+  const pendingVerifyIssues = await loadPendingVerifyIssues(20);
+  const issuePool = mergeIssuePools(pendingVerifyIssues, await loadIssueSnapshot());
 
   await tx(async () => {
     await wipe();
@@ -581,32 +608,51 @@ export async function runMock() {
     }
 
     // ----------------------------------------------------------------------
-    // 8) 工单分析（10 条，关联实际问题编号，含开发/测试任务）
+    // 8) 工单分析（20 条，全部来源于当前问题清单中 status=待验证 的问题）
     // ----------------------------------------------------------------------
-    // 工单画像：released/sit/dev/analysis - 对应全链路进度
-    const TICKET_SPECS = [
-      { profile: 'released', rp: rpIds[4], issueIdx: 14, type: '工单阻塞问题', isAccounting: '否' }, // 已上线
-      { profile: 'released', rp: rpIds[3], issueIdx: 11, type: '工单阻塞问题', isAccounting: '是' }, // 已上线涉账
-      { profile: 'sit',      rp: rpIds[5], issueIdx: 8,  type: '工单阻塞问题', isAccounting: '否' }, // 测试中
-      { profile: 'sit',      rp: rpIds[5], issueIdx: 9,  type: '工单急迫需求', isAccounting: '否' }, // 测试中
-      { profile: 'dev',      rp: rpIds[6], issueIdx: 4,  type: '工单阻塞问题', isAccounting: '否' }, // 开发中
-      { profile: 'dev',      rp: rpIds[6], issueIdx: 5,  type: '工单急迫需求', isAccounting: '是' }, // 开发中涉账
-      { profile: 'dev',      rp: rpIds[7], issueIdx: 6,  type: '工单阻塞问题', isAccounting: '否' }, // 开发中
-      { profile: 'analysis', rp: rpIds[7], issueIdx: 0,  type: '工单阻塞问题', isAccounting: '否' }, // 工单分析
-      { profile: 'analysis', rp: rpIds[8], issueIdx: 1,  type: '延后承诺需求', isAccounting: '否' }, // 工单分析
-      { profile: 'register', rp: rpIds[8], issueIdx: 3,  type: '工单阻塞问题', isAccounting: '否' }, // 工单登记
+    const ticketIssuePool = mergeIssuePools(pendingVerifyIssues, issuePool).slice(0, 20);
+    if (ticketIssuePool.length < 20) {
+      logger.warn(`[模拟数据] 当前问题清单中待验证问题不足 20 条，实际生成工单 ${ticketIssuePool.length} 条。`);
+    }
+    const TICKET_PROFILE_PLAN = [
+      'released', 'released',
+      'sit', 'sit', 'sit', 'sit', 'sit',
+      'dev', 'dev', 'dev', 'dev', 'dev',
+      'analysis', 'analysis', 'analysis', 'analysis',
+      'register', 'register', 'register', 'register',
     ];
     const TICKET_STATUS = {
       released: '分析完成', sit: '分析完成', dev: '分析完成',
       analysis: '工单分析', register: '工单登记',
     };
+    const TICKET_RELEASE_POINT_INDEX = {
+      released: [3, 4],
+      sit: [5, 6],
+      dev: [6, 7],
+      analysis: [7, 8],
+      register: [8, 9],
+    };
+    function issueSystemCode(issue) {
+      const raw = String(issue?.system || '').trim();
+      if (raw && sysByCode[raw]) return raw;
+      const byName = raw ? systems.find((s) => s.sys_name === raw) : null;
+      return byName?.sys_code || pick(sysCodes);
+    }
 
     const tickets = [];
-    for (const tspec of TICKET_SPECS) {
-      const linkedIssue = issuePool[tspec.issueIdx % issuePool.length];
+    for (let i = 0; i < ticketIssuePool.length; i++) {
+      const linkedIssue = ticketIssuePool[i];
+      const profile = TICKET_PROFILE_PLAN[i % TICKET_PROFILE_PLAN.length];
+      const winList = TICKET_RELEASE_POINT_INDEX[profile];
+      const tspec = {
+        profile,
+        rp: rpIds[winList[i % winList.length]],
+        type: linkedIssue.cls || '工单阻塞问题',
+        isAccounting: i % 7 === 0 ? '是' : '否',
+      };
       const code = linkedIssue.code;
       const tStatus = TICKET_STATUS[tspec.profile];
-      const main = pickN(sysCodes, 1);
+      const main = [issueSystemCode(linkedIssue)];
       const proposeTime = shift(ymd(tspec.rp.date), -40 - Math.floor(rng() * 20));
       await run(
         `INSERT INTO ticket
@@ -617,7 +663,7 @@ export async function runMock() {
          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         code,
         linkedIssue.summary.slice(0, 50).trimEnd() + (linkedIssue.summary.length > 50 ? '…' : ''),
-        linkedIssue.summary,
+        linkedIssue.details || linkedIssue.summary,
         tStatus, tspec.type, tspec.isAccounting,
         '云南农信', JSON.stringify([pickUser('农信业务')]),
         pickUser('农信业务'), pickUser('金科业务'),

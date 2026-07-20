@@ -70,7 +70,7 @@ export default function DashboardChart({
     if (chart.chart_type === 'table') {
       return (
         <div style={{ maxHeight: height ? height : undefined, overflow: 'auto' }}>
-          <PivotTable cfg={cfg} data={data} labelOf={labelOf} dimName={dimName}
+          <PivotTable cfg={cfg} data={data} labelOf={labelOf} dimName={dimName} activeColors={activeColors}
             onCell={(filters, dimensionLabel) => onDrill?.(cfg, filters, chart.title, dimensionLabel)} />
         </div>
       );

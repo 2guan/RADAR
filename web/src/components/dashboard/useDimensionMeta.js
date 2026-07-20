@@ -64,7 +64,9 @@ async function fetchMeta() {
 
   const processStatusRows = dictArr.find(([c]) => c === 'process_status')?.[1] || [];
   const taskStatusList = [];
-  processStatusRows.forEach((item) => taskStatusList.push({ value: item.attr_value, label: item.display_value || item.attr_value }));
+  processStatusRows.forEach((item) => taskStatusList.push({
+    value: item.attr_value, label: item.display_value || item.attr_value, stage: item.extra?.stage,
+  }));
   const taskStatusLabel = Object.fromEntries(taskStatusList.map((t) => [t.value, t.label]));
 
   return {
@@ -116,6 +118,21 @@ export function useDimensionMeta() {
     return [];
   };
 
+  /**
+   * 分组“加载预设”专用选项。统计阶段已限定时，阶段状态仅加载该阶段可用的状态。
+   * 需求/工单分析阶段再结合统计维度，避免把需求状态和工单状态混在一起。
+   */
+  const getPresetOptions = (dim, { statStage = 'all', statDimension = 'all' } = {}) => {
+    if (dim !== 'stage_status' || statStage === 'all') return getOptions(dim);
+    const stageMap = {
+      analysis: statDimension === 'requirement' ? ['需求'] : (statDimension === 'ticket' ? ['工单'] : ['需求', '工单']),
+      dev: ['开发'], sit: ['测试'], uat: ['测试'], nft: ['测试'], sec: ['测试'], release: ['投产'],
+    };
+    const stages = stageMap[statStage];
+    if (!stages) return getOptions(dim);
+    return meta.taskStatusList.filter((option) => stages.includes(option.stage));
+  };
+
   /** 原始值 → 显示名 */
   const labelOf = (dim, raw) => {
     const m = meta.dimByKey[dim];
@@ -132,6 +149,6 @@ export function useDimensionMeta() {
 
   return {
     ready, sources: meta.sources, statDimensions: meta.statDimensions, statStages: meta.statStages,
-    chartTypes: meta.chartTypes, dimsOf, dimMeta, getOptions, labelOf,
+    chartTypes: meta.chartTypes, dimsOf, dimMeta, getOptions, getPresetOptions, labelOf,
   };
 }

@@ -1205,6 +1205,28 @@ docker compose pull radar
 docker compose up -d --no-build
 ```
 
+国内服务器如拉取 `ghcr.io` 超时，推荐把 Actions 同步推送到国内镜像仓库。先在 GitHub 仓库 `Settings -> Secrets and variables -> Actions` 新增：
+
+| Secret | 示例 | 说明 |
+| --- | --- | --- |
+| `CN_REGISTRY` | `registry.cn-hangzhou.aliyuncs.com` | 国内镜像仓库地址 |
+| `CN_IMAGE_NAME` | `your-namespace/radar` | 镜像命名空间和仓库名 |
+| `CN_REGISTRY_USERNAME` | `your-username` | 国内镜像仓库登录用户名 |
+| `CN_REGISTRY_PASSWORD` | `your-password` | 国内镜像仓库登录密码或访问凭证 |
+
+重新运行 `Build Docker Image` 后，服务器 `.env` 改为国内镜像：
+
+```env
+RADAR_IMAGE=registry.cn-hangzhou.aliyuncs.com/your-namespace/radar:latest
+```
+
+再执行：
+
+```bash
+docker compose pull radar
+docker compose up -d --no-build
+```
+
 访问：
 
 ```text

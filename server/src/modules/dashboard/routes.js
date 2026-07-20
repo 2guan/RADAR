@@ -122,10 +122,11 @@ function projectRecord(source, row, ctx) {
   if (realSource === 'analytics') {
     const item = row._workItem || row;
     const code = item.req_code || item.ticket_code;
+    const primarySystems = extract(realSource, 'system', { ...row, impl_system: null }, ctx).map(sysName).join('、');
+    const latestTaskStatus = extract(realSource, 'current_task_status', row, ctx)[0];
     return {
-      req_code: code, code: row.task_code || code, name: row.task_name || item.title || code,
-      status: row.status || item.status, system: systems,
-      org: extract(realSource, 'org', row, ctx).join('、'), owner: row.owner || '',
+      req_code: code, code, name: item.title || code,
+      status: latestTaskStatus || row.status || item.status, system: primarySystems,
     };
   }
   if (realSource === 'requirement' || realSource === 'ticket') {
