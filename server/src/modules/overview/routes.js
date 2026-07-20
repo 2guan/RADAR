@@ -165,6 +165,10 @@ async function appendIssueCards({ groups, body, targetReleasePointIds, sysMap, r
   // 2) 问题主数据 + 系统名→机构 映射（问题的 system 字段多为系统名称）
   const issueMap = {};
   for (const it of await all('SELECT issue_code, status, summary, system FROM issue')) issueMap[it.issue_code] = it;
+  const workItemCodes = new Set([
+    ...(await all('SELECT req_code AS code FROM requirement')).map((r) => r.code),
+    ...(await all('SELECT ticket_code AS code FROM ticket')).map((r) => r.code),
+  ]);
   const sysNameOrg = {};
   for (const s of await all('SELECT sys_name, org FROM system')) sysNameOrg[s.sys_name] = s.org;
 
@@ -173,7 +177,8 @@ async function appendIssueCards({ groups, body, targetReleasePointIds, sysMap, r
   for (const ra of applies) {
     const refs = parseJsonArray(ra.ref_codes);
     for (const code of refs) {
-      if (issueMap[code] && !(code in issueImplOrg)) issueImplOrg[code] = ra.impl_org || null;
+      // 工单编号按业务口径等于问题编号；若编号已存在于需求/工单表，概览必须按工作项展示，不能再重复追加为问题卡片。
+      if (issueMap[code] && !workItemCodes.has(code) && !(code in issueImplOrg)) issueImplOrg[code] = ra.impl_org || null;
     }
   }
 

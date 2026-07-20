@@ -773,12 +773,10 @@ export async function runMock() {
     const applyRows = await all('SELECT ref_codes FROM release_apply');
     let requirementApplyRefs = 0;
     let ticketApplyRefs = 0;
-    let directIssueApplyRefs = 0;
     for (const row of applyRows) {
       for (const code of parseJsonArray(row.ref_codes)) {
         if (await get('SELECT 1 FROM requirement WHERE req_code = ?', code)) requirementApplyRefs++;
         else if (await get('SELECT 1 FROM ticket WHERE ticket_code = ?', code)) ticketApplyRefs++;
-        else if (await get('SELECT 1 FROM issue WHERE issue_code = ?', code)) directIssueApplyRefs++;
       }
     }
 
@@ -802,7 +800,6 @@ export async function runMock() {
       投产申请: (await get('SELECT COUNT(*) c FROM release_apply')).c,
       投产申请需求引用: requirementApplyRefs,
       投产申请工单引用: ticketApplyRefs,
-      直接问题投产引用: directIssueApplyRefs,
       评审状态分布: (await all("SELECT review_status, COUNT(*) c FROM release_task GROUP BY review_status"))
         .map((r) => `${r.review_status}:${r.c}`).join('、'),
     };
