@@ -8,7 +8,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Card, Row, Col, Progress, Button, Empty, message, Modal, Table, Grid, Spin, List,
+  Card, Row, Col, Progress, Button, Empty, message, Modal, Table, Grid, Spin, List, Tag,
 } from 'antd';
 import {
   FileTextOutlined, CodeOutlined, ExperimentOutlined, UserOutlined, RocketOutlined, PlusOutlined,
@@ -20,7 +20,9 @@ import { useDimensionMeta } from '../components/dashboard/useDimensionMeta.js';
 import { useResponsive } from '../hooks/useResponsive.js';
 import ChartEditor from '../components/dashboard/ChartEditor.jsx';
 import DashboardChart from '../components/dashboard/DashboardChart.jsx';
-import { VersionOverviewWorkItemDetail } from './Overview.jsx';
+import ReleaseDetail from '../components/editors/ReleaseDetail.jsx';
+import ReleaseApplyEditor from '../components/editors/ReleaseApplyEditor.jsx';
+import { DevIntakeModal, TestIntakeModal, VersionOverviewWorkItemDetail } from './Overview.jsx';
 
 const { useBreakpoint } = Grid;
 
@@ -54,6 +56,10 @@ export default function Dashboard() {
   const [editor, setEditor] = useState({ open: false, chart: null, scope: 'user' });
   const [drill, setDrill] = useState({ open: false, title: '', rows: [], loading: false });
   const [overviewDetail, setOverviewDetail] = useState({ open: false, code: '', systemName: '', data: null, loading: false });
+  const [devIntakeReq, setDevIntakeReq] = useState(null);
+  const [testIntakeReq, setTestIntakeReq] = useState(null);
+  const [releaseDetailCode, setReleaseDetailCode] = useState(null);
+  const [releaseApply, setReleaseApply] = useState(null);
 
   const canManage = can('dashboard', 'manage');
 
@@ -113,15 +119,34 @@ export default function Dashboard() {
   };
 
   // 仪表盘内直接打开版本概览的同一套生命周期详情内容。
-  const openOverviewDetail = async (row) => {
-    const code = row.req_code || row.code;
+  const loadOverviewDetail = async (code, systemName) => {
     if (!code) return;
-    setOverviewDetail({ open: true, code, systemName: row.system, data: null, loading: true });
+    setOverviewDetail((current) => ({
+      ...current, open: true, code, systemName: systemName ?? current.systemName, data: null, loading: true,
+    }));
     try {
       const data = await apiGet(`/overview/${code}/detail`);
-      setOverviewDetail((current) => ({ ...current, data: { entityType: data.entityType || 'requirement', ...data }, loading: false }));
+      setOverviewDetail((current) => (current.code === code
+        ? { ...current, data: { entityType: data.entityType || 'requirement', ...data }, loading: false }
+        : current));
     } catch {
-      setOverviewDetail((current) => ({ ...current, loading: false }));
+      setOverviewDetail((current) => (current.code === code ? { ...current, loading: false } : current));
+    }
+  };
+  const openOverviewDetail = (row) => loadOverviewDetail(row.req_code || row.code, row.system);
+  const refreshOverviewDetail = () => loadOverviewDetail(overviewDetail.code);
+  const openOverviewRelease = () => {
+    const detail = overviewDetail.data;
+    if (!detail?.requirement) return;
+    const reqCode = detail.requirement.req_code;
+    if (detail.release) {
+      setReleaseDetailCode(reqCode);
+    } else {
+      setReleaseApply({
+        reqCode,
+        releasePointId: detail.requirement.release_point_id,
+        entityType: detail.entityType === 'ticket' ? 'ticket' : 'requirement',
+      });
     }
   };
 
@@ -216,7 +241,7 @@ export default function Dashboard() {
       )}
 
       {/* 钻取记录列表 */}
-      <Modal open={drill.open} title={`钻取明细 · ${drill.title}`} footer={null} width={900}
+      <Modal className="dash-drill-modal" open={drill.open} title={<span title={drill.title}>{drill.title}</span>} footer={null} width={900}
         onCancel={() => setDrill({ ...drill, open: false })}>
         {isMobile ? (
           // 手机端：钻取明细改用卡片列表，避免表格横向滚动
@@ -228,11 +253,9 @@ export default function Dashboard() {
             pagination={{ pageSize: 8, size: 'small', showSizeChanger: false }}
             renderItem={(r) => (
               <Card size="small" hoverable style={{ marginBottom: 10, cursor: 'pointer' }} onClick={() => openOverviewDetail(r)}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
-                  <span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', fontWeight: 600, fontSize: 12 }}>{r.req_code || r.code || '—'}</span>
-                  {r.status && <span style={{ fontSize: 11, color: 'var(--radar-text-secondary)', whiteSpace: 'nowrap' }}>任务状态：{r.status}</span>}
-                </div>
-                {r.name && <div style={{ fontWeight: 600, fontSize: 12, lineHeight: 1.45, marginBottom: 6 }}>{r.name}</div>}
+                <div className="crud-card-row"><span className="crud-card-label">需求/工单编号</span><span className="crud-card-value" style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', fontWeight: 600 }}>{r.req_code || r.code || '—'}</span></div>
+                <div className="crud-card-row"><span className="crud-card-label">名称</span><span className="crud-card-value dash-drill-name">{r.name || '—'}</span></div>
+                <div className="crud-card-row"><span className="crud-card-label">任务状态</span><span className="crud-card-value">{r.status || '—'}</span></div>
                 <div className="crud-card-row"><span className="crud-card-label">主责系统</span><span className="crud-card-value">{r.system || '—'}</span></div>
               </Card>
             )}
@@ -261,7 +284,7 @@ export default function Dashboard() {
           <div className="lc-modal-title" style={{ paddingRight: 24 }}>
             <span className="lc-id big">{overviewDetail.data.requirement.req_code}</span>
             <span className="lc-modal-name">{overviewDetail.data.requirement.title}</span>
-            {overviewDetail.systemName && overviewDetail.systemName !== '—' && <span className="tag-system">{overviewDetail.systemName}</span>}
+            {overviewDetail.systemName && overviewDetail.systemName !== '—' && <Tag className="tag-system" style={{ borderRadius: 2, margin: 0 }}>{overviewDetail.systemName}</Tag>}
           </div>
         )}
       >
@@ -271,9 +294,28 @@ export default function Dashboard() {
           <VersionOverviewWorkItemDetail
             detail={overviewDetail.data}
             isTabMode={!screens.xl}
+            can={can}
+            onDevIntake={() => setDevIntakeReq(overviewDetail.data.requirement)}
+            onTestIntake={(testType) => setTestIntakeReq({ req: overviewDetail.data.requirement, testType })}
+            onRelease={openOverviewRelease}
           />
         )}
       </Modal>
+      <DevIntakeModal open={!!devIntakeReq} requirement={devIntakeReq}
+        onClose={() => setDevIntakeReq(null)} onSaved={refreshOverviewDetail} />
+      <TestIntakeModal open={!!testIntakeReq} requirement={testIntakeReq?.req} testType={testIntakeReq?.testType}
+        onClose={() => setTestIntakeReq(null)} onSaved={refreshOverviewDetail} />
+      <ReleaseDetail open={!!releaseDetailCode} reqCode={releaseDetailCode}
+        onClose={() => setReleaseDetailCode(null)} onChanged={refreshOverviewDetail} />
+      <ReleaseApplyEditor
+        open={!!releaseApply}
+        defaultReqCodes={releaseApply?.entityType === 'requirement' ? [releaseApply.reqCode] : undefined}
+        defaultTicketCodes={releaseApply?.entityType === 'ticket' ? [releaseApply.reqCode] : undefined}
+        defaultType={releaseApply?.entityType === 'ticket' ? 'ticket' : 'req'}
+        defaultReleasePointId={releaseApply?.releasePointId}
+        onClose={() => setReleaseApply(null)}
+        onSaved={() => { setReleaseApply(null); refreshOverviewDetail(); }}
+      />
     </div>
   );
 }

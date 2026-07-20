@@ -157,21 +157,21 @@ function Field({ label, col, children }) {
   );
 }
 
-/** 详情卡片外框（状态绝对定位在右上角，避免挤压） */
-function DetailCard({ status, code, title, onEdit, lg, shrinkCodeForStatus, children }) {
+/** 详情卡片外框：桌面端编号与状态空间不足时，状态置首行、编号自动换至第二行。 */
+function DetailCard({ status, code, title, onEdit, lg, children }) {
   const cardRef = useRef(null);
   const codeRef = useRef(null);
   const statusRef = useRef(null);
-  const [codeFitStyle, setCodeFitStyle] = useState(null);
+  const [stackStatus, setStackStatus] = useState(false);
 
   useLayoutEffect(() => {
-    if (!shrinkCodeForStatus || !status) {
-      setCodeFitStyle(null);
+    if (!status) {
+      setStackStatus(false);
       return undefined;
     }
 
     let raf = 0;
-    const updateCodeSize = () => {
+    const updateHeaderLayout = () => {
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => {
         const cardEl = cardRef.current;
@@ -179,67 +179,46 @@ function DetailCard({ status, code, title, onEdit, lg, shrinkCodeForStatus, chil
         const statusEl = statusRef.current;
         if (!cardEl || !codeEl || !statusEl) return;
 
-        const cardStyle = window.getComputedStyle(cardEl);
-        const codeStyle = window.getComputedStyle(codeEl);
-        const baseSize = Number.parseFloat(codeStyle.getPropertyValue('--lc-id-base-size')) || Number.parseFloat(codeStyle.fontSize) || 11;
-        const cardRect = cardEl.getBoundingClientRect();
-        const statusRect = statusEl.getBoundingClientRect();
-        const codeHorizontalSpace =
-          Number.parseFloat(codeStyle.paddingLeft || 0) +
-          Number.parseFloat(codeStyle.paddingRight || 0);
-        const currentSize = Number.parseFloat(codeStyle.fontSize) || baseSize;
-        const leftGap = codeEl.offsetLeft;
-        const safeGap = 8;
-        const availableWidth = Math.max(0, statusRect.left - cardRect.left - leftGap - safeGap);
-        const currentTextWidth = Math.max(0, codeEl.scrollWidth - codeHorizontalSpace);
-        const naturalTextWidth = currentTextWidth * (baseSize / Math.max(currentSize, 1));
-        const naturalWidth = naturalTextWidth + codeHorizontalSpace;
-
-        if (naturalWidth <= availableWidth) {
-          setCodeFitStyle((prev) => (prev ? null : prev));
+        if (window.innerWidth < 768) {
+          setStackStatus((prev) => (prev ? false : prev));
           return;
         }
-
-        const targetTextWidth = Math.max(0, availableWidth - codeHorizontalSpace);
-        const nextSize = Math.max(8, Math.floor((baseSize * targetTextWidth) / Math.max(naturalTextWidth, 1) * 10) / 10);
-        const nextStyle = {
-          fontSize: nextSize < baseSize ? nextSize : baseSize,
-          maxWidth: Math.max(0, Math.floor(availableWidth)),
-        };
-        setCodeFitStyle((prev) => {
-          if (prev && prev.fontSize === nextStyle.fontSize && prev.maxWidth === nextStyle.maxWidth) return prev;
-          return nextStyle;
-        });
+        const cardStyle = window.getComputedStyle(cardEl);
+        const horizontalPadding = Number.parseFloat(cardStyle.paddingLeft || 0) + Number.parseFloat(cardStyle.paddingRight || 0);
+        const availableWidth = cardEl.clientWidth - horizontalPadding;
+        // 两行布局时状态容器会占满整行，必须测量内部标签宽度，才能在空间恢复后切回一行。
+        const statusWidth = statusEl.firstElementChild?.getBoundingClientRect().width || statusEl.offsetWidth;
+        const requiredWidth = codeEl.scrollWidth + statusWidth + 8;
+        setStackStatus((prev) => (prev === (requiredWidth > availableWidth) ? prev : requiredWidth > availableWidth));
       });
     };
 
-    updateCodeSize();
+    updateHeaderLayout();
 
-    const resizeObserver = new ResizeObserver(updateCodeSize);
+    const resizeObserver = new ResizeObserver(updateHeaderLayout);
     if (cardRef.current) resizeObserver.observe(cardRef.current);
     if (codeRef.current) resizeObserver.observe(codeRef.current);
     if (statusRef.current) resizeObserver.observe(statusRef.current);
-    window.addEventListener('resize', updateCodeSize);
+    window.addEventListener('resize', updateHeaderLayout);
 
     return () => {
       cancelAnimationFrame(raf);
       resizeObserver.disconnect();
-      window.removeEventListener('resize', updateCodeSize);
+      window.removeEventListener('resize', updateHeaderLayout);
     };
-  }, [shrinkCodeForStatus, status, code]);
+  }, [status, code]);
 
   return (
-    <div ref={cardRef} className={`lc-card ${lg ? 'lc-card-lg' : ''}`} onClick={onEdit} style={{ position: 'relative' }}>
+    <div ref={cardRef} className={`lc-card ${lg ? 'lc-card-lg' : ''} ${stackStatus ? 'lc-card-status-stacked-layout' : ''}`} onClick={onEdit} style={{ position: 'relative' }}>
       {status && (
-        <div ref={statusRef} className="lc-card-status">
+        <div ref={statusRef} className={`lc-card-status ${stackStatus ? 'lc-card-status-stacked' : ''}`}>
           <StatusBadge status={status} />
         </div>
       )}
       <div>
         <span
           ref={codeRef}
-          className={`lc-id ${lg ? 'big' : ''} ${shrinkCodeForStatus ? 'lc-id-fit-status' : ''}`}
-          style={codeFitStyle || undefined}
+          className={`lc-id ${lg ? 'big' : ''}`}
         >
           {code}
         </span>
@@ -324,7 +303,7 @@ function TaskDetailCard({ t, moduleKey, scopeKey, onEdit }) {
   const attachFields = required.attachmentFields.filter((f) => required.isVisible(`attachment:${f}`));
 
   return (
-    <DetailCard status={t.status} code={t.task_code} onEdit={onEdit} shrinkCodeForStatus>
+    <DetailCard status={t.status} code={t.task_code} onEdit={onEdit}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 6 }}>
         {t.systemInfo && <SystemCard s={t.systemInfo} />}
         {t.ownerInfo && <PersonCard p={t.ownerInfo} />}
@@ -525,7 +504,7 @@ function IntakePreviewList({ list, selected, setSelected }) {
   );
 }
 
-function DevIntakeModal({ open, requirement, onClose, onSaved }) {
+export function DevIntakeModal({ open, requirement, onClose, onSaved }) {
   const { isMobile } = useResponsive();
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [previewList, setPreviewList] = useState([]);
@@ -768,7 +747,7 @@ function DevIntakeModal({ open, requirement, onClose, onSaved }) {
   );
 }
 
-function TestIntakeModal({ open, requirement, testType, onClose, onSaved }) {
+export function TestIntakeModal({ open, requirement, testType, onClose, onSaved }) {
   const { isMobile } = useResponsive();
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [previewData, setPreviewData] = useState({ overall: [], split: [] });
@@ -1141,13 +1120,14 @@ export function VersionOverviewWorkItemDetail({
   if (isTabMode) {
     return (
       <Tabs
+        className="lc-lifecycle-tabs"
         items={[
           { key: 'req', label: detail.entityType === 'ticket' ? '工单' : '需求', children: <ReqDetailCard req={detail.requirement} entityType={detail.entityType} onEdit={editRequirement} /> },
           { key: 'dev', label: '开发', children: <TaskGrid items={detail.dev} moduleKey="dev" onEdit={(t) => editTask('dev', t)} emptyText="点击承接开发" onIntake={openDevIntake} hasIntakePermission={hasPermission('dev', 'dev.intake')} /> },
-          { key: 'sit', label: '应用组装测试', children: <TaskGrid items={detail.sit} moduleKey="test" scopeKey="SIT" onEdit={(t) => editTask('test', t)} emptyText="点击承接测试" onIntake={() => openTestIntake('SIT')} hasIntakePermission={hasPermission('test', 'test.intake')} /> },
-          ...(detail.nft.length ? [{ key: 'nft', label: '非功能测试', children: <TaskGrid items={detail.nft} moduleKey="test" scopeKey="NFT" onEdit={(t) => editTask('test', t)} /> }] : []),
-          ...(detail.sec.length ? [{ key: 'sec', label: '安全测试', children: <TaskGrid items={detail.sec} moduleKey="test" scopeKey="SEC" onEdit={(t) => editTask('test', t)} /> }] : []),
-          { key: 'uat', label: '用户测试', children: <TaskGrid items={detail.uat} moduleKey="test" scopeKey="UAT" onEdit={(t) => editTask('test', t)} emptyText="点击承接测试" onIntake={() => openTestIntake('UAT')} hasIntakePermission={hasPermission('test', 'test.intake')} /> },
+          { key: 'sit', label: 'SIT', children: <TaskGrid items={detail.sit} moduleKey="test" scopeKey="SIT" onEdit={(t) => editTask('test', t)} emptyText="点击承接测试" onIntake={() => openTestIntake('SIT')} hasIntakePermission={hasPermission('test', 'test.intake')} /> },
+          ...(detail.nft.length ? [{ key: 'nft', label: 'NFT', children: <TaskGrid items={detail.nft} moduleKey="test" scopeKey="NFT" onEdit={(t) => editTask('test', t)} /> }] : []),
+          ...(detail.sec.length ? [{ key: 'sec', label: 'SEC', children: <TaskGrid items={detail.sec} moduleKey="test" scopeKey="SEC" onEdit={(t) => editTask('test', t)} /> }] : []),
+          { key: 'uat', label: 'UAT', children: <TaskGrid items={detail.uat} moduleKey="test" scopeKey="UAT" onEdit={(t) => editTask('test', t)} emptyText="点击承接测试" onIntake={() => openTestIntake('UAT')} hasIntakePermission={hasPermission('test', 'test.intake')} /> },
           { key: 'rel', label: '投产', children: <ReleaseDetailCard release={detail.release} onEdit={openRelease} /> },
         ]}
       />

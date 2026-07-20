@@ -9,6 +9,7 @@
 
 import { all } from '../db/index.js';
 import { isTerminalStatus } from './status.js';
+import { parseJsonArray } from './json.js';
 
 // ---------------------------------------------------------------------------
 // 维度元数据（label 与选项来源；optionSource 供前端决定下拉/预设取数方式）
@@ -192,8 +193,8 @@ export async function buildContext() {
 /** 取一条记录涉及的系统编号数组（随源不同字段） */
 function systemCodes(source, row) {
   if (source === 'requirement' || source === 'ticket') {
-    try { const a = JSON.parse(row.main_systems || '[]'); return Array.isArray(a) ? a.filter(Boolean) : []; }
-    catch { return []; }
+    // SQLite 返回 JSON 字符串，TDSQL 可能直接返回数组；统一兼容两种格式。
+    return parseJsonArray(row.main_systems).filter(Boolean);
   }
   if (source === 'releaseSystem') return row.system_code ? [row.system_code] : [];
   return row.impl_system ? [row.impl_system] : [];

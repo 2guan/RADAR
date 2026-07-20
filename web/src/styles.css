@@ -495,6 +495,8 @@ body {
 .lc-card:hover { border-color: var(--radar-primary); box-shadow: 0 4px 14px rgba(31,45,80,0.08); }
 .lc-card-lg { max-width: 100%; }
 .lc-card-status { position: absolute; top: 12px; right: 12px; z-index: 2; }
+.lc-card-status-stacked { position: static; display: flex; justify-content: flex-start; margin-bottom: 6px; }
+.lc-card-status-stacked-layout .lc-title { padding-right: 0; }
 .lc-id { --lc-id-base-size: 11; display: inline-block; font-size: 11px; font-weight: 700; color: var(--radar-text-secondary); background: rgba(120,130,150,0.12); padding: 1px 6px; letter-spacing: .3px; margin-bottom: 6px; }
 .lc-id.big { --lc-id-base-size: 12; font-size: 12px; color: var(--radar-primary); background: var(--radar-primary-soft); }
 .lc-id-fit-status { white-space: nowrap; line-height: 1.5; overflow: hidden; text-overflow: ellipsis; vertical-align: top; }
@@ -997,6 +999,33 @@ body {
   line-height: 1.4;
   word-break: break-word;
 }
+.dash-drill-modal .ant-modal-title {
+  padding-right: 36px;
+  overflow: hidden;
+  color: var(--radar-ink);
+  font-size: 14px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lc-lifecycle-tabs .ant-tabs-nav { margin-bottom: 12px; }
+.lc-lifecycle-tabs .ant-tabs-nav-list {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+}
+.lc-lifecycle-tabs .ant-tabs-tab {
+  flex: 1 1 0;
+  justify-content: center;
+  margin: 0 !important;
+  padding: 6px 4px !important;
+}
+.lc-lifecycle-tabs .ant-tabs-tab-btn { font-size: 12px; }
+@media (max-width: 767px) {
+  .lc-lifecycle-tabs .ant-tabs-nav { margin-bottom: 8px; }
+  .lc-lifecycle-tabs .ant-tabs-tab { padding: 5px 2px !important; }
+  .lc-lifecycle-tabs .ant-tabs-tab-btn { font-size: 10.5px; }
+}
 .dash-pivot .ant-table-thead > tr > th {
   background: var(--radar-primary-soft) !important;
   color: var(--radar-ink); font-weight: 600;
@@ -1028,6 +1057,27 @@ body {
 }
 .dash-pivot .ant-table-cell-fix-right-first {
   border-inline-start: 1px solid color-mix(in srgb, var(--radar-border) 78%, var(--radar-ink)) !important;
+}
+/* 横向滚动时首列与合计列为固定列：提供实色背景并提高层级，避免中间单元格文字穿透重叠。 */
+.dash-pivot .ant-table-tbody > tr > .ant-table-cell-fix-left,
+.dash-pivot .ant-table-tbody > tr > .ant-table-cell-fix-right {
+  background: var(--radar-surface) !important;
+  background-clip: padding-box;
+  z-index: 4;
+}
+.dash-pivot .ant-table-thead > tr > .ant-table-cell-fix-left,
+.dash-pivot .ant-table-thead > tr > .ant-table-cell-fix-right {
+  /* primary-soft 含透明度，滚动内容会透出；这里改为与表面色混合后的实色。 */
+  background: color-mix(in srgb, var(--radar-primary) 12%, var(--radar-surface)) !important;
+  background-clip: padding-box;
+  z-index: 5;
+}
+.dash-pivot .ant-table-tbody > .pivot-total-row > .ant-table-cell-fix-left,
+.dash-pivot .ant-table-tbody > .pivot-total-row > .ant-table-cell-fix-right {
+  /* 选择器需高于普通固定单元格，避免合计底纹被表面色覆盖。 */
+  background: color-mix(in srgb, var(--radar-primary) 12%, var(--radar-surface)) !important;
+  background-clip: padding-box;
+  z-index: 4;
 }
 .dash-pivot .ant-table-cell,
 .dash-pivot .ant-table-thead > tr > th,
