@@ -555,7 +555,7 @@ export async function runMock() {
           reviewStatus = '评审撤销'; // 手动状态
           results = signRoles.map(() => '未签署');
         }
-        await makeReleaseTask(req.code, 'requirement', req.rp.id, '待投产', reviewStatus, results, signedDate);
+        await makeReleaseTask(req.code, 'requirement', req.rp.id, '待评审', reviewStatus, results, signedDate);
       }
       ai++;
     }

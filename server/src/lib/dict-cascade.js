@@ -18,14 +18,11 @@ import { parseJsonArray } from './json.js';
  * 字典分类 → 引用该字典 attr_value 的业务表字段清单。
  */
 const DICT_REFERENCES = {
-  // 流程状态（需求/开发/测试三段共用，attr_value 全局唯一，按文本等值替换安全）
+  // 流程状态（需求/开发/测试/投产阶段共用，attr_value 全局唯一，按文本等值替换安全）
   process_status: [
     { table: 'requirement', column: 'status' },
     { table: 'dev_task', column: 'status' },
     { table: 'test_task', column: 'status' },
-  ],
-  // 投产状态
-  release_status: [
     { table: 'release_task', column: 'status' },
     { table: 'release_system', column: 'status' },
   ],

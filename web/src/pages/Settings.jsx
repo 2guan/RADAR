@@ -408,7 +408,6 @@ export default function Settings() {
   const paramConfig = (
     <Tabs items={[
       { key: 'status', label: '流程状态', children: <ProcessStatusManager /> },
-      { key: 'release', label: '投产状态', children: <DictManager category="release_status" title="投产状态" /> },
       { key: 'review', label: '评审状态', children: <DictManager category="review_status" title="评审状态" /> },
       { key: 'reqtype', label: '需求类型', children: <DictManager category="req_type" title="需求类型" /> },
       { key: 'tickettype', label: '工单类型', children: <DictManager category="ticket_type" title="工单类型" /> },

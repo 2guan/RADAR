@@ -242,13 +242,7 @@ export default async function ticketRoutes(fastify) {
       decoded.has_tasks = linkedCodes.has(decoded.ticket_code);
 
       const rtStatus = rtMap[decoded.ticket_code] || null;
-      let releaseStageType = null;
-      if (rtStatus === '已投产') {
-        releaseStageType = processStatusMap['已上线'] || 'final';
-      } else if (rtStatus === '待投产') {
-        releaseStageType = processStatusMap['待评审'] || 'in-progress';
-      }
-      decoded.release_stage_type = releaseStageType;
+      decoded.release_stage_type = rtStatus ? (processStatusMap[rtStatus] || null) : null;
 
       return decoded;
     });

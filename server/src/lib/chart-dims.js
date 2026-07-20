@@ -156,7 +156,7 @@ function buildChain(req, devMap = {}, testMap = {}, rtMap = {}, unifiedLabels = 
   nodes.push({ key: 'UAT', label: '用户测试', ...nodeState(uat) });
   if (nft.length) nodes.push({ key: 'NFT', label: '非功能测试', ...nodeState(nft) });
   if (sec.length) nodes.push({ key: 'SEC', label: '安全测试', ...nodeState(sec) });
-  nodes.push({ key: '投产', label: unifiedLabels ? '投产审批' : '投产', ...nodeState(rt ? [{ status: rt.status === '已投产' ? '已上线' : '待评审' }] : []) });
+  nodes.push({ key: '投产', label: unifiedLabels ? '投产审批' : '投产', ...nodeState(rt ? [{ status: rt.status }] : []) });
 
   return { nodes };
 }

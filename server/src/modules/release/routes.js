@@ -21,7 +21,7 @@ import { exportXlsx } from '../../lib/excel.js';
 import { signatureDataUrl } from '../../lib/signature.js';
 import { buildReleaseWordDoc } from '../../lib/release-word.js';
 import { getWorkItem } from '../../lib/work-items.js';
-import { defaultDictAttr } from '../../lib/status.js';
+import { defaultDictAttr, defaultProcessStatus } from '../../lib/status.js';
 import { formatAttachments } from '../../lib/resolver.js';
 import { parseJsonArray } from '../../lib/json.js';
 import { statusTypeForReleaseStatus, validateRequiredFields } from '../../lib/required-fields.js';
@@ -263,6 +263,19 @@ async function recomputeReviewStatus(releaseTaskId) {
   return next;
 }
 
+/**
+ * 评审通过后自动推进投产状态。仅推进“待评审”，不覆盖人工已调整过的后续状态。
+ */
+async function advanceReleaseStatusAfterApproval(releaseTaskId) {
+  const rt = await get('SELECT id, req_code, status, review_status FROM release_task WHERE id = ?', releaseTaskId);
+  if (!rt || rt.review_status !== '评审同意' || rt.status !== '待评审') return null;
+  await run(
+    `UPDATE release_task SET status=?, updated_at=datetime('now','localtime') WHERE id=?`,
+    '待投产', rt.id,
+  );
+  return { ...rt, nextStatus: '待投产' };
+}
+
 /** 判定实体类型：需求 / 工单 / 问题 / 未知 */
 async function classifyEntity(code) {
   const item = await getWorkItem(code);
@@ -278,7 +291,7 @@ async function ensureReleaseTask(code, entityType, releasePointId) {
   let rt = await releaseTaskByCodePoint(code, releasePointId);
   if (rt) return rt;
   return await tx(async () => {
-    const releaseStatus = await defaultDictAttr('release_status', '待投产');
+    const releaseStatus = await defaultProcessStatus('投产', 'initial', '待评审');
     const reviewStatus = await defaultDictAttr('review_status', '待评审');
     const res = await run(
       `INSERT INTO release_task (req_code, release_point_id, entity_type, status, review_status) VALUES (?,?,?,?,?)`,
@@ -676,7 +689,7 @@ async function moveReleaseTaskPoint(code, fromPointId, toPointId, operatorName) 
  * @returns {Array} 完整行集合（未分页）
  */
 async function computeEntities(windowIdList) {
-  const defaultReleaseStatus = await defaultDictAttr('release_status', '待投产');
+  const defaultReleaseStatus = await defaultProcessStatus('投产', 'initial', '待评审');
   const defaultReviewStatus = await defaultDictAttr('review_status', '待评审');
   let applies;
   if (windowIdList.length) {
@@ -903,6 +916,15 @@ export default async function releaseRoutes(fastify) {
       const valid = await get('SELECT 1 FROM dict_item WHERE category = ? AND attr_value = ?', 'review_status', review_status);
       if (!valid) throw badRequest('评审状态取值非法');
     }
+    if (status !== undefined) {
+      const valid = await get(
+        `SELECT 1 FROM dict_item
+          WHERE category = ? AND attr_value = ?
+            AND ${dialect.jsonExtract('extra', '$.stage')} = ?`,
+        'process_status', status, '投产',
+      );
+      if (!valid) throw badRequest('投产状态取值非法');
+    }
 
     if (release_point_id !== undefined) {
       const nextPointId = numberOrNull(release_point_id);
@@ -915,6 +937,10 @@ export default async function releaseRoutes(fastify) {
     if (owner !== undefined) updateData.owner = owner;
     if (status !== undefined) updateData.status = status;
     if (review_status !== undefined) updateData.review_status = review_status;
+    // 评审同意是投产状态从“待评审”进入“待投产”的唯一自动推进条件。
+    // 即使调用方同时回填了待评审，也始终以该联动规则为准。
+    if ((updateData.review_status ?? rt.review_status) === '评审同意'
+      && (updateData.status ?? rt.status) === '待评审') updateData.status = '待投产';
 
     const keys = Object.keys(updateData);
     if (keys.length > 0) {
@@ -969,6 +995,11 @@ export default async function releaseRoutes(fastify) {
       const rt = await get('SELECT req_code FROM release_task WHERE id = ?', so.release_task_id);
       await auditUpdate('release', so.release_task_id, rt?.req_code, request.currentUser?.name,
         { v: beforeReview }, { v: afterReview }, { v: '评审状态' });
+    }
+    const advanced = await advanceReleaseStatusAfterApproval(so.release_task_id);
+    if (advanced) {
+      await auditUpdate('release', advanced.id, advanced.req_code, request.currentUser?.name,
+        { status: advanced.status }, { status: advanced.nextStatus }, { status: '投产状态' });
     }
     return ok(null, '签署完成');
   });

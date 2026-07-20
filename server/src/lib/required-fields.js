@@ -357,8 +357,8 @@ export function statusTypeForReleaseApply(reviewStatus) {
 }
 
 export function statusTypeForReleaseStatus(status) {
-  if (!status || String(status).includes('待') || String(status).includes('未')) return 'initial';
-  if (String(status).includes('已投产') || String(status).includes('取消')) return 'final';
+  if (!status || status === '待评审') return 'initial';
+  if (status === '已投产' || status === '已取消') return 'final';
   return 'inProgress';
 }
 

@@ -37,8 +37,8 @@ function attachmentModeText(mode) {
 
 function releaseRequiredStatusType(status) {
   const val = String(status || '');
-  if (!val || val.includes('待') || val.includes('未')) return 'initial';
-  if (val.includes('已投产') || val.includes('取消')) return 'final';
+  if (!val || val === '待评审') return 'initial';
+  if (val === '已投产' || val === '已取消') return 'final';
   return 'inProgress';
 }
 
@@ -516,7 +516,7 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
           {detail?.releaseTask && (
             <span className={`status-select status-select-${getStatusType(statusValue)}`}>
               <DictSelect
-                category="release_status" size="small" allowClear={false} showSearch={false}
+                category="process_status" stage="投产" size="small" allowClear={false} showSearch={false}
                 popupClassName="status-select-dropdown" popupMatchSelectWidth={false}
                 value={statusValue}
                 onChange={async (v) => {

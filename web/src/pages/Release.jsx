@@ -30,8 +30,9 @@ export default function Release() {
   const [orgs, setOrgs] = useState([]);
 
   useEffect(() => {
-    apiGet('/dict/by-category/release_status').then((res) => {
-      setStatuses([{ attr_value: '未发起', display_value: '未发起' }, ...(res || [])]);
+    apiGet('/dict/by-category/process_status').then((res) => {
+      const releaseStatuses = (res || []).filter((item) => item.extra?.stage === '投产');
+      setStatuses([{ attr_value: '未发起', display_value: '未发起' }, ...releaseStatuses]);
     }).catch(() => {});
     apiGet('/dict/by-category/review_status').then(setReviews).catch(() => {});
     apiGet('/dict/by-category/org').then(setOrgs).catch(() => {});

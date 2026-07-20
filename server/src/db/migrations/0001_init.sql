@@ -17,11 +17,11 @@ CREATE TABLE app_config (
 );
 
 -- ---------------------------------------------------------------------------
--- 字典表（通用）：流程状态、版本类型、投产状态、需求类型、机构、板块、组织机构等
+-- 字典表（通用）：流程状态（含投产阶段）、版本类型、需求类型、机构、板块、组织机构等
 -- ---------------------------------------------------------------------------
 CREATE TABLE dict_item (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
-  category      TEXT NOT NULL,            -- 字典分类：process_status/version_type/release_status/req_type/org/sector/department...
+  category      TEXT NOT NULL,            -- 字典分类：process_status/version_type/req_type/org/sector/department...
   attr_value    TEXT NOT NULL,            -- 状态属性值（中文）
   display_value TEXT NOT NULL,            -- 状态显示值（中文）
   sort          INTEGER NOT NULL DEFAULT 0,

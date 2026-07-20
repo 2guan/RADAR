@@ -76,18 +76,18 @@ const PROCESS_STATUS = [
   ['测试', '测试实施', '测试实施', 14, 'in-progress'],
   ['测试', '测试报告', '测试报告', 15, 'in-progress'],
   ['测试', '测试完成', '测试完成', 16, 'final'],
-  ['投产', '待评审', '待评审', 17, 'in-progress'],
-  ['投产', '评审通过', '评审通过', 18, 'in-progress'],
-  ['投产', '已上线', '已上线', 19, 'final'],
-  ['评审', '未签署', '未签署', 20, 'in-progress'],
-  ['评审', '已签署', '已签署', 21, 'final'],
-  ['评审', '已驳回', '已驳回', 22, 'in-progress'],
+  // 投产审批的阶段状态与投产状态共用同一套字典，避免两处配置不一致。
+  ['投产', '待评审', '待评审', 17, 'initial'],
+  ['投产', '待投产', '待投产', 18, 'in-progress'],
+  ['投产', '已投产', '已投产', 19, 'final'],
+  ['投产', '已取消', '已取消', 20, 'final'],
+  ['评审', '未签署', '未签署', 21, 'in-progress'],
+  ['评审', '已签署', '已签署', 22, 'final'],
+  ['评审', '已驳回', '已驳回', 23, 'in-progress'],
 ];
 
 // 投产版本类型
 const VERSION_TYPE = [['常规版本', 1], ['应急版本', 2], ['重大版本', 3]];
-// 投产状态
-const RELEASE_STATUS = [['待投产', 1], ['已投产', 2], ['已取消', 3]];
 // 需求类型（默认值，可在系统设置中增删）
 const REQ_TYPE = [
   ['新增监管需求', 1],
@@ -379,7 +379,6 @@ export async function runSeed() {
       await seedDict('process_status', attr, disp, sort, { stage, stateType, isTerminal: stateType === 'final' });
     }
     for (const [attr, sort] of VERSION_TYPE) await seedDict('version_type', attr, attr, sort);
-    for (const [attr, sort] of RELEASE_STATUS) await seedDict('release_status', attr, attr, sort);
     for (const [attr, sort] of REQ_TYPE) await seedDict('req_type', attr, attr, sort);
     for (const [attr, sort] of TICKET_TYPE) await seedDict('ticket_type', attr, attr, sort);
     for (const [attr, sort, rank] of REVIEW_STATUS) await seedDict('review_status', attr, attr, sort, { rank });
@@ -478,7 +477,7 @@ export async function runSeed() {
       if (!extra.stateType) {
         if (['需求登记', '开发承接', '测试承接'].includes(r.attr_value)) {
           extra.stateType = 'initial';
-        } else if (['需求完成', '分析完成', '开发完成', '测试完成', '已上线', '已签署'].includes(r.attr_value)) {
+        } else if (['需求完成', '分析完成', '开发完成', '测试完成', '已投产', '已取消', '已签署'].includes(r.attr_value)) {
           extra.stateType = 'final';
         } else {
           extra.stateType = 'in-progress';

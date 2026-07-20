@@ -119,7 +119,7 @@ function buildChain(req, devMap, testMap, rtMap, firstLabel = '需求') {
   if (nft.length) nodes.push({ key: 'NFT', label: '非功能测试', ...nodeState(nft) });
   if (sec.length) nodes.push({ key: 'SEC', label: '安全测试', ...nodeState(sec) });
   nodes.push({ key: 'UAT', label: '用户测试', ...nodeState(uat) });
-  nodes.push({ key: '投产', label: '投产', ...nodeState(rt ? [{ status: rt.status === '已投产' ? '已上线' : '待评审' }] : []) });
+  nodes.push({ key: '投产', label: '投产', ...nodeState(rt ? [{ status: rt.status }] : []) });
 
   // 当前阶段：最后一个 doing；若无 doing 取最后一个 done
   let current = nodes.find((n) => n.state === 'doing');
@@ -198,7 +198,7 @@ async function appendIssueCards({ groups, body, targetReleasePointIds, sysMap, r
     const rt = rtStatus ? { status: rtStatus } : null;
     const nodes = [
       issueStatusNode(it.status),
-      { key: '投产', label: '投产', ...nodeState(rt ? [{ status: rt.status === '已投产' ? '已上线' : '待评审' }] : []) },
+      { key: '投产', label: '投产', ...nodeState(rt ? [{ status: rt.status }] : []) },
     ];
     let current = nodes.find((n) => n.state === 'doing') || nodes.filter((n) => n.state === 'done').pop() || nodes[0];
 
