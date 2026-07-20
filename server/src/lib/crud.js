@@ -27,13 +27,14 @@ import { ok, notFound, badRequest } from './http.js';
  * @param {Function} [cfg.beforeWrite] (data, {isCreate, request}) => data 写入前钩子
  * @param {Function} [cfg.afterWrite] ({id, isCreate, request, data, old}) => void 写入后钩子（同事务外；old 仅修改时有值）
  * @param {Function} [cfg.beforeDelete] (row, request) => void 删除前钩子（可抛错阻止）
+ * @param {Function} [cfg.afterDelete] ({row, request}) => void 删除后钩子
  */
 export function registerCrud(fastify, cfg) {
   const {
     prefix, table, module, entityType,
     columns, searchColumns = [], writable, fieldLabels,
     codeField = 'id', beforeWrite, afterWrite, beforeDelete,
-    skipList = false,
+    skipList = false, afterDelete,
   } = cfg;
 
   // 列表（POST 以承载复杂筛选体）
@@ -94,6 +95,7 @@ export function registerCrud(fastify, cfg) {
     if (beforeDelete) await beforeDelete(row, request);
     await run(`DELETE FROM ${table} WHERE id = ?`, id);
     await auditDelete(entityType, id, String(row[codeField] ?? id), request.currentUser?.name);
+    if (afterDelete) await afterDelete({ row, request });
     return ok(null, '删除成功');
   });
 }

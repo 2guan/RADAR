@@ -131,7 +131,9 @@ test('检查内容设置：支持影响性分析与测试覆盖性分析', () =>
   assert.ok(dev.fields.some((field) => field.key === 'impact_analysis'));
   assert.ok(dev.attachmentFields.includes('编码检查表'));
   assert.ok(dev.attachmentFields.includes('技术方案确认单'));
+  assert.ok(!dev.attachmentFields.includes('影响性分析文档'));
   assert.ok(testModule.fields.some((field) => field.key === 'coverage_analysis'));
+  assert.ok(!testModule.attachmentFields.includes('测试覆盖设计文档'));
   assert.ok(sitModule.fields.some((field) => field.key === 'coverage_analysis'));
   assert.ok(!uatModule.fields.some((field) => field.key === 'coverage_analysis'));
   assert.ok(!nftModule.fields.some((field) => field.key === 'coverage_analysis'));

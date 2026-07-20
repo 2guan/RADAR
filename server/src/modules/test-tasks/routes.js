@@ -51,8 +51,6 @@ const LABELS = {
   impl_org: '测试实施方', impl_agency: '实施机构', plan_start: '计划开始时间', plan_end: '计划结束时间',
   actual_start: '实际开始时间', actual_end: '实际结束时间', deviation_rate: '排期偏差率',
 };
-const ATTACH_FIELDS = ['测试方案', '测试报告'];
-
 export default async function testTaskRoutes(fastify) {
   // 列表（按 test_type / req_code / 投产窗口过滤）
   fastify.post('/test-tasks/list', { preHandler: fastify.requirePerm('test', 'view') }, async (request) => {

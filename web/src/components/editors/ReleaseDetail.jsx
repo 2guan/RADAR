@@ -29,8 +29,6 @@ import { apiGet, apiPost, apiPut, apiDelete, rawClient } from '../../api/client.
 import { useAppStore } from '../../stores/app.js';
 import { useRequiredFields } from '../../hooks/useRequiredFields.js';
 
-const RELEASE_ATTACH_FIELDS = ['投产变更方案', '投产变更控制表'];
-
 function attachmentModeText(mode) {
   if (mode === 'path') return '路径';
   if (mode === 'file') return '上传文档';
@@ -694,7 +692,7 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
                 </div>
               </div>
 
-              {RELEASE_ATTACH_FIELDS.filter((f) => visible(`attachment:${f}`)).map((f) => {
+              {required.attachmentFields.filter((f) => visible(`attachment:${f}`)).map((f) => {
                 const mode = required.attachmentMode(f);
                 return (
                   <div className="form-section-card" key={f}>

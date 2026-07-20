@@ -19,7 +19,7 @@ import { getRouteModule, renderMainRouteElements } from './router/routes.jsx';
  * 受保护区域容器：首次加载拉取用户/平台/投产窗口；未登录跳转登录页。
  */
 function Protected({ children }) {
-  const { user, loadMe, loadPlatform, loadReleasePoint, can } = useAppStore();
+  const { user, loadMe, loadPlatform, loadReleasePoint, loadStatusCatalog, can } = useAppStore();
   const [loading, setLoading] = useState(!user);
   const location = useLocation();
   const token = localStorage.getItem(TOKEN_KEY);
@@ -30,6 +30,7 @@ function Protected({ children }) {
     (async () => {
       try {
         await Promise.all([loadPlatform(), loadMe()]);
+        await loadStatusCatalog();
         await loadReleasePoint();
       } finally {
         setLoading(false);

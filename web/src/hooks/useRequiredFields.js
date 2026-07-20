@@ -38,6 +38,12 @@ function moduleConfigKey(moduleKey, scopeKey) {
   return moduleKey;
 }
 
+function moduleMeta(payload, moduleKey, scopeKey) {
+  const key = moduleConfigKey(moduleKey, scopeKey);
+  return payload?.modules?.find((mod) => mod.key === key)
+    || payload?.modules?.find((mod) => mod.key === moduleKey);
+}
+
 function cellVisible(cell, stateKey) {
   if (typeof cell?.visible === 'boolean') return cell.visible;
   return cell?.visible?.[stateKey] !== false;
@@ -63,6 +69,8 @@ export function useRequiredFields(moduleKey, statusType, readonly, scopeKey) {
   return useMemo(() => {
     const configKey = moduleConfigKey(moduleKey, scopeKey);
     const moduleConfig = payload?.config?.[configKey] || payload?.config?.[moduleKey] || {};
+    const meta = moduleMeta(payload, moduleKey, scopeKey);
+    const attachmentFields = meta?.attachmentFields || [];
     const isVisible = (fieldKey) => cellVisible(moduleConfig[fieldKey], stateKey);
     const isRequired = (fieldKey) => !readonly && cellRequired(moduleConfig[fieldKey], stateKey);
     const attachmentMode = (fieldKey) => moduleConfig[`attachment:${fieldKey}`]?.mode?.[stateKey] || 'both';
@@ -76,6 +84,6 @@ export function useRequiredFields(moduleKey, statusType, readonly, scopeKey) {
       if (options.min !== undefined) requiredRule.min = options.min;
       return [requiredRule, ...(options.extraRules || [])];
     };
-    return { isVisible, isRequired, attachmentMode, rules, stateKey };
+    return { isVisible, isRequired, attachmentMode, rules, stateKey, attachmentFields };
   }, [moduleKey, payload, readonly, scopeKey, stateKey]);
 }

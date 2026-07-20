@@ -8,7 +8,7 @@
 
 import { get } from '../db/index.js';
 import { badRequest } from './http.js';
-import { parseJsonObject } from './json.js';
+import { statusTypeForProcessStatus } from './status.js';
 
 export const REQUIRED_FIELDS_CONFIG_KEY = 'required.fields';
 
@@ -349,22 +349,7 @@ export async function readRequiredFieldConfig() {
   }
 }
 
-export async function statusTypeForProcessStatus(statusAttr) {
-  if (!statusAttr) return 'initial';
-  const row = await get('SELECT extra FROM dict_item WHERE category = ? AND attr_value = ?', 'process_status', statusAttr);
-  if (row?.extra) {
-    try {
-      const extra = parseJsonObject(row.extra);
-      if (extra.stateType === 'initial') return 'initial';
-      if (extra.stateType === 'final' || extra.isTerminal) return 'final';
-      return 'inProgress';
-    } catch {}
-  }
-  const val = String(statusAttr);
-  if (val.includes('登记') || val.includes('承接') || val.includes('初始') || val.includes('新建')) return 'initial';
-  if (val.includes('完成') || val.includes('上线') || val.includes('通过') || val.includes('同意')) return 'final';
-  return 'inProgress';
-}
+export { statusTypeForProcessStatus };
 
 export function statusTypeForReleaseApply(reviewStatus) {
   if (!reviewStatus || reviewStatus === '待评审') return 'initial';
@@ -479,6 +464,8 @@ export async function assertAttachmentInputAllowed(entityType, entityId, fieldKe
   const selectFields = entityType === 'test' ? 'status, test_type' : 'status';
   const row = await get(`SELECT ${selectFields} FROM ${meta.table} WHERE id = ?`, entityId);
   if (!row) return;
+  const mod = MODULE_MAP.get(meta.moduleKey);
+  if (!mod?.attachmentFields?.includes(fieldKey)) throw badRequest(`不支持的附件字段：${fieldKey}`);
   const stateType = meta.moduleKey === 'release'
     ? statusTypeForReleaseStatus(row.status)
     : await statusTypeForProcessStatus(row.status);

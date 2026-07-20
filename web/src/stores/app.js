@@ -9,6 +9,7 @@
 import { create } from 'zustand';
 import { apiGet, TOKEN_KEY } from '../api/client.js';
 import { DEFAULT_PRESET } from '../theme/presets.js';
+import { setStatusCatalog } from '../utils/status.js';
 
 const THEME_KEY = 'radar_theme';
 const RP_KEY = 'radar_release_point';
@@ -80,6 +81,7 @@ export const useAppStore = create((set, get) => ({
   releasePointIds: parseRP(),
   // 内容区模式：single / tabs（默认单页，用户本地选择优先）
   contentMode: localStorage.getItem(CONTENT_MODE_KEY) === 'tabs' ? 'tabs' : 'single',
+  statusCatalogVersion: 0,
 
   /** 切换明暗主题 */
   toggleTheme: () => {
@@ -147,6 +149,17 @@ export const useAppStore = create((set, get) => ({
     const ids = cur?.id ? [cur.id] : [];
     get().setReleasePointIds(ids);
     return ids;
+  },
+
+  /** 加载流程/问题状态语义目录，供状态徽章与阶段判断使用 */
+  loadStatusCatalog: async () => {
+    const [processStatus, issueStatus] = await Promise.all([
+      apiGet('/dict/by-category/process_status'),
+      apiGet('/dict/by-category/issue_status'),
+    ]);
+    setStatusCatalog('process_status', processStatus || []);
+    setStatusCatalog('issue_status', issueStatus || []);
+    set({ statusCatalogVersion: Date.now() });
   },
 
   /** 退出登录 */

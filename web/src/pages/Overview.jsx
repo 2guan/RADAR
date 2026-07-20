@@ -29,10 +29,8 @@ import Can from '../components/Can.jsx';
 import { makeReleasePointOptions, ReleasePointText } from '../components/ReleasePointText.jsx';
 import { formatBeijingDateTime } from '../utils/time.js';
 import { logger } from '../utils/logger.js';
+import { useRequiredFields } from '../hooks/useRequiredFields.js';
 
-const TEST_ATTACH = ['测试方案', '测试报告'];
-const SIT_ATTACH = ['测试方案', '测试覆盖设计文档', '测试报告'];
-const DEV_ATTACH = ['概要设计', '详细设计', '代码走查', '单元测试报告', '编码检查表', '技术方案确认单'];
 const AV_COLORS = ['#2E6BFF', '#22C55E', '#F59E0B', '#8B5CF6', '#06B6D4', '#EC4899', '#F1683C'];
 
 /** 由姓名稳定地取一个头像颜色 */
@@ -255,6 +253,8 @@ function DetailCard({ status, code, title, onEdit, lg, shrinkCodeForStatus, chil
 /** 需求/工单详情卡片（完整字段） */
 function ReqDetailCard({ req, entityType = 'requirement', onEdit }) {
   const isTicket = entityType === 'ticket';
+  const required = useRequiredFields('requirement', getStatusType(req.status), true);
+  const attachFields = required.attachmentFields.filter((f) => required.isVisible(`attachment:${f}`));
   return (
     <DetailCard status={req.status} code={req.req_code} title={req.title} onEdit={onEdit} lg>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6, fontSize: 11 }}>
@@ -312,14 +312,16 @@ function ReqDetailCard({ req, entityType = 'requirement', onEdit }) {
         </div>
       </Field>
 
-      {!isTicket && <AttachList attachments={req.attachments} fields={['需求说明书']} />}
+      {!isTicket && <AttachList attachments={req.attachments} fields={attachFields} />}
     </DetailCard>
   );
 }
 
 /** 开发 / 测试任务卡片（支持折叠/展开） */
-function TaskDetailCard({ t, attachFields, onEdit }) {
+function TaskDetailCard({ t, moduleKey, scopeKey, onEdit }) {
   const [expanded, setExpanded] = useState(false);
+  const required = useRequiredFields(moduleKey, getStatusType(t.status), true, scopeKey || t.test_type);
+  const attachFields = required.attachmentFields.filter((f) => required.isVisible(`attachment:${f}`));
 
   return (
     <DetailCard status={t.status} code={t.task_code} onEdit={onEdit} shrinkCodeForStatus>
@@ -1109,7 +1111,7 @@ function RequirementHistoryModal({ open, onClose, reqCode }) {
 }
 
 /** 一个阶段页签内的任务网格 */
-function TaskGrid({ items, attachFields, onEdit, emptyText, onIntake, hasIntakePermission }) {
+function TaskGrid({ items, moduleKey, scopeKey, onEdit, emptyText, onIntake, hasIntakePermission }) {
   if (!items.length) {
     if (hasIntakePermission && onIntake) {
       return (
@@ -1120,7 +1122,7 @@ function TaskGrid({ items, attachFields, onEdit, emptyText, onIntake, hasIntakeP
     }
     return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无任务" />;
   }
-  return <div className="lc-tab-grid">{items.map((t) => <TaskDetailCard key={t.id} t={t} attachFields={attachFields} onEdit={() => onEdit(t)} />)}</div>;
+  return <div className="lc-tab-grid">{items.map((t) => <TaskDetailCard key={t.id} t={t} moduleKey={moduleKey} scopeKey={scopeKey} onEdit={() => onEdit(t)} />)}</div>;
 }
 
 export default function Overview() {
@@ -1405,11 +1407,11 @@ export default function Overview() {
             <Tabs
               items={[
                 { key: 'req', label: detail.entityType === 'ticket' ? '工单' : '需求', children: <ReqDetailCard req={detail.requirement} entityType={detail.entityType} onEdit={() => setEditor({ type: detail.entityType === 'ticket' ? 'ticket' : 'requirement', id: detail.requirement.id })} /> },
-                { key: 'dev', label: '开发', children: <TaskGrid items={detail.dev} attachFields={DEV_ATTACH} onEdit={(t) => setEditor({ type: 'dev', id: t.id })} emptyText="点击承接开发" onIntake={() => setDevIntakeReq(detail.requirement)} hasIntakePermission={can('dev', 'dev.intake')} /> },
-                { key: 'sit', label: '应用组装测试', children: <TaskGrid items={detail.sit} attachFields={SIT_ATTACH} onEdit={(t) => setEditor({ type: 'test', id: t.id })} emptyText="点击承接测试" onIntake={() => setTestIntakeReq({ req: detail.requirement, testType: 'SIT' })} hasIntakePermission={can('test', 'test.intake')} /> },
-                ...(detail.nft.length ? [{ key: 'nft', label: '非功能测试', children: <TaskGrid items={detail.nft} attachFields={TEST_ATTACH} onEdit={(t) => setEditor({ type: 'test', id: t.id })} /> }] : []),
-                ...(detail.sec.length ? [{ key: 'sec', label: '安全测试', children: <TaskGrid items={detail.sec} attachFields={TEST_ATTACH} onEdit={(t) => setEditor({ type: 'test', id: t.id })} /> }] : []),
-                { key: 'uat', label: '用户测试', children: <TaskGrid items={detail.uat} attachFields={TEST_ATTACH} onEdit={(t) => setEditor({ type: 'test', id: t.id })} emptyText="点击承接测试" onIntake={() => setTestIntakeReq({ req: detail.requirement, testType: 'UAT' })} hasIntakePermission={can('test', 'test.intake')} /> },
+                { key: 'dev', label: '开发', children: <TaskGrid items={detail.dev} moduleKey="dev" onEdit={(t) => setEditor({ type: 'dev', id: t.id })} emptyText="点击承接开发" onIntake={() => setDevIntakeReq(detail.requirement)} hasIntakePermission={can('dev', 'dev.intake')} /> },
+                { key: 'sit', label: '应用组装测试', children: <TaskGrid items={detail.sit} moduleKey="test" scopeKey="SIT" onEdit={(t) => setEditor({ type: 'test', id: t.id })} emptyText="点击承接测试" onIntake={() => setTestIntakeReq({ req: detail.requirement, testType: 'SIT' })} hasIntakePermission={can('test', 'test.intake')} /> },
+                ...(detail.nft.length ? [{ key: 'nft', label: '非功能测试', children: <TaskGrid items={detail.nft} moduleKey="test" scopeKey="NFT" onEdit={(t) => setEditor({ type: 'test', id: t.id })} /> }] : []),
+                ...(detail.sec.length ? [{ key: 'sec', label: '安全测试', children: <TaskGrid items={detail.sec} moduleKey="test" scopeKey="SEC" onEdit={(t) => setEditor({ type: 'test', id: t.id })} /> }] : []),
+                { key: 'uat', label: '用户测试', children: <TaskGrid items={detail.uat} moduleKey="test" scopeKey="UAT" onEdit={(t) => setEditor({ type: 'test', id: t.id })} emptyText="点击承接测试" onIntake={() => setTestIntakeReq({ req: detail.requirement, testType: 'UAT' })} hasIntakePermission={can('test', 'test.intake')} /> },
                 { key: 'rel', label: '投产', children: <ReleaseDetailCard release={detail.release} onEdit={openReleaseCard} /> },
               ]}
             />
@@ -1429,7 +1431,7 @@ export default function Overview() {
                   <span>开发</span>
                   <span className="lc-column-header-count">{detail.dev.length}</span>
                 </div>
-                <TaskGrid items={detail.dev} attachFields={DEV_ATTACH} onEdit={(t) => setEditor({ type: 'dev', id: t.id })} emptyText="点击承接开发" onIntake={() => setDevIntakeReq(detail.requirement)} hasIntakePermission={can('dev', 'dev.intake')} />
+                <TaskGrid items={detail.dev} moduleKey="dev" onEdit={(t) => setEditor({ type: 'dev', id: t.id })} emptyText="点击承接开发" onIntake={() => setDevIntakeReq(detail.requirement)} hasIntakePermission={can('dev', 'dev.intake')} />
               </div>
 
               {/* 第三列：应用组装测试、非功能测试、安全测试 */}
@@ -1437,14 +1439,14 @@ export default function Overview() {
                 <div className="lc-column-header">
                   <span>应用组装测试</span>
                 </div>
-                <TaskGrid items={detail.sit} attachFields={SIT_ATTACH} onEdit={(t) => setEditor({ type: 'test', id: t.id })} emptyText="点击承接测试" onIntake={() => setTestIntakeReq({ req: detail.requirement, testType: 'SIT' })} hasIntakePermission={can('test', 'test.intake')} />
+                <TaskGrid items={detail.sit} moduleKey="test" scopeKey="SIT" onEdit={(t) => setEditor({ type: 'test', id: t.id })} emptyText="点击承接测试" onIntake={() => setTestIntakeReq({ req: detail.requirement, testType: 'SIT' })} hasIntakePermission={can('test', 'test.intake')} />
 
                 {detail.nft.length > 0 && (
                   <>
                     <div className="lc-column-header" style={{ marginTop: 16 }}>
                       <span>非功能测试</span>
                     </div>
-                    <TaskGrid items={detail.nft} attachFields={TEST_ATTACH} onEdit={(t) => setEditor({ type: 'test', id: t.id })} />
+                    <TaskGrid items={detail.nft} moduleKey="test" scopeKey="NFT" onEdit={(t) => setEditor({ type: 'test', id: t.id })} />
                   </>
                 )}
 
@@ -1453,7 +1455,7 @@ export default function Overview() {
                     <div className="lc-column-header" style={{ marginTop: 16 }}>
                       <span>安全测试</span>
                     </div>
-                    <TaskGrid items={detail.sec} attachFields={TEST_ATTACH} onEdit={(t) => setEditor({ type: 'test', id: t.id })} />
+                    <TaskGrid items={detail.sec} moduleKey="test" scopeKey="SEC" onEdit={(t) => setEditor({ type: 'test', id: t.id })} />
                   </>
                 )}
               </div>
@@ -1463,7 +1465,7 @@ export default function Overview() {
                 <div className="lc-column-header">
                   <span>用户测试</span>
                 </div>
-                <TaskGrid items={detail.uat} attachFields={TEST_ATTACH} onEdit={(t) => setEditor({ type: 'test', id: t.id })} emptyText="点击承接测试" onIntake={() => setTestIntakeReq({ req: detail.requirement, testType: 'UAT' })} hasIntakePermission={can('test', 'test.intake')} />
+                <TaskGrid items={detail.uat} moduleKey="test" scopeKey="UAT" onEdit={(t) => setEditor({ type: 'test', id: t.id })} emptyText="点击承接测试" onIntake={() => setTestIntakeReq({ req: detail.requirement, testType: 'UAT' })} hasIntakePermission={can('test', 'test.intake')} />
               </div>
 
               {/* 第五列：投产 */}

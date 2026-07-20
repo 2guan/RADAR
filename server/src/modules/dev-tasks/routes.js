@@ -54,8 +54,6 @@ const LABELS = {
   impl_system: '开发实施系统', impl_org: '开发实施方', plan_start: '计划开始时间', plan_end: '计划结束时间',
   actual_start: '实际开始时间', actual_end: '实际结束时间', deviation_rate: '排期偏差率',
 };
-// 本阶段附件字段
-const ATTACH_FIELDS = ['概要设计', '详细设计', '代码走查', '单元测试报告', '编码检查表', '技术方案确认单', '影响性分析文档'];
 const TEMPLATE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../templates/dev-documents');
 
 async function templatePath(filename) {

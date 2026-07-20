@@ -13,6 +13,7 @@ import { listQuery } from '../../lib/query.js';
 import { exportXlsx, parseXlsx } from '../../lib/excel.js';
 import { ok, badRequest } from '../../lib/http.js';
 import { parseJsonObject } from '../../lib/json.js';
+import { refreshStatusSemantics } from '../../lib/status.js';
 
 // 基础列；流程状态额外含 阶段/终态
 const BASE_COLS = [
@@ -58,9 +59,16 @@ export default async function dictRoutes(fastify) {
     skipList: true,
     // 修改字典属性值时，级联同步所有引用旧值的存量业务数据（流程状态/机构/版本类型等）
     afterWrite: async ({ isCreate, request, data, old }) => {
-      if (isCreate || !old) return;
-      if (data.attr_value === undefined || data.attr_value === old.attr_value) return;
-      await cascadeDictRename(old.category, old.attr_value, data.attr_value, request.currentUser?.name);
+      const category = data.category ?? old?.category;
+      if (old && data.attr_value !== undefined && data.attr_value !== old.attr_value) {
+        await cascadeDictRename(old.category, old.attr_value, data.attr_value, request.currentUser?.name);
+      }
+      if (category === 'process_status' || category === 'issue_status') await refreshStatusSemantics();
+    },
+    afterDelete: async ({ row }) => {
+      if (row.category === 'process_status' || row.category === 'issue_status') {
+        await refreshStatusSemantics();
+      }
     },
   });
 
@@ -178,6 +186,7 @@ export default async function dictRoutes(fastify) {
       }
     };
     if (mode === 'rollback') await tx(apply); else await apply();
+    if (category === 'process_status' || category === 'issue_status') await refreshStatusSemantics();
     return ok(stat, '导入完成');
   });
 }

@@ -18,6 +18,7 @@ import fs from 'node:fs';
 import { config } from './config.js';
 import authPlugin from './plugins/auth.js';
 import { HttpError, ok } from './lib/http.js';
+import { refreshStatusSemantics } from './lib/status.js';
 
 // 业务路由模块
 import authRoutes from './modules/auth/routes.js';
@@ -45,6 +46,8 @@ import dashboardRoutes from './modules/dashboard/routes.js';
  * 创建并返回已装配的 Fastify 实例。
  */
 export async function buildApp() {
+  await refreshStatusSemantics();
+
   const app = Fastify({
     logger: { level: config.logging.level },
     disableRequestLogging: !config.logging.requestLogging,

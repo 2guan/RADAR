@@ -31,12 +31,10 @@ import { useRequiredFields } from '../../hooks/useRequiredFields.js';
 const CFG = {
   dev: {
     api: '/dev-tasks', entity: 'dev', stage: '开发', title: '开发任务',
-    attachFields: ['概要设计', '详细设计', '代码走查', '单元测试报告', '编码检查表', '技术方案确认单'],
     statusLabel: '开发状态', ownerLabel: '开发负责人', orgLabel: '开发实施方',
   },
   test: {
     api: '/test-tasks', entity: 'test', stage: '测试', title: '测试任务',
-    attachFields: ['测试方案', '测试报告'],
     statusLabel: '测试状态', ownerLabel: '测试负责人', orgLabel: '测试实施方',
   },
 };
@@ -65,7 +63,7 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
   const required = useRequiredFields(cfg.entity, getStatusType(statusValue), readonly, kind === 'test' ? current?.test_type : undefined);
   const visible = (fieldKey) => required.isVisible(fieldKey);
   const linkStyle = { color: 'var(--radar-primary)', cursor: 'pointer' };
-  const attachFields = cfg.attachFields;
+  const attachFields = required.attachmentFields;
   const workItemLabel = current?.entity_label || (current?.entity_type === 'ticket' ? '工单' : (current?.entity_type === 'requirement' ? '需求' : '需求/工单'));
   const canOpenWorkItem = !!current?.req_code && ['requirement', 'ticket'].includes(current?.entity_type);
   // 结构化分析弹窗（影响性分析 / 测试覆盖性分析）

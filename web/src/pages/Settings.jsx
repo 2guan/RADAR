@@ -23,6 +23,7 @@ import { MENU } from '../router/menu.js';
 import { PRESETS } from '../theme/presets.js';
 import { apiPost, apiGet } from '../api/client.js';
 import { makeReleasePointOptions, ReleasePointText } from '../components/ReleasePointText.jsx';
+import { useAppStore } from '../stores/app.js';
 
 const PENDING_RELEASE_DATE = '投产点待定';
 const RELEASE_DATE_RE = /^\d{8}$/;
@@ -37,6 +38,7 @@ function parseExtra(e) {
 
 /** 通用字典管理器（属性值/显示值/排序） */
 function DictManager({ category, title }) {
+  const loadStatusCatalog = useAppStore((s) => s.loadStatusCatalog);
   const filterConfigs = [
     { field: 'dict_query', label: title, type: 'input', isPrimary: true, placeholder: `${title}检索` },
   ];
@@ -45,6 +47,7 @@ function DictManager({ category, title }) {
     <CrudManager
       apiBase="/dict" title={title} baseQuery={{ filters: [{ field: 'category', op: 'eq', value: category }] }}
       io={{ enabled: true, params: { category } }}
+      onMutate={category === 'issue_status' ? () => loadStatusCatalog().catch(() => {}) : undefined}
       filterConfigs={filterConfigs}
       columns={[
         { title: '属性值', dataIndex: 'attr_value', width: 200 },
@@ -65,6 +68,7 @@ function DictManager({ category, title }) {
 
 /** 流程状态管理器（含阶段与状态类别打标） */
 function ProcessStatusManager() {
+  const loadStatusCatalog = useAppStore((s) => s.loadStatusCatalog);
   const stageOptions = [
     { value: '需求', label: '需求' },
     { value: '开发', label: '开发' },
@@ -87,6 +91,7 @@ function ProcessStatusManager() {
     <CrudManager
       apiBase="/dict" title="流程状态" baseQuery={{ filters: [{ field: 'category', op: 'eq', value: 'process_status' }] }}
       io={{ enabled: true, params: { category: 'process_status' } }}
+      onMutate={() => loadStatusCatalog().catch(() => {})}
       filterConfigs={filterConfigs}
       columns={[
         { title: '阶段', dataIndex: 'extra', key: 'stage', width: 100, render: (e) => parseExtra(e).stage || '—' },

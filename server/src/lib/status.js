@@ -5,19 +5,58 @@
  * 说明：终态标识来自字典 process_status 的 extra.isTerminal。
  */
 
-import { get, dialect } from '../db/index.js';
+import { all, get, dialect } from '../db/index.js';
+import { parseJsonObject } from './json.js';
 
-function terminalFallback(category, statusAttr) {
+const STATUS_CATEGORIES = ['process_status', 'issue_status'];
+let semanticCache = new Map();
+
+function normalizeStateType(extra = {}) {
+  const raw = String(extra.stateType || '').trim();
+  if (raw === 'initial') return 'initial';
+  if (raw === 'final' || extra.isTerminal === true) return 'final';
+  return 'inProgress';
+}
+
+function fallbackStateType(category, statusAttr) {
   const val = String(statusAttr || '');
-  if (category === 'issue_status') return ['已解决', '待验证'].includes(val);
-  return ['分析完成', '开发完成', '测试完成', '已上线', '已签署'].includes(val)
+  if (!val) return 'initial';
+  if (category === 'issue_status') {
+    return ['已解决', '待验证'].includes(val) ? 'final' : 'inProgress';
+  }
+  if (val.includes('登记') || val.includes('承接') || val.includes('初始') || val.includes('新建')) return 'initial';
+  if (['分析完成', '开发完成', '测试完成', '已上线', '已签署'].includes(val)
     || val.includes('完成')
-    || val.includes('已上线');
+    || val.includes('已上线')) return 'final';
+  return 'inProgress';
+}
+
+export async function refreshStatusSemantics() {
+  const next = new Map();
+  for (const category of STATUS_CATEGORIES) {
+    const rows = await all('SELECT attr_value, extra FROM dict_item WHERE category = ?', category);
+    const map = new Map();
+    for (const row of rows) {
+      const extra = parseJsonObject(row.extra);
+      map.set(row.attr_value, {
+        stateType: normalizeStateType(extra),
+        isTerminal: normalizeStateType(extra) === 'final',
+      });
+    }
+    next.set(category, map);
+  }
+  semanticCache = next;
+}
+
+function statusTypeFromCache(category, statusAttr) {
+  if (!statusAttr) return false;
+  const item = semanticCache.get(category)?.get(statusAttr);
+  return item?.stateType || fallbackStateType(category, statusAttr);
 }
 
 function isTerminalDictAttr(category, statusAttr) {
   if (!statusAttr) return false;
-  return terminalFallback(category, statusAttr);
+  return statusTypeFromCache(category, statusAttr) === 'final';
 }
 
 /**
@@ -34,6 +73,13 @@ export function isTerminalStatus(statusAttr) {
  */
 export function isIssueTerminalStatus(statusAttr) {
   return isTerminalDictAttr('issue_status', statusAttr);
+}
+
+export async function statusTypeForProcessStatus(statusAttr) {
+  if (!statusAttr) return 'initial';
+  const row = await get('SELECT extra FROM dict_item WHERE category = ? AND attr_value = ?', 'process_status', statusAttr);
+  if (row?.extra) return normalizeStateType(parseJsonObject(row.extra));
+  return fallbackStateType('process_status', statusAttr);
 }
 
 /**

@@ -24,6 +24,7 @@ export default function CrudManager({
   transformIn = (x) => x, transformOut = (x) => x, rowKey = 'id', extraToolbar, rowActions,
   io, // { enabled, params } 开启导入/导出/模板；params 透传给三个接口（如 {category}）
   filterConfigs, // 新增：高级筛选配置项
+  onMutate,
 }) {
   const tableRef = useRef();
   const [form] = Form.useForm();
@@ -51,6 +52,7 @@ export default function CrudManager({
     message.success('已保存');
     setOpen(false);
     tableRef.current?.reload();
+    onMutate?.();
   };
 
   const handleCancel = (e) => {
@@ -73,6 +75,7 @@ export default function CrudManager({
     await apiDelete(`${apiBase}/${row[rowKey]}`);
     message.success('已删除');
     tableRef.current?.reload();
+    onMutate?.();
   };
 
   const handleFilterChange = (vals) => {
@@ -168,7 +171,7 @@ export default function CrudManager({
         <ImportModal
           open={importOpen}
           onCancel={() => setImportOpen(false)}
-          onSuccess={() => tableRef.current?.reload()}
+          onSuccess={() => { tableRef.current?.reload(); onMutate?.(); }}
           importUrl={`${apiBase}/import`}
           templateUrl={`${apiBase}/template`}
           templateFilename={`${title}导入模板.xlsx`}
