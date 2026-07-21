@@ -19,6 +19,7 @@ import { config } from './config.js';
 import authPlugin from './plugins/auth.js';
 import { HttpError, ok } from './lib/http.js';
 import { refreshStatusSemantics } from './lib/status.js';
+import { startIssueSyncScheduler, stopIssueSyncScheduler } from './lib/issue-sync-scheduler.js';
 
 // 业务路由模块
 import authRoutes from './modules/auth/routes.js';
@@ -187,6 +188,10 @@ export async function buildApp() {
       return reply.sendFile('index.html');
     });
   }
+
+  // 问题详情定时同步：配置持久化于系统设置，启动后立即读取，关闭应用时回收定时器。
+  startIssueSyncScheduler();
+  app.addHook('onClose', async () => { stopIssueSyncScheduler(); });
 
   return app;
 }

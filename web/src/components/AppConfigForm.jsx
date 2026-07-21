@@ -7,7 +7,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { Form, Input, Button, message, ColorPicker, Switch, InputNumber, Row, Col, Card, Space, Tag, Alert } from 'antd';
+import { Form, Input, Button, message, ColorPicker, Switch, InputNumber, Row, Col, Card, Space, Tag, Alert, Select } from 'antd';
 import { 
   ProjectOutlined, 
   GlobalOutlined, 
@@ -114,9 +114,13 @@ export default function AppConfigForm({ mode, items }) {
             ? <Switch />
             : it.type === 'number'
               ? <InputNumber style={{ width: '100%' }} placeholder={it.placeholder} min={it.min} max={it.max} />
-              : it.type === 'textarea'
-                ? <Input.TextArea rows={customProps.rows || 2} />
-                : <Input placeholder={it.placeholder} />}
+              : it.type === 'select'
+                ? <Select options={it.options || []} placeholder={it.placeholder} />
+                : it.type === 'password'
+                  ? <Input.Password placeholder={it.placeholder} autoComplete={it.autoComplete || 'new-password'} />
+                : it.type === 'textarea'
+                  ? <Input.TextArea rows={customProps.rows || 2} />
+                : <Input placeholder={it.placeholder} autoComplete={it.autoComplete || 'off'} />}
       </Form.Item>
     );
   };
@@ -134,7 +138,7 @@ export default function AppConfigForm({ mode, items }) {
   // 1. 平台信息自定义布局
   if (mode === 'platform') {
     return (
-      <Form form={form} layout="vertical">
+      <Form form={form} layout="vertical" autoComplete="off">
         <Row gutter={[24, 24]}>
           <Col xs={24} lg={13}>
             <div className="form-section-title">平台信息配置</div>
@@ -240,7 +244,7 @@ export default function AppConfigForm({ mode, items }) {
   // 2. 编号规则自定义布局
   if (mode === 'code') {
     return (
-      <Form form={form} layout="vertical">
+      <Form form={form} layout="vertical" autoComplete="off">
         <Row gutter={[24, 24]}>
           <Col xs={24} lg={15}>
             <div className="form-section-card">
@@ -358,7 +362,7 @@ export default function AppConfigForm({ mode, items }) {
   // 3. 安全规则自定义布局
   if (mode === 'security') {
     return (
-      <Form form={form} layout="vertical">
+      <Form form={form} layout="vertical" autoComplete="off">
         <Row gutter={[24, 24]}>
           <Col xs={24} md={12}>
             <div className="form-section-card" style={{ height: '100%', padding: '20px 24px' }}>
@@ -406,7 +410,7 @@ export default function AppConfigForm({ mode, items }) {
 
   // 默认平铺降级布局
   return (
-    <Form form={form} layout="vertical" style={{ maxWidth: 560 }}>
+    <Form form={form} layout="vertical" autoComplete="off" style={{ maxWidth: 560 }}>
       {items.map((it) => renderFormItem(it.key))}
       <Button type="primary" onClick={onSave} loading={loading}>保存</Button>
     </Form>

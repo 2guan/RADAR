@@ -402,6 +402,31 @@ export default function Settings() {
           { key: 'security.lockout.durationMinutes', label: '账号锁定时长（分钟）', type: 'number', min: 1, max: 1440, placeholder: '默认 15' },
         ]} />,
       },
+      {
+        key: 'issue-sync', label: '问题同步设置',
+        children: <AppConfigForm mode="issue-sync" items={[
+          { key: 'issue.sync.baseUrl', label: '问题工具地址', placeholder: '如 https://pams.example.com', autoComplete: 'off', extra: '可配置外部问题工具的服务地址；留空时使用部署环境变量 PAMS_BASE_URL' },
+          { key: 'issue.sync.apiKey', label: 'API Key', type: 'password', placeholder: '请输入问题工具 API Key', autoComplete: 'new-password', extra: '留空时使用部署环境变量 PAMS_API_KEY' },
+          { key: 'issue.sync.overviewApi', label: '问题概述 API', placeholder: '/PAMS/api/report/overview', extra: '用于手动“同步问题”的接口路径' },
+          { key: 'issue.sync.detailApi', label: '问题详情 API', placeholder: '/PAMS/api/report/detail', extra: '用于问题详情同步的接口路径' },
+          { key: 'issue.sync.overview.enabled', label: '启用定时同步问题概述', type: 'switch', extra: '定时拉取并更新问题概述列表' },
+          { key: 'issue.sync.overview.scheduleMode', label: '问题概述同步周期', type: 'select', options: [
+            { value: 'daily', label: '每天' },
+            { value: 'hours', label: '每 N 小时' },
+            { value: 'minutes', label: '每 N 分钟' },
+          ], extra: '每日模式按指定时间执行；间隔模式按 N 小时或 N 分钟执行' },
+          { key: 'issue.sync.overview.dailyTime', label: '问题概述每日同步时间', placeholder: '01:30', extra: '仅“每天”模式生效，格式 HH:mm' },
+          { key: 'issue.sync.overview.interval', label: '问题概述同步间隔', type: 'number', min: 1, max: 10080, placeholder: '如 2', extra: '仅“每 N 小时 / 每 N 分钟”模式生效' },
+          { key: 'issue.sync.enabled', label: '启用定时同步问题详情', type: 'switch', extra: '定时逐条拉取本地问题的详情；关闭后仍可手动同步' },
+          { key: 'issue.sync.scheduleMode', label: '问题详情同步周期', type: 'select', options: [
+            { value: 'daily', label: '每天' },
+            { value: 'hours', label: '每 N 小时' },
+            { value: 'minutes', label: '每 N 分钟' },
+          ], extra: '每日模式按指定时间执行；间隔模式按 N 小时或 N 分钟执行' },
+          { key: 'issue.sync.dailyTime', label: '问题详情每日同步时间', placeholder: '02:00', extra: '仅“每天”模式生效，格式 HH:mm' },
+          { key: 'issue.sync.interval', label: '问题详情同步间隔', type: 'number', min: 1, max: 10080, placeholder: '如 2', extra: '仅“每 N 小时 / 每 N 分钟”模式生效' },
+        ]} />,
+      },
     ]} />
   );
 

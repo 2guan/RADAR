@@ -125,7 +125,10 @@ export default function RequiredFieldMatrix() {
     ];
 
     const columns = [
-      { title: '字段', dataIndex: 'label', fixed: 'left', width: 220 },
+      {
+        title: '字段', dataIndex: 'label', fixed: 'left', width: 160, ellipsis: true,
+        render: (label) => <span title={label}>{label}</span>,
+      },
       {
         title: '显示',
         key: 'visible',

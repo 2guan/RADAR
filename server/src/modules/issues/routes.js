@@ -134,6 +134,58 @@ async function runBgSyncDetail(codes) {
   bgState.lastFinishTime = `${now.getMonth() + 1}-${now.getDate()} ${now.getHours()}:${pad(now.getMinutes())}`;
 }
 
+/** 供定时任务与手动操作共用的后台详情同步入口；运行中的任务不会重复启动。 */
+export async function startIssueDetailSync(codes = null) {
+  if (bgState.running) return { started: false, ...bgState };
+  let targetCodes = Array.isArray(codes) ? codes.filter(Boolean) : null;
+  if (!targetCodes || !targetCodes.length) {
+    targetCodes = (await all('SELECT issue_code FROM issue ORDER BY id ASC')).map((r) => r.issue_code);
+  }
+  if (!targetCodes.length) return { started: false, empty: true, ...bgState };
+  runBgSyncDetail(targetCodes).catch(() => { bgState.running = false; });
+  return { started: true, ...bgState, total: targetCodes.length };
+}
+
+/** 同步问题概述列表，供手动操作与定时任务共用。 */
+export async function syncIssueOverview() {
+  const list = await fetchIssueOverview();
+  let inserted = 0;
+  let updated = 0;
+  const failed = [];
+
+  await tx(async () => {
+    for (const item of list) {
+      const code = (item.issue_id || '').trim();
+      if (!code) { failed.push({ issue_id: item.issue_id, error: '缺少 issue_id' }); continue; }
+      const exists = await get('SELECT id FROM issue WHERE issue_code = ?', code);
+      const pairs = Object.entries(OVERVIEW_MAP).filter(([key]) => hasOwn(item, key));
+      const cols = pairs.map(([, col]) => col);
+      const vals = pairs.map(([key]) => item[key] ?? null);
+      if (exists) {
+        if (cols.length) {
+          await run(
+            `UPDATE issue SET ${cols.map((column) => `${column}=?`).join(',')}, updated_at=datetime('now','localtime') WHERE issue_code=?`,
+            ...vals, code,
+          );
+        }
+        updated++;
+      } else {
+        if (cols.length) {
+          await run(
+            `INSERT INTO issue (issue_code, ${cols.join(',')}) VALUES (?, ${cols.map(() => '?').join(',')})`,
+            code, ...vals,
+          );
+        } else {
+          await run('INSERT INTO issue (issue_code) VALUES (?)', code);
+        }
+        inserted++;
+      }
+    }
+  });
+
+  return { total: list.length, inserted, updated, failed };
+}
+
 export default async function issueRoutes(fastify) {
   // 列表
   fastify.post('/issues/list', { preHandler: fastify.requirePerm('issue', 'view') }, async (request) => {
@@ -172,42 +224,7 @@ export default async function issueRoutes(fastify) {
 
   // 同步问题：拉取外部概述列表，按 issue_code upsert
   fastify.post('/issues/sync', { preHandler: fastify.requirePerm('issue', 'sync') }, async () => {
-    const list = await fetchIssueOverview();
-    let inserted = 0;
-    let updated = 0;
-    const failed = [];
-
-    await tx(async () => {
-      for (const item of list) {
-        const code = (item.issue_id || '').trim();
-        if (!code) { failed.push({ issue_id: item.issue_id, error: '缺少 issue_id' }); continue; }
-        const exists = await get('SELECT id FROM issue WHERE issue_code = ?', code);
-        const pairs = Object.entries(OVERVIEW_MAP).filter(([k]) => hasOwn(item, k));
-        const cols = pairs.map(([, col]) => col);
-        const vals = pairs.map(([k]) => item[k] ?? null);
-        if (exists) {
-          if (cols.length) {
-            await run(
-              `UPDATE issue SET ${cols.map((c) => `${c}=?`).join(',')}, updated_at=datetime('now','localtime') WHERE issue_code=?`,
-              ...vals, code,
-            );
-          }
-          updated++;
-        } else {
-          if (cols.length) {
-            await run(
-              `INSERT INTO issue (issue_code, ${cols.join(',')}) VALUES (?, ${cols.map(() => '?').join(',')})`,
-              code, ...vals,
-            );
-          } else {
-            await run('INSERT INTO issue (issue_code) VALUES (?)', code);
-          }
-          inserted++;
-        }
-      }
-    });
-
-    return ok({ total: list.length, inserted, updated, failed }, '同步问题完成');
+    return ok(await syncIssueOverview(), '同步问题完成');
   });
 
   // 同步问题详情：逐条按问题编号拉取明细并更新整条记录
@@ -263,16 +280,9 @@ export default async function issueRoutes(fastify) {
 
   // 启动后台同步：立即返回，任务在后台以每秒一条的速度执行
   fastify.post('/issues/sync-detail-bg', { preHandler: fastify.requirePerm('issue', 'sync') }, async (request) => {
-    if (bgState.running) return ok(bgState, '后台同步已在运行中');
-    const body = request.body || {};
-    let codes = Array.isArray(body.codes) ? body.codes.filter(Boolean) : null;
-    if (!codes || !codes.length) {
-      codes = (await all('SELECT issue_code FROM issue ORDER BY id ASC')).map((r) => r.issue_code);
-    }
-    if (!codes.length) throw badRequest('暂无可同步的问题，请先点击「同步问题」');
-    // 不 await，让任务在后台运行
-    runBgSyncDetail(codes).catch(() => { bgState.running = false; });
-    return ok({ ...bgState, total: codes.length }, '后台同步已启动');
+    const result = await startIssueDetailSync(request.body?.codes);
+    if (result.empty) throw badRequest('暂无可同步的问题，请先点击「同步问题」');
+    return ok(result, result.started ? '后台同步已启动' : '后台同步已在运行中');
   });
 
   // 查询后台同步状态

@@ -230,6 +230,18 @@ const APP_CONFIG = [
   ['security.lockout.enabled', 'true', '启用登录失败锁定'],
   ['security.lockout.maxAttempts', '5', '最大密码错误尝试次数'],
   ['security.lockout.durationMinutes', '15', '账号锁定时长（分钟）'],
+  ['issue.sync.baseUrl', '', '问题工具地址（为空时使用部署环境变量 PAMS_BASE_URL）'],
+  ['issue.sync.apiKey', '', '问题工具 API Key（为空时使用部署环境变量 PAMS_API_KEY）'],
+  ['issue.sync.overviewApi', '/PAMS/api/report/overview', '问题概述同步 API 路径'],
+  ['issue.sync.detailApi', '/PAMS/api/report/detail', '问题详情同步 API 路径'],
+  ['issue.sync.enabled', 'false', '是否启用问题详情定时同步'],
+  ['issue.sync.scheduleMode', 'daily', '问题详情定时同步周期：daily / hours / minutes'],
+  ['issue.sync.dailyTime', '02:00', '问题详情每日同步时间（HH:mm）'],
+  ['issue.sync.interval', '1', '问题详情按小时或分钟同步的间隔'],
+  ['issue.sync.overview.enabled', 'false', '是否启用问题概述定时同步'],
+  ['issue.sync.overview.scheduleMode', 'daily', '问题概述定时同步周期：daily / hours / minutes'],
+  ['issue.sync.overview.dailyTime', '01:30', '问题概述每日同步时间（HH:mm）'],
+  ['issue.sync.overview.interval', '1', '问题概述按小时或分钟同步的间隔'],
 ];
 
 // 系统默认仪表盘图表；只在同名系统图表不存在时插入，避免覆盖用户后续调整。
