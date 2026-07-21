@@ -1085,6 +1085,11 @@ body {
   background-clip: padding-box;
   z-index: 4;
 }
+/* 固定的首列与最右侧合计列默认使用实色背景；悬浮数据行时需显式同步行底纹。 */
+.dash-pivot .ant-table-tbody > tr:not(.pivot-total-row):hover > .ant-table-cell-fix-left,
+.dash-pivot .ant-table-tbody > tr:not(.pivot-total-row):hover > .ant-table-cell-fix-right {
+  background: color-mix(in srgb, var(--radar-primary) 7%, var(--radar-surface)) !important;
+}
 .dash-pivot .ant-table-cell,
 .dash-pivot .ant-table-thead > tr > th,
 .dash-pivot .ant-table-tbody > tr > td {
