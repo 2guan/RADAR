@@ -1,46 +1,68 @@
-<!--
-文件：AI-GUIDE.md
-用途：记录 RADAR 项目协作约定、运行方式与设计上下文入口。
-作者：hengguan
--->
+# RADAR 开发上下文指南
 
-# AI-GUIDE.md
+本指南为参与 RADAR 的开发者和开发助手提供最短的、以当前代码为准的上下文。开始改动前，先阅读 [PRODUCT.md](PRODUCT.md)、[DESIGN.md](DESIGN.md) 与 [COLLABORATION.md](COLLABORATION.md) 中和任务有关的章节。
 
-RADAR · 日常需求研发流程管理（Requirement Agile Delivery & Acceleration Resource）。以"投产版本（投产点）"为主线，把"需求分析 → 开发管理 → 测试管理(SIT/UAT/NFT/SEC) → 投产管理"全链路数字化。
+## 项目事实
 
-## 技术栈
+- **前端**：React 18、Vite 5、React Router 6、Ant Design 5、Zustand、ECharts。入口是 `web/src/main.jsx`，受保护路由由 `web/src/app.jsx` 装配。
+- **后端**：Node.js `>=22.5.0`、Fastify 5、ESM。入口是 `server/src/server.js`；启动时依次执行迁移、种子、应用装配。
+- **数据**：默认 SQLite；可用 `DB_CLIENT=tdsql` 或 `mysql` 连接 TDSQL/MySQL 兼容库。业务代码只能使用 `server/src/db/index.js` 暴露的异步接口。
+- **部署**：前端构建产物位于 `web/dist`；生产时 Fastify 同时提供 `/api` 和 SPA 静态资源。`data/`、`attachments/` 必须持久化。
+- **认证**：JWT + 角色权限并集；超级管理员绕过权限矩阵。生产写请求需要 `X-Requested-By` 与 `CSRF_HEADER_VALUE` 匹配。
 
-- **后端**：Node.js（≥22，推荐 25）+ Fastify + 原生 `node:sqlite`（同步 API，WAL，预编译参数化）+ JWT + RBAC 权限矩阵。
-- **前端**：React 18 + Vite + Ant Design 5 + ECharts + zustand。翡翠绿主题（可配置，非蓝）、明暗双主题、全中文、PC/PAD/手机响应式。
-- **部署**：Docker Compose（单容器，Fastify 同时供 API 与前端静态），挂载 `data/`(SQLite) 与 `attachments/`。
+## 先定位，再修改
 
-## 目录结构
+| 需求 | 首先查看 |
+| --- | --- |
+| 页面、菜单、详情页 | `web/src/pages/`、`web/src/router/`、`web/src/layout/MainLayout.jsx` |
+| 表格、筛选、导入导出 | `DataTable.jsx`、`FilterPanel.jsx`、`ImportModal.jsx`、`CrudManager.jsx` |
+| 新建或编辑工作项 | `web/src/components/editors/` 与对应 `server/src/modules/*/routes.js` |
+| 状态、终态、必填项 | `server/src/lib/status.js`、`required-fields.js`、`status-permission.js` |
+| 权限 | `server/src/lib/perm-catalog.js`、`server/src/plugins/auth.js`、`web/src/components/Can.jsx` |
+| 附件、审计、编号、Excel | `server/src/lib/attachment.js`、`audit.js`、`code-gen.js`、`excel.js` |
+| 数据库、SQL、迁移 | `server/src/db/index.js`、`providers/`、`dialects/`、`migrations/` |
+| 仪表盘 | `modules/dashboard/`、`lib/chart-dims.js`、`components/dashboard/` |
 
-- `server/src/` — `app.js`(装配) `server.js`(入口) `config.js`；`db/`(连接/迁移/seed) `plugins/auth.js`(JWT+RBAC) `lib/`(crud/query/audit/code-gen/deviation/status/attachment/excel) `modules/`(按业务域：auth/dict/systems/release-points/roles/users/settings/requirements/dev-tasks/test-tasks/release/attachments/audit/overview/dashboard)。
-- `web/src/` — `api/` `stores/` `layout/` `router/` `components/`(DataTable/DictSelect/SystemSelect/PersonPicker/AttachmentField/HistoryDrawer/StatusBadge/ChainBar/CrudManager/Can 等) `pages/` `hooks/`。
-
-## 本地运行
+## 本地工作流
 
 ```bash
-cd server && npm install && npm run dev   # 后端 :3000
-cd web && npm install && npm run dev       # 前端 :5173（代理 /api）
-# 登录：admin / admin2026
+npm install
+npm ci --prefix server
+npm ci --prefix web
+npm run dev
+
+# 提交前至少执行
+npm test --prefix server
+npm run build --prefix web
 ```
-生产：`cd web && npm run build` 后 `cd server && npm start`。首次启动自动迁移 + 种子。
 
-## 核心约定（迭代请遵循）
+不要将真实 `.env`、数据库文件、附件、构建目录或导入导出样本数据提交到仓库。
 
-- 文件头写中文注释块（用途/作者 hengguan），函数级中文注释；分层 routes→service/lib→DAO。
-- 简单配置表用 `lib/crud.js#registerCrud`；列表查询走 `lib/query.js#listQuery`（列白名单防注入）。
-- 业务写操作经 `lib/audit.js` 留痕；编号 `lib/code-gen.js`；偏差率 `lib/deviation.js`；终态判定 `lib/status.js`。
-- 权限：后端 `fastify.requirePerm(module, action)`（超管放行）；前端 `<Can>` + 路由守卫 + 菜单过滤，目录见 `lib/perm-catalog.js`。
-- 统一响应 `{code,data,message}`；前端 `api/client.js` 自动解包、注入 JWT、401 跳登录。
+## 代码约定
 
-## Design Context
+1. 先复用现有服务和组件；只有现有抽象无法承载时再新增抽象。
+2. 业务路由放在相应 `modules/<domain>/routes.js`，跨领域规则放在 `lib/`；不要把业务 SQL 或权限判断复制到前端。
+3. 后端响应使用 `ok(data, message)`，错误使用 `badRequest`、`unauthorized`、`forbidden`、`notFound`；前端统一经 `api/client.js` 请求，避免裸 `axios`。
+4. 所有外部输入必须白名单、参数化或校验。列表查询优先使用 `listQuery`；简单后台配置资源优先使用 `registerCrud`。
+5. 业务写操作须考虑 `auditCreate`、`auditUpdate` 或 `auditDelete`；有状态变化时还须走 `assertStatusChangePermission`、状态合法性与动态必填校验。
+6. SQLite 与 TDSQL 都是支持目标。不要在业务模块直接使用某一数据库特有的 JSON、日期、占位符或事务行为；需要差异时扩展 provider/dialect。
+7. 前端权限展示使用 `<Can>` 和 store 的 `can()`，但它不是安全边界；后端每一个受保护接口必须使用 `authenticate`、`requirePerm` 或动态的测试类型权限校验。
+8. 视觉实现遵循 [DESIGN.md](DESIGN.md)：复用 `DataTable`、`StatusBadge`、`DictSelect`、`SystemSelect`、`PersonPicker`、`EditorShell` 等公共组件，并同时检查明暗模式和窄屏。
 
-设计上下文由 impeccable 维护，新增/改造界面前请先读：
+## 改动检查单
 
-- **[PRODUCT.md](PRODUCT.md)** — 战略：register=product；用户=农信/金科研发协同团队；品牌人格=精密·沉稳·数据导向（现代精致科技感）；5 条设计原则（状态先行 / 密度即效率 / 一致胜于惊喜 / 克制的精致 / 可追溯即可信）；无障碍=WCAG AA + 明暗对等 + 大小屏一致。
-- **[DESIGN.md](DESIGN.md)** — 视觉系统：主色翡翠绿 `#0E9F6E`（非蓝）、语义状态色、系统字体栈、圆角 8px、偏平分层阴影、统一组件清单、Do's & Don'ts。
+- [ ] 已识别相关工作项链路、权限模块和投产点过滤口径。
+- [ ] 新接口采用统一响应、鉴权、参数校验、审计与错误处理。
+- [ ] 新字段有数据库迁移，SQLite 和 TDSQL 均可用，导入导出/详情/列表口径一致。
+- [ ] 新状态已接入状态字典、终态语义、权限和必填项配置；未绕过前端限制。
+- [ ] 新页面已补路由、菜单（如需）、权限控制、加载/空态/失败态、移动端表现。
+- [ ] 已运行后端测试与前端构建；对关键链路完成手工验证。
+- [ ] 已更新受影响的根目录文档或操作手册。
 
-设计/迭代界面时用 impeccable 命令：`/impeccable craft|shape|critique|audit|polish|live <目标>`。
+## 常见误区
+
+- `req_code` 在开发、测试和部分审批表中是“关联工作项编号”，可以是需求编号也可以是工单编号。
+- NFT、SEC 不是每个工作项必经阶段；不能因为没有任务就当作失败或缺失数据。
+- 投产任务依赖“对象编号 + 申请投产点”定位；不要只按编号更新。
+- `app_config`、`dict_item` 和权限矩阵属于运行时可配置的业务规则，修改它们的默认值需要考虑已有环境。
+- 前端主题是八套可选预设，默认是“蔚蓝”，不是固定的单一翡翠绿主题。
