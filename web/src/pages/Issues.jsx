@@ -1,20 +1,21 @@
 /**
  * 文件：pages/Issues.jsx
- * 用途：问题管理页面（只读）。展示从外部 PAMS 系统同步的问题清单，点击查看问题详情；
- *       提供「同步问题」（拉取概述列表）与「同步问题详情」（后台逐条慢速更新明细）两个同步按钮。
+ * 用途：问题管理页面。展示从外部 PAMS 系统同步或手动上传的问题清单，点击查看问题详情；
+ *       提供「手动上传问题」「同步问题」（拉取概述列表）与「同步问题详情」（后台逐条慢速更新明细）操作。
  *       后台同步通过轮询 /issues/sync-detail-status 实时展示进度和最后完成时间。
  * 作者：hengguan
- * 说明：列表显示 问题编号/工单编号/状态/详细分类/所属系统/问题概述；无新增/编辑能力。
+ * 说明：列表显示 问题编号/工单编号/状态/详细分类/所属系统/问题概述；手动上传以问题编号新增或更新数据。
  */
 
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Card, Button, Space, message, Modal } from 'antd';
-import { SyncOutlined, CloudSyncOutlined, LoadingOutlined, CheckCircleOutlined, DeleteOutlined } from '@ant-design/icons';
+import { SyncOutlined, CloudSyncOutlined, LoadingOutlined, CheckCircleOutlined, DeleteOutlined, UploadOutlined } from '@ant-design/icons';
 import DataTable from '../components/DataTable.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
 import FilterPanel from '../components/FilterPanel.jsx';
 import Can from '../components/Can.jsx';
 import IssueDetail from '../components/editors/IssueDetail.jsx';
+import ImportModal from '../components/ImportModal.jsx';
 import { getScopedPopupContainer } from '../components/scopedPopup.js';
 import { apiDelete, apiGet, apiPost } from '../api/client.js';
 
@@ -25,6 +26,7 @@ export default function Issues() {
   const [filterQuery, setFilterQuery] = useState([]);
   const [syncing, setSyncing] = useState(false);
   const [clearing, setClearing] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   // 后台同步详情状态（轮询自服务端）
   const [bgStatus, setBgStatus] = useState(null); // { running, total, done, failed, lastFinishTime }
   const pollTimerRef = useRef(null);
@@ -231,6 +233,9 @@ export default function Issues() {
           <Can module="issue" action="sync">
             <Button icon={<CloudSyncOutlined />} disabled={bgStatus?.running} onClick={onSyncDetail}>同步问题详情</Button>
           </Can>
+          <Can module="issue" action="import">
+            <Button icon={<UploadOutlined />} onClick={() => setImportOpen(true)}>手动上传问题</Button>
+          </Can>
           <Can module="issue" action="delete">
             <Button danger icon={<DeleteOutlined />} loading={clearing} disabled={bgStatus?.running} onClick={onClearIssues}>清空</Button>
           </Can>
@@ -276,6 +281,14 @@ export default function Issues() {
         issueId={detailId}
         onClose={() => setDetailOpen(false)}
         onSynced={() => { tableRef.current?.reload(); loadOptions(); }}
+      />
+      <ImportModal
+        open={importOpen}
+        onCancel={() => setImportOpen(false)}
+        onSuccess={() => { tableRef.current?.reload(); loadOptions(); }}
+        importUrl="/issues/import"
+        templateUrl="/issues/template"
+        templateFilename="问题导入模板.xlsx"
       />
     </Card>
   );

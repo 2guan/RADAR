@@ -55,7 +55,7 @@ const MODULE_ACTIONS = {
   overview: ['view'],
   requirement: ['view', 'create', 'edit', 'status.edit', 'delete', 'import', 'export'],
   ticket: ['view', 'create', 'edit', 'status.edit', 'delete', 'import', 'export'],
-  issue: ['view', 'sync', 'delete'],
+  issue: ['view', 'sync', 'import', 'delete'],
   dev: ['view', 'create', 'edit', 'status.edit', 'delete', 'import', 'export'],
   'test.SIT': ['view', 'create', 'edit', 'status.edit', 'delete', 'import', 'export'],
   'test.UAT': ['view', 'create', 'edit', 'status.edit', 'delete', 'import', 'export'],

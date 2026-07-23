@@ -25,7 +25,7 @@ export const PERM_CATALOG = [
   {
     key: 'issue', label: '问题管理',
     actions: [
-      { key: 'view', label: '查看' }, { key: 'sync', label: '同步' }, { key: 'delete', label: '清空' },
+      { key: 'view', label: '查看' }, { key: 'sync', label: '同步' }, { key: 'import', label: '手动上传' }, { key: 'delete', label: '清空' },
     ],
   },
   {
