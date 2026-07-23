@@ -308,37 +308,60 @@ function RoleManager() {
     '仪表盘': '效能仪表盘', // 兼容旧的值
   });
 
+  const renderTwoLineSignoffConfig = (value) => (
+    <div
+      title={value || '—'}
+      style={{
+        width: 240,
+        minWidth: 240,
+        maxWidth: 240,
+        display: '-webkit-box',
+        WebkitLineClamp: 2,
+        WebkitBoxOrient: 'vertical',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'pre-wrap',
+        wordBreak: 'break-word',
+        lineHeight: '18px',
+        maxHeight: 36,
+      }}
+    >
+      {value || '—'}
+    </div>
+  );
+
   return (
     <CrudManager
       apiBase="/roles" title="角色"
       io={{ enabled: true }}
       filterConfigs={filterConfigs}
       columns={[
-        { title: '角色名称', dataIndex: 'name', width: 150 },
-        { title: '角色标识', dataIndex: 'code', width: 150 },
+        { title: '角色名称', dataIndex: 'name' },
         { 
           title: '默认首页', 
           dataIndex: 'default_home', 
-          width: 150,
           render: (v) => homeLabelMap[v] || v || '—',
         },
         { 
           title: '默认主题', 
           dataIndex: 'default_theme', 
-          width: 120,
           render: (v) => PRESETS[v]?.name || v || '蔚蓝',
         },
         { 
           title: '会签角色', 
           dataIndex: 'is_signoff_role', 
-          width: 100, 
           render: (v) => (v ? <Tag className="status-tag tag-system" style={{ margin: 0 }}>会签</Tag> : '—') 
         },
-        { title: '会签检查内容', dataIndex: 'signoff_check_content', width: 180, ellipsis: true, render: (v) => v || '—' },
+        { title: '会签职责', dataIndex: 'signoff_responsibility', width: 240, render: renderTwoLineSignoffConfig },
+        { title: '会签评审点', dataIndex: 'signoff_review_points', width: 240, render: renderTwoLineSignoffConfig },
         { title: '内置', dataIndex: 'is_builtin', width: 80, render: (v) => (v ? <Tag>内置</Tag> : '—') },
       ]}
       transformIn={(row) => ({ ...row, is_signoff_role: !!row.is_signoff_role })}
-      transformOut={(v) => ({ ...v, signoff_check_content: v.is_signoff_role ? v.signoff_check_content : null })}
+      transformOut={(v) => ({
+        ...v,
+        signoff_responsibility: v.is_signoff_role ? v.signoff_responsibility : null,
+        signoff_review_points: v.is_signoff_role ? v.signoff_review_points : null,
+      })}
       fields={(form, current) => (
         <>
           <Form.Item name="name" label="角色名称" rules={[{ required: true }]}><Input /></Form.Item>
@@ -354,9 +377,14 @@ function RoleManager() {
           </Form.Item>
           <Form.Item noStyle shouldUpdate={(prev, next) => prev.is_signoff_role !== next.is_signoff_role}>
             {({ getFieldValue }) => getFieldValue('is_signoff_role') ? (
-              <Form.Item name="signoff_check_content" label="会签检查内容" extra="填写该角色在投产审批会签时需要关注的检查要点">
-                <Input.TextArea placeholder="请输入会签时的检查要点" autoSize={{ minRows: 3, maxRows: 6 }} />
-              </Form.Item>
+              <>
+                <Form.Item name="signoff_responsibility" label="会签职责" extra="填写该角色在投产审批会签中的职责">
+                  <Input.TextArea placeholder="请输入会签职责" autoSize={{ minRows: 2, maxRows: 4 }} />
+                </Form.Item>
+                <Form.Item name="signoff_review_points" label="会签评审点" extra="填写该角色在投产审批会签时需要关注的评审点">
+                  <Input.TextArea placeholder="请输入会签评审点，每行一个" autoSize={{ minRows: 3, maxRows: 8 }} />
+                </Form.Item>
+              </>
             ) : null}
           </Form.Item>
         </>

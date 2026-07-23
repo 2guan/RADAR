@@ -177,7 +177,7 @@ async function signoffRoles() {
 
 async function signoffsWithRoleConfig(releaseTaskId) {
   return (await all(
-    `SELECT rs.*, r.signoff_check_content AS signoff_check_content
+    `SELECT rs.*, r.signoff_responsibility, r.signoff_review_points
        FROM release_signoff rs
        LEFT JOIN role r ON r.id = rs.role_id
       WHERE rs.release_task_id = ?

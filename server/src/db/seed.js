@@ -14,7 +14,7 @@ import { parseJsonObject } from '../lib/json.js';
 import { logger } from '../lib/logger.js';
 
 // 角色定义（角色标识、名称、是否内置、是否会签角色）
-// 会签角色（signoff:1）：安全/架构/机构/项目/测试/配置负责人——投产评审会签由这 6 个角色完成。
+// 会签角色（signoff:1）：投产评审会签由以下 9 个角色完成。
 const ROLES = [
   { code: '金科业务', name: '金科业务' },
   { code: '农信业务', name: '农信业务' },
@@ -24,18 +24,30 @@ const ROLES = [
   { code: '农信测试', name: '农信测试' },
   { code: '金科运维', name: '金科运维' },
   { code: '农信运维', name: '农信运维' },
-  { code: '安全负责人', name: '安全负责人', signoff: 1 },
-  { code: '架构负责人', name: '架构负责人', signoff: 1 },
-  { code: '机构负责人', name: '机构负责人', signoff: 1 },
-  { code: '项目负责人', name: '项目负责人', signoff: 1 },
-  { code: '测试负责人', name: '测试负责人', signoff: 1 },
-  { code: '配置负责人', name: '配置负责人', signoff: 1 },
+  { code: '机构负责人', name: '机构负责人', signoff: 1, signoff_responsibility: '研发质量负责人，软件质量直接责任，机构内部控制版本', signoff_review_points: '1、允许发布' },
+  { code: '需求管理', name: '需求管理', signoff: 1, signoff_responsibility: '评估设计、研发和测试结果是否符合需求和问题提出方要求', signoff_review_points: '1、需求提出符合管理要求，无争议\n2、设计逻辑满足需求\n3、问题解决方案符合业务需求' },
+  { code: '架构管理', name: '架构管理', signoff: 1, signoff_responsibility: '评估建设方案是否符合整体架构设计，评估影响性分析文档', signoff_review_points: '1、影响性分析文档内容符合要求\n2、设计符合架构要求\n3、公共部分改动符合要求\n4、上下游数据变动符合要求\n5、核心功能改动符合要求' },
+  { code: '测试管理', name: '测试管理', signoff: 1, signoff_responsibility: '针对申请投产版本，评估测试覆盖度和测试用例文档，提供测试报告', signoff_review_points: '1、提测申请符合管理要求\n2、测试结论符合质量要求\n3、测试版本与发布版本一致\n4、测试用例符合要求\n5、测试范围符合要求' },
+  { code: '项目管理', name: '项目管理', signoff: 1, signoff_responsibility: '审核上线内容，控制发布风险', signoff_review_points: '1、需求和问题管理流程符合要求\n2、全生命周期符合管理要求\n3、非常规发布窗口允许上线' },
+  { code: '安全管理', name: '安全管理', signoff: 1, signoff_responsibility: '对申请投产版本按需组织相关测试，给出安全意见，包括漏扫、静态代码扫描和渗透测试', signoff_review_points: '1、漏洞扫描结论符合要求\n2、静态代码扫描报告符合要求\n3、渗透测试报告符合要求\n4、符合其他安全准出条件' },
+  { code: '质量管理', name: '质量管理', signoff: 1, signoff_responsibility: '检查文档合规性要求', signoff_review_points: '1、文档名称，包括编号、版本号、文件名\n2、文档结构\n3、未填写和不涉及内容检查' },
+  { code: '运维负责人', name: '运维负责人', signoff: 1, signoff_responsibility: '对投产文档、发布窗口、账号权限、实施人员、发布流程等进行评估，给出上线意见', signoff_review_points: '1、投产时间符合上线窗口要求\n2、投产文档符合上线要求\n3、实施人员准备完成\n4、相关权限符合管理要求\n5、上线所需全部资料齐全，包括制品、脚本、各类文档\n6、验证人员符合发布要求\n7、非常规发布窗口允许实施\n8、上线内容与实施内容一致' },
+  { code: '配置管理员', name: '配置管理员', signoff: 1, signoff_responsibility: '组织投产评审，根据各专业意见给出最终准出意见，归档版本基线', signoff_review_points: '1、各专业审批同意\n2、部分专业审批不同意' },
   { code: '管理员', name: '管理员' },
   { code: '超级管理员', name: '超级管理员', builtin: 1 },
 ];
 
-// 会签角色标识集合（投产评审会签）
-const SIGNOFF_ROLE_CODES = ROLES.filter((r) => r.signoff).map((r) => r.code);
+// 旧版会签角色在已有环境中平滑改名，保留原角色 ID 与已分配人员。
+const LEGACY_SIGNOFF_ROLE_CODES = {
+  安全负责人: '安全管理',
+  架构负责人: '架构管理',
+  项目负责人: '项目管理',
+  测试负责人: '测试管理',
+  配置负责人: '配置管理员',
+};
+
+const LEGACY_SIGNOFF_ROLES_CONFIG = '["安全负责人","架构负责人","机构负责人","项目负责人","测试负责人","配置负责人"]';
+const DEFAULT_SIGNOFF_ROLES_CONFIG = '["机构负责人","需求管理","架构管理","测试管理","项目管理","安全管理","质量管理","运维负责人","配置管理员"]';
 
 // 模块 -> 该模块支持的全部操作键
 const MODULE_ACTIONS = {
@@ -221,7 +233,7 @@ const APP_CONFIG = [
   ['code.test.NFT', 'NFT_{需求编号}_{序号}', '非功能测试任务编号规则'],
   ['code.test.SEC', 'SEC_{需求编号}_{序号}', '安全测试任务编号规则'],
   ['code.release_apply', '{版本年月}-10bg{序号}', '投产申请变更编号规则'],
-  ['release.signoffRoles', '["安全负责人","架构负责人","机构负责人","项目负责人","测试负责人","配置负责人"]', '投产评审会签角色（JSON 数组）'],
+  ['release.signoffRoles', DEFAULT_SIGNOFF_ROLES_CONFIG, '投产评审会签角色（JSON 数组）'],
   ['appearance.preset', 'sky', '外观主题预设（默认清新蓝）'],
   [REQUIRED_FIELDS_CONFIG_KEY, JSON.stringify(DEFAULT_REQUIRED_FIELD_CONFIG), '检查内容配置（JSON）'],
   ['security.password.complexity', 'true', '启用密码复杂度校验'],
@@ -384,6 +396,11 @@ export async function runSeed() {
         await run('INSERT INTO app_config (key, value, remark) VALUES (?,?,?)', key, value, remark);
       }
     }
+    // 仅将旧版默认会签角色配置升级为新版，已由管理员调整过的配置保持不变。
+    await run(
+      'UPDATE app_config SET value = ? WHERE key = ? AND value = ?',
+      DEFAULT_SIGNOFF_ROLES_CONFIG, 'release.signoffRoles', LEGACY_SIGNOFF_ROLES_CONFIG,
+    );
     for (const chart of DEFAULT_DASHBOARD_CHARTS) await seedDashboardChart(chart);
 
     // 2) 字典
@@ -412,20 +429,39 @@ export async function runSeed() {
     }
 
     // 4) 角色
+    for (const [oldCode, newCode] of Object.entries(LEGACY_SIGNOFF_ROLE_CODES)) {
+      const oldRole = await get('SELECT id FROM role WHERE code = ?', oldCode);
+      const newRole = await get('SELECT id FROM role WHERE code = ?', newCode);
+      if (oldRole && !newRole) {
+        await run('UPDATE role SET code = ?, name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', newCode, newCode, oldRole.id);
+        await run('UPDATE release_signoff SET role_name = ? WHERE role_id = ?', newCode, oldRole.id);
+      }
+    }
     const roleIdByCode = {};
     for (const r of ROLES) {
       let row = await get('SELECT id FROM role WHERE code = ?', r.code);
       if (!row) {
         const res = await run(
-          'INSERT INTO role (name, code, default_home, is_builtin, is_signoff_role) VALUES (?,?,?,?,?)',
+          `INSERT INTO role (name, code, default_home, is_builtin, is_signoff_role,
+             signoff_responsibility, signoff_review_points)
+           VALUES (?,?,?,?,?,?,?)`,
           r.name, r.code, '仪表盘', r.builtin ? 1 : 0, r.signoff ? 1 : 0,
+          r.signoff_responsibility || null, r.signoff_review_points || null,
         );
         row = { id: res.lastInsertRowid };
+      } else if (r.signoff) {
+        await run(
+          `UPDATE role
+              SET signoff_responsibility = COALESCE(signoff_responsibility, ?),
+                  signoff_review_points = COALESCE(signoff_review_points, ?)
+            WHERE id = ?`,
+          r.signoff_responsibility, r.signoff_review_points, row.id,
+        );
       }
       roleIdByCode[r.code] = row.id;
     }
     // 4b) 同步会签角色标识：以 ROLES 定义为准（仅影响内置角色，自定义角色不受影响）。
-    //     早期迁移 0002 将金科侧业务/开发/测试/运维标记为会签角色，此处统一归位到 6 个负责人角色。
+    //     早期迁移 0002 将金科侧业务/开发/测试/运维标记为会签角色，此处统一归位到当前 9 个会签角色。
     for (const r of ROLES) {
       await run('UPDATE role SET is_signoff_role = ? WHERE code = ?', r.signoff ? 1 : 0, r.code);
     }

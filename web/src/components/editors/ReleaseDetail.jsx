@@ -29,6 +29,9 @@ import { apiGet, apiPost, apiPut, apiDelete, rawClient } from '../../api/client.
 import { useAppStore } from '../../stores/app.js';
 import { useRequiredFields } from '../../hooks/useRequiredFields.js';
 
+const DEFAULT_SIGNOFF_CONCLUSION = '已确认所有评审点符合要求，同意投产。';
+const LEGACY_SIGNOFF_CONCLUSION = '同意投产';
+
 function attachmentModeText(mode) {
   if (mode === 'path') return '路径';
   if (mode === 'file') return '上传文档';
@@ -231,7 +234,7 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
     const adminOnly = isAdminUser && !canSignDecision(so);
     const result = adminOnly ? '不涉及' : (so.result === '不涉及' ? '不涉及' : (so.result === '已驳回' ? '已驳回' : '已签署'));
     setSignResult(result);
-    const defaultConclusion = result === '不涉及' ? '不涉及' : (result === '已签署' ? '同意投产' : '不同意，[补充具体原因]');
+    const defaultConclusion = result === '不涉及' ? '不涉及' : (result === '已签署' ? DEFAULT_SIGNOFF_CONCLUSION : '不同意，[补充具体原因]');
     setSignConclusion(readonly ? (so.conclusion || '') : (so.conclusion || defaultConclusion));
     setSignReadonly(readonly);
     setSignOpen(true);
@@ -240,11 +243,11 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
 
   const handleSignResultChange = (val) => {
     setSignResult(val);
-    if (val === '已签署' && (!signConclusion || signConclusion === '不同意，[补充具体原因]')) {
-      setSignConclusion('同意投产');
-    } else if (val === '已驳回' && (!signConclusion || signConclusion === '同意投产')) {
+    if (val === '已签署' && (!signConclusion || signConclusion === '不涉及' || signConclusion === '不同意，[补充具体原因]')) {
+      setSignConclusion(DEFAULT_SIGNOFF_CONCLUSION);
+    } else if (val === '已驳回' && (!signConclusion || signConclusion === '不涉及' || signConclusion === DEFAULT_SIGNOFF_CONCLUSION || signConclusion === LEGACY_SIGNOFF_CONCLUSION)) {
       setSignConclusion('不同意，[补充具体原因]');
-    } else if (val === '不涉及' && (!signConclusion || signConclusion === '同意投产' || signConclusion === '不同意，[补充具体原因]')) {
+    } else if (val === '不涉及' && (!signConclusion || signConclusion === DEFAULT_SIGNOFF_CONCLUSION || signConclusion === LEGACY_SIGNOFF_CONCLUSION || signConclusion === '不同意，[补充具体原因]')) {
       setSignConclusion('不涉及');
     }
     if (val !== '不涉及' && !signatures.length) {
@@ -434,11 +437,19 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
         <span style={{ fontWeight: 600, width: 70 }}>签署时间：</span>
         <span style={{ color: 'var(--radar-ink)', fontFamily: 'SFMono-Regular, Consolas, monospace' }}>{fmtSignTime(so?.sign_time)}</span>
       </div>
-      {so?.signoff_check_content && (
+      {so?.signoff_responsibility && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <span style={{ fontWeight: 600 }}>会签检查内容：</span>
+          <span style={{ fontWeight: 600 }}>会签职责：</span>
           <div style={{ padding: '6px 8px', border: '1px solid var(--radar-border)', borderRadius: 2, background: 'var(--radar-primary-soft)', color: 'var(--radar-ink)', lineHeight: '18px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-            {so.signoff_check_content}
+            {so.signoff_responsibility}
+          </div>
+        </div>
+      )}
+      {so?.signoff_review_points && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <span style={{ fontWeight: 600 }}>会签评审点：</span>
+          <div style={{ padding: '6px 8px', border: '1px solid var(--radar-border)', borderRadius: 2, background: 'var(--radar-primary-soft)', color: 'var(--radar-ink)', lineHeight: '18px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+            {so.signoff_review_points}
           </div>
         </div>
       )}
@@ -790,11 +801,19 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
             </Radio.Group>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {currentSignoff?.signoff_check_content && (
+            {currentSignoff?.signoff_responsibility && (
               <>
-                <span style={{ fontSize: 12, fontWeight: 600 }}>会签检查内容：</span>
+                <span style={{ fontSize: 12, fontWeight: 600 }}>会签职责：</span>
                 <div style={{ padding: '6px 8px', border: '1px solid var(--radar-border)', borderRadius: 2, background: 'var(--radar-primary-soft)', color: 'var(--radar-ink)', lineHeight: '18px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                  {currentSignoff.signoff_check_content}
+                  {currentSignoff.signoff_responsibility}
+                </div>
+              </>
+            )}
+            {currentSignoff?.signoff_review_points && (
+              <>
+                <span style={{ fontSize: 12, fontWeight: 600 }}>会签评审点：</span>
+                <div style={{ padding: '6px 8px', border: '1px solid var(--radar-border)', borderRadius: 2, background: 'var(--radar-primary-soft)', color: 'var(--radar-ink)', lineHeight: '18px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                  {currentSignoff.signoff_review_points}
                 </div>
               </>
             )}

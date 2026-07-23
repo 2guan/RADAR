@@ -7,7 +7,7 @@
  *       权限维护、对所有人可见；我的图表(scope=user)按用户隔离。
  */
 
-import { get, all, run } from '../../db/index.js';
+import { get, all, run, dialect } from '../../db/index.js';
 import { isTerminalStatus } from '../../lib/status.js';
 import { windowIds, inClause } from '../../lib/window.js';
 import { ok, badRequest, notFound, forbidden } from '../../lib/http.js';
@@ -321,12 +321,19 @@ export default async function dashboardRoutes(fastify) {
       throw forbidden('只能修改自己的图表');
     }
     const { title, chart_type, config, sort, col_span, height } = request.body || {};
-    await run(
-      `UPDATE dashboard_chart SET title=?, chart_type=?, config=?, sort=?, col_span=?, height=?, updated_at=datetime('now','localtime') WHERE id=?`,
-      title ?? row.title, chart_type ?? row.chart_type,
-      config !== undefined ? JSON.stringify(config) : row.config,
-      sort ?? row.sort, col_span ?? row.col_span, height ?? row.height, row.id,
-    );
+    // 仅更新请求实际携带的字段。左右移动只提交 sort，避免在 TDSQL 上重复回写 JSON 配置
+    // 时触发驱动对 JSON 返回值类型的兼容问题。
+    const updates = [];
+    const params = [];
+    if (title !== undefined) { updates.push('title=?'); params.push(title); }
+    if (chart_type !== undefined) { updates.push('chart_type=?'); params.push(chart_type); }
+    if (config !== undefined) { updates.push('config=?'); params.push(JSON.stringify(config)); }
+    if (sort !== undefined) { updates.push('sort=?'); params.push(sort); }
+    if (col_span !== undefined) { updates.push('col_span=?'); params.push(col_span); }
+    if (height !== undefined) { updates.push('height=?'); params.push(height); }
+    updates.push(`updated_at=${dialect.now}`);
+    params.push(row.id);
+    await run(`UPDATE dashboard_chart SET ${updates.join(', ')} WHERE id=?`, ...params);
     return ok({ id: row.id });
   });
 
