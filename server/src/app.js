@@ -64,6 +64,8 @@ export async function buildApp() {
 
   // ---- 安全与基础插件 ----
   await app.register(helmet, {
+    // HTTP-only 内网部署默认不发送 HSTS；全站 HTTPS 部署可通过 HSTS_ENABLED=true 显式开启。
+    strictTransportSecurity: config.security.hstsEnabled,
     contentSecurityPolicy: {
       useDefaults: true,
       directives: {
@@ -76,6 +78,9 @@ export async function buildApp() {
         objectSrc: ["'none'"],
         frameAncestors: ["'self'"],
         formAction: ["'self'"],
+        // Helmet 默认会加入该指令，浏览器会把同源 /assets 请求升级为 HTTPS。
+        // HTTP-only 部署必须显式禁用，否则 JS/CSS 加载会报 ERR_SSL_PROTOCOL_ERROR 并白屏。
+        upgradeInsecureRequests: config.security.cspUpgradeInsecureRequests ? [] : null,
       },
     },
   });

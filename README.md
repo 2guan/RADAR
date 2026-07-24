@@ -1111,6 +1111,8 @@ npm run dev
 | --- | --- | --- |
 | `CORS_ORIGINS` | 开发环境本地端口 | 允许跨域访问的来源，多个来源用英文逗号分隔 |
 | `CSP_CONNECT_SRC` | `self` | CSP connect-src 白名单 |
+| `CSP_UPGRADE_INSECURE_REQUESTS` | `false` | 仅全站 HTTPS 时设为 `true`；HTTP-only 部署保持 `false`，避免静态资源被自动升级为 HTTPS |
+| `HSTS_ENABLED` | `false` | 仅全站 HTTPS 时设为 `true`，发送 HSTS 响应头 |
 | `CSRF_HEADER_VALUE` | `RADAR` | 后端期望的 `X-Requested-By` 值 |
 
 ### 上传、请求体、限流与压缩

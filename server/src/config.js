@@ -124,6 +124,10 @@ export const config = {
 
   security: {
     csrfHeaderValue: strEnv('CSRF_HEADER_VALUE', 'RADAR'),
+    // HTTP 部署时不能自动把静态资源升级为 HTTPS；证书终止在反向代理后时再显式开启。
+    cspUpgradeInsecureRequests: boolEnv('CSP_UPGRADE_INSECURE_REQUESTS', false),
+    // HSTS 仅应在全站 HTTPS 已验证可用时发送，避免浏览器记住错误的 HTTPS 策略。
+    hstsEnabled: boolEnv('HSTS_ENABLED', false),
     apiBodyLimit: intEnv('API_BODY_LIMIT', 1024 * 1024),
     rateLimitMax: intEnv('RATE_LIMIT_MAX', 600),
     rateLimitWindow: strEnv('RATE_LIMIT_WINDOW', '1 minute'),
