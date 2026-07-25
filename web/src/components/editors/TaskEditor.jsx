@@ -253,7 +253,13 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
 
         <Row gutter={12} className={`stage-detail-layout-${kind === 'test' ? `test-${current?.test_type || cfg.testType || 'SIT'}` : 'dev'}`}>
           <StageSectionLayout scopeKey={kind === 'test' ? `test.${current?.test_type || cfg.testType || 'SIT'}` : 'dev'} defaults={{
-            task: { layout_mode: 'left', sort: 0 }, schedule: { layout_mode: 'left', sort: 10 }, impact: { layout_mode: 'left', sort: 20 }, coverage: { layout_mode: 'left', sort: 20 },
+            // 服务端分区配置加载完成前使用与种子一致的兜底布局；实际位置仍以分区配置为准。
+            task: { layout_mode: 'left', sort: 0 },
+            impact: { layout_mode: 'right', sort: 10 },
+            coverage: { layout_mode: 'right', sort: 10 },
+            schedule: { layout_mode: 'left', sort: 20 },
+            extension: { layout_mode: 'left', sort: 30 },
+            deliverables: { layout_mode: 'right', sort: 40 },
           }} />
           {/* ── 左栏：基本信息 + 排期 ── */}
           <Col xs={24} md={14} style={{ display: 'contents' }}>

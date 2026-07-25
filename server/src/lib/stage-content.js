@@ -96,7 +96,8 @@ const DELIVERABLE_DEFAULTS = {
 };
 
 const BUILTIN_METADATA_VERSION_KEY = 'stage.content.builtin-metadata.v1';
-const BUILTIN_LAYOUT_VERSION_KEY = 'stage.content.builtin-layout.v3';
+// v4：开发、测试阶段的默认模块改为左右分栏，避免新库详情页全部堆叠在左侧。
+const BUILTIN_LAYOUT_VERSION_KEY = 'stage.content.builtin-layout.v4';
 const DELIVERABLE_SECTION_PRESENTATION_VERSION_KEY = 'stage.content.deliverable-section-presentation.v1';
 
 function baseScope(scopeKey) {

@@ -1272,6 +1272,11 @@ body {
 .crud-card-value { text-align: right; min-width: 0; word-break: break-word; }
 .crud-card-ops { margin-top: 6px; text-align: right; }
 
+/* 输入项配置、交付件配置在手机端复用系统设置的配置卡片结构。 */
+.stage-config-mobile-list .ant-list-item { display: block; padding: 0; border: 0; }
+.stage-config-mobile-card { margin-bottom: 10px; }
+.stage-config-mobile-card .crud-card-ops { min-height: 24px; }
+
 /* ============ 移动端统一收口：弹窗/抽屉/表单控件不再横向溢出 ============ */
 @media (max-width: 767px) {
   /* 弹窗：宽度收敛进视口、上移留白、缩小内边距，纵向超长由页面滚动 */
@@ -1297,6 +1302,10 @@ body {
   .editor-form .ant-input-number,
   .editor-form .ant-picker,
   .editor-form .ant-select { max-width: 100% !important; }
+  /* 阶段配置详情弹窗沿用系统设置的紧凑卡片表单，并让底部操作在小屏上始终可见。 */
+  .stage-config-editor-modal .ant-modal-body { max-height: calc(100vh - 156px); overflow-y: auto; }
+  .stage-config-editor-modal .ant-modal-footer { display: flex; justify-content: flex-end; }
+  .stage-config-editor-modal .form-section-card { padding: 10px 12px; }
 
   /* 全流程时间轴：手机端更紧凑——缩小节点基宽与字号，
      使无「非功能/安全测试」时（5 节点）能铺满容器、无横向滚动条；

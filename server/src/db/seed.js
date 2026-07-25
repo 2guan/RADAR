@@ -162,18 +162,20 @@ export const STAGE_BUILTIN_SECTION_DEFAULTS = {
   ],
   dev: [
     { key: 'task', title: '基本信息', layout: 'left' },
+    // 详情页按全局顺序将左右分区配对：基本信息与影响性分析并列，
+    // 排期与交付件/扩展信息继续按各自列独立堆叠。
+    { key: 'impact', title: '影响性分析', layout: 'right' },
     { key: 'schedule', title: '排期', layout: 'left' },
-    { key: 'impact', title: '影响性分析', layout: 'left' },
     { key: 'extension', title: '扩展信息', layout: 'left' },
-    { key: 'deliverables', title: '交付件', layout: 'left', show_title: false },
+    { key: 'deliverables', title: '交付件', layout: 'right', show_title: false },
   ],
   test: [
     { key: 'task', title: '基本信息', layout: 'left' },
-    { key: 'schedule', title: '排期', layout: 'left' },
     // 覆盖性分析当前仅在应用组装测试（SIT）详情页实现，其他测试类型预留后续组件接入。
-    { key: 'coverage', title: '测试覆盖性分析', layout: 'left', scope_keys: ['test.SIT'] },
+    { key: 'coverage', title: '测试覆盖性分析', layout: 'right', scope_keys: ['test.SIT'] },
+    { key: 'schedule', title: '排期', layout: 'left' },
     { key: 'extension', title: '扩展信息', layout: 'left' },
-    { key: 'deliverables', title: '交付件', layout: 'left', show_title: false },
+    { key: 'deliverables', title: '交付件', layout: 'right', show_title: false },
   ],
   release_apply: [
     { key: 'references', title: '关联需求/工单', layout: 'left' },

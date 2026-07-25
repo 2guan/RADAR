@@ -6,11 +6,12 @@
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { App, Button, Checkbox, Form, Input, InputNumber, Modal, Popconfirm, Row, Col, Select, Space, Table, Tabs, Tag, Tooltip, Upload } from 'antd';
+import { App, Button, Card, Checkbox, Empty, Form, Input, InputNumber, List, Modal, Popconfirm, Row, Col, Select, Space, Table, Tabs, Tag, Tooltip, Upload } from 'antd';
 import { DeleteOutlined, EditOutlined, HolderOutlined, PlusOutlined, SettingOutlined } from '@ant-design/icons';
 import { apiDelete, apiGet, apiPost, apiPut, rawClient } from '../api/client.js';
 import { MENU } from '../router/menu.js';
 import { buildStageSectionLayout } from '../utils/stageSectionLayout.js';
+import { useResponsive } from '../hooks/useResponsive.js';
 import ResizableTitle from './ResizableTitle.jsx';
 
 const FIELD_TYPES = [
@@ -85,6 +86,29 @@ function ConfigurationActions({ onEdit, onDelete, deleteTitle, disabledDelete = 
   </Space>;
 }
 
+/**
+ * 复用系统设置页的移动端“字段名—值”卡片结构。配置列表为本地元数据，
+ * 不经过 DataTable 的远程分页，因此在此保持相同的视觉和操作布局。
+ */
+function StageConfigurationMobileList({ rows, columns, loading }) {
+  return <List className="stage-config-mobile-list" loading={loading} split={false}
+    locale={{ emptyText: <Empty description="暂无配置" /> }} dataSource={rows}
+    renderItem={(row) => <List.Item key={row.id}>
+      <Card size="small" className="stage-config-mobile-card">
+        {columns.map((column, index) => {
+          const raw = column.dataIndex ? row[column.dataIndex] : undefined;
+          const value = column.render ? column.render(raw, row) : raw;
+          const isOperation = column.title === '操作';
+          return <div key={column.key || column.dataIndex || `column_${index}`} className={isOperation ? 'crud-card-ops' : 'crud-card-row'}>
+            {!isOperation && <span className="crud-card-label">{column.title}</span>}
+            <span className={isOperation ? undefined : 'crud-card-value'}>{value == null || value === '' ? '—' : value}</span>
+          </div>;
+        })}
+      </Card>
+    </List.Item>}
+  />;
+}
+
 function menuOrderedScopes(scopes) {
   const menuItems = flattenMenu(MENU);
   const byModule = new Map(menuItems.map((item, index) => [item.module, { ...item, index }]));
@@ -127,7 +151,7 @@ function RequiredRuleTags({ statuses, rules = {} }) {
  * 分区配置以详情页同款布局画布直接预览。原生拖拽同时表达全局顺序和布局，
  * 不引入额外拖拽依赖，便于后续在其他设置页复用。
  */
-function SectionEditor({ open, config, messageApi, onClose, onSaved }) {
+function SectionEditor({ open, config, messageApi, onClose, onSaved, isMobile }) {
   const [sections, setSections] = useState([]);
   const [saving, setSaving] = useState(false);
   useEffect(() => {
@@ -228,7 +252,7 @@ function SectionEditor({ open, config, messageApi, onClose, onSaved }) {
       {lane('right', '右侧')}
     </div>;
   };
-  return <Modal open={open} title="分区配置" width={980} onCancel={onClose} onOk={save} confirmLoading={saving} destroyOnHidden>
+  return <Modal open={open} title="分区配置" width={isMobile ? 'calc(100vw - 16px)' : 980} onCancel={onClose} onOk={save} confirmLoading={saving} destroyOnHidden className="stage-config-editor-modal">
     <div className="stage-section-preview-hint">直接拖拽卡片调整全局顺序；每张卡片可切换左侧、右侧或整行。整行模块可放在任意位置。</div>
     <div className="stage-section-preview-canvas"
       onDragOver={(event) => event.preventDefault()}
@@ -240,7 +264,7 @@ function SectionEditor({ open, config, messageApi, onClose, onSaved }) {
   </Modal>;
 }
 
-function FieldEditor({ open, field, config, sourceOptions, messageApi, onClose, onSaved }) {
+function FieldEditor({ open, field, config, sourceOptions, messageApi, onClose, onSaved, isMobile }) {
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
   const isNew = !field;
@@ -274,7 +298,7 @@ function FieldEditor({ open, field, config, sourceOptions, messageApi, onClose, 
     } finally { setSaving(false); }
   };
   return (
-    <Modal open={open} title={field ? `输入项详情 · ${field.label}` : '新增扩展输入项'} width={760} onCancel={onClose} destroyOnHidden
+    <Modal open={open} title={field ? `输入项详情 · ${field.label}` : '新增扩展输入项'} width={isMobile ? 'calc(100vw - 16px)' : 760} onCancel={onClose} destroyOnHidden className="stage-config-editor-modal"
       footer={<Space><Button onClick={onClose}>取消</Button><Button type="primary" loading={saving} onClick={save}>保存</Button></Space>}
       styles={{ body: { fontSize: 12, paddingTop: 14 } }}>
       <Form form={form} layout="vertical" className="editor-form stage-config-editor-form">
@@ -282,10 +306,10 @@ function FieldEditor({ open, field, config, sourceOptions, messageApi, onClose, 
           <div className="form-section-title">基本信息</div>
           <Row gutter={[16, 0]}>
             <Col span={24}><Form.Item name="label" label="输入项名称" rules={[{ required: true }]}><Input /></Form.Item></Col>
-            {isExtension && <Col span={12}><Form.Item name="input_type" label="字段类型" rules={[{ required: true }]}><Select options={FIELD_TYPES} /></Form.Item></Col>}
+            {isExtension && <Col span={12} xs={24}><Form.Item name="input_type" label="字段类型" rules={[{ required: true }]}><Select options={FIELD_TYPES} /></Form.Item></Col>}
             {isExtension && <Form.Item noStyle shouldUpdate={(prev, next) => prev.input_type !== next.input_type}>
               {({ getFieldValue }) => ['select', 'person', 'release_point'].includes(getFieldValue('input_type')) && (
-                <Col span={12}><Form.Item name="source_key" label="数据源" rules={[{ required: true }]}><Select options={sourceOptions.filter((item) => {
+                <Col span={12} xs={24}><Form.Item name="source_key" label="数据源" rules={[{ required: true }]}><Select options={sourceOptions.filter((item) => {
                   const inputType = getFieldValue('input_type');
                   if (inputType === 'person') return item.value === 'person';
                   if (inputType === 'release_point') return item.value === 'release_point';
@@ -298,9 +322,9 @@ function FieldEditor({ open, field, config, sourceOptions, messageApi, onClose, 
         <div className="form-section-card">
           <div className="form-section-title">显示与布局</div>
           <Row gutter={[16, 0]}>
-            <Col span={12}><Form.Item name="section_id" label="布局分区"><Select allowClear options={(config.sections || []).map((item) => ({ value: item.id, label: item.title }))} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="column_span" label="布局宽度"><Select options={[{ value: 12, label: '半行' }, { value: 24, label: '整行' }]} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="sort" label="排序"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
+            <Col span={12} xs={24}><Form.Item name="section_id" label="布局分区"><Select allowClear options={(config.sections || []).map((item) => ({ value: item.id, label: item.title }))} /></Form.Item></Col>
+            <Col span={6} xs={12}><Form.Item name="column_span" label="布局宽度"><Select options={[{ value: 12, label: '半行' }, { value: 24, label: '整行' }]} /></Form.Item></Col>
+            <Col span={6} xs={12}><Form.Item name="sort" label="排序"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
             {isExtension && <Col span={24}><Form.Item name="multiple" valuePropName="checked" style={{ marginBottom: 8 }}><Checkbox>允许多选（Excel 导入、导出以英文逗号分隔）</Checkbox></Form.Item></Col>}
             <Col span={24}><Space size={[18, 8]} wrap><Form.Item name="visible" valuePropName="checked" noStyle><Checkbox>详情页显示</Checkbox></Form.Item><Form.Item name="list_visible" valuePropName="checked" noStyle><Checkbox>列表展示</Checkbox></Form.Item><Form.Item name="filterable" valuePropName="checked" noStyle><Checkbox>作为筛选条件</Checkbox></Form.Item><Form.Item name="dashboard_dimension" valuePropName="checked" noStyle><Checkbox>作为仪表盘维度</Checkbox></Form.Item></Space></Col>
           </Row>
@@ -314,7 +338,7 @@ function FieldEditor({ open, field, config, sourceOptions, messageApi, onClose, 
   );
 }
 
-function DeliverableEditor({ open, deliverable, config, messageApi, onClose, onSaved }) {
+function DeliverableEditor({ open, deliverable, config, messageApi, onClose, onSaved, isMobile }) {
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
   useEffect(() => {
@@ -344,18 +368,18 @@ function DeliverableEditor({ open, deliverable, config, messageApi, onClose, onS
     } catch (err) { onError?.(err); }
   };
   return (
-    <Modal open={open} title={deliverable ? `交付件详情 · ${deliverable.label}` : '新增交付件'} width={720} onCancel={onClose} destroyOnHidden
+    <Modal open={open} title={deliverable ? `交付件详情 · ${deliverable.label}` : '新增交付件'} width={isMobile ? 'calc(100vw - 16px)' : 720} onCancel={onClose} destroyOnHidden className="stage-config-editor-modal"
       footer={<Space><Button onClick={onClose}>取消</Button><Button type="primary" loading={saving} onClick={save}>保存</Button></Space>}
       styles={{ body: { fontSize: 12, paddingTop: 14 } }}>
       <Form form={form} layout="vertical" className="editor-form stage-config-editor-form">
         <div className="form-section-card">
           <div className="form-section-title">基本信息</div>
           <Row gutter={[16, 0]}>
-            {!deliverable && <Col span={12}><Form.Item name="deliverable_key" label="交付件编码" extra="创建后不可修改，仅支持字母、数字和下划线" rules={[{ required: true }]}><Input placeholder="例如 rollback_plan" /></Form.Item></Col>}
-            <Col span={deliverable ? 24 : 12}><Form.Item name="label" label="交付件名称" rules={[{ required: true }]}><Input /></Form.Item></Col>
-            <Col span={12}><Form.Item name="input_mode" label="提交方式" rules={[{ required: true }]}><Select options={[{ value: 'file', label: '上传文件' }, { value: 'path', label: '填写路径' }, { value: 'both', label: '都可以' }]} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="sort" label="排序"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="visible" label="是否显示" valuePropName="checked"><Checkbox>显示</Checkbox></Form.Item></Col>
+            {!deliverable && <Col span={12} xs={24}><Form.Item name="deliverable_key" label="交付件编码" extra="创建后不可修改，仅支持字母、数字和下划线" rules={[{ required: true }]}><Input placeholder="例如 rollback_plan" /></Form.Item></Col>}
+            <Col span={deliverable ? 24 : 12} xs={24}><Form.Item name="label" label="交付件名称" rules={[{ required: true }]}><Input /></Form.Item></Col>
+            <Col span={12} xs={24}><Form.Item name="input_mode" label="提交方式" rules={[{ required: true }]}><Select options={[{ value: 'file', label: '上传文件' }, { value: 'path', label: '填写路径' }, { value: 'both', label: '都可以' }]} /></Form.Item></Col>
+            <Col span={6} xs={12}><Form.Item name="sort" label="排序"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
+            <Col span={6} xs={12}><Form.Item name="visible" label="是否显示" valuePropName="checked"><Checkbox>显示</Checkbox></Form.Item></Col>
           </Row>
         </div>
         <div className="form-section-card">
@@ -375,6 +399,7 @@ function DeliverableEditor({ open, deliverable, config, messageApi, onClose, onS
 export default function StageConfiguration({ mode }) {
   // 使用 App 上下文中的 message，保证提示框跟随动态主题与全局配置。
   const { message: messageApi } = App.useApp();
+  const { isMobile } = useResponsive();
   const [scopes, setScopes] = useState([]);
   const [activeScope, setActiveScope] = useState(null);
   const [configs, setConfigs] = useState({});
@@ -458,23 +483,24 @@ export default function StageConfiguration({ mode }) {
       };
     });
   }, [activeScope, columnWidths, deliverableColumns, fieldColumns, isContent, mode]);
+  const currentColumns = isContent ? fieldColumns : deliverableColumns;
+  const currentRows = isContent ? (config?.fields || []) : (config?.deliverables || []);
 
   return (<>
     <Tabs activeKey={activeScope || undefined} onChange={setActiveScope} items={scopes.map((scope) => ({
       key: scope.scope_key,
       label: scope.label,
-      children: <div className="compact-table">
-        <Space style={{ width: '100%', justifyContent: 'flex-end', marginBottom: 12 }}>
+      children: <div className="compact-table stage-config-list">
+        <Space wrap style={{ width: '100%', justifyContent: isMobile ? 'space-between' : 'flex-end', marginBottom: 12 }}>
           {isContent && <Button icon={<SettingOutlined />} onClick={() => setSectionOpen(true)}>分区配置</Button>}
           <Button type="primary" icon={<PlusOutlined />} onClick={() => setEditing({ __new: true })}>{isContent ? '新增输入项' : '新增交付件'}</Button>
         </Space>
-        <Table rowKey="id" loading={loading} size="small" scroll={{ x: 'max-content' }} pagination={false}
-          components={{ header: { cell: ResizableTitle } }} columns={tableColumns}
-          dataSource={isContent ? (config?.fields || []) : (config?.deliverables || [])} />
+        {isMobile ? <StageConfigurationMobileList rows={currentRows} columns={currentColumns} loading={loading} /> : <Table rowKey="id" loading={loading} size="small" scroll={{ x: 'max-content' }} pagination={false}
+          components={{ header: { cell: ResizableTitle } }} columns={tableColumns} dataSource={currentRows} />}
       </div>,
     }))} />
-    {isContent ? <FieldEditor open={!!editing} field={editing?.__new ? null : editing} config={config || {}} sourceOptions={sourceOptions} messageApi={messageApi} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />
-      : <DeliverableEditor open={!!editing} deliverable={editing?.__new ? null : editing} config={config || {}} messageApi={messageApi} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />}
-    {isContent && <SectionEditor open={sectionOpen} config={config || {}} messageApi={messageApi} onClose={() => setSectionOpen(false)} onSaved={() => { setSectionOpen(false); load(); }} />}
+    {isContent ? <FieldEditor open={!!editing} field={editing?.__new ? null : editing} config={config || {}} sourceOptions={sourceOptions} messageApi={messageApi} isMobile={isMobile} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />
+      : <DeliverableEditor open={!!editing} deliverable={editing?.__new ? null : editing} config={config || {}} messageApi={messageApi} isMobile={isMobile} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />}
+    {isContent && <SectionEditor open={sectionOpen} config={config || {}} messageApi={messageApi} isMobile={isMobile} onClose={() => setSectionOpen(false)} onSaved={() => { setSectionOpen(false); load(); }} />}
   </>);
 }
