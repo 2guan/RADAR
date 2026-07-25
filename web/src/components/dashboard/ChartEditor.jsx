@@ -19,6 +19,19 @@ import { getScopedPopupContainer } from '../scopedPopup.js';
 
 // 支持次维度（堆叠/横轴/透视）的图表类型
 const X_TYPES = ['stacked_bar', 'stacked_bar_horizontal', 'line', 'area', 'table'];
+const DYNAMIC_SCOPE_BY_STAGE = { dev: 'dev', sit: 'test.SIT', uat: 'test.UAT', nft: 'test.NFT', sec: 'test.SEC', release: 'release' };
+
+/**
+ * 动态字段的范围仅用于内部筛选，维度下拉只展示字段名称。
+ * 同时兼容已缓存的旧接口文本（如“风险等级(requirement)”），避免范围编码残留在界面中。
+ */
+function dimensionLabel(item) {
+  const label = String(item?.label || '');
+  const scopeKey = String(item?.scopeKey || '');
+  if (!scopeKey) return label;
+  const escapedScope = scopeKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return label.replace(new RegExp(`\\s*[（(]${escapedScope}[)）]\\s*$`, 'i'), '');
+}
 
 export default function ChartEditor({ open, onClose, onSave, initialData, scope, meta }) {
   const [form] = Form.useForm();
@@ -32,8 +45,14 @@ export default function ChartEditor({ open, onClose, onSave, initialData, scope,
   const statDimension = Form.useWatch('statDimension', form);
   const statStage = Form.useWatch('statStage', form);
 
-  const dims = meta.dimsOf('analytics');
-  const dimOptions = dims.map((d) => ({ value: d.key, label: d.label }));
+  const dims = meta.dimsOf('analytics').filter((item) => {
+    if (!item.scopeKey) return true;
+    if (statStage === 'analysis') return statDimension === 'all'
+      ? ['requirement', 'ticket'].includes(item.scopeKey)
+      : item.scopeKey === statDimension;
+    return statStage !== 'all' && item.scopeKey === DYNAMIC_SCOPE_BY_STAGE[statStage];
+  });
+  const dimOptions = dims.map((d) => ({ value: d.key, label: dimensionLabel(d) }));
   const supportsX = X_TYPES.includes(chartType);
 
   useEffect(() => {

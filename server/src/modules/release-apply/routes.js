@@ -14,6 +14,14 @@ import { exportXlsx, parseXlsx } from '../../lib/excel.js';
 import { windowIds, inClause } from '../../lib/window.js';
 import { ok, notFound, badRequest } from '../../lib/http.js';
 import { statusTypeForReleaseApply, validateRequiredFields } from '../../lib/required-fields.js';
+import {
+  appendStageExcelValues,
+  appendStageListValues,
+  extensionValuesFromExcelRow,
+  getStageExcelColumns,
+  saveExtensionValues,
+  validateStageContent,
+} from '../../lib/stage-content.js';
 import { defaultDictAttr } from '../../lib/status.js';
 import { parseJsonArray, parseJsonObject } from '../../lib/json.js';
 
@@ -163,7 +171,7 @@ export default async function releaseApplyRoutes(fastify) {
     const baseWhere = wh.join(' AND ');
     const result = await listQuery({
       table: 'release_apply', columns: COLUMNS, searchColumns: SEARCH,
-      query: newBody, baseWhere, baseParams: params,
+      query: newBody, baseWhere, baseParams: params, extensionScopeKey: 'release_apply', extensionEntityType: 'release_apply',
     });
 
     // 主数据映射
@@ -183,6 +191,7 @@ export default async function releaseApplyRoutes(fastify) {
       decoded.release_date = rpMap[row.release_point_id] || null;
       return decoded;
     }));
+    result.list = await appendStageListValues('release_apply', result.list);
 
     return ok(result);
   });
@@ -218,6 +227,7 @@ export default async function releaseApplyRoutes(fastify) {
       change_code: body.change_code || '__AUTO__',
       ref_codes: refCodes,
     });
+    await validateStageContent('release_apply', { ...picked, ref_codes: refCodes, review_status: reviewStatus });
     const data = encodeField(picked);
 
     const result = await tx(async () => {
@@ -273,6 +283,7 @@ export default async function releaseApplyRoutes(fastify) {
       ...picked,
       ref_codes: newRefs,
     });
+    await validateStageContent('release_apply', { ...decode(old), ...picked, ref_codes: newRefs, review_status: data.review_status });
 
     const keys = Object.keys(data);
     if (keys.length) {
@@ -361,7 +372,9 @@ export default async function releaseApplyRoutes(fastify) {
       };
     }));
 
-    const buf = await exportXlsx(cols, mappedList, '投产申请清单');
+    const extensionColumns = await getStageExcelColumns('release_apply');
+    const exportRows = await appendStageExcelValues('release_apply', mappedList);
+    const buf = await exportXlsx([...cols, ...extensionColumns], exportRows, '投产申请清单');
     reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     reply.header('Content-Disposition', 'attachment; filename=release_apply.xlsx');
     return reply.send(buf);
@@ -384,7 +397,7 @@ export default async function releaseApplyRoutes(fastify) {
   ];
 
   fastify.get('/release-apply/template', { preHandler: fastify.requirePerm('release_apply', 'import') }, async (request, reply) => {
-    const buf = await exportXlsx(IO_COLUMNS, [], '投产申请模板');
+    const buf = await exportXlsx([...IO_COLUMNS, ...await getStageExcelColumns('release_apply')], [], '投产申请模板');
     reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     reply.header('Content-Disposition', 'attachment; filename=release_apply_template.xlsx');
     return reply.send(buf);
@@ -396,7 +409,7 @@ export default async function releaseApplyRoutes(fastify) {
     if (!data) throw badRequest('请上传文件');
     const mode = data.fields?.mode?.value || 'skip';
     const buffer = await data.toBuffer();
-    const rows = await parseXlsx(buffer, IO_COLUMNS);
+    const rows = await parseXlsx(buffer, [...IO_COLUMNS, ...await getStageExcelColumns('release_apply')]);
     if (!rows.length) throw badRequest('文件中无有效数据');
 
     const stat = { inserted: 0, updated: 0, skipped: 0, failed: 0 };
@@ -410,14 +423,15 @@ export default async function releaseApplyRoutes(fastify) {
         try {
           if (!r.change_content) throw new Error('变更内容不能为空');
           const refs = splitCodes(r.ref_codes);
+          let code = String(r.change_code || '').trim();
           const exists = code ? await get('SELECT * FROM release_apply WHERE change_code = ?', code) : null;
           const reviewStatus = await deriveReviewStatus(refs, exists?.release_point_id ?? null);
+          const extensionValues = await extensionValuesFromExcelRow('release_apply', r);
           // 导入按单组交付制品处理（多组请在页面维护）
           const units = JSON.stringify(await normalizeUnits([{
             artifact_type: r.artifact_type || null, delivery_unit: r.delivery_unit || null,
             new_version: r.new_version || null, ferry_status: r.ferry_status || null,
           }]));
-          let code = String(r.change_code || '').trim();
           if (exists) {
             if (mode === 'skip') {
               stat.skipped++;
@@ -443,6 +457,7 @@ export default async function releaseApplyRoutes(fastify) {
               out_dept: r.out_dept || null,
               deploy_dept: r.deploy_dept || null,
             }, LABELS);
+            await saveExtensionValues('release_apply', exists.id, extensionValues, request.currentUser?.name);
             stat.updated++;
             details.push({ key: code, title: r.change_content, action: 'update', status: 'success', __rowNum__: rowNum });
           } else {
@@ -457,6 +472,7 @@ export default async function releaseApplyRoutes(fastify) {
               request.currentUser?.name, new Date().toISOString().slice(0, 10),
             );
             await auditCreate('release_apply', res.lastInsertRowid, code, request.currentUser?.name);
+            await saveExtensionValues('release_apply', res.lastInsertRowid, extensionValues, request.currentUser?.name);
             stat.inserted++;
             details.push({ key: code, title: r.change_content, action: 'insert', status: 'success', __rowNum__: rowNum });
           }

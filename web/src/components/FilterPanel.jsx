@@ -79,7 +79,7 @@ export default function FilterPanel({ configs, onChange, actions }) {
           value={val || []}
           onChange={(v) => handleValueChange(c.field, v, 'select')}
           style={{ width: '100%' }}
-          dropdownStyle={{ borderRadius: 0 }}
+          styles={{ popup: { root: { borderRadius: 0 } } }}
         />
       );
     }

@@ -6,11 +6,12 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { Upload, Button, Input, Space, List, Tag, Popconfirm, message, Modal } from 'antd';
+import { App, Upload, Button, Input, Space, List, Tag, Popconfirm, Modal } from 'antd';
 import { UploadOutlined, LinkOutlined, DownloadOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons';
 import { apiGet, apiPost, apiDelete, rawClient, TOKEN_KEY } from '../api/client.js';
 
-export default function AttachmentField({ entityType, entityId, fieldKey, readOnly, inputMode = 'both' }) {
+export default function AttachmentField({ entityType, entityId, fieldKey, deliverableId, readOnly, inputMode = 'both' }) {
+  const { message } = App.useApp();
   const [list, setList] = useState([]);
   const [pathText, setPathText] = useState('');
   const allowFile = inputMode !== 'path';
@@ -24,9 +25,14 @@ export default function AttachmentField({ entityType, entityId, fieldKey, readOn
   const reload = async () => {
     if (!entityId) { setList([]); return; }
     const rows = await apiGet('/attachments', { entityType, entityId });
-    setList((rows || []).filter((a) => a.field_key === fieldKey));
+    setList((rows || []).filter((a) => {
+      if (!deliverableId) return a.field_key === fieldKey;
+      // 已切换到公共交付件的内置项，同时兼容历史上只有 field_key 的附件记录。
+      return Number(a.deliverable_id) === Number(deliverableId)
+        || (!a.deliverable_id && a.field_key === fieldKey);
+    }));
   };
-  useEffect(() => { reload(); }, [entityId, fieldKey]);
+  useEffect(() => { reload(); }, [entityId, fieldKey, deliverableId]);
 
   if (!entityId) {
     return <Tag className="status-tag status-tag-error" style={{ fontSize: 11 }}>保存记录后可管理附件</Tag>;
@@ -37,7 +43,8 @@ export default function AttachmentField({ entityType, entityId, fieldKey, readOn
     const fd = new FormData();
     fd.append('entityType', entityType);
     fd.append('entityId', String(entityId));
-    fd.append('fieldKey', fieldKey);
+    if (fieldKey) fd.append('fieldKey', fieldKey);
+    if (deliverableId) fd.append('deliverableId', String(deliverableId));
     fd.append('file', file);
     try {
       await rawClient.post('/attachments/upload', fd, {
@@ -54,7 +61,7 @@ export default function AttachmentField({ entityType, entityId, fieldKey, readOn
   // 添加路径
   const addPath = async () => {
     if (!pathText.trim()) return;
-    await apiPost('/attachments/path', { entityType, entityId, fieldKey, pathText: pathText.trim() });
+    await apiPost('/attachments/path', { entityType, entityId, fieldKey, deliverableId, pathText: pathText.trim() });
     setPathText('');
     reload();
   };

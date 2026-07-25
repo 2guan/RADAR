@@ -11,6 +11,14 @@ import { listQuery } from '../../lib/query.js';
 import { genTestCode } from '../../lib/code-gen.js';
 import { defaultProcessStatus } from '../../lib/status.js';
 import { statusTypeForProcessStatus, validateRequiredFields } from '../../lib/required-fields.js';
+import {
+  appendStageExcelValues,
+  appendStageListValues,
+  extensionValuesFromExcelRow,
+  getStageExcelColumns,
+  saveExtensionValues,
+  validateStageContent,
+} from '../../lib/stage-content.js';
 import { calcDeviation } from '../../lib/deviation.js';
 import { auditCreate, auditUpdate, auditDelete } from '../../lib/audit.js';
 import { listByEntity } from '../../lib/attachment.js';
@@ -135,7 +143,7 @@ export default async function testTaskRoutes(fastify) {
 
     const result = await listQuery({
       table: 'test_task', columns: COLUMNS, searchColumns: SEARCH, query: newBody,
-      baseWhere, baseParams: params,
+      baseWhere, baseParams: params, extensionScopeKey: `test.${body.testType}`, extensionEntityType: 'test',
     });
 
     // 仅针对当前页任务涉及的需求/工单映射计划投产点，避免随翻页整表扫描
@@ -160,6 +168,7 @@ export default async function testTaskRoutes(fastify) {
       entity_label: itemMap[row.req_code]?.entity_label || null,
       impl_system_name: sysMap[row.impl_system] || row.impl_system,
     }));
+    result.list = await appendStageListValues(`test.${body.testType}`, result.list);
 
     return ok(result);
   });
@@ -374,6 +383,7 @@ export default async function testTaskRoutes(fastify) {
 
     const merged = { ...old, ...data };
     await validateRequiredFields('test', await statusTypeForProcessStatus(merged.status), merged);
+    await validateStageContent(`test.${merged.test_type}`, merged);
     data.deviation_rate = calcDeviation(merged.plan_start, merged.plan_end, merged.actual_end);
 
     const keys = Object.keys(data);
@@ -478,7 +488,10 @@ export default async function testTaskRoutes(fastify) {
       };
     }));
 
-    const buf = await exportXlsx(cols, mappedList, '测试任务清单');
+    const scopeKey = `test.${body.test_type}`;
+    const extensionColumns = await getStageExcelColumns(scopeKey);
+    const exportRows = await appendStageExcelValues(scopeKey, mappedList);
+    const buf = await exportXlsx([...cols, ...extensionColumns], exportRows, '测试任务清单');
     reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     reply.header('Content-Disposition', 'attachment; filename=test_tasks.xlsx');
     return reply.send(buf);
@@ -487,7 +500,8 @@ export default async function testTaskRoutes(fastify) {
   // 模板下载
   fastify.get('/test-tasks/template', async (request, reply) => {
     await requireTestPerm(request, 'import', request.query?.testType);
-    const buf = await exportXlsx(IO_COLUMNS, [], '测试任务模板');
+    const scopeKey = `test.${request.query?.testType}`;
+    const buf = await exportXlsx([...IO_COLUMNS, ...await getStageExcelColumns(scopeKey)], [], '测试任务模板');
     reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     reply.header('Content-Disposition', 'attachment; filename=test_tasks_template.xlsx');
     return reply.send(buf);
@@ -501,7 +515,8 @@ export default async function testTaskRoutes(fastify) {
     const testType = data.fields?.testType?.value;
     await requireTestPerm(request, 'import', testType);
     const buffer = await data.toBuffer();
-    const rows = await parseXlsx(buffer, IO_COLUMNS);
+    const scopeKey = `test.${testType}`;
+    const rows = await parseXlsx(buffer, [...IO_COLUMNS, ...await getStageExcelColumns(scopeKey)]);
     if (!rows.length) throw badRequest('文件中无有效数据');
 
     const stat = { inserted: 0, updated: 0, skipped: 0, failed: 0 };
@@ -541,6 +556,7 @@ export default async function testTaskRoutes(fastify) {
           const status = await resolveDictAttr('process_status', r.status) || await defaultProcessStatus('测试', 'initial', '测试承接');
           const implOrg = await resolveDictAttr('org', r.impl_org);
           const implSystem = await resolveSystemCode(r.impl_system);
+          const extensionValues = await extensionValuesFromExcelRow(scopeKey, r);
 
           let code = String(r.task_code || '').trim();
           const exists = code ? await get('SELECT * FROM test_task WHERE task_code = ?', code) : null;
@@ -597,6 +613,7 @@ export default async function testTaskRoutes(fastify) {
                 actual_start: r.actual_start || null, actual_end: r.actual_end || null, deviation_rate: devRate
               }, LABELS);
             }
+            await saveExtensionValues(scopeKey, exists.id, extensionValues, request.currentUser?.name);
 
             stat.updated++;
             details.push({
@@ -622,6 +639,7 @@ export default async function testTaskRoutes(fastify) {
               request.currentUser?.name, new Date().toISOString().slice(0, 10)
             );
             await auditCreate('test', res.lastInsertRowid, code, request.currentUser?.name);
+            await saveExtensionValues(scopeKey, res.lastInsertRowid, extensionValues, request.currentUser?.name);
             stat.inserted++;
             details.push({
               key: code,

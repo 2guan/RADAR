@@ -65,6 +65,18 @@ export default async function dictRoutes(fastify) {
       }
       if (category === 'process_status' || category === 'issue_status') await refreshStatusSemantics();
     },
+    // 阶段内容规则以字典 ID 绑定。被规则或业务记录使用的状态不能直接删除，避免配置悬空。
+    beforeDelete: async (row) => {
+      if (!['process_status', 'review_status'].includes(row.category)) return;
+      const fieldRule = await get('SELECT 1 FROM stage_field_status_rule WHERE status_dict_item_id = ? LIMIT 1', row.id);
+      const deliverableRule = await get('SELECT 1 FROM deliverable_status_rule WHERE status_dict_item_id = ? LIMIT 1', row.id);
+      if (fieldRule || deliverableRule) throw badRequest('该状态已被阶段内容规则引用，请先调整规则或停用状态');
+      const scopes = await all('SELECT DISTINCT table_name, status_field FROM stage_scope WHERE status_category = ?', row.category);
+      for (const scope of scopes) {
+        const used = await get(`SELECT id FROM ${scope.table_name} WHERE ${scope.status_field} = ? LIMIT 1`, row.attr_value);
+        if (used) throw badRequest('该状态已被业务记录使用，请改为停用或先处理业务数据');
+      }
+    },
     afterDelete: async ({ row }) => {
       if (row.category === 'process_status' || row.category === 'issue_status') {
         await refreshStatusSemantics();

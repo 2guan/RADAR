@@ -42,6 +42,7 @@ import attachmentRoutes from './modules/attachments/routes.js';
 import auditRoutes from './modules/audit/routes.js';
 import overviewRoutes from './modules/overview/routes.js';
 import dashboardRoutes from './modules/dashboard/routes.js';
+import stageContentRoutes from './modules/stage-content/routes.js';
 
 /**
  * 创建并返回已装配的 Fastify 实例。
@@ -154,6 +155,7 @@ export async function buildApp() {
     await api.register(roleRoutes);
     await api.register(userRoutes);
     await api.register(settingsRoutes);
+    await api.register(stageContentRoutes);
     await api.register(requirementRoutes);
     await api.register(ticketRoutes);
     await api.register(issueRoutes);

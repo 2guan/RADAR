@@ -14,6 +14,8 @@ import dayjs from 'dayjs';
 import DictSelect from '../DictSelect.jsx';
 import PersonPicker from '../PersonPicker.jsx';
 import HistoryDrawer from '../HistoryDrawer.jsx';
+import StageContentPanel from '../StageContentPanel.jsx';
+import StageSectionLayout from '../StageSectionLayout.jsx';
 import CodeLink from '../CodeLink.jsx';
 import EditorShell from './EditorShell.jsx';
 import { getStatusType, statusSelectWidth } from '../StatusBadge.jsx';
@@ -185,6 +187,9 @@ function PersonPickerField({ value = [], onChange, readonly, placeholder }) {
 
 export default function TicketEditor({ open, mode = 'modal', code, reqId, defaultReleasePointId, onClose, onSaved }) {
   const [form] = Form.useForm();
+  const extensionPanelRef = useRef(null);
+  const extensionRightPanelRef = useRef(null);
+  const extensionFullPanelRef = useRef(null);
   // 监听工单状态，供标题栏内联选择器响应式回显
   const statusValue = Form.useWatch('status', form);
   const [current, setCurrent] = useState(null);
@@ -309,6 +314,7 @@ export default function TicketEditor({ open, mode = 'modal', code, reqId, defaul
       propose_time: v.propose_time ? v.propose_time.format('YYYY-MM-DD') : null,
     };
     if (isEdit) {
+      await Promise.all([extensionPanelRef, extensionRightPanelRef, extensionFullPanelRef].map((panel) => panel.current?.save()));
       await apiPut(`/tickets/${reqId ?? current?.id}`, payload);
       message.success('已保存');
     } else {
@@ -419,12 +425,15 @@ export default function TicketEditor({ open, mode = 'modal', code, reqId, defaul
         style={{ marginTop: 10, fontSize: 12 }}
         onValuesChange={() => { if (!readonly) setIsDirty(true); }}
       >
-        <Row gutter={12}>
+        <Row gutter={12} className="stage-detail-layout-ticket">
+          <StageSectionLayout scopeKey="ticket" defaults={{
+            basic: { layout_mode: 'left', sort: 0 }, systems: { layout_mode: 'right', sort: 10 }, owners: { layout_mode: 'right', sort: 20 },
+          }} />
           {/* ── 左栏 ── */}
-          <Col xs={24} md={14}>
+          <Col xs={24} md={14} style={{ display: 'contents' }}>
 
             {/* 基本信息 */}
-            <div className="form-section-card">
+            <div className="form-section-card stage-detail-section-basic">
               <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>基本信息</div>
 
               {/* 工单状态改由标题栏内联编辑，此处保留隐藏字段以保证保存 */}
@@ -533,14 +542,16 @@ export default function TicketEditor({ open, mode = 'modal', code, reqId, defaul
               )}
             </div>
 
+            <StageContentPanel ref={extensionPanelRef} scopeKey="ticket" entityType="ticket" entityId={current?.id} readOnly={readonly} onDirtyChange={() => setIsDirty(true)} />
+
           </Col>
 
           {/* ── 右栏 ── */}
-          <Col xs={24} md={10}>
+          <Col xs={24} md={10} style={{ display: 'contents' }}>
 
             {/* 涉及系统 */}
             {['main_systems', 'collab_dev_systems', 'collab_test_systems'].some(visible) && (
-            <div className="form-section-card">
+            <div className="form-section-card stage-detail-section-systems">
               <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>涉及系统</div>
 
               {/* 主责系统：标题右侧选择框，单选（再选自动替换），已选展示在下方 */}
@@ -568,7 +579,7 @@ export default function TicketEditor({ open, mode = 'modal', code, reqId, defaul
 
             {/* 相关负责人 */}
             {['propose_dept', 'proposer', 'yn_owner', 'jk_owner'].some(visible) && (
-            <div className="form-section-card">
+            <div className="form-section-card stage-detail-section-owners">
               <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>相关负责人</div>
               <Row gutter={8}>
                 {/* 提出部门 + 提出人：手机端各占一行（充满），PC 端双栏 */}
@@ -599,7 +610,9 @@ export default function TicketEditor({ open, mode = 'modal', code, reqId, defaul
               )}
             </div>
             )}
+            <StageContentPanel ref={extensionRightPanelRef} scopeKey="ticket" entityType="ticket" entityId={current?.id} readOnly={readonly} position="right" onDirtyChange={() => setIsDirty(true)} />
           </Col>
+          <StageContentPanel ref={extensionFullPanelRef} scopeKey="ticket" entityType="ticket" entityId={current?.id} readOnly={readonly} position="full" onDirtyChange={() => setIsDirty(true)} />
         </Row>
       </Form>
 

@@ -14,16 +14,21 @@ import DictSelect from '../DictSelect.jsx';
 import SystemSelect from '../SystemSelect.jsx';
 import StatusBadge, { getStatusType } from '../StatusBadge.jsx';
 import HistoryDrawer from '../HistoryDrawer.jsx';
+import StageContentPanel from '../StageContentPanel.jsx';
+import StageSectionLayout from '../StageSectionLayout.jsx';
 import CodeLink from '../CodeLink.jsx';
 import EditorShell from './EditorShell.jsx';
 import { apiGet, apiPost, apiPut } from '../../api/client.js';
 import { useAppStore } from '../../stores/app.js';
 import { useResponsive } from '../../hooks/useResponsive.js';
-import { useRequiredFields } from '../../hooks/useRequiredFields.js';
+import { useStageFormConfig } from '../../hooks/useStageFormConfig.js';
 import { makeReleasePointOptions, ReleasePointText } from '../ReleasePointText.jsx';
 
 export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId, defaultReleasePointId, defaultReqCodes, defaultTicketCodes, defaultType = 'req', onClose, onSaved }) {
   const [form] = Form.useForm();
+  const extensionPanelRef = useRef(null);
+  const extensionRightPanelRef = useRef(null);
+  const extensionFullPanelRef = useRef(null);
   // 监听申请投产点，用于与所选需求的计划投产点做一致性校验提示
   const releasePointIdValue = Form.useWatch('release_point_id', form);
   const [current, setCurrent] = useState(null);
@@ -35,14 +40,9 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
   // 既有申请（按 id 或变更编号加载）即为编辑/查看态；其余为新增
   const isEdit = !!applyId || !!code || mode === 'page';
   const readonly = isEdit ? !can('release_apply', 'edit') : !can('release_apply', 'create');
-  const required = useRequiredFields('release_apply', current?.review_status ? getStatusType(current.review_status) : 'initial', readonly);
+  const required = useStageFormConfig('release_apply', current?.review_status, readonly);
   const visible = (fieldKey) => required.isVisible(fieldKey);
-  const hasDeliveryUnitVisible = [
-    'delivery_units.artifact_type',
-    'delivery_units.delivery_unit',
-    'delivery_units.new_version',
-    'delivery_units.ferry_status',
-  ].some(visible);
+  const hasDeliveryUnitVisible = visible('delivery_units');
 
   // 自动生成变更编号并填充
   const autoGenCode = (pointId) => {
@@ -213,6 +213,7 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
     const ref_codes = [...new Set([...selReqs, ...selTickets])];
     const payload = { ...v, ref_codes };
     if (isEdit) {
+      await Promise.all([extensionPanelRef, extensionRightPanelRef, extensionFullPanelRef].map((panel) => panel.current?.save()));
       await apiPut(`/release-apply/${applyId ?? current?.id}`, payload);
       message.success('已保存');
     } else {
@@ -319,15 +320,13 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
       )}
     >
       <Form form={form} layout="vertical" requiredMark={false} className="editor-form" onValuesChange={onValuesChange} style={{ marginTop: 10, fontSize: 12 }}>
-        <Row gutter={12}>
+        <Row gutter={12} className="stage-detail-layout-release_apply">
+          <StageSectionLayout scopeKey="release_apply" leftSpan={12} rightSpan={12} />
           {/* ── 左栏：关联需求/工单 + 变更内容 ── */}
-          <Col xs={24} md={12}>
+          <Col xs={24} md={12} style={{ display: 'contents' }}>
             {visible('ref_codes') && (
-            <div className="form-section-card">
-              <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>
-                关联需求/工单
-                {!isEdit && <span style={{ fontWeight: 400, color: 'var(--radar-text-secondary)', marginLeft: 6, fontSize: 11 }}>（可多选）</span>}
-              </div>
+            <div className="form-section-card stage-detail-section-references">
+              <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>关联需求/工单</div>
               {/* 新增时显示 TAB 下拉选择；编辑时不可修改，仅展示已选 */}
               {!isEdit && (
                 <Tabs
@@ -366,7 +365,7 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
             )}
 
             {['change_content', 'impact_scope'].some(visible) && (
-            <div className="form-section-card">
+            <div className="form-section-card stage-detail-section-content">
               <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>变更内容</div>
               {visible('change_content') && (
                 <Form.Item name="change_content" label="变更内容" rules={required.rules('change_content', '变更内容', { message: '请输入变更内容' })} style={{ marginBottom: 8 }}>
@@ -380,12 +379,15 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
               )}
             </div>
             )}
+
+            {/* 扩展信息作为左侧业务内容的延续显示，不单独占用整宽区域。 */}
+            <StageContentPanel ref={extensionPanelRef} scopeKey="release_apply" entityType="release_apply" entityId={current?.id} readOnly={readonly} onDirtyChange={() => setIsDirty(true)} />
           </Col>
 
           {/* ── 右栏：变更明细 ── */}
-          <Col xs={24} md={12}>
+          <Col xs={24} md={12} style={{ display: 'contents' }}>
             {['change_code', 'release_point_id', 'change_system', 'impl_org', 'out_dept', 'deploy_dept'].some(visible) && (
-            <div className="form-section-card">
+            <div className="form-section-card stage-detail-section-change">
               <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>变更明细</div>
               <Row gutter={8}>
                 {visible('change_code') && (
@@ -468,40 +470,32 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
               </Row>
             </div>
             )}
+            <StageContentPanel ref={extensionRightPanelRef} scopeKey="release_apply" entityType="release_apply" entityId={current?.id} readOnly={readonly} position="right" onDirtyChange={() => setIsDirty(true)} />
           </Col>
-        </Row>
+          <StageContentPanel ref={extensionFullPanelRef} scopeKey="release_apply" entityType="release_apply" entityId={current?.id} readOnly={readonly} position="full" onDirtyChange={() => setIsDirty(true)} />
 
         {/* ── 交付制品（独立整宽模块，PC 端一组一行，可添加多组） ── */}
         {hasDeliveryUnitVisible && (
-        <div className="form-section-card">
-          <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>
-            交付制品
-            <span style={{ fontWeight: 400, color: 'var(--radar-text-secondary)', marginLeft: 6, fontSize: 11 }}>（一组制品类型/交付单元名称/新版本号/摆渡状态，可添加多组）</span>
-          </div>
+        <div className="form-section-card release-apply-delivery-section stage-detail-section-artifacts">
+          <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>交付制品</div>
           <Form.List name="delivery_units">
             {(fields, { add, remove }) => (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {fields.map((field, idx) => (
                   <div key={field.key} style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap', paddingBottom: idx < fields.length - 1 ? 8 : 0, borderBottom: idx < fields.length - 1 ? '1px dashed var(--radar-border)' : 'none' }}>
                     <div style={{ width: 18, textAlign: 'center', fontSize: 11, fontWeight: 600, color: 'var(--radar-text-secondary)', paddingBottom: 6, flexShrink: 0 }}>{idx + 1}</div>
-                    {visible('delivery_units.artifact_type') && (
-                      <Form.Item name={[field.name, 'artifact_type']} label={idx === 0 ? '制品类型' : undefined} rules={required.rules('delivery_units.artifact_type', '制品类型', { action: '请选择' })} style={{ marginBottom: 0, flex: '1 1 130px', minWidth: 120 }}>
+                    <Form.Item name={[field.name, 'artifact_type']} label={idx === 0 ? '制品类型' : undefined} style={{ marginBottom: 0, flex: '1 1 130px', minWidth: 120 }}>
                         <DictSelect category="artifact_type" size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} />
-                      </Form.Item>
-                    )}
-                    {visible('delivery_units.delivery_unit') && (
-                      <Form.Item name={[field.name, 'delivery_unit']} label={idx === 0 ? '交付单元名称（介质库路径/文件名）' : undefined} rules={required.rules('delivery_units.delivery_unit', '交付单元名称')} style={{ marginBottom: 0, flex: '2 1 220px', minWidth: 180 }}>
+                    </Form.Item>
+                    <Form.Item name={[field.name, 'delivery_unit']} label={idx === 0 ? '交付单元名称（介质库路径/文件名）' : undefined} style={{ marginBottom: 0, flex: '2 1 220px', minWidth: 180 }}>
                         <Input size="small" placeholder="介质库路径 / 文件名" readOnly={readonly} />
-                      </Form.Item>
-                    )}
-                    {visible('delivery_units.new_version') && (
-                      <Form.Item name={[field.name, 'new_version']} label={idx === 0 ? '新版本号' : undefined} rules={required.rules('delivery_units.new_version', '新版本号')} style={{ marginBottom: 0, flex: '1 1 110px', minWidth: 100 }}>
+                    </Form.Item>
+                    <Form.Item name={[field.name, 'new_version']} label={idx === 0 ? '新版本号' : undefined} style={{ marginBottom: 0, flex: '1 1 110px', minWidth: 100 }}>
                         <Input size="small" placeholder="如 V1.2.0" readOnly={readonly} />
-                      </Form.Item>
-                    )}
+                    </Form.Item>
                     {/* 摆渡状态：仅编辑时显示；新增由后端按字典默认值写入 */}
-                    {isEdit && visible('delivery_units.ferry_status') && (
-                      <Form.Item name={[field.name, 'ferry_status']} label={idx === 0 ? '摆渡状态' : undefined} rules={required.rules('delivery_units.ferry_status', '摆渡状态', { action: '请选择' })} style={{ marginBottom: 0, flex: '1 1 120px', minWidth: 110 }}>
+                    {isEdit && (
+                      <Form.Item name={[field.name, 'ferry_status']} label={idx === 0 ? '摆渡状态' : undefined} style={{ marginBottom: 0, flex: '1 1 120px', minWidth: 110 }}>
                         <DictSelect category="ferry_status" size="small" allowClear={false} style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} />
                       </Form.Item>
                     )}
@@ -521,6 +515,7 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
           </Form.List>
         </div>
         )}
+        </Row>
       </Form>
 
       <HistoryDrawer open={historyOpen} entityType="release_apply" entityId={current?.id} onClose={() => setHistoryOpen(false)} />

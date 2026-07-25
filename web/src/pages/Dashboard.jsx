@@ -220,7 +220,8 @@ export default function Dashboard() {
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 3 }}>
                   <span className="value" style={{ color: 'var(--radar-ink)' }}>{m.total}</span>
                 </div>
-                <Progress percent={pct} showInfo={false} strokeColor={c.color} trailColor="var(--radar-border)" strokeWidth={6} style={{ marginTop: 12, marginBottom: 2 }} />
+                {/* antd 的数值 size 会同时设置宽、高；仅指定高度，保持进度条占满统计卡宽度。 */}
+                <Progress percent={pct} showInfo={false} strokeColor={c.color} trailColor="var(--radar-border)" size={{ height: 6 }} style={{ marginTop: 12, marginBottom: 2 }} />
                 <div className="done-text"><b style={{ color: c.color }}>{m.terminal}/{m.total}</b> 已完成</div>
               </div>
             </Col>

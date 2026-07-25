@@ -7,14 +7,15 @@
  * 说明：kind='dev' 用开发表与开发阶段状态；kind='test' 用测试表与测试阶段状态。
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Form, Input, DatePicker, Row, Col, Button, Tooltip, message } from 'antd';
 import { DownloadOutlined, HistoryOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import DictSelect from '../DictSelect.jsx';
 import SystemSelect from '../SystemSelect.jsx';
 import PersonPicker from '../PersonPicker.jsx';
-import AttachmentField from '../AttachmentField.jsx';
+import StageContentPanel from '../StageContentPanel.jsx';
+import StageSectionLayout from '../StageSectionLayout.jsx';
 import ImpactAnalysisModal from './ImpactAnalysisModal.jsx';
 import CoverageAnalysisModal from './CoverageAnalysisModal.jsx';
 import HistoryDrawer from '../HistoryDrawer.jsx';
@@ -40,15 +41,12 @@ const CFG = {
 };
 const TEMPLATE_ATTACH_FIELDS = new Set(['编码检查表', '技术方案确认单']);
 
-function attachmentModeText(mode) {
-  if (mode === 'path') return '路径';
-  if (mode === 'file') return '上传文档';
-  return '附件或路径';
-}
-
 export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', taskId, onClose, onSaved }) {
   const cfg = CFG[kind];
   const [form] = Form.useForm();
+  const extensionPanelRef = useRef(null);
+  const extensionRightPanelRef = useRef(null);
+  const extensionFullPanelRef = useRef(null);
   // 监听任务状态，供标题栏内联选择器响应式回显
   const statusValue = Form.useWatch('status', form);
   const [current, setCurrent] = useState(null);
@@ -65,7 +63,6 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
   const required = useRequiredFields(cfg.entity, getStatusType(statusValue), readonly, kind === 'test' ? current?.test_type : undefined);
   const visible = (fieldKey) => required.isVisible(fieldKey);
   const linkStyle = { color: 'var(--radar-primary)', cursor: 'pointer' };
-  const attachFields = required.attachmentFields;
   const workItemLabel = current?.entity_label || (current?.entity_type === 'ticket' ? '工单' : (current?.entity_type === 'requirement' ? '需求' : '需求/工单'));
   const canOpenWorkItem = !!current?.req_code && ['requirement', 'ticket'].includes(current?.entity_type);
   // 结构化分析弹窗（影响性分析 / 测试覆盖性分析）
@@ -113,6 +110,7 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
     const v = await form.validateFields();
     const id = taskId ?? current?.id;
     const fmt = (x) => (x ? x.format('YYYY-MM-DD') : null);
+    await Promise.all([extensionPanelRef, extensionRightPanelRef, extensionFullPanelRef].map((panel) => panel.current?.save()));
     await apiPut(`${cfg.api}/${id}`, {
       ...v, plan_start: fmt(v.plan_start), plan_end: fmt(v.plan_end),
       actual_start: fmt(v.actual_start), actual_end: fmt(v.actual_end),
@@ -166,6 +164,14 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
       setTemplateDownloading(null);
     }
   };
+  // 历史业务模板仍保留专用生成能力，但附件位置完全交由公共交付件布局决定。
+  const renderDeliverableAction = (deliverable) => (
+    kind === 'dev' && TEMPLATE_ATTACH_FIELDS.has(deliverable.label)
+      ? <Tooltip title="下载模板"><Button type="text" size="small" aria-label={`下载${deliverable.label}模板`}
+        icon={<DownloadOutlined style={{ fontSize: 12 }} />} loading={templateDownloading === deliverable.label}
+        onClick={() => downloadAttachmentTemplate(deliverable.label)} /></Tooltip>
+      : null
+  );
 
   return (
     <EditorShell
@@ -245,10 +251,13 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
         {/* 状态改由标题栏内联编辑，此处保留隐藏字段以保证保存 */}
         <Form.Item name="status" hidden><Input /></Form.Item>
 
-        <Row gutter={12}>
+        <Row gutter={12} className={`stage-detail-layout-${kind === 'test' ? `test-${current?.test_type || cfg.testType || 'SIT'}` : 'dev'}`}>
+          <StageSectionLayout scopeKey={kind === 'test' ? `test.${current?.test_type || cfg.testType || 'SIT'}` : 'dev'} defaults={{
+            task: { layout_mode: 'left', sort: 0 }, schedule: { layout_mode: 'left', sort: 10 }, impact: { layout_mode: 'left', sort: 20 }, coverage: { layout_mode: 'left', sort: 20 },
+          }} />
           {/* ── 左栏：基本信息 + 排期 ── */}
-          <Col xs={24} md={14}>
-            <div className="form-section-card">
+          <Col xs={24} md={14} style={{ display: 'contents' }}>
+            <div className="form-section-card stage-detail-section-task">
               <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>基本信息</div>
 
               {visible('task_name') && (
@@ -290,8 +299,8 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
             </div>
 
             {['plan_start', 'plan_end', 'actual_start', 'actual_end'].some(visible) && (
-              <div className="form-section-card">
-                <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>排期<span style={{ fontWeight: 400, color: 'var(--radar-text-secondary)', marginLeft: 6, fontSize: 11 }}>（终态必填）</span></div>
+              <div className="form-section-card stage-detail-section-schedule">
+                <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>排期</div>
                 <Row gutter={8}>
                   {visible('plan_start') && <Col span={12}><Form.Item name="plan_start" label="计划开始" rules={required.rules('plan_start', '计划开始', { action: '请选择' })} style={{ marginBottom: 8 }}><DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" /></Form.Item></Col>}
                   {visible('plan_end') && <Col span={12}><Form.Item name="plan_end" label="计划结束" rules={required.rules('plan_end', '计划结束', { action: '请选择' })} style={{ marginBottom: 8 }}><DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" /></Form.Item></Col>}
@@ -300,13 +309,16 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
                 </Row>
               </div>
             )}
+
+            {/* 公共扩展信息默认在左栏显示，保持与任务信息、排期模块一致的卡片宽度。 */}
+            <StageContentPanel ref={extensionPanelRef} scopeKey={kind === 'test' ? `test.${current?.test_type || cfg.testType || 'SIT'}` : 'dev'} entityType={cfg.entity} entityId={current?.id} readOnly={readonly} renderDeliverableAction={renderDeliverableAction} onDirtyChange={() => setIsDirty(true)} />
           </Col>
 
           {/* ── 右栏：阶段附件 ── */}
-          <Col xs={24} md={10}>
+          <Col xs={24} md={10} style={{ display: 'contents' }}>
             {/* 影响性分析（开发阶段）/ 测试覆盖性分析（应用组装 SIT）——结构化表单 */}
             {kind === 'dev' && visible('impact_analysis') && (
-              <div className="form-section-card" style={{ marginBottom: 12 }}>
+              <div className="form-section-card stage-detail-section-impact" style={{ marginBottom: 12 }}>
                 <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>影响性分析</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <Button size="small" type="primary" ghost onClick={() => setImpactOpen(true)}>
@@ -318,8 +330,9 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
                 </div>
               </div>
             )}
-            {isSit && visible('coverage_analysis') && (
-              <div className="form-section-card" style={{ marginBottom: 12 }}>
+            {/* SIT 覆盖性分析由已注册业务组件提供，不再依赖旧检查内容设置。 */}
+            {isSit && (
+              <div className="form-section-card stage-detail-section-coverage" style={{ marginBottom: 12 }}>
                 <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>测试覆盖性分析</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <Button size="small" type="primary" ghost onClick={() => setCoverageOpen(true)}>
@@ -331,36 +344,9 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
                 </div>
               </div>
             )}
-            {attachFields.filter((f) => visible(`attachment:${f}`)).map((f) => {
-              const mode = required.attachmentMode(f);
-              return (
-                <div className="form-section-card" key={f} style={{ marginBottom: 12 }}>
-                  <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                    <span>
-                      {f}
-                      <span style={{ fontWeight: 400, color: 'var(--radar-text-secondary)', marginLeft: 6, fontSize: 11 }}>
-                        （{attachmentModeText(mode)}）
-                      </span>
-                    </span>
-                    {kind === 'dev' && TEMPLATE_ATTACH_FIELDS.has(f) && (
-                      <Tooltip title="下载模板">
-                        <Button
-                          type="text"
-                          size="small"
-                          aria-label={`下载${f}模板`}
-                          icon={<DownloadOutlined style={{ fontSize: 12 }} />}
-                          loading={templateDownloading === f}
-                          onClick={() => downloadAttachmentTemplate(f)}
-                          style={{ width: 24, height: 24, borderRadius: 2, flexShrink: 0 }}
-                        />
-                      </Tooltip>
-                    )}
-                  </div>
-                  <AttachmentField entityType={cfg.entity} entityId={current?.id} fieldKey={f} readOnly={readonly} inputMode={mode} />
-                </div>
-              );
-            })}
+            <StageContentPanel ref={extensionRightPanelRef} scopeKey={kind === 'test' ? `test.${current?.test_type || cfg.testType || 'SIT'}` : 'dev'} entityType={cfg.entity} entityId={current?.id} readOnly={readonly} position="right" renderDeliverableAction={renderDeliverableAction} onDirtyChange={() => setIsDirty(true)} />
           </Col>
+          <StageContentPanel ref={extensionFullPanelRef} scopeKey={kind === 'test' ? `test.${current?.test_type || cfg.testType || 'SIT'}` : 'dev'} entityType={cfg.entity} entityId={current?.id} readOnly={readonly} position="full" renderDeliverableAction={renderDeliverableAction} onDirtyChange={() => setIsDirty(true)} />
         </Row>
       </Form>
 

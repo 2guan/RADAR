@@ -26,7 +26,7 @@ export function checkExt(filename) {
  * 保存上传文件到磁盘并登记。
  * @returns {object} 附件记录
  */
-export async function saveFile({ entityType, entityId, fieldKey, filename, buffer, uploader }) {
+export async function saveFile({ entityType, entityId, fieldKey, deliverableId = null, filename, buffer, uploader }) {
   checkExt(filename);
   const d = new Date();
   const subDir = path.join(entityType, `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}`);
@@ -39,9 +39,9 @@ export async function saveFile({ entityType, entityId, fieldKey, filename, buffe
   fs.writeFileSync(path.join(config.attachmentDir, relPath), buffer);
 
   const res = await run(
-    `INSERT INTO attachment (entity_type, entity_id, field_key, kind, filename, stored_path, size, uploader)
-     VALUES (?,?,?, 'file', ?,?,?,?)`,
-    entityType, entityId, fieldKey, safeName, relPath, buffer.length, uploader,
+    `INSERT INTO attachment (entity_type, entity_id, field_key, deliverable_id, kind, filename, stored_path, size, uploader)
+     VALUES (?,?,?,?, 'file', ?,?,?,?)`,
+    entityType, entityId, fieldKey, deliverableId, safeName, relPath, buffer.length, uploader,
   );
   return await get('SELECT * FROM attachment WHERE id = ?', res.lastInsertRowid);
 }
@@ -49,12 +49,12 @@ export async function saveFile({ entityType, entityId, fieldKey, filename, buffe
 /**
  * 登记一条"路径型"附件。
  */
-export async function savePath({ entityType, entityId, fieldKey, pathText, uploader }) {
+export async function savePath({ entityType, entityId, fieldKey, deliverableId = null, pathText, uploader }) {
   if (!pathText) throw badRequest('路径不能为空');
   const res = await run(
-    `INSERT INTO attachment (entity_type, entity_id, field_key, kind, path_text, uploader)
-     VALUES (?,?,?, 'path', ?, ?)`,
-    entityType, entityId, fieldKey, pathText, uploader,
+    `INSERT INTO attachment (entity_type, entity_id, field_key, deliverable_id, kind, path_text, uploader)
+     VALUES (?,?,?,?, 'path', ?, ?)`,
+    entityType, entityId, fieldKey, deliverableId, pathText, uploader,
   );
   return await get('SELECT * FROM attachment WHERE id = ?', res.lastInsertRowid);
 }

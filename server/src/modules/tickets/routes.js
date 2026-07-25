@@ -11,6 +11,14 @@ import { listQuery } from '../../lib/query.js';
 import { genTicketCode } from '../../lib/code-gen.js';
 import { defaultProcessStatus, isTerminalStatus } from '../../lib/status.js';
 import { statusTypeForProcessStatus, validateRequiredFields } from '../../lib/required-fields.js';
+import {
+  appendStageExcelValues,
+  appendStageListValues,
+  extensionValuesFromExcelRow,
+  getStageExcelColumns,
+  saveExtensionValues,
+  validateStageContent,
+} from '../../lib/stage-content.js';
 import { auditCreate, auditUpdate, auditDelete } from '../../lib/audit.js';
 import { exportXlsx, parseXlsx } from '../../lib/excel.js';
 import { windowIds, inClause } from '../../lib/window.js';
@@ -189,7 +197,7 @@ export default async function ticketRoutes(fastify) {
     
     const result = await listQuery({
       table: 'ticket', columns: COLUMNS, searchColumns: SEARCH,
-      query: newBody, baseWhere, baseParams: params,
+      query: newBody, baseWhere, baseParams: params, extensionScopeKey: 'ticket', extensionEntityType: 'ticket',
     });
 
     // 投产点与系统为主数据（量小），整表载入做编号→名称映射
@@ -246,6 +254,7 @@ export default async function ticketRoutes(fastify) {
 
       return decoded;
     });
+    result.list = await appendStageListValues('ticket', result.list);
 
     return ok(result);
   });
@@ -300,6 +309,7 @@ export default async function ticketRoutes(fastify) {
       ticket_code: manualCode || '__AUTO__',
       status: body.status || initialStatus,
     });
+    await validateStageContent('ticket', { ...body, status: body.status || initialStatus });
 
     const data = encodeField(pick(body));
     if (data.title === undefined) data.title = '';
@@ -349,6 +359,7 @@ export default async function ticketRoutes(fastify) {
     const newStatus = picked.status ?? old.status;
     const newMain = picked.main_systems ?? parseJsonArray(old.main_systems);
     await validateRequiredFields('ticket', await statusTypeForProcessStatus(newStatus), { ...decode(old), ...picked, status: newStatus });
+    await validateStageContent('ticket', { ...decode(old), ...picked, status: newStatus });
     validateTerminal(newStatus, newMain);
 
     const data = encodeField(picked);
@@ -442,7 +453,9 @@ export default async function ticketRoutes(fastify) {
       };
     });
 
-    const buf = await exportXlsx(cols, mappedList, '工单清单');
+    const extensionColumns = await getStageExcelColumns('ticket');
+    const exportRows = await appendStageExcelValues('ticket', mappedList);
+    const buf = await exportXlsx([...cols, ...extensionColumns], exportRows, '工单清单');
     reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     reply.header('Content-Disposition', 'attachment; filename=tickets.xlsx');
     return reply.send(buf);
@@ -450,7 +463,7 @@ export default async function ticketRoutes(fastify) {
 
   // 导入模板
   fastify.get('/tickets/template', { preHandler: fastify.requirePerm('ticket', 'import') }, async (request, reply) => {
-    const buf = await exportXlsx(IO_COLUMNS, [], '工单模板');
+    const buf = await exportXlsx([...IO_COLUMNS, ...await getStageExcelColumns('ticket')], [], '工单模板');
     reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     reply.header('Content-Disposition', 'attachment; filename=tickets_template.xlsx');
     return reply.send(buf);
@@ -462,7 +475,7 @@ export default async function ticketRoutes(fastify) {
     if (!data) throw badRequest('请上传文件');
     const mode = data.fields?.mode?.value || 'skip';
     const buffer = await data.toBuffer();
-    const rows = await parseXlsx(buffer, IO_COLUMNS);
+    const rows = await parseXlsx(buffer, [...IO_COLUMNS, ...await getStageExcelColumns('ticket')]);
     if (!rows.length) throw badRequest('文件中无有效数据');
 
     const stat = { inserted: 0, updated: 0, skipped: 0, failed: 0 };
@@ -506,6 +519,7 @@ export default async function ticketRoutes(fastify) {
             ? String(r.proposer).split(/[，,]/).map(s => s.trim()).filter(Boolean)
             : [];
           const proposerJson = JSON.stringify(proposerArray);
+          const extensionValues = await extensionValuesFromExcelRow('ticket', r);
 
           let code = String(r.ticket_code || '').trim();
           const exists = code ? await get('SELECT * FROM ticket WHERE ticket_code = ?', code) : null;
@@ -582,6 +596,7 @@ export default async function ticketRoutes(fastify) {
                 issue_no: r.issue_no || null
               }, LABELS);
             }
+            await saveExtensionValues('ticket', exists.id, extensionValues, request.currentUser?.name);
 
             stat.updated++;
             details.push({
@@ -606,6 +621,7 @@ export default async function ticketRoutes(fastify) {
               r.issue_no || null
             );
             await auditCreate('ticket', res.lastInsertRowid, code, request.currentUser?.name);
+            await saveExtensionValues('ticket', res.lastInsertRowid, extensionValues, request.currentUser?.name);
             stat.inserted++;
             details.push({
               key: code,

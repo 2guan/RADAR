@@ -17,7 +17,7 @@ import { config } from '../config.js';
 import { runMigrations } from './migrate.js';
 import { runSeed } from './seed.js';
 import { hashPassword } from '../lib/password.js';
-import { parseJsonArray } from '../lib/json.js';
+import { parseJsonArray, parseJsonObject } from '../lib/json.js';
 import { calcDeviation } from '../lib/deviation.js';
 import { logger } from '../lib/logger.js';
 import {
@@ -223,10 +223,51 @@ async function wipe() {
     'attachment', 'audit_log', 'saved_filter',
   ];
   for (const t of tables) await run(`DELETE FROM ${t}`);
+  // 公共内容填写值随演示业务数据重置；内置字段、业务组件与分区元数据由 seed 保留。
+  await run('DELETE FROM stage_field_value');
+  await run('DELETE FROM content_config_revision');
+  await run('DELETE FROM deliverable_template_version');
+  await run(`DELETE FROM deliverable_status_rule
+    WHERE deliverable_definition_id IN (SELECT id FROM deliverable_definition WHERE deliverable_key NOT LIKE 'builtin_%')`);
+  await run("DELETE FROM deliverable_definition WHERE deliverable_key NOT LIKE 'builtin_%'");
+  await run(`DELETE FROM stage_field_status_rule
+    WHERE field_definition_id IN (SELECT id FROM stage_field_definition WHERE is_builtin = 0)`);
+  await run('DELETE FROM stage_field_definition WHERE is_builtin = 0');
+  await run('DELETE FROM stage_section WHERE is_builtin = 0');
   // 删除除引导超管(admin)外的全部人员（含名单内的超管薛潇，保证可重复执行；user_role 随级联删除）
   await run('DELETE FROM user WHERE phone <> ?', config.superAdmin.phone);
   // release_point 被需求/投产申请引用，需在其后清空
   await run('DELETE FROM release_point');
+}
+
+/**
+ * 为演示环境建立公共交付件凭证样例。
+ * 扩展字段属于管理员运行时配置，不在 seed 或 mock 中预置，避免污染初始配置。
+ */
+async function seedStageDeliverableDemo() {
+  const reviewer = await get('SELECT id, name, phone FROM user WHERE status = ? ORDER BY id LIMIT 1', '启用');
+  const applies = await all('SELECT id FROM release_apply ORDER BY id LIMIT 6');
+
+  const addDeliverable = async (scopeKey, key, label, mode, sort) => {
+    const res = await run('INSERT INTO deliverable_definition (scope_key, deliverable_key, label, input_mode, visible, sort) VALUES (?,?,?,?,?,?)', scopeKey, key, label, mode, 1, sort);
+    return Number(res.lastInsertRowid);
+  };
+  const rollbackPlan = await addDeliverable('dev', 'rollback_plan', '回退方案', 'both', 90);
+  // “摆渡证明”已作为投产申请内置交付件由 seed 创建；Mock 只复用该定义，
+  // 避免再次生成同名自定义交付件导致配置页出现重复项。
+  const builtinApplyProof = await get(`SELECT id FROM deliverable_definition
+    WHERE scope_key = ? AND deliverable_key = ? AND deleted_at IS NULL`, 'release_apply', 'builtin_1');
+  const applyProof = Number(builtinApplyProof?.id || await addDeliverable('release_apply', 'ferry_proof', '摆渡证明', 'file', 90));
+  // 状态的阶段归属保存在参数配置 extra 中；这里在 JS 侧筛选，避免 Mock 脚本依赖 SQLite JSON 函数。
+  const devFinalStatus = (await all('SELECT id, extra FROM dict_item WHERE category = ? ORDER BY sort DESC, id DESC', 'process_status'))
+    .find((row) => parseJsonObject(row.extra).stage === '开发');
+  if (devFinalStatus) await run('INSERT INTO deliverable_status_rule (deliverable_definition_id, status_dict_item_id, required) VALUES (?,?,1)', rollbackPlan, devFinalStatus.id);
+  const demoDev = await get('SELECT id FROM dev_task WHERE status <> ? ORDER BY id LIMIT 1', '开发完成');
+  if (demoDev) await run(`INSERT INTO attachment (entity_type, entity_id, field_key, kind, path_text, deliverable_id, uploader)
+    VALUES (?,?,?,?,?,?,?)`, 'dev', demoDev.id, 'deliverable:rollback_plan', 'path', '/mock/rollback-plan.md', rollbackPlan, reviewer?.name || '系统初始化');
+  const demoApply = applies[0];
+  if (demoApply) await run(`INSERT INTO attachment (entity_type, entity_id, field_key, kind, filename, stored_path, size, deliverable_id, uploader)
+    VALUES (?,?,?,?,?,?,?,?,?)`, 'release_apply', demoApply.id, 'deliverable:ferry_proof', 'file', 'mock-ferry-proof.txt', 'mock/ferry-proof.txt', 128, applyProof, reviewer?.name || '系统初始化');
 }
 
 export async function runMock() {
@@ -793,6 +834,9 @@ export async function runMock() {
       if (!req) continue;
       await makeApply([req.code], req.rp, req.main[0]);
     }
+
+    // 仅保留公共交付件凭证样例；扩展字段由管理员在配置页自行创建。
+    await seedStageDeliverableDemo();
 
     // ----------------------------------------------------------------------
     // 输出统计

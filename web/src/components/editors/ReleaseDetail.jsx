@@ -11,7 +11,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Modal, Card, Space, Button, Input, message, Empty, Row, Col, Radio, Tooltip, Tag, Upload, Popconfirm, Select } from 'antd';
 import { HistoryOutlined, UploadOutlined, DeleteOutlined, PlusOutlined, HighlightOutlined, DownloadOutlined } from '@ant-design/icons';
 import HistoryDrawer from '../HistoryDrawer.jsx';
-import AttachmentField from '../AttachmentField.jsx';
+import StageContentPanel from '../StageContentPanel.jsx';
+import StageSectionLayout from '../StageSectionLayout.jsx';
 import SignaturePad from '../SignaturePad.jsx';
 import CodeLink from '../CodeLink.jsx';
 import EditorShell from './EditorShell.jsx';
@@ -27,23 +28,10 @@ import PersonPicker from '../PersonPicker.jsx';
 import { makeReleasePointOptions, ReleasePointText } from '../ReleasePointText.jsx';
 import { apiGet, apiPost, apiPut, apiDelete, rawClient } from '../../api/client.js';
 import { useAppStore } from '../../stores/app.js';
-import { useRequiredFields } from '../../hooks/useRequiredFields.js';
+import { useStageFormConfig } from '../../hooks/useStageFormConfig.js';
 
 const DEFAULT_SIGNOFF_CONCLUSION = '已确认所有评审点符合要求，同意投产。';
 const LEGACY_SIGNOFF_CONCLUSION = '同意投产';
-
-function attachmentModeText(mode) {
-  if (mode === 'path') return '路径';
-  if (mode === 'file') return '上传文档';
-  return '附件或路径';
-}
-
-function releaseRequiredStatusType(status) {
-  const val = String(status || '');
-  if (!val || val === '待评审') return 'initial';
-  if (val === '已投产' || val === '已取消') return 'final';
-  return 'inProgress';
-}
 
 /** 签署时间缩略：YYYY-MM-DD HH:MM:SS -> M-D H:MM */
 function fmtSignTime(s) {
@@ -159,6 +147,14 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
       setTemplateDownloading(null);
     }
   };
+  // 投产文档的专用生成模板保留在业务组件中，交付件展示位置由公共配置决定。
+  const renderDeliverableAction = (deliverable) => (
+    ['投产变更方案', '投产变更控制表'].includes(deliverable.label)
+      ? <Tooltip title="下载模板"><Button type="text" size="small" aria-label={`下载${deliverable.label}模板`}
+        icon={<DownloadOutlined style={{ fontSize: 12 }} />} loading={templateDownloading === deliverable.label}
+        onClick={() => handleDownloadAttachmentTemplate(deliverable.label)} /></Tooltip>
+      : null
+  );
 
   // 联动弹窗：阶段状态标签 → 对应阶段详情；制品卡片 → 投产申请详情
   const [reqOpen, setReqOpen] = useState(false);
@@ -511,7 +507,7 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
   const reviewStatus = detail?.releaseTask?.review_status;
   const editable = can('release', 'edit');
   const statusEditable = can('release', 'status.edit');
-  const required = useRequiredFields('release', releaseRequiredStatusType(statusValue), !editable);
+  const required = useStageFormConfig('release', statusValue, !editable);
   const visible = (fieldKey) => required.isVisible(fieldKey);
 
   // 打开某条任务详情（按阶段类型分发到开发/测试详情弹窗）
@@ -541,7 +537,7 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
       title={(
         <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 10, rowGap: 6, minWidth: 0, width: '100%', paddingRight: 76 }}>
           <CodeLink module="release" code={entityCode} />
-          {detail?.releaseTask && (
+          {detail?.releaseTask && visible('status') && (
             <span className={`status-select status-select-${getStatusType(statusValue)}`}>
               <DictSelect
                 category="process_status" stage="投产" size="small" allowClear={false} showSearch={false}
@@ -577,11 +573,12 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
         <div style={{ padding: '40px 0' }}><Empty /></div>
       ) : (
         <div className="editor-form" style={{ marginTop: 10 }}>
-          <Row gutter={12}>
+          <Row gutter={12} className="stage-detail-layout-release">
+            <StageSectionLayout scopeKey="release" />
             {/* ── 左栏 ── */}
-            <Col xs={24} md={14}>
+            <Col xs={24} md={14} style={{ display: 'contents' }}>
               {/* 基本信息 */}
-              <div className="form-section-card">
+              {visible('approval_overview') && <div className="form-section-card stage-detail-section-basic">
                 <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>基本信息</div>
 
                 {(entityType === 'requirement' || entityType === 'ticket') ? (
@@ -655,10 +652,10 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
                     </div>
                   </div>
                 )}
-              </div>
+              </div>}
 
               {/* 评审会签 */}
-              <div className="form-section-card">
+              {visible('review_signoff') && <div className="form-section-card stage-detail-section-signoff">
                 <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span>评审会签</span>
                   <span className={`status-select status-select-${getStatusType(reviewStatus)}`}>
@@ -683,16 +680,19 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
                     <Col span={24}><div style={{ padding: '12px 0', textAlign: 'center', color: '#bbb', fontSize: 11 }}>未配置会签角色</div></Col>
                   )}
                 </Row>
-              </div>
+              </div>}
+
+              {/* 投产审批的公共扩展信息与会签同属左侧业务主区域。 */}
+              <StageContentPanel scopeKey="release" entityType="release" entityId={detail.releaseTask?.id} readOnly={!editable} renderDeliverableAction={renderDeliverableAction} />
             </Col>
 
             {/* ── 右栏 ── */}
-            <Col xs={24} md={10}>
+            <Col xs={24} md={10} style={{ display: 'contents' }}>
               {/* 投产信息 */}
-              <div className="form-section-card">
+              {(visible('release_point') || visible('owner')) && <div className="form-section-card stage-detail-section-release_info">
                 <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>投产信息</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {visible('release_point') && <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--radar-ink)', width: 80 }}>申请投产点</span>
                     <Select
                       size="small"
@@ -705,7 +705,7 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
                       style={{ flex: 1, ...(editable ? {} : { pointerEvents: 'none' }) }}
                       tabIndex={editable ? undefined : -1}
                     />
-                  </div>
+                  </div>}
                   {visible('owner') && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--radar-ink)', width: 80 }}>
@@ -721,39 +721,10 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
                     <span style={{ width: 80 }}>发起时间：</span><span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace' }}>{fmtSignTime(detail.releaseApplicant?.register_time)}</span>
                   </div>
                 </div>
-              </div>
-
-              {required.attachmentFields.filter((f) => visible(`attachment:${f}`)).map((f) => {
-                const mode = required.attachmentMode(f);
-                return (
-                  <div className="form-section-card" key={f}>
-                    <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                      <span>
-                        {f}
-                        {required.isRequired(`attachment:${f}`) && <span style={{ color: '#ff4d4f', marginLeft: 2 }}>*</span>}
-                        <span style={{ fontWeight: 400, color: 'var(--radar-text-secondary)', marginLeft: 6, fontSize: 11 }}>
-                          （{attachmentModeText(mode)}）
-                        </span>
-                      </span>
-                      <Tooltip title="下载模板">
-                        <Button
-                          type="text"
-                          size="small"
-                          aria-label={`下载${f}模板`}
-                          icon={<DownloadOutlined style={{ fontSize: 12 }} />}
-                          loading={templateDownloading === f}
-                          onClick={() => handleDownloadAttachmentTemplate(f)}
-                          style={{ width: 24, height: 24, borderRadius: 2, flexShrink: 0 }}
-                        />
-                      </Tooltip>
-                    </div>
-                    <AttachmentField entityType="release" entityId={detail.releaseTask?.id} fieldKey={f} readOnly={!editable} inputMode={mode} />
-                  </div>
-                );
-              })}
+              </div>}
 
               {/* 关联制品情况 */}
-              <div className="form-section-card">
+              {visible('related_artifacts') && <div className="form-section-card stage-detail-section-artifacts">
                 <div className="form-section-title" style={{ marginTop: 0, marginBottom: 4 }}>关联制品情况</div>
                 <div style={{ fontSize: 11, color: 'var(--radar-text-secondary)', marginBottom: 8 }}>
                   引用了本{entityType === 'issue' ? '问题' : (entityType === 'ticket' ? '工单' : '需求')}的投产申请制品
@@ -765,8 +736,10 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
                     detail.artifacts.map((a) => <ArtifactCard key={a.id} a={a} />)
                   )}
                 </div>
-              </div>
+              </div>}
+              <StageContentPanel scopeKey="release" entityType="release" entityId={detail.releaseTask?.id} readOnly={!editable} position="right" renderDeliverableAction={renderDeliverableAction} />
             </Col>
+            <StageContentPanel scopeKey="release" entityType="release" entityId={detail.releaseTask?.id} readOnly={!editable} position="full" renderDeliverableAction={renderDeliverableAction} />
           </Row>
         </div>
       )}

@@ -19,8 +19,10 @@ import { apiPost, apiDelete, apiGet } from '../api/client.js';
 import { exportXlsx } from '../utils/io.js';
 import { useAppStore } from '../stores/app.js';
 import { ReleasePointText } from '../components/ReleasePointText.jsx';
+import { useStageListFields } from '../hooks/useStageListFields.js';
 
 export default function ReleaseApply() {
+  const stageList = useStageListFields('release_apply');
   const tableRef = useRef();
   const releasePointIds = useAppStore((s) => s.releasePointIds);
   const [editOpen, setEditOpen] = useState(false);
@@ -52,6 +54,7 @@ export default function ReleaseApply() {
     { field: 'change_system', label: '变更系统', type: 'select', op: 'in', options: systemOptions },
     { field: 'artifact_type', label: '制品类型', type: 'select', op: 'in', options: artifactOptions },
     { field: 'ferry_status', label: '摆渡状态', type: 'select', op: 'in', options: ferryOptions },
+    ...stageList.filterConfigs,
   ];
 
   const handleFilterChange = (vals) => {
@@ -165,7 +168,7 @@ export default function ReleaseApply() {
         ]}
       />
       <DataTable
-        ref={tableRef} columns={columns} fetcher={fetcher}
+        ref={tableRef} columns={[...columns.slice(0, -1), ...stageList.columns, columns.at(-1)]} fetcher={fetcher}
         baseQuery={{ releasePointIds, filters: filterQuery }}
         showSearch={false}
         tableLayout="fixed"

@@ -636,6 +636,148 @@ body {
 .form-section-card:last-child {
   margin-bottom: 0;
 }
+/* 分区配置采用详情页同款卡片预览；拖动卡片即可改变分区所在区域和顺序。 */
+.stage-section-preview-hint {
+  margin-bottom: 12px;
+  color: var(--radar-text-secondary);
+  font-size: 12px;
+}
+.stage-section-preview-canvas {
+  margin-bottom: 12px;
+  min-height: 180px;
+  padding: 10px;
+  background: var(--radar-bg);
+  border: 1px dashed var(--radar-border);
+}
+.stage-section-preview-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  margin-bottom: 12px;
+}
+.stage-section-preview-lane {
+  display: flex;
+  min-height: 72px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+}
+.stage-section-preview-lane-label {
+  color: var(--radar-text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+.stage-section-preview-lane-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60px;
+  color: var(--radar-text-secondary);
+  font-size: 11px;
+  border: 1px dashed var(--radar-border-light);
+}
+.stage-section-preview-full-row { margin-bottom: 12px; }
+.stage-section-preview-card {
+  cursor: grab;
+  margin-bottom: 0 !important;
+  padding: 10px 12px !important;
+}
+.stage-section-preview-card:active { cursor: grabbing; }
+.stage-section-preview-toolbar,
+.stage-section-preview-options {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.stage-section-preview-toolbar { margin-bottom: 8px; }
+.stage-section-preview-toolbar .ant-input { min-width: 0; font-weight: 600; }
+.stage-section-preview-handle { color: var(--radar-text-secondary); cursor: grab; }
+.stage-section-preview-options { flex-wrap: wrap; }
+.stage-section-preview-layouts { margin-right: 4px; }
+.stage-section-preview-body {
+  margin-top: 10px;
+  padding: 8px 10px;
+  color: var(--radar-text-secondary);
+  font-size: 11px;
+  background: var(--radar-bg);
+  border: 1px solid var(--radar-border-light);
+}
+.stage-section-preview-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 80px;
+  color: var(--radar-text-secondary);
+  font-size: 12px;
+}
+/* 详情页内置模块按阶段分区配置实时换位；内容仍保留原有专业表单交互。 */
+[class^="stage-detail-layout-"].ant-row,
+[class*=" stage-detail-layout-"].ant-row { align-items: flex-start; }
+[class^="stage-detail-layout-"] [class*="stage-detail-section-"],
+[class*=" stage-detail-layout-"] [class*="stage-detail-section-"] { width: 100%; }
+/* 分区换位后由 Grid 统一控制模块节奏。右侧模块始终留在右栏，
+   不再因上一行左栏内容高度不同而被 Flex 换到左侧。 */
+[class*="stage-detail-layout-"] [class*="stage-detail-section-"] {
+  width: auto !important;
+  max-width: none !important;
+  margin-bottom: 0 !important;
+  /* 详情模块外框沿用当前主题的主色淡化值，随主题切换自动变化。 */
+  border-color: var(--radar-primary-fade) !important;
+}
+.stage-content-panel-card { margin-bottom: 12px !important; }
+.stage-content-panel-card:last-child { margin-bottom: 0 !important; }
+@media (max-width: 767px) {
+  [class^="stage-detail-layout-"] [class*="stage-detail-section-"],
+  [class*=" stage-detail-layout-"] [class*="stage-detail-section-"] {
+    position: static !important;
+    width: 100% !important;
+    grid-column: auto !important;
+    grid-row: auto !important;
+  }
+  [class^="stage-detail-layout-"].ant-row,
+  [class*=" stage-detail-layout-"].ant-row {
+    display: flex !important;
+    flex-direction: column;
+    grid-template-columns: none !important;
+  }
+}
+@media (max-width: 720px) {
+  .stage-section-preview-columns { grid-template-columns: 1fr; }
+}
+/* 公共扩展信息嵌入详情左栏时沿用现有模块卡片、标题和纵向字段排版。 */
+.stage-content-panel { width: 100%; }
+.stage-content-panel-card { width: 100%; }
+.stage-content-panel .ant-form-item-label > label {
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  color: var(--radar-ink) !important;
+}
+.stage-content-panel .ant-form-item-label { padding-bottom: 2px !important; }
+.stage-content-panel .ant-select,
+.stage-content-panel .ant-picker,
+.stage-content-panel .ant-input { width: 100%; }
+/* 默认折叠的分区仍保留标题作为开关，键盘也可使用 Enter/空格展开。 */
+.is-stage-section-collapsible > .form-section-title {
+  position: relative;
+  cursor: pointer;
+  user-select: none;
+}
+.is-stage-section-collapsible > .form-section-title::before {
+  content: '⌄';
+  display: inline-block;
+  width: 12px;
+  margin-right: 3px;
+  font-size: 12px;
+  transition: transform .16s ease;
+}
+.is-stage-section-collapsed > .form-section-title::before { transform: rotate(-90deg); }
+.is-stage-section-collapsible > .form-section-title:focus-visible {
+  outline: 2px solid var(--radar-primary-fade);
+  outline-offset: 2px;
+}
+/* 投产申请的交付制品是业务主模块，始终跨左右栏整行展示。 */
+.release-apply-delivery-section { width: 100%; clear: both; }
 .meta-bar { display: flex; flex-wrap: wrap; gap: 8px 24px; padding: 10px 14px; margin-bottom: 16px; background: var(--radar-primary-soft); border-radius: 0; font-size: 13px; }
 .meta-bar .meta-item { display: flex; gap: 6px; align-items: center; }
 .meta-bar .meta-label { color: var(--radar-text-secondary); }

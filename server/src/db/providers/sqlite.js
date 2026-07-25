@@ -8,6 +8,7 @@
  */
 
 import { DatabaseSync } from 'node:sqlite';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import fs from 'node:fs';
 import path from 'node:path';
 import { sqliteDialect } from '../dialects/sqlite.js';
@@ -26,6 +27,9 @@ export function createSqliteProvider(config) {
   db.exec('PRAGMA mmap_size = 268435456;');
 
   const stmtCache = new Map();
+  // 导入等复合业务会在外层事务中保存扩展字段；嵌套时复用同一事务，
+  // 与 TDSQL provider 的事务语义保持一致。
+  const txStore = new AsyncLocalStorage();
   /** 缓存 prepare 结果，避免热点列表和详情接口反复编译同一 SQL。 */
   function prepare(sql) {
     let stmt = stmtCache.get(sql);
@@ -57,9 +61,10 @@ export function createSqliteProvider(config) {
       return db.exec(sql);
     },
     async tx(fn) {
+      if (txStore.getStore()) return await fn();
       db.exec('BEGIN IMMEDIATE');
       try {
-        const result = await fn();
+        const result = await txStore.run(true, fn);
         db.exec('COMMIT');
         return result;
       } catch (err) {

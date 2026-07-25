@@ -23,11 +23,13 @@ import ResizableTitle from '../components/ResizableTitle.jsx';
 import { exportXlsx } from '../utils/io.js';
 import ImportModal from '../components/ImportModal.jsx';
 import { makeReleasePointOptions, ReleasePointText } from '../components/ReleasePointText.jsx';
+import { useStageListFields } from '../hooks/useStageListFields.js';
 
 const TYPE_LABEL = { SIT: '应用组装测试', UAT: '用户测试', NFT: '非功能测试', SEC: '安全测试' };
 const moduleForTestType = (testType) => `test.${testType}`;
 
 const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
+  const stageList = useStageListFields(`test.${testType}`);
   const moduleKey = moduleForTestType(testType);
   const tableRef = useRef();
   const { isMobile } = useResponsive();
@@ -84,6 +86,7 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
     { field: 'impl_org', label: '测试实施方', type: 'select', op: 'in', options: orgOptions },
     { field: 'owners', label: '负责人', type: 'select', op: 'in', options: userOptions },
     { field: 'impl_system', label: '实施系统', type: 'select', op: 'in', options: systemOptions },
+    ...stageList.filterConfigs,
   ];
 
   const handleFilterChange = (vals) => {
@@ -394,7 +397,7 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
         ]}
       />
       <DataTable
-        ref={tableRef} columns={columns} fetcher={fetcher} 
+        ref={tableRef} columns={[...columns.slice(0, -1), ...stageList.columns, columns.at(-1)]} fetcher={fetcher}
         baseQuery={{ releasePointIds, testType, filters: filterQuery }} 
         showSearch={false}
         onRowClick={(r) => setEditId(r.id)}

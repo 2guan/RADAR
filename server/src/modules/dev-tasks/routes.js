@@ -14,6 +14,14 @@ import { listQuery } from '../../lib/query.js';
 import { genDevCode } from '../../lib/code-gen.js';
 import { defaultProcessStatus } from '../../lib/status.js';
 import { statusTypeForProcessStatus, validateRequiredFields } from '../../lib/required-fields.js';
+import {
+  appendStageExcelValues,
+  appendStageListValues,
+  extensionValuesFromExcelRow,
+  getStageExcelColumns,
+  saveExtensionValues,
+  validateStageContent,
+} from '../../lib/stage-content.js';
 import { calcDeviation } from '../../lib/deviation.js';
 import { auditCreate, auditUpdate, auditDelete } from '../../lib/audit.js';
 import { listByEntity } from '../../lib/attachment.js';
@@ -240,7 +248,7 @@ export default async function devTaskRoutes(fastify) {
     const newBody = { ...body, filters: normalFilters };
     const baseWhere = wh.join(' AND ');
 
-    const result = await listQuery({ table: 'dev_task', columns: COLUMNS, searchColumns: SEARCH, query: newBody, baseWhere, baseParams: params });
+    const result = await listQuery({ table: 'dev_task', columns: COLUMNS, searchColumns: SEARCH, query: newBody, baseWhere, baseParams: params, extensionScopeKey: 'dev', extensionEntityType: 'dev' });
 
     // 仅针对当前页任务涉及的需求/工单映射计划投产点，避免随翻页整表扫描
     const pageCodes = [...new Set(result.list.map((r) => r.req_code).filter(Boolean))];
@@ -264,6 +272,7 @@ export default async function devTaskRoutes(fastify) {
       entity_label: itemMap[row.req_code]?.entity_label || null,
       impl_system_name: sysMap[row.impl_system] || row.impl_system,
     }));
+    result.list = await appendStageListValues('dev', result.list);
 
     return ok(result);
   });
@@ -449,6 +458,7 @@ export default async function devTaskRoutes(fastify) {
 
     const merged = { ...old, ...data };
     await validateRequiredFields('dev', await statusTypeForProcessStatus(merged.status), merged);
+    await validateStageContent('dev', merged);
     // 重算偏差率
     data.deviation_rate = calcDeviation(merged.plan_start, merged.plan_end, merged.actual_end);
 
@@ -550,7 +560,9 @@ export default async function devTaskRoutes(fastify) {
       };
     }));
 
-    const buf = await exportXlsx(cols, mappedList, '开发任务清单');
+    const extensionColumns = await getStageExcelColumns('dev');
+    const exportRows = await appendStageExcelValues('dev', mappedList);
+    const buf = await exportXlsx([...cols, ...extensionColumns], exportRows, '开发任务清单');
     reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     reply.header('Content-Disposition', 'attachment; filename=dev_tasks.xlsx');
     return reply.send(buf);
@@ -558,7 +570,7 @@ export default async function devTaskRoutes(fastify) {
 
   // 模板下载
   fastify.get('/dev-tasks/template', { preHandler: fastify.requirePerm('dev', 'import') }, async (request, reply) => {
-    const buf = await exportXlsx(IO_COLUMNS, [], '开发任务模板');
+    const buf = await exportXlsx([...IO_COLUMNS, ...await getStageExcelColumns('dev')], [], '开发任务模板');
     reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     reply.header('Content-Disposition', 'attachment; filename=dev_tasks_template.xlsx');
     return reply.send(buf);
@@ -570,7 +582,7 @@ export default async function devTaskRoutes(fastify) {
     if (!data) throw badRequest('请上传文件');
     const mode = data.fields?.mode?.value || 'skip';
     const buffer = await data.toBuffer();
-    const rows = await parseXlsx(buffer, IO_COLUMNS);
+    const rows = await parseXlsx(buffer, [...IO_COLUMNS, ...await getStageExcelColumns('dev')]);
     if (!rows.length) throw badRequest('文件中无有效数据');
 
     const stat = { inserted: 0, updated: 0, skipped: 0, failed: 0 };
@@ -595,6 +607,7 @@ export default async function devTaskRoutes(fastify) {
           const status = await resolveDictAttr('process_status', r.status) || await defaultProcessStatus('开发', 'initial', '开发承接');
           const implOrg = await resolveDictAttr('org', r.impl_org);
           const implSystem = await resolveSystemCode(r.impl_system);
+          const extensionValues = await extensionValuesFromExcelRow('dev', r);
 
           let code = String(r.task_code || '').trim();
           const exists = code ? await get('SELECT * FROM dev_task WHERE task_code = ?', code) : null;
@@ -651,6 +664,7 @@ export default async function devTaskRoutes(fastify) {
                 actual_start: r.actual_start || null, actual_end: r.actual_end || null, deviation_rate: devRate
               }, LABELS);
             }
+            await saveExtensionValues('dev', exists.id, extensionValues, request.currentUser?.name);
 
             stat.updated++;
             details.push({
@@ -676,6 +690,7 @@ export default async function devTaskRoutes(fastify) {
               request.currentUser?.name, new Date().toISOString().slice(0, 10)
             );
             await auditCreate('dev', res.lastInsertRowid, code, request.currentUser?.name);
+            await saveExtensionValues('dev', res.lastInsertRowid, extensionValues, request.currentUser?.name);
             stat.inserted++;
             details.push({
               key: code,

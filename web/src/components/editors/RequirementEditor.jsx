@@ -13,7 +13,8 @@ import { HistoryOutlined, CloseOutlined, ThunderboltOutlined, CheckCircleOutline
 import dayjs from 'dayjs';
 import DictSelect from '../DictSelect.jsx';
 import PersonPicker from '../PersonPicker.jsx';
-import AttachmentField from '../AttachmentField.jsx';
+import StageContentPanel from '../StageContentPanel.jsx';
+import StageSectionLayout from '../StageSectionLayout.jsx';
 import HistoryDrawer from '../HistoryDrawer.jsx';
 import CodeLink from '../CodeLink.jsx';
 import EditorShell from './EditorShell.jsx';
@@ -27,12 +28,6 @@ import { makeReleasePointOptions } from '../ReleasePointText.jsx';
 
 // ─── 模块级系统列表缓存（与 SystemSelect 共用同一接口，但单独维护以供下方组件使用） ───
 let _sysCache = null;
-
-function attachmentModeText(mode) {
-  if (mode === 'path') return '路径';
-  if (mode === 'file') return '上传文档';
-  return '附件或路径';
-}
 
 /**
  * 系统选择子区块：标题在左、选择框在右，已选系统逐个展示在下方、可单独删除。
@@ -192,6 +187,9 @@ function PersonPickerField({ value = [], onChange, readonly, placeholder }) {
 
 export default function RequirementEditor({ open, mode = 'modal', code, reqId, defaultReleasePointId, onClose, onSaved }) {
   const [form] = Form.useForm();
+  const extensionPanelRef = useRef(null);
+  const extensionRightPanelRef = useRef(null);
+  const extensionFullPanelRef = useRef(null);
   // 监听需求状态，供标题栏内联选择器响应式回显
   const statusValue = Form.useWatch('status', form);
   const [current, setCurrent] = useState(null);
@@ -241,6 +239,7 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
       propose_time: v.propose_time ? v.propose_time.format('YYYY-MM-DD') : null,
     };
     if (isEdit) {
+      await Promise.all([extensionPanelRef, extensionRightPanelRef, extensionFullPanelRef].map((panel) => panel.current?.save()));
       await apiPut(`/requirements/${reqId ?? current?.id}`, payload);
       message.success('已保存');
     } else {
@@ -372,12 +371,15 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
         style={{ marginTop: 10, fontSize: 12 }}
         onValuesChange={() => { if (!readonly) setIsDirty(true); }}
       >
-        <Row gutter={12}>
+        <Row gutter={12} className="stage-detail-layout-requirement">
+          <StageSectionLayout scopeKey="requirement" defaults={{
+            basic: { layout_mode: 'left', sort: 0 }, systems: { layout_mode: 'right', sort: 10 }, owners: { layout_mode: 'right', sort: 20 },
+          }} />
           {/* ── 左栏 ── */}
-          <Col xs={24} md={14}>
+          <Col xs={24} md={14} style={{ display: 'contents' }}>
 
             {/* 基本信息 */}
-            <div className="form-section-card">
+            <div className="form-section-card stage-detail-section-basic">
               <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>基本信息</div>
 
               {/* 需求状态改由标题栏内联编辑，此处保留隐藏字段以保证保存 */}
@@ -495,21 +497,16 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
               )}
             </div>
 
-            {/* 需求说明书（附件） */}
-            {visible('attachment:需求说明书') && (
-              <div className="form-section-card">
-                <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>需求说明书<span style={{ fontWeight: 400, color: 'var(--radar-text-secondary)', marginLeft: 6, fontSize: 11 }}>（{attachmentModeText(required.attachmentMode('需求说明书'))}）</span></div>
-                <AttachmentField entityType="requirement" entityId={current?.id} fieldKey="需求说明书" readOnly={readonly} inputMode={required.attachmentMode('需求说明书')} />
-              </div>
-            )}
+            {/* 交付件与扩展信息均由公共配置渲染，移动交付件布局后立即跟随生效。 */}
+            <StageContentPanel ref={extensionPanelRef} scopeKey="requirement" entityType="requirement" entityId={current?.id} readOnly={readonly} onDirtyChange={() => setIsDirty(true)} />
           </Col>
 
           {/* ── 右栏 ── */}
-          <Col xs={24} md={10}>
+          <Col xs={24} md={10} style={{ display: 'contents' }}>
 
             {/* 涉及系统 */}
             {['main_systems', 'collab_dev_systems', 'collab_test_systems'].some(visible) && (
-            <div className="form-section-card">
+            <div className="form-section-card stage-detail-section-systems">
               <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>涉及系统</div>
 
               {/* 主责系统：标题右侧选择框，单选（再选自动替换），已选展示在下方 */}
@@ -537,7 +534,7 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
 
             {/* 相关负责人 */}
             {['propose_dept', 'proposer', 'yn_owner', 'jk_owner'].some(visible) && (
-            <div className="form-section-card">
+            <div className="form-section-card stage-detail-section-owners">
               <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>相关负责人</div>
               <Row gutter={8}>
                 {/* 提出部门 + 提出人：手机端各占一行（充满），PC 端双栏 */}
@@ -568,7 +565,10 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
               )}
             </div>
             )}
+
+            <StageContentPanel ref={extensionRightPanelRef} scopeKey="requirement" entityType="requirement" entityId={current?.id} readOnly={readonly} position="right" onDirtyChange={() => setIsDirty(true)} />
           </Col>
+          <StageContentPanel ref={extensionFullPanelRef} scopeKey="requirement" entityType="requirement" entityId={current?.id} readOnly={readonly} position="full" onDirtyChange={() => setIsDirty(true)} />
         </Row>
       </Form>
 

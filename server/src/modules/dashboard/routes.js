@@ -17,6 +17,42 @@ import {
 } from '../../lib/chart-dims.js';
 import { parseJsonArray } from '../../lib/json.js';
 
+const DYNAMIC_STAGE_SCOPE = {
+  analysis: { requirement: 'requirement', ticket: 'ticket' }, dev: 'dev', sit: 'test.SIT',
+  uat: 'test.UAT', nft: 'test.NFT', sec: 'test.SEC', release: 'release',
+};
+
+/** 仅公开管理员勾选为仪表盘维度的扩展字段；键使用稳定 ID，页面只展示字段名称。 */
+async function dynamicDashboardDimensions() {
+  const rows = await all(`SELECT id, scope_key, label, input_type, source_key, multiple
+    FROM stage_field_definition
+    WHERE field_kind = 'extension' AND dashboard_dimension = 1 AND visible = 1 AND deleted_at IS NULL
+    ORDER BY scope_key, sort, id`);
+  return rows.map((row) => ({
+    key: `extension:${row.scope_key}:${row.id}`,
+    label: row.label,
+    optionSource: row.source_key || 'free',
+    isDate: ['date', 'datetime'].includes(row.input_type),
+    scopeKey: row.scope_key,
+    multiple: !!row.multiple,
+  }));
+}
+
+function allowedDynamicScopes(analytics) {
+  if (!analytics || analytics.statStage === 'all') return [];
+  if (analytics.statStage === 'analysis') {
+    return analytics.statDimension === 'all' ? ['requirement', 'ticket'] : [analytics.statDimension];
+  }
+  return DYNAMIC_STAGE_SCOPE[analytics.statStage] ? [DYNAMIC_STAGE_SCOPE[analytics.statStage]] : [];
+}
+
+function isChartDimensionAllowed(source, dimension, analytics, dynamicDimensions) {
+  if (isValidDim(source, dimension) && !String(dimension).startsWith('extension:')) return true;
+  if (source !== 'analytics') return false;
+  const definition = dynamicDimensions.find((item) => item.key === dimension);
+  return !!definition && allowedDynamicScopes(analytics).includes(definition.scopeKey);
+}
+
 /** 取所选投产窗口下的需求/工单编号集合；ids 为空返回 null（=全部，不过滤） */
 async function workItemCodesInWindow(ids) {
   if (!ids?.length) return null;
@@ -78,9 +114,9 @@ async function loadAnalyticsRows(statDimension = 'requirement', statStage = 'all
   const keepType = (item) => item && (statDimension === 'all' || item._entityType === statDimension);
   const withItem = (row, stage) => {
     const item = itemMap[row.req_code];
-    return keepType(item) ? { ...row, _workItem: item, _entityType: item._entityType, _analyticsStage: stage } : null;
+    return keepType(item) ? { ...row, _workItem: item, _entityType: item._entityType, _analyticsStage: stage, _stageScope: DYNAMIC_STAGE_SCOPE[stage] } : null;
   };
-  const analysis = items.filter((r) => keepType(r)).map((r) => ({ ...r, _workItem: r, _analyticsStage: 'analysis' }));
+  const analysis = items.filter((r) => keepType(r)).map((r) => ({ ...r, _workItem: r, _analyticsStage: 'analysis', _stageScope: DYNAMIC_STAGE_SCOPE.analysis[r._entityType] }));
   const dev = (await all('SELECT * FROM dev_task')).filter(inWindow).map((r) => withItem(r, 'dev')).filter(Boolean);
   const tests = await all('SELECT * FROM test_task');
   const stageRows = {
@@ -207,7 +243,8 @@ export default async function dashboardRoutes(fastify) {
     const source = request.query.source;
     const sources = [{ value: 'analytics', label: '效能统计' }];
     const chartTypes = CHART_TYPES;
-    const dimsOf = (src) => SOURCES[src].dims.map((key) => ({ key, ...DIMENSIONS[key] }));
+    const dynamicDims = await dynamicDashboardDimensions();
+    const dimsOf = (src) => [...SOURCES[src].dims.map((key) => ({ key, ...DIMENSIONS[key] })), ...(src === 'analytics' ? dynamicDims : [])];
     if (!source || !SOURCES[source]) {
       const dimsBySource = {};
       dimsBySource.analytics = dimsOf('analytics');
@@ -223,8 +260,9 @@ export default async function dashboardRoutes(fastify) {
     const { dimension, xAxisDimension, filters, groups, xAxisGroups } = cfg;
     const source = analytics?.source || cfg.source;
     if (!SOURCES[source]) throw badRequest('未知数据源');
-    if (!isValidDim(source, dimension)) throw badRequest('非法的统计维度');
-    const xDim = xAxisDimension && isValidDim(source, xAxisDimension) ? xAxisDimension : undefined;
+    const dynamicDims = await dynamicDashboardDimensions();
+    if (!isChartDimensionAllowed(source, dimension, analytics, dynamicDims)) throw badRequest('非法的统计维度');
+    const xDim = xAxisDimension && isChartDimensionAllowed(source, xAxisDimension, analytics, dynamicDims) ? xAxisDimension : undefined;
 
     const codes = await workItemCodesInWindow(windowIds(request.body));
     const ctx = await buildContext();
@@ -253,8 +291,9 @@ export default async function dashboardRoutes(fastify) {
       const analytics = normalizeAnalyticsConfig(cfg);
       const source = analytics?.source || cfg.source || 'analytics';
       // 非法配置返回空数据而非整体失败，保证其余图表正常
-      if (!SOURCES[source] || !isValidDim(source, cfg.dimension)) { result[ch.id] = []; continue; }
-      const xDim = cfg.xAxisDimension && isValidDim(source, cfg.xAxisDimension) ? cfg.xAxisDimension : undefined;
+      const dynamicDims = await dynamicDashboardDimensions();
+      if (!SOURCES[source] || !isChartDimensionAllowed(source, cfg.dimension, analytics, dynamicDims)) { result[ch.id] = []; continue; }
+      const xDim = cfg.xAxisDimension && isChartDimensionAllowed(source, cfg.xAxisDimension, analytics, dynamicDims) ? cfg.xAxisDimension : undefined;
       try {
         result[ch.id] = aggregate({
           source, dimension: cfg.dimension, xAxisDimension: xDim,

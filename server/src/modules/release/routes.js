@@ -25,6 +25,7 @@ import { defaultDictAttr, defaultProcessStatus } from '../../lib/status.js';
 import { formatAttachments } from '../../lib/resolver.js';
 import { parseJsonArray } from '../../lib/json.js';
 import { statusTypeForReleaseStatus, validateRequiredFields } from '../../lib/required-fields.js';
+import { appendStageExcelValues, getStageExcelColumns, validateStageContent } from '../../lib/stage-content.js';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
 
@@ -955,6 +956,7 @@ export default async function releaseRoutes(fastify) {
     if (keys.length > 0) {
       const merged = { ...rt, ...updateData };
       await validateRequiredFields('release', statusTypeForReleaseStatus(merged.status), merged);
+      await validateStageContent('release', merged);
       await run(
         `UPDATE release_task SET ${keys.map((k) => `${k}=?`).join(',')}, updated_at=datetime('now','localtime') WHERE id=?`,
         ...keys.map((k) => updateData[k]), rt.id,
@@ -1111,6 +1113,8 @@ export default async function releaseRoutes(fastify) {
     ];
 
     const mapped = rows.map((r) => ({
+      // 仅供公共扩展字段服务关联 release_task，Excel 列定义不会导出该内部主键。
+      id: r.release_task_id,
       impl_org: r.impl_org || '',
       change_codes_text: (r.change_codes || []).join('\n'),
       code: r.code,
@@ -1124,7 +1128,9 @@ export default async function releaseRoutes(fastify) {
       release_change_control: r.release_change_control || '',
     }));
 
-    const buf = await exportXlsx(cols, mapped, '投产审批清单');
+    const extensionColumns = await getStageExcelColumns('release');
+    const exportRows = await appendStageExcelValues('release', mapped);
+    const buf = await exportXlsx([...cols, ...extensionColumns], exportRows, '投产审批清单');
     reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     reply.header('Content-Disposition', 'attachment; filename=release_approval.xlsx');
     return reply.send(buf);

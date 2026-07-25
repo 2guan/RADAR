@@ -12,6 +12,7 @@ import { config } from '../config.js';
 import { DEFAULT_REQUIRED_FIELD_CONFIG, REQUIRED_FIELDS_CONFIG_KEY } from '../lib/required-fields.js';
 import { parseJsonObject } from '../lib/json.js';
 import { logger } from '../lib/logger.js';
+import { seedStageContentDefaults } from '../lib/stage-content.js';
 
 // 角色定义（角色标识、名称、是否内置、是否会签角色）
 // 会签角色（signoff:1）：投产评审会签由以下 9 个角色完成。
@@ -48,6 +49,22 @@ const LEGACY_SIGNOFF_ROLE_CODES = {
 
 const LEGACY_SIGNOFF_ROLES_CONFIG = '["安全负责人","架构负责人","机构负责人","项目负责人","测试负责人","配置负责人"]';
 const DEFAULT_SIGNOFF_ROLES_CONFIG = '["机构负责人","需求管理","架构管理","测试管理","项目管理","安全管理","质量管理","运维负责人","配置管理员"]';
+
+// 字典分类目录：分类编码只用于程序关联，管理员界面统一展示中文分类名称。
+// 新增可配置字典时应同步在这里登记分类名称，避免将内部编码暴露到配置页面。
+const DICT_CATEGORIES = [
+  ['process_status', '流程状态', 10],
+  ['review_status', '评审状态', 20],
+  ['req_type', '需求类型', 30],
+  ['ticket_type', '工单类型', 40],
+  ['req_dept', '需求部门', 50],
+  ['artifact_type', '制品类型', 60],
+  ['ferry_status', '摆渡状态', 70],
+  ['version_type', '版本类型', 80],
+  ['org', '实施机构', 90],
+  ['sector', '业务板块', 100],
+  ['issue_status', '问题状态', 110],
+];
 
 // 模块 -> 该模块支持的全部操作键
 const MODULE_ACTIONS = {
@@ -115,12 +132,115 @@ const TICKET_TYPE = [
 ];
 // 评审状态（投产评审会签）：sort 控制默认值，extra.rank 控制取最弱评审状态的排序
 const REVIEW_STATUS = [
-  ['待评审', 1, 2],
-  ['评审同意', 2, 4],
-  ['评审拒绝', 3, 0],
-  ['评审撤销', 4, 1],
-  ['应急审批', 5, 3],
+  ['待评审', 1, 2, 'initial'],
+  ['评审同意', 2, 4, 'final'],
+  ['评审拒绝', 3, 0, 'final'],
+  ['评审撤销', 4, 1, 'final'],
+  ['应急审批', 5, 3, 'in-progress'],
 ];
+
+/**
+ * 内置分区以现有详情页的实际模块为准。布局位置与字段归属也在此处维护，
+ * 避免阶段领域服务再保存一份页面布局的硬编码。legacy_keys 仅用于把开发期
+ * 旧种子中的分区平滑校准为当前结构，不影响管理员后续新增的自定义分区。
+ * “扩展信息”仅是供管理员后续放置字段的空布局分区，不包含任何预置扩展字段。
+ */
+export const STAGE_BUILTIN_SECTION_DEFAULTS = {
+  requirement: [
+    { key: 'basic', title: '基本信息', layout: 'left' },
+    { key: 'systems', title: '涉及系统', layout: 'right', legacy_keys: ['analysis'] },
+    { key: 'owners', title: '相关负责人', layout: 'right' },
+    { key: 'extension', title: '扩展信息', layout: 'left' },
+    { key: 'deliverables', title: '交付件', layout: 'left', show_title: false },
+  ],
+  ticket: [
+    { key: 'basic', title: '基本信息', layout: 'left' },
+    { key: 'systems', title: '涉及系统', layout: 'right', legacy_keys: ['analysis'] },
+    { key: 'owners', title: '相关负责人', layout: 'right' },
+    { key: 'extension', title: '扩展信息', layout: 'left' },
+    { key: 'deliverables', title: '交付件', layout: 'left', show_title: false },
+  ],
+  dev: [
+    { key: 'task', title: '基本信息', layout: 'left' },
+    { key: 'schedule', title: '排期', layout: 'left' },
+    { key: 'impact', title: '影响性分析', layout: 'left' },
+    { key: 'extension', title: '扩展信息', layout: 'left' },
+    { key: 'deliverables', title: '交付件', layout: 'left', show_title: false },
+  ],
+  test: [
+    { key: 'task', title: '基本信息', layout: 'left' },
+    { key: 'schedule', title: '排期', layout: 'left' },
+    // 覆盖性分析当前仅在应用组装测试（SIT）详情页实现，其他测试类型预留后续组件接入。
+    { key: 'coverage', title: '测试覆盖性分析', layout: 'left', scope_keys: ['test.SIT'] },
+    { key: 'extension', title: '扩展信息', layout: 'left' },
+    { key: 'deliverables', title: '交付件', layout: 'left', show_title: false },
+  ],
+  release_apply: [
+    { key: 'references', title: '关联需求/工单', layout: 'left' },
+    { key: 'content', title: '变更内容', layout: 'left' },
+    { key: 'change', title: '变更明细', layout: 'right' },
+    { key: 'artifacts', title: '交付制品', layout: 'full' },
+    { key: 'extension', title: '扩展信息', layout: 'left' },
+    { key: 'deliverables', title: '交付件', layout: 'left', show_title: false },
+  ],
+  release: [
+    { key: 'basic', title: '基本信息', layout: 'left' },
+    { key: 'signoff', title: '评审会签', layout: 'left' },
+    { key: 'release_info', title: '投产信息', layout: 'right', legacy_keys: ['approval'] },
+    { key: 'artifacts', title: '关联制品情况', layout: 'right' },
+    { key: 'extension', title: '扩展信息', layout: 'left' },
+    { key: 'deliverables', title: '交付件', layout: 'left', show_title: false },
+  ],
+};
+
+/**
+ * 公共阶段内置字段的默认元数据。它是种子数据而非运行时业务规则：
+ * 新库创建时直接写入阶段配置；已有库只按版本标识校准一次，之后由管理员配置接管。
+ */
+export const STAGE_BUILTIN_FIELD_METADATA = {
+  requirement: {
+    req_code: { section: 'basic', required_from: 'initial', list: 1, filter: 1 }, status: { section: 'basic', list: 1, filter: 1, dashboard: 1 },
+    req_type: { section: 'basic', required_from: 'initial', list: 1, filter: 1, dashboard: 1 }, release_point_id: { section: 'basic', required_from: 'initial', list: 1, filter: 1, dashboard: 1 },
+    propose_time: { section: 'basic', required_from: 'initial', list: 1, dashboard: 1 }, issue_no: { section: 'basic', filter: 1 }, is_accounting: { section: 'basic', required_from: 'initial', filter: 1 },
+    title: { section: 'basic', required_from: 'initial', list: 1 }, summary: { section: 'basic', required_from: 'initial' }, main_systems: { section: 'systems', required_from: 'initial', list: 1, filter: 1, dashboard: 1 },
+    collab_dev_systems: { section: 'systems', list: 1, filter: 1 }, collab_test_systems: { section: 'systems', filter: 1 }, propose_dept: { section: 'owners', required_from: 'initial', filter: 1, dashboard: 1 },
+    proposer: { section: 'owners', required_from: 'initial', list: 1, filter: 1 }, yn_owner: { section: 'owners' }, jk_owner: { section: 'owners' },
+  },
+  ticket: {
+    ticket_code: { section: 'basic', required_from: 'initial', list: 1, filter: 1 }, status: { section: 'basic', list: 1, filter: 1, dashboard: 1 },
+    ticket_type: { section: 'basic', required_from: 'initial', list: 1, filter: 1, dashboard: 1 }, release_point_id: { section: 'basic', required_from: 'initial', list: 1, filter: 1, dashboard: 1 },
+    propose_time: { section: 'basic', required_from: 'initial', list: 1, dashboard: 1 }, issue_no: { section: 'basic', filter: 1 }, is_accounting: { section: 'basic', required_from: 'initial', filter: 1 },
+    title: { section: 'basic', required_from: 'initial', list: 1 }, summary: { section: 'basic', required_from: 'initial' }, main_systems: { section: 'systems', required_from: 'initial', list: 1, filter: 1, dashboard: 1 },
+    collab_dev_systems: { section: 'systems', list: 1, filter: 1 }, collab_test_systems: { section: 'systems', filter: 1 }, propose_dept: { section: 'owners', required_from: 'initial', filter: 1, dashboard: 1 },
+    proposer: { section: 'owners', required_from: 'initial', list: 1, filter: 1 }, yn_owner: { section: 'owners' }, jk_owner: { section: 'owners' },
+  },
+  dev: {
+    task_name: { section: 'task', list: 1 }, content: { section: 'task' }, status: { section: 'task', list: 1, filter: 1, dashboard: 1 }, owner: { section: 'task', list: 1, filter: 1, dashboard: 1 },
+    impl_system: { section: 'task', list: 1, filter: 1, dashboard: 1 }, impl_org: { section: 'task', filter: 1, dashboard: 1 }, plan_start: { section: 'schedule', required_from: 'final' },
+    plan_end: { section: 'schedule', required_from: 'final', dashboard: 1 }, actual_start: { section: 'schedule', required_from: 'final' }, actual_end: { section: 'schedule', required_from: 'final', dashboard: 1 },
+    impact_analysis: { section: 'impact' },
+  },
+  test: {
+    task_name: { section: 'task', list: 1 }, status: { section: 'task', list: 1, filter: 1, dashboard: 1 }, owner: { section: 'task', list: 1, filter: 1, dashboard: 1 },
+    impl_system: { section: 'task', list: 1, filter: 1, dashboard: 1 }, impl_org: { section: 'task', filter: 1, dashboard: 1 }, plan_start: { section: 'schedule', required_from: 'final' },
+    plan_end: { section: 'schedule', required_from: 'final', dashboard: 1 }, actual_start: { section: 'schedule', required_from: 'final' }, actual_end: { section: 'schedule', required_from: 'final', dashboard: 1 },
+    coverage_analysis: { section: 'coverage' },
+  },
+  release_apply: {
+    change_code: { section: 'change', list: 1, filter: 1 }, ref_codes: { section: 'references', required_from: 'initial' }, release_point_id: { section: 'change', required_from: 'initial' },
+    change_system: { section: 'change', required_from: 'initial', list: 1, filter: 1 }, change_content: { section: 'content', required_from: 'initial', list: 1, filter: 1 }, impact_scope: { section: 'content' },
+    impl_org: { section: 'change', list: 1, filter: 1 }, out_dept: { section: 'change' }, deploy_dept: { section: 'change' },
+    delivery_units: { section: 'artifacts' },
+  },
+  release: {
+    status: { section: 'basic', list: 1, filter: 1, dashboard: 1 },
+    owner: { section: 'release_info', dashboard: 1 },
+    approval_overview: { section: 'basic' },
+    release_point: { section: 'release_info' },
+    review_signoff: { section: 'signoff' },
+    related_artifacts: { section: 'artifacts' },
+  },
+};
 // 问题状态：PAMS 同步状态中标记终态的项
 const ISSUE_STATUS = [['已解决', 1, true], ['待验证', 2, true]];
 // 制品类型（投产申请）：镜像制品 / 二进制制品 / 介质库文件 / 无制品
@@ -350,6 +470,17 @@ async function seedDict(category, attrValue, displayValue, sort, extra) {
 }
 
 /**
+ * 初始化字典分类中文名称。名称由数据库承载，运行时不依赖前端硬编码。
+ */
+async function seedDictCategory(category, label, sort) {
+  if (await get('SELECT category FROM dict_category WHERE category = ?', category)) return;
+  await run(
+    'INSERT INTO dict_category (category, label, sort, enabled) VALUES (?,?,?,1)',
+    category, label, sort,
+  );
+}
+
+/**
  * 插入系统默认仪表盘图表（不存在才插）。
  */
 async function seedDashboardChart(chart) {
@@ -404,19 +535,27 @@ export async function runSeed() {
     for (const chart of DEFAULT_DASHBOARD_CHARTS) await seedDashboardChart(chart);
 
     // 2) 字典
+    for (const [category, label, sort] of DICT_CATEGORIES) await seedDictCategory(category, label, sort);
     for (const [stage, attr, disp, sort, stateType] of PROCESS_STATUS) {
       await seedDict('process_status', attr, disp, sort, { stage, stateType, isTerminal: stateType === 'final' });
     }
     for (const [attr, sort] of VERSION_TYPE) await seedDict('version_type', attr, attr, sort);
     for (const [attr, sort] of REQ_TYPE) await seedDict('req_type', attr, attr, sort);
     for (const [attr, sort] of TICKET_TYPE) await seedDict('ticket_type', attr, attr, sort);
-    for (const [attr, sort, rank] of REVIEW_STATUS) await seedDict('review_status', attr, attr, sort, { rank });
+    for (const [attr, sort, rank, stateType] of REVIEW_STATUS) await seedDict('review_status', attr, attr, sort, { rank, stateType, isTerminal: stateType === 'final' });
     for (const [attr, sort, isTerminal] of ISSUE_STATUS) await seedDict('issue_status', attr, attr, sort, { isTerminal });
     for (const [attr, sort] of ARTIFACT_TYPE) await seedDict('artifact_type', attr, attr, sort);
     for (const [attr, sort] of FERRY_STATUS) await seedDict('ferry_status', attr, attr, sort);
     for (const [attr, disp, sort] of ORGS) await seedDict('org', attr, disp, sort);
     for (const [attr, disp, sort] of SECTORS) await seedDict('sector', attr, disp, sort);
     for (const [attr, sort] of REQ_DEPTS) await seedDict('req_dept', attr, attr, sort);
+
+    // 2b) 阶段内容：范围、内置字段、复杂组件和预置交付件均以数据库定义初始化。
+    //     后续新增范围或组件只需扩展注册表，不依赖业务页面硬编码。
+    await seedStageContentDefaults({
+      builtinMetadata: STAGE_BUILTIN_FIELD_METADATA,
+      sectionDefaults: STAGE_BUILTIN_SECTION_DEFAULTS,
+    });
 
     // 3) 所属系统
     for (const [code, name, org, sector, sort] of SYSTEMS) {

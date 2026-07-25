@@ -23,7 +23,7 @@ import { all, get } from '../db/index.js';
 export async function listQuery(opts) {
   const {
     table, columns, searchColumns = [], query = {},
-    baseWhere = '', baseParams = [], select = '*',
+    baseWhere = '', baseParams = [], select = '*', extensionScopeKey, extensionEntityType,
   } = opts;
 
   const colSet = new Set(columns);
@@ -50,9 +50,37 @@ export async function listQuery(opts) {
   // 字段筛选：[{field, op, value}]
   const filters = Array.isArray(query.filters) ? query.filters : [];
   for (const f of filters) {
-    if (!f || !colSet.has(f.field)) continue;
+    if (!f) continue;
     const { field, op = 'eq', value } = f;
     if (value === undefined || value === null || value === '') continue;
+    // 扩展字段筛选统一走值表。字段定义按 scope 和 filterable 双重校验，
+    // 表名来自模块代码白名单，不拼接用户输入，兼容 SQLite/TDSQL。
+    if (extensionScopeKey && extensionEntityType && String(field).startsWith('extension:')) {
+      const fieldKey = String(field).slice('extension:'.length);
+      const definition = await get(`SELECT id, input_type, source_key, multiple FROM stage_field_definition
+        WHERE scope_key = ? AND field_key = ? AND field_kind = 'extension'
+          AND visible = 1 AND filterable = 1 AND deleted_at IS NULL`, extensionScopeKey, fieldKey);
+      if (!definition) continue;
+      const values = Array.isArray(value) ? value : [value];
+      if (!values.length) continue;
+      const column = ['date', 'datetime'].includes(definition.input_type) ? 'value_date'
+        : (definition.source_key ? (['person', 'release_point'].includes(definition.source_key) ? 'value_ref_id' : 'value_code') : 'value_text');
+      const inner = [`esf.field_definition_id = ?`, 'esf.entity_type = ?', `esf.entity_id = ${table}.id`];
+      const innerParams = [definition.id, extensionEntityType];
+      if (op === 'like' && column === 'value_text') {
+        inner.push(`esf.${column} LIKE ?`); innerParams.push(`%${value}%`);
+      } else if (op === 'between' && values.length === 2 && column === 'value_date') {
+        inner.push(`esf.${column} BETWEEN ? AND ?`); innerParams.push(values[0], values[1]);
+      } else if ((op === 'gte' || op === 'lte') && column === 'value_date') {
+        inner.push(`esf.${column} ${op === 'gte' ? '>=' : '<='} ?`); innerParams.push(value);
+      } else {
+        inner.push(`esf.${column} IN (${values.map(() => '?').join(',')})`); innerParams.push(...values);
+      }
+      where.push(`EXISTS (SELECT 1 FROM stage_field_value esf WHERE ${inner.join(' AND ')})`);
+      params.push(...innerParams);
+      continue;
+    }
+    if (!colSet.has(field)) continue;
     switch (op) {
       case 'eq': where.push(`${field} = ?`); params.push(value); break;
       case 'like': where.push(`${field} LIKE ?`); params.push(`%${value}%`); break;

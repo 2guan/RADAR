@@ -187,7 +187,22 @@ export async function buildContext() {
     if (rt.release_point_id != null) (applyPointMap[rt.req_code] ||= []).push(String(rt.release_point_id));
   }
 
-  return { sysMap, devMap, testMap, rtMap, applyPointMap };
+  // 动态字段值只为已启用“仪表盘维度”的扩展字段加载，按阶段/实体/定义建立索引，
+  // 聚合时无需 N+1 查询，也不会让跨阶段图表把其他阶段误当作未填写。
+  const extensionValueMap = new Map();
+  const extensionRows = await all(`SELECT f.scope_key, f.id AS field_id, v.entity_id,
+      v.value_text, v.value_date, v.value_code, v.value_ref_id, v.value_label_snapshot
+    FROM stage_field_definition f
+    JOIN stage_field_value v ON v.field_definition_id = f.id
+    WHERE f.field_kind = 'extension' AND f.dashboard_dimension = 1 AND f.deleted_at IS NULL`);
+  for (const value of extensionRows) {
+    const key = `${value.scope_key}:${value.entity_id}:${value.field_id}`;
+    const label = value.value_label_snapshot ?? value.value_code ?? value.value_date ?? value.value_text ?? String(value.value_ref_id ?? '');
+    if (!extensionValueMap.has(key)) extensionValueMap.set(key, []);
+    if (label) extensionValueMap.get(key).push(String(label));
+  }
+
+  return { sysMap, devMap, testMap, rtMap, applyPointMap, extensionValueMap };
 }
 
 /** 取一条记录涉及的系统编号数组（随源不同字段） */
@@ -241,6 +256,13 @@ function statusesOfCurrentStages(item, stages, ctx) {
 export function extract(source, dim, row, ctx, filters) {
   const realSource = source === 'all' ? row._source : source;
   const { sysMap } = ctx;
+  // 动态维度使用定义 ID 而非字段中文名，避免改名影响历史图表；未填写统一显示为“未填写”。
+  if (dim.startsWith('extension:')) {
+    const [, scopeKey, fieldId] = dim.split(':');
+    if (!scopeKey || !fieldId || row._stageScope !== scopeKey) return ['未填写'];
+    const values = ctx.extensionValueMap?.get(`${scopeKey}:${row.id}:${fieldId}`) || [];
+    return values.length ? values : ['未填写'];
+  }
   // 统一效能统计记录保留其所属需求/工单；阶段记录本身只用于“阶段状态”。
   if (source === 'analytics') {
     const item = row._workItem || row;
@@ -507,7 +529,8 @@ export function aggregate({ source, dimension, xAxisDimension, filters = {}, gro
 
 /** 校验维度是否属于该源（防注入/越权维度） */
 export function isValidDim(source, dim) {
-  return !!dim && SOURCES[source]?.dims.includes(dim);
+  // 动态字段仅可在统一效能统计源中使用；其是否真实存在由仪表盘元数据接口控制。
+  return !!dim && (SOURCES[source]?.dims.includes(dim) || (source === 'analytics' && /^extension:[A-Za-z0-9._-]+:\d+$/.test(dim)));
 }
 
 /** 取测试源对应的 test_type（非测试源返回 null） */

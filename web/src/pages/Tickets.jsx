@@ -22,8 +22,10 @@ import { exportXlsx, downloadGet } from '../utils/io.js';
 import { useAppStore } from '../stores/app.js';
 import ImportModal from '../components/ImportModal.jsx';
 import { makeReleasePointOptions, ReleasePointText } from '../components/ReleasePointText.jsx';
+import { useStageListFields } from '../hooks/useStageListFields.js';
 
 export default function Tickets() {
+  const stageList = useStageListFields('ticket');
   const tableRef = useRef();
   const releasePointIds = useAppStore((s) => s.releasePointIds);
   const [editOpen, setEditOpen] = useState(false);
@@ -77,6 +79,7 @@ export default function Tickets() {
     { field: 'owners', label: '负责人', type: 'select', op: 'in', options: userOptions },
     { field: 'main_systems', label: '主责系统', type: 'select', op: 'in', options: systemOptions },
     { field: 'collab_systems', label: '协同系统', type: 'select', op: 'in', options: systemOptions },
+    ...stageList.filterConfigs,
   ];
 
   const handleFilterChange = (vals) => {
@@ -226,7 +229,7 @@ export default function Tickets() {
         ]}
       />
       <DataTable
-        ref={tableRef} columns={columns} fetcher={fetcher} 
+        ref={tableRef} columns={[...columns.slice(0, -1), ...stageList.columns, columns.at(-1)]} fetcher={fetcher}
         baseQuery={{ releasePointIds, filters: filterQuery }} 
         showSearch={false}
         onRowClick={openEdit}

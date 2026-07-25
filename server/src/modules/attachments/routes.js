@@ -11,6 +11,7 @@ import { config } from '../../config.js';
 import { get, run } from '../../db/index.js';
 import { saveFile, savePath, listByEntity, removeAttachment } from '../../lib/attachment.js';
 import { assertAttachmentInputAllowed } from '../../lib/required-fields.js';
+import { assertDeliverableInputAllowed, assertDeliverableRemovable } from '../../lib/stage-content.js';
 import { ok, badRequest, notFound } from '../../lib/http.js';
 
 async function getEntityCode(entityType, entityId) {
@@ -29,6 +30,10 @@ async function getEntityCode(entityType, entityId) {
   if (entityType === 'release') {
     const row = await get('SELECT req_code FROM release_task WHERE id = ?', entityId);
     return row?.req_code || null;
+  }
+  if (entityType === 'release_apply') {
+    const row = await get('SELECT change_code FROM release_apply WHERE id = ?', entityId);
+    return row?.change_code || null;
   }
   return null;
 }
@@ -57,15 +62,17 @@ export default async function attachmentRoutes(fastify) {
     const entityType = data.fields?.entityType?.value;
     const entityId = data.fields?.entityId?.value;
     const fieldKey = data.fields?.fieldKey?.value;
-    if (!entityType || !entityId || !fieldKey) throw badRequest('实体信息缺失');
-    await assertAttachmentInputAllowed(entityType, Number(entityId), fieldKey, 'file');
+    const deliverableId = data.fields?.deliverableId?.value ? Number(data.fields.deliverableId.value) : null;
+    if (!entityType || !entityId || (!fieldKey && !deliverableId)) throw badRequest('实体信息缺失');
+    if (deliverableId) await assertDeliverableInputAllowed({ entityType, entityId: Number(entityId), deliverableId, kind: 'file' });
+    else await assertAttachmentInputAllowed(entityType, Number(entityId), fieldKey, 'file');
     const buffer = await data.toBuffer();
     const rec = await saveFile({
-      entityType, entityId: Number(entityId), fieldKey,
+      entityType, entityId: Number(entityId), fieldKey: fieldKey || `deliverable:${deliverableId}`, deliverableId,
       filename: data.filename, buffer, uploader: request.currentUser?.name,
     });
     await logAttachmentChange({
-      entityType, entityId: Number(entityId), fieldKey,
+      entityType, entityId: Number(entityId), fieldKey: fieldKey || `deliverable:${deliverableId}`,
       action: 'update', operator: request.currentUser?.name,
       oldValue: null, newValue: `[文件] ${rec.filename}`
     });
@@ -74,14 +81,16 @@ export default async function attachmentRoutes(fastify) {
 
   // 登记路径
   fastify.post('/attachments/path', { preHandler: fastify.authenticate }, async (request) => {
-    const { entityType, entityId, fieldKey, pathText } = request.body || {};
-    if (!entityType || !entityId || !fieldKey) throw badRequest('实体信息缺失');
-    await assertAttachmentInputAllowed(entityType, Number(entityId), fieldKey, 'path');
+    const { entityType, entityId, fieldKey, deliverableId: rawDeliverableId, pathText } = request.body || {};
+    const deliverableId = rawDeliverableId ? Number(rawDeliverableId) : null;
+    if (!entityType || !entityId || (!fieldKey && !deliverableId)) throw badRequest('实体信息缺失');
+    if (deliverableId) await assertDeliverableInputAllowed({ entityType, entityId: Number(entityId), deliverableId, kind: 'path' });
+    else await assertAttachmentInputAllowed(entityType, Number(entityId), fieldKey, 'path');
     const rec = await savePath({
-      entityType, entityId: Number(entityId), fieldKey, pathText, uploader: request.currentUser?.name,
+      entityType, entityId: Number(entityId), fieldKey: fieldKey || `deliverable:${deliverableId}`, deliverableId, pathText, uploader: request.currentUser?.name,
     });
     await logAttachmentChange({
-      entityType, entityId: Number(entityId), fieldKey,
+      entityType, entityId: Number(entityId), fieldKey: fieldKey || `deliverable:${deliverableId}`,
       action: 'update', operator: request.currentUser?.name,
       oldValue: null, newValue: `[路径] ${rec.path_text}`
     });
@@ -119,6 +128,7 @@ export default async function attachmentRoutes(fastify) {
     const id = Number(request.params.id);
     const a = await get('SELECT * FROM attachment WHERE id = ?', id);
     if (a) {
+      await assertDeliverableRemovable(a);
       await logAttachmentChange({
         entityType: a.entity_type, entityId: a.entity_id, fieldKey: a.field_key,
         action: 'update', operator: request.currentUser?.name,

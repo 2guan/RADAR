@@ -36,6 +36,8 @@ function normalizeCell(cell = {}) {
     next.required.inProgress = true;
     next.required.final = true;
   }
+  // 与公共阶段规则保持一致：进行中必填时，终态默认继续必填。
+  if (next.required.inProgress) next.required.final = true;
   for (const state of STATE_COLUMNS) {
     if (!next.visible) next.required[state.key] = false;
   }
