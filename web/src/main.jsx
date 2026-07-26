@@ -38,6 +38,36 @@ function Root() {
     syncFaviconLogo(presetKey);
   }, [presetKey]);
 
+  // 静态 message / notification / Modal API 不在 React 上下文树内；注入同一主题容器，
+  // 既保持导出等公共工具的反馈可用，也避免在动态配色下持续输出 Ant Design 上下文警告。
+  useEffect(() => {
+    const feedbackTheme = {
+      algorithm: isDark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
+      token: {
+        colorPrimary: primary,
+        colorInfo: primary,
+        colorSuccess: '#16A34A',
+        colorWarning: '#F59E0B',
+        colorError: '#DC2626',
+        colorLink: primary,
+        borderRadius: 2,
+        borderRadiusLG: 0,
+        borderRadiusSM: 2,
+        borderRadiusXS: 0,
+        fontSize: 14,
+        fontFamily: FONT,
+      },
+    };
+    ConfigProvider.config({
+      theme: feedbackTheme,
+      holderRender: (children) => (
+        <ConfigProvider locale={zhCN} theme={feedbackTheme}>
+          <AntdApp>{children}</AntdApp>
+        </ConfigProvider>
+      ),
+    });
+  }, [isDark, primary]);
+
   // 同步 CSS 变量（供 styles.css 使用）
   useEffect(() => {
     const root = document.documentElement;

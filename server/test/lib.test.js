@@ -19,6 +19,7 @@ import { normalizeRequiredFieldConfig, REQUIRED_FIELD_CONFIG_MODULES, REQUIRED_F
 import { WORK_ITEM_TYPES, isWorkItemType } from '../src/shared/contracts/work-item.js';
 import { REQUIREMENT_WORK_ITEM_TYPE } from '../src/modules/requirements/contracts/work-item.js';
 import { TICKET_WORK_ITEM_TYPE } from '../src/modules/tickets/contracts/work-item.js';
+import { workItemCodesInReleasePoints } from '../src/modules/delivery/index.js';
 
 test('工作项公共契约：需求和工单保持独立且类型受控', () => {
   assert.deepEqual(WORK_ITEM_TYPES, ['requirement', 'ticket']);
@@ -27,6 +28,10 @@ test('工作项公共契约：需求和工单保持独立且类型受控', () =>
   assert.equal(isWorkItemType('requirement'), true);
   assert.equal(isWorkItemType('ticket'), true);
   assert.equal(isWorkItemType('release'), false);
+});
+
+test('工作项投产点筛选：空集合代表全部投产点，不追加空编号条件', async () => {
+  assert.equal(await workItemCodesInReleasePoints([]), null);
 });
 
 test('密码哈希：正确密码校验通过、错误密码失败', () => {

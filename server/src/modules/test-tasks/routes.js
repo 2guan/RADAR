@@ -411,17 +411,16 @@ export default async function testTaskRoutes(fastify) {
     await requireTestPerm(request, 'export', body.test_type);
     const { where: baseWhere, params: baseParams } = inClause('req_code', body.req_code ? [body.req_code] : []);
 
-    // 如果没有指定 req_code，根据窗口过滤
+    // 未指定工作项时，按当前投产点范围过滤；空范围代表全部投产点。
     let finalWhere = baseWhere;
     let finalParams = [...baseParams];
     if (!body.req_code) {
-      const codes = [
-        ...(await all("SELECT req_code AS code FROM requirement WHERE release_point_id IN (SELECT id FROM release_point WHERE is_default = 1 OR release_date >= date('now'))")).map(r => r.code),
-        ...(await all("SELECT ticket_code AS code FROM ticket WHERE release_point_id IN (SELECT id FROM release_point WHERE is_default = 1 OR release_date >= date('now'))")).map(r => r.code),
-      ];
-      const win = inClause('req_code', [...new Set(codes)]);
-      finalWhere = win.where || '1=0';
-      finalParams = win.params;
+      const codes = await workItemCodesInReleasePoints(windowIds(body));
+      if (codes) {
+        const win = inClause('req_code', codes);
+        finalWhere = win.where || '1=0';
+        finalParams = win.params;
+      }
     }
 
     // 过滤特定的测试类型（前端分四个页面，所以会传入 test_type 的过滤条件）

@@ -402,7 +402,7 @@ export default function DevTasks() {
             <Button icon={<ImportOutlined />} onClick={() => setImportOpen(true)} style={{ width: 88 }}>导入</Button>
           </Can>,
           <Can key="exp" module="dev" action="export">
-            <Button icon={<ExportOutlined />} onClick={() => exportXlsx('/dev-tasks/export', { filters: filterQuery }, '开发任务清单.xlsx')} style={{ width: 88 }}>导出</Button>
+            <Button icon={<ExportOutlined />} onClick={() => exportXlsx('/dev-tasks/export', { releasePointIds, filters: filterQuery }, '开发任务清单.xlsx')} style={{ width: 88 }}>导出</Button>
           </Can>,
         ]}
       />

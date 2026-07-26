@@ -33,6 +33,8 @@ export async function getWorkItem(workItemCode) {
 }
 
 export async function workItemCodesInReleasePoints(ids) {
+  // 空投产点集合代表“全部投产点”，交由调用方跳过编号过滤；不能误当作无匹配数据。
+  if (!ids?.length) return null;
   // 两个模块并行查询后去重，避免投产点筛选重复展示同一编号。
   const [requirements, tickets] = await Promise.all([
     requirementCodesInReleasePoints(ids), ticketCodesInReleasePoints(ids),
