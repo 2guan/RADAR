@@ -15,7 +15,12 @@ if (!process.env.RADAR_RUN_API_TESTS) {
   test('API/RBAC integration suite is opt-in outside CI', { skip: true }, () => {});
 } else {
   const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'radar-api-test-'));
+  const staticDirectory = path.join(temporaryDirectory, 'web-dist');
+  // CI 在前端构建之前执行 API 测试；创建最小静态产物，使首页回归不依赖仓库中的 dist。
+  fs.mkdirSync(staticDirectory, { recursive: true });
+  fs.writeFileSync(path.join(staticDirectory, 'index.html'), '<!doctype html><div id="root"></div>');
   process.env.DB_FILE = path.join(temporaryDirectory, 'radar.db');
+  process.env.WEB_DIST = staticDirectory;
   process.env.ADMIN_PASSWORD = 'Radar@Test2026!';
   process.env.NODE_ENV = 'test';
 
@@ -27,6 +32,7 @@ if (!process.env.RADAR_RUN_API_TESTS) {
   await runSeed();
   const app = await buildApp();
 
+  // 关闭顺序与生产运行时一致：先停止 HTTP 与定时器，再释放 SQLite 文件句柄后清理夹具。
   after(async () => {
     await app.close();
     await closeDb();
