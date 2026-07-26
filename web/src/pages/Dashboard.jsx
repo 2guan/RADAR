@@ -6,7 +6,7 @@
  * 作者：hengguan
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import {
   Card, Row, Col, Progress, Button, Empty, message, Modal, Table, Grid, Spin, List, Tag,
 } from 'antd';
@@ -18,14 +18,18 @@ import { useAppStore } from '../stores/app.js';
 import { getPreset } from '../theme/presets.js';
 import { useDimensionMeta } from '../components/dashboard/useDimensionMeta.js';
 import { useResponsive } from '../hooks/useResponsive.js';
-import ChartEditor from '../components/dashboard/ChartEditor.jsx';
-import DashboardChart from '../components/dashboard/DashboardChart.jsx';
-import ReleaseDetail from '../components/editors/ReleaseDetail.jsx';
-import ReleaseApplyEditor from '../components/editors/ReleaseApplyEditor.jsx';
-import RequirementEditor from '../components/editors/RequirementEditor.jsx';
-import TicketEditor from '../components/editors/TicketEditor.jsx';
-import TaskEditor from '../components/editors/TaskEditor.jsx';
-import { DevIntakeModal, TestIntakeModal, VersionOverviewWorkItemDetail } from './Overview.jsx';
+
+// 图表、编辑器和概览详情仅在用户打开相应交互时下载，避免仪表盘首屏加载 ECharts 与多个表单模块。
+const ChartEditor = lazy(() => import('../components/dashboard/ChartEditor.jsx'));
+const DashboardChart = lazy(() => import('../components/dashboard/DashboardChart.jsx'));
+const ReleaseDetail = lazy(() => import('../components/editors/ReleaseDetail.jsx'));
+const ReleaseApplyEditor = lazy(() => import('../components/editors/ReleaseApplyEditor.jsx'));
+const RequirementEditor = lazy(() => import('../components/editors/RequirementEditor.jsx'));
+const TicketEditor = lazy(() => import('../components/editors/TicketEditor.jsx'));
+const TaskEditor = lazy(() => import('../components/editors/TaskEditor.jsx'));
+const DevIntakeModal = lazy(() => import('./Overview.jsx').then((module) => ({ default: module.DevIntakeModal })));
+const TestIntakeModal = lazy(() => import('./Overview.jsx').then((module) => ({ default: module.TestIntakeModal })));
+const VersionOverviewWorkItemDetail = lazy(() => import('./Overview.jsx').then((module) => ({ default: module.VersionOverviewWorkItemDetail })));
 
 const { useBreakpoint } = Grid;
 
@@ -184,15 +188,17 @@ export default function Dashboard() {
           <Row gutter={[16, 16]}>
             {list.map((ch, i) => (
               <Col key={ch.id} xs={24} lg={ch.col_span || 12}>
-                <DashboardChart
-                  chart={ch} data={chartData[ch.id] || []} loading={chartLoading} theme={theme}
-                  activeColors={activeColors}
-                  editable={editable} isFirst={i === 0} isLast={i === list.length - 1}
-                  forcedHeight={screens.lg ? heights[ch.id] : undefined}
-                  onEdit={() => setEditor({ open: true, chart: ch, scope })}
-                  onDelete={() => deleteChart(ch.id)}
-                  onMove={(dir) => moveChart(list, ch, dir)}
-                  onDrill={onDrill} labelOf={meta.labelOf} dimName={(d) => meta.dimMeta(d)?.label || d} />
+                <Suspense fallback={<div style={{ minHeight: 220, display: 'grid', placeItems: 'center' }}><Spin /></div>}>
+                  <DashboardChart
+                    chart={ch} data={chartData[ch.id] || []} loading={chartLoading} theme={theme}
+                    activeColors={activeColors}
+                    editable={editable} isFirst={i === 0} isLast={i === list.length - 1}
+                    forcedHeight={screens.lg ? heights[ch.id] : undefined}
+                    onEdit={() => setEditor({ open: true, chart: ch, scope })}
+                    onDelete={() => deleteChart(ch.id)}
+                    onMove={(dir) => moveChart(list, ch, dir)}
+                    onDrill={onDrill} labelOf={meta.labelOf} dimName={(d) => meta.dimMeta(d)?.label || d} />
+                </Suspense>
               </Col>
             ))}
           </Row>
@@ -240,9 +246,11 @@ export default function Dashboard() {
       )}
 
       {/* 配置弹窗 */}
-      {meta.ready && (
-        <ChartEditor open={editor.open} initialData={editor.chart} scope={editor.scope} meta={meta}
-          onClose={() => setEditor({ open: false, chart: null, scope: 'user' })} onSave={saveChart} />
+      {meta.ready && editor.open && (
+        <Suspense fallback={null}>
+          <ChartEditor open initialData={editor.chart} scope={editor.scope} meta={meta}
+            onClose={() => setEditor({ open: false, chart: null, scope: 'user' })} onSave={saveChart} />
+        </Suspense>
       )}
 
       {/* 钻取记录列表 */}
@@ -296,43 +304,46 @@ export default function Dashboard() {
         {overviewDetail.loading || !overviewDetail.data ? (
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 360 }}><Spin size="large" /></div>
         ) : (
-          <VersionOverviewWorkItemDetail
-            detail={overviewDetail.data}
-            isTabMode={!screens.xl}
-            can={can}
-            onDevIntake={() => setDevIntakeReq(overviewDetail.data.requirement)}
-            onTestIntake={(testType) => setTestIntakeReq({ req: overviewDetail.data.requirement, testType })}
-            onRelease={openOverviewRelease}
-            onEditRequirement={() => setWorkItemEditor({
-              type: overviewDetail.data.entityType === 'ticket' ? 'ticket' : 'requirement',
-              id: overviewDetail.data.requirement.id,
-            })}
-            onEditTask={(type, task) => setWorkItemEditor({ type, id: task.id })}
-          />
+          <Suspense fallback={<div style={{ minHeight: 360, display: 'grid', placeItems: 'center' }}><Spin size="large" /></div>}>
+            <VersionOverviewWorkItemDetail
+              detail={overviewDetail.data}
+              isTabMode={!screens.xl}
+              can={can}
+              onDevIntake={() => setDevIntakeReq(overviewDetail.data.requirement)}
+              onTestIntake={(testType) => setTestIntakeReq({ req: overviewDetail.data.requirement, testType })}
+              onRelease={openOverviewRelease}
+              onEditRequirement={() => setWorkItemEditor({
+                type: overviewDetail.data.entityType === 'ticket' ? 'ticket' : 'requirement',
+                id: overviewDetail.data.requirement.id,
+              })}
+              onEditTask={(type, task) => setWorkItemEditor({ type, id: task.id })}
+            />
+          </Suspense>
         )}
       </Modal>
-      <RequirementEditor open={workItemEditor?.type === 'requirement'} reqId={workItemEditor?.type === 'requirement' ? workItemEditor.id : null}
-        onClose={() => setWorkItemEditor(null)} onSaved={refreshOverviewDetail} />
-      <TicketEditor open={workItemEditor?.type === 'ticket'} reqId={workItemEditor?.type === 'ticket' ? workItemEditor.id : null}
-        onClose={() => setWorkItemEditor(null)} onSaved={refreshOverviewDetail} />
-      <TaskEditor open={workItemEditor?.type === 'dev' || workItemEditor?.type === 'test'} kind={workItemEditor?.type === 'test' ? 'test' : 'dev'}
-        taskId={workItemEditor?.type === 'dev' || workItemEditor?.type === 'test' ? workItemEditor.id : null}
-        onClose={() => setWorkItemEditor(null)} onSaved={refreshOverviewDetail} />
-      <DevIntakeModal open={!!devIntakeReq} requirement={devIntakeReq}
-        onClose={() => setDevIntakeReq(null)} onSaved={refreshOverviewDetail} />
-      <TestIntakeModal open={!!testIntakeReq} requirement={testIntakeReq?.req} testType={testIntakeReq?.testType}
-        onClose={() => setTestIntakeReq(null)} onSaved={refreshOverviewDetail} />
-      <ReleaseDetail open={!!releaseDetailCode} reqCode={releaseDetailCode}
-        onClose={() => setReleaseDetailCode(null)} onChanged={refreshOverviewDetail} />
-      <ReleaseApplyEditor
-        open={!!releaseApply}
-        defaultReqCodes={releaseApply?.entityType === 'requirement' ? [releaseApply.reqCode] : undefined}
-        defaultTicketCodes={releaseApply?.entityType === 'ticket' ? [releaseApply.reqCode] : undefined}
-        defaultType={releaseApply?.entityType === 'ticket' ? 'ticket' : 'req'}
-        defaultReleasePointId={releaseApply?.releasePointId}
-        onClose={() => setReleaseApply(null)}
-        onSaved={() => { setReleaseApply(null); refreshOverviewDetail(); }}
-      />
+      <Suspense fallback={null}>
+        {workItemEditor?.type === 'requirement' && <RequirementEditor open reqId={workItemEditor.id}
+          onClose={() => setWorkItemEditor(null)} onSaved={refreshOverviewDetail} />}
+        {workItemEditor?.type === 'ticket' && <TicketEditor open reqId={workItemEditor.id}
+          onClose={() => setWorkItemEditor(null)} onSaved={refreshOverviewDetail} />}
+        {(workItemEditor?.type === 'dev' || workItemEditor?.type === 'test') && <TaskEditor open kind={workItemEditor.type === 'test' ? 'test' : 'dev'}
+          taskId={workItemEditor.id} onClose={() => setWorkItemEditor(null)} onSaved={refreshOverviewDetail} />}
+        {devIntakeReq && <DevIntakeModal open requirement={devIntakeReq}
+          onClose={() => setDevIntakeReq(null)} onSaved={refreshOverviewDetail} />}
+        {testIntakeReq && <TestIntakeModal open requirement={testIntakeReq.req} testType={testIntakeReq.testType}
+          onClose={() => setTestIntakeReq(null)} onSaved={refreshOverviewDetail} />}
+        {releaseDetailCode && <ReleaseDetail open reqCode={releaseDetailCode}
+          onClose={() => setReleaseDetailCode(null)} onChanged={refreshOverviewDetail} />}
+        {releaseApply && <ReleaseApplyEditor
+          open
+          defaultReqCodes={releaseApply.entityType === 'requirement' ? [releaseApply.reqCode] : undefined}
+          defaultTicketCodes={releaseApply.entityType === 'ticket' ? [releaseApply.reqCode] : undefined}
+          defaultType={releaseApply.entityType === 'ticket' ? 'ticket' : 'req'}
+          defaultReleasePointId={releaseApply.releasePointId}
+          onClose={() => setReleaseApply(null)}
+          onSaved={() => { setReleaseApply(null); refreshOverviewDetail(); }}
+        />}
+      </Suspense>
     </div>
   );
 }

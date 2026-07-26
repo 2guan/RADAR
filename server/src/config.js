@@ -139,6 +139,9 @@ export const config = {
   logging: {
     level: normalizeLogLevel(strEnv('LOG_LEVEL'), isProd ? 'info' : 'warn'),
     requestLogging: boolEnv('REQUEST_LOGGING', false),
+    // 慢请求/慢查询仅记录方法、路径和耗时，不写入参数、Token 或业务内容。
+    slowRequestMs: intEnv('SLOW_REQUEST_MS', 1000),
+    slowQueryMs: intEnv('SLOW_QUERY_MS', 500),
   },
 
   captcha: {

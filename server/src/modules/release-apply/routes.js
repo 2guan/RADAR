@@ -44,6 +44,24 @@ const LABELS = {
 // 交付制品分组字段
 const UNIT_KEYS = ['artifact_type', 'delivery_unit', 'new_version', 'ferry_status'];
 
+/** 规整关联编号并去重，避免同一申请写入重复关系行或触发无效评审查询。 */
+function normalizeRefCodes(refCodes) {
+  return [...new Set((Array.isArray(refCodes) ? refCodes : [])
+    .map((code) => String(code || '').trim())
+    .filter(Boolean))];
+}
+
+/** 同步 JSON 兼容字段对应的索引读模型；调用方须在写入事务内执行。 */
+async function syncReleaseApplyReferences(releaseApplyId, refCodes, releasePointId) {
+  await run('DELETE FROM release_apply_reference WHERE release_apply_id = ?', releaseApplyId);
+  for (const code of normalizeRefCodes(refCodes)) {
+    await run(
+      'INSERT INTO release_apply_reference (release_apply_id, ref_code, release_point_id) VALUES (?,?,?)',
+      releaseApplyId, code, releasePointId ?? null,
+    );
+  }
+}
+
 /** 规整交付制品数组：仅保留组内字段，过滤全空组，摆渡状态取字典默认值 */
 async function normalizeUnits(units) {
   if (!Array.isArray(units)) return [];
@@ -83,35 +101,39 @@ async function pick(body) {
   return out;
 }
 
-/** 读取评审状态强弱排序，数值越小越弱；来自 review_status.extra.rank。 */
-async function reviewRankOf(status) {
-  const row = await get('SELECT sort, extra FROM dict_item WHERE category = ? AND attr_value = ?', 'review_status', status);
-  if (!row) return Number.POSITIVE_INFINITY;
-  try {
-    const rank = parseJsonObject(row.extra).rank;
-    const n = Number(rank);
-    if (Number.isFinite(n)) return n;
-  } catch {}
-  return Number.isFinite(row.sort) ? row.sort : Number.POSITIVE_INFINITY;
-}
-
 /**
  * 由关联的需求/工单编号派生评审状态：从投产审批表（release_task）取评审状态，取最弱。
  * 无任何匹配则返回 null。
  */
 async function deriveReviewStatus(refCodes, releasePointId) {
-  if (!Array.isArray(refCodes) || !refCodes.length) return null;
+  const codes = normalizeRefCodes(refCodes);
+  if (!codes.length) return null;
+  const placeholders = codes.map(() => '?').join(',');
+  const rows = await all(
+    `SELECT DISTINCT review_status FROM release_task
+      WHERE req_code IN (${placeholders})
+        AND (release_point_id = ? OR (release_point_id IS NULL AND ? IS NULL))`,
+    ...codes, releasePointId ?? null, releasePointId ?? null,
+  );
+  if (!rows.length) return null;
+  const statuses = rows.map((row) => row.review_status).filter(Boolean);
+  const statusPlaceholders = statuses.map(() => '?').join(',');
+  const rankRows = await all(
+    `SELECT attr_value, sort, extra FROM dict_item
+      WHERE category = 'review_status' AND attr_value IN (${statusPlaceholders})`,
+    ...statuses,
+  );
+  const rankMap = new Map();
+  for (const row of rankRows) {
+    const rank = Number(parseJsonObject(row.extra).rank);
+    const fallbackRank = Number(row.sort);
+    rankMap.set(row.attr_value, Number.isFinite(rank) ? rank : (Number.isFinite(fallbackRank) ? fallbackRank : Number.POSITIVE_INFINITY));
+  }
   let weakest = null;
   let weakestRank = Infinity;
-  for (const code of refCodes) {
-    const rt = await get(
-      `SELECT review_status FROM release_task
-        WHERE req_code = ? AND (release_point_id = ? OR (release_point_id IS NULL AND ? IS NULL))`,
-      code, releasePointId ?? null, releasePointId ?? null,
-    );
-    if (!rt || !rt.review_status) continue;
-    const rank = await reviewRankOf(rt.review_status);
-    if (rank < weakestRank) { weakestRank = rank; weakest = rt.review_status; }
+  for (const status of statuses) {
+    const rank = rankMap.get(status) ?? Number.POSITIVE_INFINITY;
+    if (rank < weakestRank) { weakestRank = rank; weakest = status; }
   }
   return weakest;
 }
@@ -248,6 +270,7 @@ export default async function releaseApplyRoutes(fastify) {
         `INSERT INTO release_apply (${fields.join(',')}) VALUES (${fields.map(() => '?').join(',')})`,
         ...values,
       );
+      await syncReleaseApplyReferences(res.lastInsertRowid, refCodes, body.release_point_id ?? null);
       return { id: res.lastInsertRowid, code };
     });
 
@@ -285,10 +308,15 @@ export default async function releaseApplyRoutes(fastify) {
 
     const keys = Object.keys(data);
     if (keys.length) {
-      await run(
-        `UPDATE release_apply SET ${keys.map((k) => `${k}=?`).join(',')}, updated_at=datetime('now','localtime') WHERE id=?`,
-        ...keys.map((k) => data[k]), id,
-      );
+      await tx(async () => {
+        await run(
+          `UPDATE release_apply SET ${keys.map((k) => `${k}=?`).join(',')}, updated_at=datetime('now','localtime') WHERE id=?`,
+          ...keys.map((k) => data[k]), id,
+        );
+        if (picked.ref_codes !== undefined || picked.release_point_id !== undefined) {
+          await syncReleaseApplyReferences(id, newRefs, nextReleasePointId ?? null);
+        }
+      });
       const oldReadable = decode(old);
       const newReadable = { ...picked };
       await auditUpdate('release_apply', id, old.change_code, request.currentUser?.name, oldReadable, newReadable, LABELS);
@@ -444,6 +472,7 @@ export default async function releaseApplyRoutes(fastify) {
               r.change_content, r.impact_scope || null, r.change_system || null, r.impl_org || null, units,
               JSON.stringify(refs), reviewStatus, r.out_dept || null, r.deploy_dept || null, exists.id,
             );
+            await syncReleaseApplyReferences(exists.id, refs, exists.release_point_id ?? null);
             await auditUpdate('release_apply', exists.id, code, request.currentUser?.name, exists, {
               change_content: r.change_content,
               impact_scope: r.impact_scope || null,
@@ -469,6 +498,7 @@ export default async function releaseApplyRoutes(fastify) {
               units, JSON.stringify(refs), reviewStatus, r.out_dept || null, r.deploy_dept || null,
               request.currentUser?.name, new Date().toISOString().slice(0, 10),
             );
+            await syncReleaseApplyReferences(res.lastInsertRowid, refs, null);
             await auditCreate('release_apply', res.lastInsertRowid, code, request.currentUser?.name);
             await saveExtensionValues('release_apply', res.lastInsertRowid, extensionValues, request.currentUser?.name);
             stat.inserted++;

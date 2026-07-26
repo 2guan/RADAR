@@ -9,9 +9,24 @@
 
 import { DatabaseSync } from 'node:sqlite';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { performance } from 'node:perf_hooks';
 import fs from 'node:fs';
 import path from 'node:path';
 import { sqliteDialect } from '../dialects/sqlite.js';
+import { logger } from '../../lib/logger.js';
+
+/** 记录慢 SQL 的结构化摘要；不输出绑定参数，避免日志包含业务敏感数据。 */
+function measureQuery(config, operation, sql, fn) {
+  const startedAt = performance.now();
+  try {
+    return fn();
+  } finally {
+    const elapsed = performance.now() - startedAt;
+    if (elapsed >= config.logging.slowQueryMs) {
+      logger.warn({ client: 'sqlite', operation, elapsedMs: Math.round(elapsed), sql: String(sql).replace(/\s+/g, ' ').slice(0, 240) }, 'Slow database query');
+    }
+  }
+}
 
 export function createSqliteProvider(config) {
   fs.mkdirSync(path.dirname(config.db.file), { recursive: true });
@@ -45,20 +60,20 @@ export function createSqliteProvider(config) {
     dialect: sqliteDialect,
     raw: db,
     async get(sql, params = []) {
-      return prepare(sql).get(...params);
+      return measureQuery(config, 'get', sql, () => prepare(sql).get(...params));
     },
     async all(sql, params = []) {
-      return prepare(sql).all(...params);
+      return measureQuery(config, 'all', sql, () => prepare(sql).all(...params));
     },
     async run(sql, params = []) {
-      const result = prepare(sql).run(...params);
+      const result = measureQuery(config, 'run', sql, () => prepare(sql).run(...params));
       return {
         changes: result.changes,
         lastInsertRowid: Number(result.lastInsertRowid ?? 0),
       };
     },
     async exec(sql) {
-      return db.exec(sql);
+      return measureQuery(config, 'exec', sql, () => db.exec(sql));
     },
     async tx(fn) {
       if (txStore.getStore()) return await fn();

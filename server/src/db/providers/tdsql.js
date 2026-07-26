@@ -8,8 +8,10 @@
  */
 
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { performance } from 'node:perf_hooks';
 import mysql from 'mysql2/promise';
 import { mysqlDialect } from '../dialects/mysql.js';
+import { logger } from '../../lib/logger.js';
 
 const txStore = new AsyncLocalStorage();
 
@@ -131,6 +133,19 @@ function current(pool) {
   return txStore.getStore() || pool;
 }
 
+/** 记录慢 SQL 的结构化摘要；参数不写入日志，避免暴露业务内容。 */
+async function measureQuery(config, operation, sql, fn) {
+  const startedAt = performance.now();
+  try {
+    return await fn();
+  } finally {
+    const elapsed = performance.now() - startedAt;
+    if (elapsed >= config.logging.slowQueryMs) {
+      logger.warn({ client: 'tdsql', operation, elapsedMs: Math.round(elapsed), sql: String(sql).replace(/\s+/g, ' ').slice(0, 240) }, 'Slow database query');
+    }
+  }
+}
+
 export function createTdsqlProvider(config) {
   const pool = mysql.createPool(mysqlConfig(config));
 
@@ -139,15 +154,15 @@ export function createTdsqlProvider(config) {
     dialect: mysqlDialect,
     raw: pool,
     async get(sql, params = []) {
-      const [rows] = await current(pool).execute(normalizeSql(sql), params);
+      const [rows] = await measureQuery(config, 'get', sql, () => current(pool).execute(normalizeSql(sql), params));
       return rows[0];
     },
     async all(sql, params = []) {
-      const [rows] = await current(pool).execute(normalizeSql(sql), params);
+      const [rows] = await measureQuery(config, 'all', sql, () => current(pool).execute(normalizeSql(sql), params));
       return rows;
     },
     async run(sql, params = []) {
-      const [result] = await current(pool).execute(normalizeSql(sql), params);
+      const [result] = await measureQuery(config, 'run', sql, () => current(pool).execute(normalizeSql(sql), params));
       return {
         changes: result.affectedRows ?? 0,
         lastInsertRowid: result.insertId ?? 0,
@@ -155,7 +170,7 @@ export function createTdsqlProvider(config) {
       };
     },
     async exec(sql) {
-      return current(pool).query(normalizeSql(sql));
+      return measureQuery(config, 'exec', sql, () => current(pool).query(normalizeSql(sql)));
     },
     async tx(fn) {
       const existing = txStore.getStore();

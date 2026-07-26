@@ -7,19 +7,28 @@
  */
 
 import { config } from './config.js';
+import { performance } from 'node:perf_hooks';
 import { runMigrations } from './db/migrate.js';
 import { runSeed } from './db/seed.js';
 import { buildApp } from './app.js';
 import { logger } from './lib/logger.js';
 
+/** 为启动阶段记录分段耗时，便于线上区分卷权限、迁移、初始化和应用装配瓶颈。 */
+async function measureStartupStage(name, fn) {
+  const startedAt = performance.now();
+  const result = await fn();
+  logger.info(`[性能] 启动阶段 ${name}：${Math.round(performance.now() - startedAt)}ms`);
+  return result;
+}
+
 async function main() {
   // 1) 数据库迁移与初始化
-  await runMigrations();
-  await runSeed();
+  await measureStartupStage('数据库迁移', runMigrations);
+  await measureStartupStage('种子初始化', runSeed);
 
   // 2) 构建并启动应用
-  const app = await buildApp();
-  await app.listen({ port: config.port, host: config.host });
+  const app = await measureStartupStage('应用装配', buildApp);
+  await measureStartupStage('HTTP 监听', () => app.listen({ port: config.port, host: config.host }));
   logger.info(`[RADAR] 服务已启动：http://${config.host}:${config.port}`);
 
   // 3) 优雅退出

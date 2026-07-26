@@ -26,6 +26,16 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: 'dist',
       chunkSizeWarningLimit: intEnv(env.VITE_CHUNK_SIZE_WARNING_LIMIT, 1500),
+      rollupOptions: {
+        output: {
+          // 将稳定的大型依赖拆分为可长期缓存的供应商块，业务页面升级不会重复下载它们。
+          manualChunks: {
+            'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+            'vendor-antd': ['antd', '@ant-design/icons'],
+            'vendor-echarts': ['echarts', 'echarts-for-react'],
+          },
+        },
+      },
     },
   };
 });

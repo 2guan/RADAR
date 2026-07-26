@@ -849,6 +849,8 @@ RADAR/
 - `issue.tags`
 - `issue.linked_cases`
 
+`release_apply.ref_codes` 同时维护到 `release_apply_reference` 索引关联表。JSON 字段继续作为兼容写模型和导入导出格式；跨模块按编号关联、投产审批和版本概览读取索引表，避免大数据量时扫描 JSON。
+
 ### 迁移版本
 
 SQLite 迁移位于 [server/src/db/migrations](server/src/db/migrations)。
@@ -888,6 +890,13 @@ SQLite 迁移位于 [server/src/db/migrations](server/src/db/migrations)。
 | `0029_advance_release_after_review_approval.sql` | 评审通过后推进待投产 |
 | `0030_split_role_signoff_config.sql` | 会签角色配置拆分 |
 | `0031_remove_role_signoff_responsible_party.sql` | 清理旧会签责任方字段 |
+| `0032_stage_content_and_deliverables.sql` | 阶段内容、扩展输入项和交付件模型 |
+| `0033_stage_section_layout.sql` | 阶段区块布局 |
+| `0034_stage_status_type_rules.sql` | 状态类型规则 |
+| `0035_deliverable_layout.sql` | 交付件布局 |
+| `0036_stage_section_title_visibility.sql` | 阶段区块标题可见性 |
+| `0037_dict_category.sql` | 字典分类 |
+| `0038_performance_read_models.sql` | 投产申请索引关联表与高频读索引 |
 
 TDSQL 迁移位于 [server/src/db/migrations/tdsql](server/src/db/migrations/tdsql)。TDSQL 与 SQLite 的迁移编号独立维护，新增结构时必须同时补齐两侧迁移。
 
@@ -1022,7 +1031,7 @@ http://localhost:3000
 1. 读取仓库根目录 `.env`。
 2. 初始化数据库 provider。
 3. 执行数据库迁移。
-4. 写入幂等种子数据。
+4. 首次初始化或种子版本升级时写入幂等种子数据；常规重启跳过重复校准。
 5. 启动 Fastify。
 
 ### 启动前端
@@ -1096,6 +1105,16 @@ npm run dev
 | `WEB_DIST` | `./web/dist` | 前端构建产物目录 |
 | `RADAR_DATA_DIR` | `./RADARdata/data` | Docker 宿主机数据库挂载目录 |
 | `RADAR_ATTACHMENTS_DIR` | `./RADARdata/attachments` | Docker 宿主机附件挂载目录 |
+| `RADAR_REPAIR_VOLUME_OWNERSHIP` | `0` | 历史 root 数据卷的单次递归属主修复开关；完成后应保持 `0` |
+
+### 性能观测
+
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `SLOW_REQUEST_MS` | `1000` | 慢请求日志阈值（毫秒），仅记录方法、路径、状态和耗时 |
+| `SLOW_QUERY_MS` | `500` | 慢 SQL 日志阈值（毫秒），不记录参数 |
+
+SQLite 保持完全支持，适合单机与中小并发部署；SQLite 使用 WAL、语句缓存和安全的忙等待配置。数据量与并发写入持续增长时，建议切换到 TDSQL/MySQL 8，以获得连接池和多写入连接能力。
 
 ### PAMS 问题系统
 

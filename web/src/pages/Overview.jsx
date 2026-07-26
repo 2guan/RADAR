@@ -1167,6 +1167,8 @@ export default function Overview() {
   const [groups, setGroups] = useState([]);
   const [collapsedGroups, setCollapsedGroups] = useState({});
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [pageInfo, setPageInfo] = useState({ page: 1, total: 0, hasMore: false });
   const [detail, setDetail] = useState(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -1263,9 +1265,24 @@ export default function Overview() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const load = () => {
-    setLoading(true);
-    apiPost('/overview/list', { releasePointIds, filters: filterQuery }).then((d) => setGroups(d.list || [])).finally(() => setLoading(false));
+  const mergeGroups = (current, incoming) => {
+    const byOrg = new Map(current.map((group) => [group.org, { ...group, cards: [...group.cards] }]));
+    for (const group of incoming) {
+      const existing = byOrg.get(group.org);
+      if (existing) existing.cards.push(...group.cards);
+      else byOrg.set(group.org, { ...group, cards: [...group.cards] });
+    }
+    return [...byOrg.values()];
+  };
+  const load = (page = 1) => {
+    if (page === 1) setLoading(true); else setLoadingMore(true);
+    apiPost('/overview/list', { releasePointIds, filters: filterQuery, page, pageSize: 100 })
+      .then((d) => {
+        const list = d.list || [];
+        setGroups((current) => page === 1 ? list : mergeGroups(current, list));
+        setPageInfo({ page: d.page || page, total: d.total || 0, hasMore: !!d.hasMore });
+      })
+      .finally(() => { if (page === 1) setLoading(false); else setLoadingMore(false); });
   };
   useEffect(load, [JSON.stringify(releasePointIds), JSON.stringify(filterQuery)]);
 
@@ -1392,6 +1409,11 @@ export default function Overview() {
           </Card>
         );
       })}
+      {!loading && pageInfo.hasMore && (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0 20px' }}>
+          <Button loading={loadingMore} onClick={() => load(pageInfo.page + 1)}>加载更多（已加载 {groups.reduce((count, group) => count + group.cards.length, 0)}/{pageInfo.total}）</Button>
+        </div>
+      )}
 
       {/* 全生命周期详情（宽屏5列看板式，窄屏自动切换为页签式以避免横向滚动） */}
       <Modal open={detailOpen} width={isTabMode ? "86%" : "96%"} footer={null} onCancel={() => setDetailOpen(false)} style={{ top: 20, maxWidth: isTabMode ? '1000px' : '1700px' }}

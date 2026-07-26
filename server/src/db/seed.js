@@ -1,6 +1,6 @@
 /**
  * 文件：db/seed.js
- * 说明：全部操作幂等：仅当目标数据不存在时才插入，可安全重复执行。
+ * 说明：首次初始化与种子版本升级时执行幂等校准；常规重启按版本标记跳过，避免重复扫描配置表。
  * 用途：写入平台初始数据——超级管理员、角色、权限矩阵默认值、各类字典初值
  *       （流程状态/版本类型/投产状态/需求类型/机构/板块）、所属系统清单、平台配置与编号规则。
  * 作者：hengguan
@@ -13,6 +13,10 @@ import { DEFAULT_REQUIRED_FIELD_CONFIG, REQUIRED_FIELDS_CONFIG_KEY } from '../li
 import { parseJsonObject } from '../lib/json.js';
 import { logger } from '../lib/logger.js';
 import { seedStageContentDefaults } from '../lib/stage-content.js';
+
+// 种子版本是“内置默认配置”而非业务数据版本；仅在首次初始化或显式升级版本时执行全量校准。
+const SEED_VERSION_KEY = 'runtime.seed.version';
+const SEED_VERSION = '20260726.1';
 
 // 角色定义（角色标识、名称、是否内置、是否会签角色）
 // 会签角色（signoff:1）：投产评审会签由以下 9 个角色完成。
@@ -522,7 +526,13 @@ async function grant(roleId, moduleKey, actions) {
  * 执行全部初始化数据写入。
  */
 export async function runSeed() {
+  let seeded = false;
   await tx(async () => {
+    // 常规重启不重复执行数百次幂等读取/写入；新增内置默认配置时才提高 SEED_VERSION。
+    const seedVersion = await get('SELECT value FROM app_config WHERE key = ?', SEED_VERSION_KEY);
+    if (seedVersion?.value === SEED_VERSION) return;
+    seeded = true;
+
     // 1) 平台配置
     for (const [key, value, remark] of APP_CONFIG) {
       if (!await get('SELECT key FROM app_config WHERE key = ?', key)) {
@@ -675,7 +685,14 @@ export async function runSeed() {
         await run('UPDATE dict_item SET extra = ? WHERE id = ?', JSON.stringify(extra), r.id);
       }
     }
+
+    // 版本标记与种子默认值位于同一事务，避免进程中断后把“已完成”误写入。
+    if (await get('SELECT key FROM app_config WHERE key = ?', SEED_VERSION_KEY)) {
+      await run('UPDATE app_config SET value = ?, remark = ? WHERE key = ?', SEED_VERSION, '内置默认配置种子版本', SEED_VERSION_KEY);
+    } else {
+      await run('INSERT INTO app_config (key, value, remark) VALUES (?,?,?)', SEED_VERSION_KEY, SEED_VERSION, '内置默认配置种子版本');
+    }
   });
 
-  logger.info('[初始化] 种子数据已就绪');
+  logger.info(seeded ? '[初始化] 种子数据已就绪' : '[初始化] 种子版本已就绪，跳过重复校准');
 }

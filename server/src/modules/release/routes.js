@@ -229,8 +229,9 @@ async function resolveReleasePointId(code, explicitValue) {
   const explicit = numberOrNull(explicitValue);
   if (explicit !== null) return explicit;
   const ap = await get(
-    `SELECT release_point_id FROM release_apply ra
-       WHERE ${dialect.jsonArrayContains('ra.ref_codes')} ORDER BY ra.id LIMIT 1`,
+    `SELECT ra.release_point_id FROM release_apply_reference rar
+       JOIN release_apply ra ON ra.id = rar.release_apply_id
+      WHERE rar.ref_code = ? ORDER BY ra.id LIMIT 1`,
     code,
   );
   if (ap?.release_point_id) return Number(ap.release_point_id);
@@ -315,9 +316,10 @@ async function entityArtifacts(code, releasePointId, sysMap) {
     : 'AND ra.release_point_id = ?';
   const params = releasePointId === null ? [code] : [code, releasePointId];
   const rows = await all(
-    `SELECT ra.* FROM release_apply ra
-       WHERE ${dialect.jsonArrayContains('ra.ref_codes')}
-       ${pointFilter}
+    `SELECT ra.* FROM release_apply_reference rar
+       JOIN release_apply ra ON ra.id = rar.release_apply_id
+      WHERE rar.ref_code = ?
+       ${pointFilter.replaceAll('ra.release_point_id', 'rar.release_point_id')}
      ORDER BY ra.id DESC`,
     ...params,
   );
@@ -366,9 +368,10 @@ async function releaseApplicantFor(code, releasePointId, entityType) {
     : 'AND ra.release_point_id = ?';
   const params = releasePointId === null ? [code] : [code, releasePointId];
   const applies = await all(
-    `SELECT ra.* FROM release_apply ra
-       WHERE ${dialect.jsonArrayContains('ra.ref_codes')}
-       ${pointFilter}
+    `SELECT ra.* FROM release_apply_reference rar
+       JOIN release_apply ra ON ra.id = rar.release_apply_id
+      WHERE rar.ref_code = ?
+       ${pointFilter.replaceAll('ra.release_point_id', 'rar.release_point_id')}
      ORDER BY ra.id DESC`,
     ...params,
   );
@@ -413,9 +416,10 @@ async function releaseApplyRowsFor(code, releasePointId) {
     : 'AND ra.release_point_id = ?';
   const params = releasePointId === null ? [code] : [code, releasePointId];
   return await all(
-    `SELECT ra.* FROM release_apply ra
-       WHERE ${dialect.jsonArrayContains('ra.ref_codes')}
-       ${pointFilter}
+    `SELECT ra.* FROM release_apply_reference rar
+       JOIN release_apply ra ON ra.id = rar.release_apply_id
+      WHERE rar.ref_code = ?
+       ${pointFilter.replaceAll('ra.release_point_id', 'rar.release_point_id')}
      ORDER BY ra.id`,
     ...params,
   );
@@ -666,12 +670,21 @@ async function moveReleaseTaskPoint(code, fromPointId, toPointId, operatorName) 
 
   return await tx(async () => {
     // 从审批详情切换申请投产点时，同步移动引用当前工作项的投产申请，从而让关联制品自动进入新投产点。
+    const referenceWhere = fromPointId === null ? 'release_point_id IS NULL' : 'release_point_id = ?';
+    const referenceParams = fromPointId === null ? [code] : [code, fromPointId];
     await run(
       `UPDATE release_apply
           SET release_point_id=?, updated_at=datetime('now','localtime')
-        WHERE ${dialect.jsonArrayContains('ref_codes')}
-          AND ${fromPointId === null ? 'release_point_id IS NULL' : 'release_point_id = ?'}`,
-      ...(fromPointId === null ? [toPointId, code] : [toPointId, code, fromPointId]),
+        WHERE id IN (
+          SELECT release_apply_id FROM release_apply_reference
+           WHERE ref_code = ? AND ${referenceWhere}
+        )`,
+      toPointId, ...referenceParams,
+    );
+    await run(
+      `UPDATE release_apply_reference SET release_point_id=?
+        WHERE ref_code = ? AND ${referenceWhere}`,
+      toPointId, ...referenceParams,
     );
 
     const target = await releaseTaskByCodePoint(code, toPointId);
@@ -693,37 +706,44 @@ async function moveReleaseTaskPoint(code, fromPointId, toPointId, operatorName) 
 async function computeEntities(windowIdList) {
   const defaultReleaseStatus = await defaultProcessStatus('投产', 'initial', '待评审');
   const defaultReviewStatus = await defaultDictAttr('review_status', '待评审');
-  let applies;
+  let references;
   if (windowIdList.length) {
     const ph = windowIdList.map(() => '?').join(',');
-    applies = await all(`SELECT id, ref_codes, release_point_id, change_code, impl_org FROM release_apply WHERE release_point_id IN (${ph})`, ...windowIdList);
+    references = await all(
+      `SELECT rar.ref_code, rar.release_point_id, ra.change_code, ra.impl_org
+         FROM release_apply_reference rar
+         JOIN release_apply ra ON ra.id = rar.release_apply_id
+        WHERE rar.release_point_id IN (${ph})`,
+      ...windowIdList,
+    );
   } else {
-    applies = await all('SELECT id, ref_codes, release_point_id, change_code, impl_org FROM release_apply');
+    references = await all(
+      `SELECT rar.ref_code, rar.release_point_id, ra.change_code, ra.impl_org
+         FROM release_apply_reference rar
+         JOIN release_apply ra ON ra.id = rar.release_apply_id`,
+    );
   }
 
   const codeMap = new Map(); // `${code}::${releasePointId}` -> { code, applyPointId, implOrg, changeCode, changeCodes }
-  for (const ap of applies) {
-    const refs = parseJsonArray(ap.ref_codes);
-    for (const code of refs) {
-      if (!code) continue;
-      const key = `${code}::${ap.release_point_id || ''}`;
-      const cur = codeMap.get(key);
-      if (!cur) {
-        // 首次记录：同一工作项在不同申请投产点下是不同审批实例；同点多申请则聚合变更编号。
-        codeMap.set(key, {
-          code,
-          applyPointId: ap.release_point_id,
-          implOrg: ap.impl_org || null,
-          changeCode: ap.change_code || '',
-          changeCodes: ap.change_code ? [ap.change_code] : [],
-        });
-      } else {
-        if (ap.change_code && !cur.changeCodes.includes(ap.change_code)) cur.changeCodes.push(ap.change_code);
-        if (ap.change_code && (!cur.changeCode || String(ap.change_code) < String(cur.changeCode))) {
-          // 实施机构取「申请编号最小」的投产申请
-          cur.implOrg = ap.impl_org || null;
-          cur.changeCode = ap.change_code;
-        }
+  for (const reference of references) {
+    const code = reference.ref_code;
+    const key = `${code}::${reference.release_point_id ?? ''}`;
+    const cur = codeMap.get(key);
+    if (!cur) {
+      // 首次记录：同一工作项在不同申请投产点下是不同审批实例；同点多申请则聚合变更编号。
+      codeMap.set(key, {
+        code,
+        applyPointId: reference.release_point_id,
+        implOrg: reference.impl_org || null,
+        changeCode: reference.change_code || '',
+        changeCodes: reference.change_code ? [reference.change_code] : [],
+      });
+    } else {
+      if (reference.change_code && !cur.changeCodes.includes(reference.change_code)) cur.changeCodes.push(reference.change_code);
+      if (reference.change_code && (!cur.changeCode || String(reference.change_code) < String(cur.changeCode))) {
+        // 实施机构取「申请编号最小」的投产申请。
+        cur.implOrg = reference.impl_org || null;
+        cur.changeCode = reference.change_code;
       }
     }
   }
@@ -735,20 +755,54 @@ async function computeEntities(windowIdList) {
   // 会签角色数：未发起的实体会签进度按 0/角色数 展示（与首次打开详情后惰性创建的会签项数一致）
   const signoffRoleCount = (await get('SELECT COUNT(*) AS c FROM role WHERE is_signoff_role = 1'))?.c || 0;
 
+  const codes = [...new Set([...codeMap.values()].map((item) => item.code))];
+  if (!codes.length) return [];
+  const placeholders = codes.map(() => '?').join(',');
+  const [requirements, tickets, issues, tasks] = await Promise.all([
+    all(`SELECT req_code AS code, title, 'requirement' AS entity_type FROM requirement WHERE req_code IN (${placeholders})`, ...codes),
+    all(`SELECT ticket_code AS code, title, 'ticket' AS entity_type FROM ticket WHERE ticket_code IN (${placeholders})`, ...codes),
+    all(`SELECT issue_code AS code, summary AS title, 'issue' AS entity_type FROM issue WHERE issue_code IN (${placeholders})`, ...codes),
+    all(`SELECT id, req_code, release_point_id, status, review_status FROM release_task WHERE req_code IN (${placeholders})`, ...codes),
+  ]);
+  const itemMap = new Map([...requirements, ...tickets, ...issues].map((item) => [item.code, item]));
+  const taskMap = new Map(tasks.map((task) => [`${task.req_code}::${task.release_point_id ?? ''}`, task]));
+  const taskIds = tasks.map((task) => task.id);
+  const attachmentsByTask = new Map();
+  const signoffByTask = new Map();
+  if (taskIds.length) {
+    const taskPlaceholders = taskIds.map(() => '?').join(',');
+    const [attachments, signoffs] = await Promise.all([
+      all(`SELECT * FROM attachment WHERE entity_type = 'release' AND entity_id IN (${taskPlaceholders})`, ...taskIds),
+      all(`SELECT release_task_id,
+                  SUM(CASE WHEN result <> '不涉及' THEN 1 ELSE 0 END) AS total,
+                  SUM(CASE WHEN result = '已签署' THEN 1 ELSE 0 END) AS signed,
+                  SUM(CASE WHEN result = '已驳回' THEN 1 ELSE 0 END) AS rejected
+             FROM release_signoff WHERE release_task_id IN (${taskPlaceholders})
+            GROUP BY release_task_id`, ...taskIds),
+    ]);
+    for (const attachment of attachments) {
+      const taskAttachments = attachmentsByTask.get(attachment.entity_id) || [];
+      taskAttachments.push(attachment);
+      attachmentsByTask.set(attachment.entity_id, taskAttachments);
+    }
+    for (const summary of signoffs) signoffByTask.set(summary.release_task_id, {
+      total: Number(summary.total || 0), signed: Number(summary.signed || 0), rejected: Number(summary.rejected || 0),
+    });
+  }
+
   const list = [];
   for (const info of codeMap.values()) {
     const code = info.code;
-    const item = await getWorkItem(code);
-    const issue = item ? null : await get('SELECT issue_code, summary, status FROM issue WHERE issue_code = ?', code);
-    const type = item ? item.entity_type : (issue ? 'issue' : 'unknown');
-    const title = item ? item.title : (issue ? issue.summary : '');
+    const item = itemMap.get(code);
+    const type = item?.entity_type || 'unknown';
+    const title = item?.title || '';
     const pointId = info.applyPointId;
     const releaseDate = rpMap[pointId] || null;
 
-    const rt = await releaseTaskByCodePoint(code, pointId);
-    const releaseAttaches = rt ? await all("SELECT * FROM attachment WHERE entity_type = 'release' AND entity_id = ?", rt.id) : [];
+    const rt = taskMap.get(`${code}::${pointId ?? ''}`);
+    const releaseAttaches = rt ? attachmentsByTask.get(rt.id) || [] : [];
     // 未发起时按默认基线展示：投产/评审状态取字典默认值，会签进度=签0/角色数
-    const summary = rt ? await signoffSummary(rt.id) : { total: signoffRoleCount, signed: 0, rejected: 0 };
+    const summary = rt ? signoffByTask.get(rt.id) || { total: 0, signed: 0, rejected: 0 } : { total: signoffRoleCount, signed: 0, rejected: 0 };
 
     list.push({
       release_task_id: rt?.id || null,

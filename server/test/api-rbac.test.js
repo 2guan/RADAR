@@ -27,7 +27,7 @@ if (!process.env.RADAR_RUN_API_TESTS) {
   const { runMigrations } = await import('../src/db/migrate.js');
   const { runSeed } = await import('../src/db/seed.js');
   const { buildApp } = await import('../src/app.js');
-  const { run, closeDb } = await import('../src/db/index.js');
+  const { get, all, run, closeDb } = await import('../src/db/index.js');
   await runMigrations();
   await runSeed();
   const app = await buildApp();
@@ -79,5 +79,61 @@ if (!process.env.RADAR_RUN_API_TESTS) {
     });
     assert.equal(response.statusCode, 403);
     assert.equal(response.json().code, 403);
+  });
+
+  test('投产申请写入索引关联表，投产审批列表可按关联编号读取', async () => {
+    const administrator = await get('SELECT id, phone FROM user WHERE is_super = 1 LIMIT 1');
+    const releasePoint = await get('SELECT id FROM release_point ORDER BY id LIMIT 1');
+    assert.ok(administrator);
+    assert.ok(releasePoint);
+    const code = 'PERF-REF-001';
+    await run(
+      `INSERT INTO requirement (req_code, title, status, release_point_id)
+       VALUES (?,?,?,?)`,
+      code, '索引关联回归需求', '待分析', releasePoint.id,
+    );
+    const token = await app.jwt.sign({ id: administrator.id, phone: administrator.phone });
+    const headers = { authorization: `Bearer ${token}`, 'x-requested-by': 'RADAR' };
+    const created = await app.inject({
+      method: 'POST', url: '/api/release-apply', headers,
+      payload: {
+        change_content: '索引关联回归变更', change_system: 'PERF-SYSTEM', release_point_id: releasePoint.id,
+        ref_codes: [code], delivery_units: [{ artifact_type: '程序包', delivery_unit: 'perf.tar.gz', new_version: '1.0.0' }],
+      },
+    });
+    assert.equal(created.statusCode, 200);
+    const applyId = created.json().data.id;
+    const reference = await get('SELECT ref_code, release_point_id FROM release_apply_reference WHERE release_apply_id = ?', applyId);
+    assert.equal(reference.ref_code, code);
+    assert.equal(reference.release_point_id, releasePoint.id);
+
+    const updatedCode = 'PERF-REF-002';
+    await run(
+      `INSERT INTO requirement (req_code, title, status, release_point_id)
+       VALUES (?,?,?,?)`,
+      updatedCode, '索引关联更新回归需求', '待分析', releasePoint.id,
+    );
+    const updated = await app.inject({
+      method: 'PUT', url: `/api/release-apply/${applyId}`, headers, payload: { ref_codes: [updatedCode] },
+    });
+    assert.equal(updated.statusCode, 200);
+    const updatedReferences = await all('SELECT ref_code FROM release_apply_reference WHERE release_apply_id = ?', applyId);
+    assert.equal(updatedReferences.length, 1);
+    assert.equal(updatedReferences[0].ref_code, updatedCode);
+
+    const list = await app.inject({ method: 'POST', url: '/api/release/list', headers, payload: { page: 1, pageSize: 20 } });
+    assert.equal(list.statusCode, 200);
+    assert.ok(list.json().data.list.some((row) => row.code === updatedCode));
+
+    const metrics = await app.inject({ method: 'GET', url: '/api/dashboard/metrics', headers });
+    assert.equal(metrics.statusCode, 200);
+    assert.ok(metrics.json().data.requirement.total >= 2);
+
+    const overview = await app.inject({
+      method: 'POST', url: '/api/overview/list', headers, payload: { page: 1, pageSize: 20 },
+    });
+    assert.equal(overview.statusCode, 200);
+    assert.equal(overview.json().data.page, 1);
+    assert.ok(overview.json().data.total >= overview.json().data.list.length);
   });
 }

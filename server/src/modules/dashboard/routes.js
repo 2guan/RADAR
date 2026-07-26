@@ -63,9 +63,14 @@ async function workItemCodesInWindow(ids) {
   ];
 }
 
-/** 计数终态记录 */
-function countTerminal(rows) {
-  return rows.filter((r) => isTerminalStatus(r.status)).length;
+/** 将 SQL 的状态分组结果转换为总量与终态量，避免为指标卡传输全量状态行。 */
+function summarizeStatusRows(rows) {
+  return rows.reduce((summary, row) => {
+    const count = Number(row.count || 0);
+    summary.total += count;
+    if (isTerminalStatus(row.status)) summary.terminal += count;
+    return summary;
+  }, { total: 0, terminal: 0 });
 }
 
 /** 载入某数据源的记录，并按投产窗口（req_code 集合）过滤 */
@@ -187,30 +192,42 @@ export default async function dashboardRoutes(fastify) {
   // 原子指标卡（每项返回 总数 total 与 终态计数 terminal）
   fastify.get('/dashboard/metrics', { preHandler: fastify.requirePerm('dashboard', 'view') }, async (request) => {
     const winIds = windowIds(request.query);
-    const codes = await workItemCodesInWindow(winIds);
-    const inWindow = async (table, extraWhere = '') => {
-      if (!codes) return await all(`SELECT status FROM ${table} ${extraWhere ? 'WHERE ' + extraWhere : ''}`);
-      if (!codes.length) return [];
-      const ph = codes.map(() => '?').join(',');
-      const where = `req_code IN (${ph})${extraWhere ? ' AND ' + extraWhere : ''}`;
-      return await all(`SELECT status FROM ${table} WHERE ${where}`, ...codes);
+    const groupedStatus = async (table, where = '', params = []) => await all(
+      `SELECT status, COUNT(*) AS count FROM ${table}${where ? ` WHERE ${where}` : ''} GROUP BY status`,
+      ...params,
+    );
+    const pointFilter = (column) => {
+      if (!winIds?.length) return { where: '', params: [] };
+      return { where: `${column} IN (${winIds.map(() => '?').join(',')})`, params: winIds };
+    };
+    const taskWindowFilter = (taskAlias, testType = null) => {
+      const params = [];
+      const pieces = [];
+      if (testType) { pieces.push(`${taskAlias}.test_type = ?`); params.push(testType); }
+      if (winIds?.length) {
+        const placeholders = winIds.map(() => '?').join(',');
+        pieces.push(`(
+          EXISTS (SELECT 1 FROM requirement r WHERE r.req_code = ${taskAlias}.req_code AND r.release_point_id IN (${placeholders}))
+          OR EXISTS (SELECT 1 FROM ticket t WHERE t.ticket_code = ${taskAlias}.req_code AND t.release_point_id IN (${placeholders}))
+        )`);
+        params.push(...winIds, ...winIds);
+      }
+      return { where: pieces.join(' AND '), params };
     };
 
-    const reqRows = codes
-      ? (codes.length ? await all(`SELECT status FROM requirement WHERE req_code IN (${codes.map(() => '?').join(',')})`, ...codes) : [])
-      : await all('SELECT status FROM requirement');
-
-    const ticketRows = codes
-      ? (codes.length ? await all(`SELECT status FROM ticket WHERE ticket_code IN (${codes.map(() => '?').join(',')})`, ...codes) : [])
-      : await all('SELECT status FROM ticket');
+    const reqFilter = pointFilter('release_point_id');
+    const ticketFilter = pointFilter('release_point_id');
+    const devFilter = taskWindowFilter('dev_task');
+    const sitFilter = taskWindowFilter('test_task', 'SIT');
+    const uatFilter = taskWindowFilter('test_task', 'UAT');
 
     // 投产申请（变更单）：按所选投产点过滤（窗口为空=全部）
     let applyRows;
     if (!winIds?.length) {
-      applyRows = await all('SELECT ref_codes, delivery_units FROM release_apply');
+      applyRows = await all('SELECT delivery_units FROM release_apply');
     } else {
       const sub = inClause('release_point_id', winIds);
-      applyRows = await all(`SELECT ref_codes, delivery_units FROM release_apply WHERE ${sub.where}`, ...sub.params);
+      applyRows = await all(`SELECT delivery_units FROM release_apply WHERE ${sub.where}`, ...sub.params);
     }
 
     // 投产系统：对应投产点提交了投产申请的变更单数；完成=全部交付单元已摆渡
@@ -222,16 +239,20 @@ export default async function dashboardRoutes(fastify) {
       }).length,
     };
 
-    const dev = await inWindow('dev_task');
-    const sit = await inWindow('test_task', "test_type='SIT'");
-    const uat = await inWindow('test_task', "test_type='UAT'");
+    const [reqRows, ticketRows, devRows, sitRows, uatRows] = await Promise.all([
+      groupedStatus('requirement', reqFilter.where, reqFilter.params),
+      groupedStatus('ticket', ticketFilter.where, ticketFilter.params),
+      groupedStatus('dev_task', devFilter.where, devFilter.params),
+      groupedStatus('test_task', sitFilter.where, sitFilter.params),
+      groupedStatus('test_task', uatFilter.where, uatFilter.params),
+    ]);
 
     return ok({
-      requirement: { total: reqRows.length, terminal: countTerminal(reqRows) },
-      ticket: { total: ticketRows.length, terminal: countTerminal(ticketRows) },
-      dev: { total: dev.length, terminal: countTerminal(dev) },
-      sit: { total: sit.length, terminal: countTerminal(sit) },
-      uat: { total: uat.length, terminal: countTerminal(uat) },
+      requirement: summarizeStatusRows(reqRows),
+      ticket: summarizeStatusRows(ticketRows),
+      dev: summarizeStatusRows(devRows),
+      sit: summarizeStatusRows(sitRows),
+      uat: summarizeStatusRows(uatRows),
       releaseSystem,
     });
   });
@@ -281,8 +302,17 @@ export default async function dashboardRoutes(fastify) {
     const ctx = await buildContext();
     const rowsCache = new Map(); // source → 该窗口下的记录集（同源复用）
     const loadOnce = async (source) => {
-      if (!rowsCache.has(source)) rowsCache.set(source, await loadRows(source, codes));
+      if (!rowsCache.has(source)) rowsCache.set(source, loadRows(source, codes));
       return rowsCache.get(source);
+    };
+    const dynamicDims = await dynamicDashboardDimensions();
+    const analyticsRowsCache = new Map(); // 统计口径 → Promise<记录集>，同口径图表只扫描一次
+    const loadAnalyticsOnce = (analytics) => {
+      const key = `${analytics.statDimension}::${analytics.statStage}`;
+      if (!analyticsRowsCache.has(key)) {
+        analyticsRowsCache.set(key, loadAnalyticsRows(analytics.statDimension, analytics.statStage, codes, ctx));
+      }
+      return analyticsRowsCache.get(key);
     };
 
     const result = {};
@@ -291,7 +321,6 @@ export default async function dashboardRoutes(fastify) {
       const analytics = normalizeAnalyticsConfig(cfg);
       const source = analytics?.source || cfg.source || 'analytics';
       // 非法配置返回空数据而非整体失败，保证其余图表正常
-      const dynamicDims = await dynamicDashboardDimensions();
       if (!SOURCES[source] || !isChartDimensionAllowed(source, cfg.dimension, analytics, dynamicDims)) { result[ch.id] = []; continue; }
       const xDim = cfg.xAxisDimension && isChartDimensionAllowed(source, cfg.xAxisDimension, analytics, dynamicDims) ? cfg.xAxisDimension : undefined;
       try {
@@ -299,7 +328,7 @@ export default async function dashboardRoutes(fastify) {
           source, dimension: cfg.dimension, xAxisDimension: xDim,
           filters: cfg.filters, groups: cfg.groups, xAxisGroups: cfg.xAxisGroups,
           rows: source === 'analytics'
-            ? await loadAnalyticsRows(analytics.statDimension, analytics.statStage, codes, ctx)
+            ? await loadAnalyticsOnce(analytics)
             : await loadOnce(source), ctx,
         });
       } catch { result[ch.id] = []; }

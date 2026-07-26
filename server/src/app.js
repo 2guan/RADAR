@@ -7,6 +7,7 @@
  */
 
 import Fastify from 'fastify';
+import { performance } from 'node:perf_hooks';
 import helmet from '@fastify/helmet';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
@@ -33,6 +34,17 @@ export async function buildApp() {
     // Fastify 5 将请求日志开关收敛至控制器，避免使用即将删除的顶层配置。
     logController: new Fastify.LogController({ disableRequestLogging: !config.logging.requestLogging }),
     bodyLimit: config.upload.maxFileSize + 1024 * 1024,
+  });
+
+  // 请求级耗时观测仅输出路由元数据与状态码，供线上定位慢接口且不记录业务参数。
+  app.addHook('onRequest', async (request) => {
+    request.radarRequestStartedAt = performance.now();
+  });
+  app.addHook('onResponse', async (request, reply) => {
+    const elapsed = performance.now() - (request.radarRequestStartedAt || performance.now());
+    if (elapsed >= config.logging.slowRequestMs) {
+      request.log.warn({ method: request.method, url: request.url, statusCode: reply.statusCode, elapsedMs: Math.round(elapsed) }, 'Slow request');
+    }
   });
 
   // ---- 响应压缩：公网/VPN 访问下显著降低 JS 包与 JSON 传输量（gzip 为主，CPU 开销可控）----

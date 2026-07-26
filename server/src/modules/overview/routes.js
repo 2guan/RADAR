@@ -6,7 +6,7 @@
  * 作者：hengguan
  */
 
-import { get, all, dialect } from '../../platform/persistence/index.js';
+import { get, all } from '../../platform/persistence/index.js';
 import { isIssueTerminalStatus, isTerminalStatus } from '../process-configuration/index.js';
 import { listByEntity } from '../../platform/attachments/index.js';
 import { windowIds, inClause } from '../../lib/window.js';
@@ -78,24 +78,25 @@ async function resolveSystem(code) {
 async function entityArtifacts(code) {
   if (!code) return [];
   const rows = await all(
-    `SELECT * FROM release_apply ra
-       WHERE ${dialect.jsonArrayContains('ra.ref_codes')}
+    `SELECT ra.*, s.sys_name FROM release_apply_reference rar
+       JOIN release_apply ra ON ra.id = rar.release_apply_id
+       LEFT JOIN system s ON s.sys_code = ra.change_system
+      WHERE rar.ref_code = ?
      ORDER BY ra.id DESC`,
     code,
   );
-  return Promise.all(rows.map(async (r) => {
+  return rows.map((r) => {
     const units = parseJsonArray(r.delivery_units);
-    const sys = r.change_system ? await resolveSystem(r.change_system) : null;
     return {
       id: r.id,
       change_code: r.change_code,
       change_system: r.change_system,
-      change_system_name: sys ? (sys.sys_name || r.change_system) : (r.change_system || null),
+      change_system_name: r.sys_name || r.change_system || null,
       impl_org: r.impl_org,
       change_content: r.change_content,
       units,
     };
-  }));
+  });
 }
 
 /** 构建单需求/工单链路概要（dev/test/rt 状态均由预载 Map 提供，免逐条查询） */
@@ -148,7 +149,9 @@ async function appendIssueCards({ groups, body, targetReleasePointIds, sysMap, r
   if (stageFilter || taskStatusFilter || mainSystemsFilter || collabSystemsFilter) return;
 
   // 1) 取窗口（或指定投产点）下的投产申请
-  let raSql = 'SELECT ref_codes, impl_org FROM release_apply';
+  let raSql = `SELECT rar.ref_code, ra.impl_org
+    FROM release_apply_reference rar
+    JOIN release_apply ra ON ra.id = rar.release_apply_id`;
   const raParams = [];
   if (targetReleasePointIds) {
     if (!targetReleasePointIds.length) return;
@@ -174,11 +177,9 @@ async function appendIssueCards({ groups, body, targetReleasePointIds, sysMap, r
   // 3) 收集关联到的问题编号（去重，记录首个关联申请的实施机构作分组兜底）
   const issueImplOrg = {};
   for (const ra of applies) {
-    const refs = parseJsonArray(ra.ref_codes);
-    for (const code of refs) {
-      // 工单编号按业务口径等于问题编号；若编号已存在于需求/工单表，概览必须按工作项展示，不能再重复追加为问题卡片。
-      if (issueMap[code] && !workItemCodes.has(code) && !(code in issueImplOrg)) issueImplOrg[code] = ra.impl_org || null;
-    }
+    const code = ra.ref_code;
+    // 工单编号按业务口径等于问题编号；若编号已存在于需求/工单表，概览必须按工作项展示，不能再重复追加为问题卡片。
+    if (issueMap[code] && !workItemCodes.has(code) && !(code in issueImplOrg)) issueImplOrg[code] = ra.impl_org || null;
   }
 
   // 4) 逐个问题生成卡片
@@ -371,8 +372,15 @@ export default async function overviewRoutes(fastify) {
       filters: { orgsFilter, reqCodeFilter, contentFilter, stageFilter, taskStatusFilter, mainSystemsFilter, collabSystemsFilter },
     });
 
-    const list = Object.entries(groups).map(([org, cards]) => ({ org, cards }));
-    return ok({ list });
+    // 概览卡片在数据量大时会显著放大接口响应与浏览器布局成本；按卡片分页，分组结构保持原接口兼容。
+    const page = Math.max(1, Number(body.page) || 1);
+    const pageSize = Math.min(200, Math.max(20, Number(body.pageSize) || 100));
+    const cards = Object.entries(groups).flatMap(([org, groupCards]) => groupCards.map((card) => ({ org, card })));
+    const pageCards = cards.slice((page - 1) * pageSize, page * pageSize);
+    const pageGroups = {};
+    for (const { org, card } of pageCards) (pageGroups[org] ||= []).push(card);
+    const list = Object.entries(pageGroups).map(([org, groupCards]) => ({ org, cards: groupCards }));
+    return ok({ list, total: cards.length, page, pageSize, hasMore: page * pageSize < cards.length });
   });
 
   // 单需求/工单 5 层全生命周期详情
@@ -438,9 +446,9 @@ export default async function overviewRoutes(fastify) {
 
     // 关联投产申请（取最早一条）以推导计划投产点
     const ap = await get(
-      `SELECT release_point_id FROM release_apply
-         WHERE ${dialect.jsonArrayContains('release_apply.ref_codes')}
-         ORDER BY id ASC LIMIT 1`,
+      `SELECT ra.release_point_id FROM release_apply_reference rar
+         JOIN release_apply ra ON ra.id = rar.release_apply_id
+        WHERE rar.ref_code = ? ORDER BY ra.id ASC LIMIT 1`,
       code,
     );
     const rp = ap?.release_point_id ? await get('SELECT release_date FROM release_point WHERE id = ?', ap.release_point_id) : null;
