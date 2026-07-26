@@ -51,3 +51,4 @@ jobs:
           scan-ref: .
           exit-code: '1'
           severity: HIGH,CRITICAL
+          trivyignores: .trivyignore

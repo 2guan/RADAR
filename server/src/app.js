@@ -30,7 +30,8 @@ export async function buildApp() {
 
   const app = Fastify({
     logger: { level: config.logging.level },
-    disableRequestLogging: !config.logging.requestLogging,
+    // Fastify 5 将请求日志开关收敛至控制器，避免使用即将删除的顶层配置。
+    logController: new Fastify.LogController({ disableRequestLogging: !config.logging.requestLogging }),
     bodyLimit: config.upload.maxFileSize + 1024 * 1024,
   });
 

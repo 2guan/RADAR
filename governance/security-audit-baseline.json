@@ -4,7 +4,17 @@
   "approved_by": "hengguan",
   "rationale": "Existing dependency advisories are tracked as a time-boxed baseline so CI prevents regressions while upgrades are handled in a dedicated compatibility-tested security change.",
   "packages": {
-    "server": { "info": 0, "low": 0, "moderate": 2, "high": 4, "critical": 0 },
-    "web": { "info": 0, "low": 0, "moderate": 3, "high": 2, "critical": 0 }
-  }
+    "server": { "info": 0, "low": 0, "moderate": 1, "high": 1, "critical": 0 },
+    "web": { "info": 0, "low": 0, "moderate": 3, "high": 0, "critical": 0 }
+  },
+  "container_exceptions": [
+    {
+      "id": "CVE-2026-14257",
+      "component": "brace-expansion@1.1.16",
+      "source": "ExcelJS -> unzipper -> rimraf -> glob -> minimatch",
+      "rationale": "受影响的 1.x 依赖链没有兼容修复版本；已升级其余可修复依赖，保留到期复核。",
+      "review_by": "2026-08-30",
+      "approved_by": "hengguan"
+    }
+  ]
 }
