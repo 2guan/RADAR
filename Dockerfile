@@ -25,9 +25,10 @@ FROM ${NODE_IMAGE}
 ARG NPM_CONFIG_REGISTRY
 WORKDIR /app
 
-# 安装后端依赖（仅生产），然后移除最终运行镜像不需要的 npm/corepack 工具及其依赖。
+# 安装后端依赖（仅生产）与降权工具，然后移除最终运行镜像不需要的 npm/corepack 工具及其依赖。
 COPY server/package*.json ./server/
-RUN npm config set registry "${NPM_CONFIG_REGISTRY}" \
+RUN apk add --no-cache su-exec \
+  && npm config set registry "${NPM_CONFIG_REGISTRY}" \
   && cd server && npm ci --omit=dev \
   && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
   && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
@@ -35,11 +36,13 @@ RUN npm config set registry "${NPM_CONFIG_REGISTRY}" \
 # 拷贝后端源码与前端构建产物
 COPY server/ ./server/
 COPY --from=web-builder /build/web/dist ./web/dist
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
 # 数据与附件目录（将通过 volume 挂载）；服务进程不以 root 身份运行。
 RUN addgroup -S radar && adduser -S -G radar -h /app radar \
   && mkdir -p /app/data /app/attachments \
-  && chown -R radar:radar /app
+  && chown -R radar:radar /app \
+  && chmod 755 /usr/local/bin/docker-entrypoint.sh
 
 ENV NODE_ENV=production
 ENV DB_CLIENT=sqlite
@@ -48,6 +51,10 @@ ARG APP_PORT=3000
 EXPOSE ${APP_PORT}
 
 USER radar
+
+# Compose 会仅在入口脚本初始化挂载目录时覆盖为 root；脚本完成属主修正后，
+# 立即通过 su-exec 以 radar 用户启动服务。直接运行镜像仍默认保持非 root。
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
 # 启动后端（自动迁移 + 种子 + 提供前端）
 CMD ["node", "server/src/server.js"]

@@ -18,6 +18,9 @@ services:
     image: ${RADAR_IMAGE:-radar:latest}
     container_name: ${RADAR_CONTAINER_NAME:-radar}
     restart: unless-stopped
+    # 入口脚本仅以 root 修正已挂载目录的属主，随后以镜像内 radar 用户运行服务。
+    # 这兼容旧版 root 所有的 SQLite 数据卷，避免数据库升级后变为只读。
+    user: "0:0"
     env_file:
       - .env
     ports:
