@@ -11,11 +11,11 @@ export {
   assertAttachmentInputAllowed,
   statusTypeForProcessStatus,
   statusTypeForReleaseApply,
-} from '../../lib/required-fields.js';
+} from '../../modules/process-configuration/index.js';
 export {
   getStageContentConfig,
   validateStageContent,
   assertDeliverableInputAllowed,
   assertDeliverableRemovable,
-} from '../../lib/stage-content.js';
-export { assertStatusChangePermission } from '../../lib/status-permission.js';
+} from '../../modules/process-configuration/index.js';
+export { assertStatusChangePermission } from '../../modules/process-configuration/index.js';

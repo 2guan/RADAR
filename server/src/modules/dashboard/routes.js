@@ -1,6 +1,6 @@
 /**
  * 文件：modules/dashboard/routes.js
- * 说明：聚合在内存按维度分桶（见 lib/chart-dims.js）；系统图表(scope=system)由 dashboard:manage
+ * 说明：聚合在内存按维度分桶（见 reporting/application/chart-dims.js）；系统图表(scope=system)由 dashboard:manage
  *       权限维护、对所有人可见；我的图表(scope=user)按用户隔离。
  * 用途：效能仪表盘接口。5 原子指标卡（终态计数）、分析图表数据聚合（多维度组合/分组归并/
  *       局部过滤/透视）、维度元数据、钻取记录列表，以及系统图表/我的图表的增删改查。
@@ -9,12 +9,12 @@
 
 import { get, all, run, dialect } from '../../platform/persistence/index.js';
 import { isTerminalStatus } from '../process-configuration/index.js';
-import { windowIds, inClause } from '../../lib/window.js';
+import { windowIds, inClause } from '../reference-data/index.js';
 import { ok, badRequest, notFound, forbidden } from '../../platform/runtime/index.js';
 import {
   SOURCES, DIMENSIONS, CHART_TYPES, ANALYTICS_DIMENSIONS, ANALYTICS_STAGES,
   buildContext, aggregate, extract, matchFilters, isValidDim, testTypeOf,
-} from '../../lib/chart-dims.js';
+} from '../reporting/index.js';
 import { parseJsonArray } from '../../platform/runtime/index.js';
 
 const DYNAMIC_STAGE_SCOPE = {

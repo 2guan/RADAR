@@ -8,10 +8,10 @@
 /** Public attachment and signature platform contract. */
 export {
   saveFile, savePath, listByEntity, countByFields, removeAttachment,
-} from '../../lib/attachment.js';
+} from './attachment.js';
 export {
   decodeSignatureDataUrl, saveSignatureFile, removeSignatureFile, signatureDataUrl,
-} from '../../lib/signature.js';
+} from './signature.js';
 export { authorizeEntity, resolveEntityAccess } from '../auth/index.js';
 export { resolveAttachmentPath } from './storage.js';
 export { MODULE_CONTRACT as attachmentsContract } from './contracts/index.js';

@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { all, exec, run, tx, dbClient } from './index.js';
-import { logger } from '../lib/logger.js';
+import { logger } from '../platform/runtime/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_ROOT = path.join(__dirname, 'migrations');

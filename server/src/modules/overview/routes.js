@@ -9,10 +9,9 @@
 import { get, all } from '../../platform/persistence/index.js';
 import { isIssueTerminalStatus, isTerminalStatus } from '../process-configuration/index.js';
 import { listByEntity } from '../../platform/attachments/index.js';
-import { windowIds, inClause } from '../../lib/window.js';
+import { windowIds, inClause, formatAttachments } from '../reference-data/index.js';
 import { ok, notFound, parseJsonArray } from '../../platform/runtime/index.js';
-import { exportXlsx } from '../../lib/excel.js';
-import { formatAttachments } from '../../lib/resolver.js';
+import { exportXlsx } from '../../platform/import-export/index.js';
 import { getWorkItem } from '../delivery/index.js';
 import { formatImpactItemsText, formatCoverageText } from '../delivery/index.js';
 

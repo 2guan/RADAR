@@ -22,7 +22,7 @@ RADAR（Requirement Agile Delivery & Acceleration Resource）是面向日常需�
 
 ## 核心能力
 
-- 需求与工单分别管理，保留独立编号、字段和写入边界。
+- 需求与工单分别管理，保留独立编号、字段、写入边界和可配置编号模板。
 - 覆盖需求/工单分析、开发、SIT/UAT/NFT/SEC 测试、投产申请、投产审批与会签。
 - 支持投产窗口、版本概览、效能仪表盘、图表钻取、过程审计、附件与电子签名。
 - 支持 PAMS 问题快照及受控同步；外网辅助入口当前不实施。
@@ -36,7 +36,7 @@ RADAR（Requirement Agile Delivery & Acceleration Resource）是面向日常需�
         │ HTTPS / HTTP，JWT，统一响应 { code, data, message }
         ▼
 RADAR 单体服务（Fastify）
-  platform/ 认证、持久化、附件、审计、运行时、通知
+  platform/ 认证、持久化、附件、审计、导入导出、运行时、通知
   shared/   稳定 DTO 与无业务语义工具
   modules/  按领域拆分的业务模块及公开契约
         │
@@ -52,7 +52,7 @@ RADAR 单体服务（Fastify）
 
 | 层级 | 职责 |
 | --- | --- |
-| `server/src/platform/` | 认证、持久化、附件、审计、运行时和通知等横切能力 |
+| `server/src/platform/` | 认证、持久化、附件、审计、导入导出、运行时和通知等横切能力 |
 | `server/src/shared/` | 稳定 DTO、契约和无业务语义的纯工具 |
 | `server/src/modules/` | 领域业务模块；公开入口为模块 `index.js` 和 `contracts/` |
 | `web/src/modules/` | 前端领域页面与 API 适配层 |
@@ -67,9 +67,24 @@ SQLite 与 TDSQL/MySQL 8 都是正式兼容目标：
 - 业务层通过 `platform/persistence` 使用统一的 `get`、`all`、`run`、`tx` 接口。
 - 每项 schema 变更必须追加 SQLite 与 TDSQL 两份等价迁移，历史迁移不得改写。
 - `release_apply.ref_codes` 保留 JSON 兼容字段，同时维护 `release_apply_reference` 索引关联表，供投产审批和跨模块读取使用。
+- `code_sequence` 按“编号规则键 + 固定前缀”保存下一可用序号。首次使用新序列时从历史业务编号最大值接续；SQLite 对领号临界区串行，TDSQL/MySQL 8 使用数据库事务保障唯一递增。
 - SQLite 使用 WAL、语句缓存、忙等待和安全的同步配置；高并发写入或大数据量生产环境建议使用 TDSQL。
 
 迁移、数据搬迁、备份与恢复请参阅 [MIGRATION.md](MIGRATION.md)。
+
+### 编号规则设置
+
+系统设置 → 编号规则可分别维护需求、工单、开发任务、SIT/UAT/NFT/SEC 测试任务和投产申请的模板。保存后，下一次生成会即时读取新模板，不需要重启服务。
+
+| 业务对象 | 配置键 | 默认模板 | 可用占位符 |
+| --- | --- | --- | --- |
+| 需求 | `code.requirement` | `RC_{投产窗口}_{序号}` | `{投产窗口}`、`{序号}` |
+| 工单 | `code.ticket` | `TK_{投产窗口}_{序号}` | `{投产窗口}`、`{序号}` |
+| 开发任务 | `code.dev` | `RW_{需求编号}_{序号}` | `{需求编号}`、`{序号}` |
+| 测试任务 | `code.test.SIT/UAT/NFT/SEC` | `SIT_{需求编号}_{序号}` 等 | `{需求编号}`、`{序号}` |
+| 投产申请 | `code.release_apply` | `{版本年月}-10bg{序号}` | `{版本年月}`、`{序号}` |
+
+`{序号}` 保持至少三位补零。修改模板导致固定前缀变化时，会为新前缀建立独立序列并从同前缀历史编号接续；恢复旧模板时会继续旧前缀已有序列。编号序列只增不回收，因此创建失败或撤销可能留下编号空档，这是并发场景下避免重复编号的预期行为。
 
 ## 目录结构
 
@@ -122,24 +137,27 @@ RADAR/
 │       │   ├── seed.js              # 内置默认数据及种子版本控制
 │       │   ├── providers/           # sqlite.js、tdsql.js Provider
 │       │   ├── dialects/            # SQLite 与 MySQL 方言差异封装
-│       │   └── migrations/          # SQLite 迁移及 tdsql/ 等价迁移
+│       │   └── migrations/          # SQLite 迁移及 tdsql/ 等价迁移（含编号序列表）
 │       ├── platform/
-│       │   ├── auth/                # 身份、JWT、RBAC 公共能力
-│       │   ├── persistence/         # 数据持久化公开契约
+│       │   ├── auth/                # index.js 公开认证、密码和验证码能力
+│       │   ├── persistence/         # index.js、list-query.js、code-sequence.js
 │       │   ├── attachments/         # 附件、签名与存储访问控制
-│       │   ├── audit/               # 统一操作审计
-│       │   ├── runtime/             # HTTP 响应、运行时适配与工具
+│       │   ├── audit/               # 统一操作审计能力
+│       │   ├── import-export/       # Excel、导入导出和简单配置 CRUD
+│       │   ├── runtime/             # HTTP 响应、JSON、日志、环境变量和清洗工具
 │       │   └── notifications/       # 通知能力预留入口
 │       ├── shared/
 │       │   ├── contracts/           # 跨模块稳定 DTO 与契约
+│       │   ├── utils/               # 无业务归属的纯函数工具（如编号模板）
+│       │   ├── application/         # 跨领域但不归属具体模块的业务编排辅助
 │       │   ├── authorization/       # 实体级授权工具
 │       │   ├── evidence/            # 证据与审计辅助能力
 │       │   └── workflow/            # 无业务归属的流程辅助能力
 │       ├── modules/
 │       │   ├── AGENTS.md             # 后端模块目录通用约束
-│       │   ├── requirements/        # 需求模块（独立编号、字段与公开契约）
-│       │   ├── tickets/             # 工单模块（独立编号、字段与公开契约）
-│       │   ├── delivery/            # 开发、测试、影响与覆盖分析公共编排
+│       │   ├── requirements/        # application/numbering.js、公开契约和 HTTP 入口
+│       │   ├── tickets/             # application/numbering.js、公开契约和 HTTP 入口
+│       │   ├── delivery/            # application/numbering.js、偏差、影响与覆盖分析
 │       │   ├── dev-tasks/           # 开发任务 HTTP 兼容入口
 │       │   ├── test-tasks/          # SIT/UAT/NFT/SEC 任务 HTTP 兼容入口
 │       │   ├── analysis/            # 影响与覆盖分析 HTTP 兼容入口
@@ -158,14 +176,13 @@ RADAR/
 │       │   ├── identity-access/     # 用户、角色、权限编排与公开契约
 │       │   ├── users/               # 用户 HTTP 兼容入口
 │       │   ├── roles/               # 角色与权限 HTTP 兼容入口
-│       │   ├── process-configuration/ # 状态、动态字段、阶段内容与交付物
+│       │   ├── process-configuration/ # 状态、动态字段、交付物与扩展筛选契约
 │       │   ├── stage-content/       # 流程配置 HTTP 兼容入口
 │       │   ├── auth/                # 登录与会话 HTTP 适配入口
 │       │   ├── attachments/         # 附件 HTTP 适配入口
 │       │   ├── audit/               # 审计查询 HTTP 适配入口
 │       │   └── signatures/          # 电子签名 HTTP 适配入口
-│       ├── plugins/                 # Fastify 插件（鉴权等）
-│       └── lib/                     # 历史兼容工具与稳定通用实现
+│       └── plugins/                 # Fastify 插件（鉴权等）
 └── web/
     ├── AGENTS.md                   # 前端通用规则
     ├── package.json                # Vite 开发、构建与预览脚本

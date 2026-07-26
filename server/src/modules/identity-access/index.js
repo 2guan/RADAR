@@ -6,4 +6,5 @@
  */
 
 /** Public boundary: this module currently exposes no cross-module mutable operations. */
+export { PERM_CATALOG } from './application/perm-catalog.js';
 export { MODULE_CONTRACT as identityAccessContract } from './contracts/index.js';

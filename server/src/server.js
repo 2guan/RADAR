@@ -11,7 +11,7 @@ import { performance } from 'node:perf_hooks';
 import { runMigrations } from './db/migrate.js';
 import { runSeed } from './db/seed.js';
 import { buildApp } from './app.js';
-import { logger } from './lib/logger.js';
+import { logger } from './platform/runtime/index.js';
 
 /** 为启动阶段记录分段耗时，便于线上区分卷权限、迁移、初始化和应用装配瓶颈。 */
 async function measureStartupStage(name, fn) {

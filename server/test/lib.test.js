@@ -8,14 +8,15 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { hashPassword, verifyPassword } from '../src/lib/password.js';
-import { calcDeviation } from '../src/lib/deviation.js';
-import { buildReleaseWordDoc, formatWordDateTime } from '../src/lib/release-word.js';
-import { formatCoverageText, formatImpactItemsText } from '../src/lib/impact-schema.js';
-import { exportXlsx } from '../src/lib/excel.js';
+import { hashPassword, verifyPassword, validatePasswordComplexity } from '../src/platform/auth/index.js';
+import { exportXlsx } from '../src/platform/import-export/index.js';
+import { calcDeviation, formatCoverageText, formatImpactItemsText } from '../src/modules/delivery/index.js';
+import { buildReleaseWordDoc, formatWordDateTime } from '../src/modules/release/index.js';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
-import { normalizeRequiredFieldConfig, REQUIRED_FIELD_CONFIG_MODULES, REQUIRED_FIELD_MODULES } from '../src/lib/required-fields.js';
+import {
+  normalizeRequiredFieldConfig, REQUIRED_FIELD_CONFIG_MODULES, REQUIRED_FIELD_MODULES,
+} from '../src/modules/process-configuration/index.js';
 import { WORK_ITEM_TYPES, isWorkItemType } from '../src/shared/contracts/work-item.js';
 import { REQUIREMENT_WORK_ITEM_TYPE } from '../src/modules/requirements/contracts/work-item.js';
 import { TICKET_WORK_ITEM_TYPE } from '../src/modules/tickets/contracts/work-item.js';
@@ -330,7 +331,6 @@ test('reqOrg 实施机构分组逻辑：第四优先级（未分配机构兜底�
   assert.equal(reqOrg(req, sysMap, devMap), '未分配机构');
 });
 
-import { validatePasswordComplexity } from '../src/lib/password.js';
 
 test('密码复杂度校验：满足各项复杂度要求时通过，不满足时拒绝', () => {
   // 满足：大写、小写、数字、特殊字符，长度>=8
@@ -347,7 +347,7 @@ test('密码复杂度校验：满足各项复杂度要求时通过，不满足�
   assert.equal(validatePasswordComplexity('Radar2026x'), false);
 });
 
-import { extract, matchFilters } from '../src/lib/chart-dims.js';
+import { extract, matchFilters } from '../src/modules/reporting/index.js';
 
 test('chart-dims 维度提取与过滤：阶段与任务状态，以及全部（all）数据源', () => {
   const req = {

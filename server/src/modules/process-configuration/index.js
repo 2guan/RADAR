@@ -9,15 +9,20 @@
 export { MODULE_CONTRACT as processConfigurationContract } from './contracts/index.js';
 export {
   defaultDictAttr, defaultProcessStatus, isIssueTerminalStatus, isTerminalStatus, refreshStatusSemantics,
-} from '../../lib/status.js';
+} from './application/status.js';
 export {
-  REQUIRED_FIELDS_CONFIG_KEY, assertAttachmentInputAllowed, normalizeRequiredFieldConfig,
+  DEFAULT_REQUIRED_FIELD_CONFIG, REQUIRED_FIELDS_CONFIG_KEY, REQUIRED_FIELD_CONFIG_MODULES, REQUIRED_FIELD_MODULES,
+  assertAttachmentInputAllowed, normalizeRequiredFieldConfig,
   requiredFieldCatalogPayload, statusTypeForProcessStatus, statusTypeForReleaseApply,
   statusTypeForReleaseStatus, validateRequiredFields,
-} from '../../lib/required-fields.js';
+} from './application/required-fields.js';
 export {
   appendStageExcelValues, appendStageListValues, assertDeliverableInputAllowed,
-  assertDeliverableRemovable, extensionValuesFromExcelRow, getStageExcelColumns,
-  saveExtensionValues, validateStageContent,
-} from '../../lib/stage-content.js';
-export { assertStatusChangePermission } from '../../lib/status-permission.js';
+  assertDeliverableRemovable, deleteDeliverableDefinition, deleteFieldDefinition, deleteSection,
+  extensionValuesFromExcelRow, getExtensionValues, getStageContentConfig, getStageExcelColumns,
+  getStageScope, listFieldSourceOptions, listStageScopes, listStageStatuses, recordConfigRevision,
+  saveDeliverableDefinition, saveExtensionValues, saveFieldDefinition, saveSection,
+  seedStageContentDefaults, validateStageContent,
+} from './application/stage-content.js';
+export { assertStatusChangePermission } from './application/status-permission.js';
+export { buildExtensionListFilter } from './application/extension-list-filter.js';

@@ -7,11 +7,11 @@
  */
 
 import { get, all, run, tx } from '../../platform/persistence/index.js';
-import { listQuery } from '../../lib/query.js';
+import { listQuery } from '../../platform/persistence/index.js';
 import { hashPassword, validatePasswordComplexity, getSecurityConfig } from '../../platform/auth/index.js';
-import { exportXlsx, parseXlsx } from '../../lib/excel.js';
+import { exportXlsx, parseXlsx } from '../../platform/import-export/index.js';
 import { ok, notFound, badRequest, sanitizeText } from '../../platform/runtime/index.js';
-import { resolveDictAttr } from '../../lib/resolver.js';
+import { resolveDictAttr } from '../reference-data/index.js';
 
 // 导出列定义（不含密码）
 const EXPORT_COLUMNS = [

@@ -16,14 +16,12 @@ import { db, get, all, run, tx, closeDb } from './index.js';
 import { config } from '../config.js';
 import { runMigrations } from './migrate.js';
 import { runSeed } from './seed.js';
-import { hashPassword } from '../lib/password.js';
-import { parseJsonArray, parseJsonObject } from '../lib/json.js';
-import { calcDeviation } from '../lib/deviation.js';
-import { logger } from '../lib/logger.js';
-import {
-  genRequirementCode, genDevCode, genTestCode, genReleaseApplyCode,
-} from '../lib/code-gen.js';
-import { auditCreate, auditUpdate } from '../lib/audit.js';
+import { hashPassword } from '../platform/auth/index.js';
+import { parseJsonArray, parseJsonObject, logger } from '../platform/runtime/index.js';
+import { auditCreate, auditUpdate } from '../platform/audit/index.js';
+import { generateRequirementCode } from '../modules/requirements/index.js';
+import { generateDevTaskCode, generateTestTaskCode, calcDeviation } from '../modules/delivery/index.js';
+import { generateReleaseApplyCode } from '../modules/release-apply/index.js';
 
 // ---------------------------------------------------------------------------
 // 确定性随机数（mulberry32），保证每次生成结果一致，便于复现与对照验证
@@ -298,7 +296,7 @@ export async function runMock() {
       const main = pickN(sysCodes, 1 + Math.floor(rng() * 2));
       const collabDev = rng() < 0.3 ? pickN(sysCodes.filter((c) => !main.includes(c)), 1) : [];
       const collabTest = rng() < 0.25 ? pickN(sysCodes.filter((c) => !main.includes(c)), 1) : [];
-      const code = await genRequirementCode(spec.rp.date);
+      const code = await generateRequirementCode(spec.rp.date);
       const topic = pick(REQ_TOPICS);
       const reqStatus = REQ_DONE.has(spec.profile) ? '分析完成'
         : (spec.profile === 'analysis' ? '需求分析' : '需求登记');
@@ -343,7 +341,7 @@ export async function runMock() {
       // 完成的任务带实际起止与偏差率；进行中的仅有实际开始
       const actualStart = shift(planStart, Math.floor(rng() * 4));
       const actualEnd = isDone ? shift(planEnd, Math.floor(rng() * 9) - 3) : null;
-      const code = await genDevCode(req.code);
+      const code = await generateDevTaskCode(req.code);
       const res = await run(
         `INSERT INTO dev_task
            (req_code, task_code, task_name, content, status, owner, impl_system, impl_org,
@@ -396,7 +394,7 @@ export async function runMock() {
       const planEnd = shift(window, -5);
       const actualStart = shift(planStart, Math.floor(rng() * 3));
       const actualEnd = isDone ? shift(planEnd, Math.floor(rng() * 7) - 2) : null;
-      const code = await genTestCode(testType, req.code);
+      const code = await generateTestTaskCode(testType, req.code);
       const ownerRole = testType === 'UAT' ? (rng() < 0.5 ? '农信业务' : '金科业务')
         : (rng() < 0.5 ? '金科测试' : '农信测试');
       const res = await run(
@@ -639,7 +637,7 @@ export async function runMock() {
       // 开发任务（released/sit/dev 各有）
       if (['released', 'sit', 'dev'].includes(tspec.profile)) {
         const devStatus = tspec.profile === 'dev' ? pick(['开发设计', '开发实施', '单元测试']) : '开发完成';
-        const devCode = await genDevCode(code);
+        const devCode = await generateDevTaskCode(code);
         const window = ymd(tspec.rp.date);
         const planStart = shift(window, -40);
         const planEnd = shift(window, -18);
@@ -665,7 +663,7 @@ export async function runMock() {
       // 测试任务（released/sit）
       if (['released', 'sit'].includes(tspec.profile)) {
         const testStatus = tspec.profile === 'released' ? '测试完成' : pick(['测试方案', '测试实施']);
-        const testCode = await genTestCode('SIT', code);
+        const testCode = await generateTestTaskCode('SIT', code);
         const window = ymd(tspec.rp.date);
         const planStart = shift(window, -16);
         const planEnd = shift(window, -4);
@@ -733,7 +731,7 @@ export async function runMock() {
     }
     async function makeApply(refCodes, rp, changeSys) {
       const refs = uniq(refCodes);
-      const code = await genReleaseApplyCode(rp.date.slice(0, 6));
+      const code = await generateReleaseApplyCode(rp.date.slice(0, 6));
       const review = await deriveReview(refs, rp.id);
       const sys = sysByCode[changeSys] || pick(systems);
       const sysCode = sysByCode[changeSys] ? changeSys : sys.sys_code;

@@ -8,6 +8,8 @@
 | `platform/auth` | 登录、JWT、RBAC、会话、密码与验证码基础能力 |
 | `platform/audit` | 统一操作审计契约与记录 |
 | `platform/attachments` | 附件、签名和存储访问控制 |
+| `platform/import-export` | Excel、导入导出和简单配置 CRUD 技术能力 |
+| `platform/persistence` | SQLite/TDSQL 适配、迁移与编号序列基础能力 |
 | `reference-data` | 字典、系统、投产点与平台配置 |
 | `requirements` | 需求登记、分析和独立公开读取契约 |
 | `tickets` | 工单登记、分析和独立公开读取契约 |
@@ -17,4 +19,4 @@
 | `issues` | PAMS 问题快照与同步集成 |
 | `reporting` | 概览、仪表盘和跨模块只读投影 |
 
-模块迁移期间，旧路径只可作为兼容入口；新增代码必须写入目标模块分层目录。
+`server/src/lib/` 已移除。跨模块能力必须从 `platform/*/index.js` 或业务模块 `index.js` 的公开契约访问；新增代码必须写入所属模块分层目录。

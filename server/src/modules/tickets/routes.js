@@ -7,9 +7,12 @@
  */
 
 import { get, run, tx, all, dialect } from '../../platform/persistence/index.js';
-import { listQuery } from '../../lib/query.js';
-import { genTicketCode } from '../../lib/code-gen.js';
-import { defaultProcessStatus, isTerminalStatus, statusTypeForProcessStatus, validateRequiredFields } from '../process-configuration/index.js';
+import { listQuery } from '../../platform/persistence/index.js';
+import { generateTicketCode } from './index.js';
+import {
+  buildExtensionListFilter, defaultProcessStatus, isTerminalStatus,
+  statusTypeForProcessStatus, validateRequiredFields,
+} from '../process-configuration/index.js';
 import {
   appendStageExcelValues,
   appendStageListValues,
@@ -19,15 +22,10 @@ import {
   validateStageContent,
 } from '../process-configuration/index.js';
 import { auditCreate, auditUpdate, auditDelete } from '../../platform/audit/index.js';
-import { exportXlsx, parseXlsx } from '../../lib/excel.js';
-import { windowIds, inClause } from '../../lib/window.js';
+import { exportXlsx, parseXlsx } from '../../platform/import-export/index.js';
+import { windowIds, inClause, resolveDictAttr, resolveSystemCodes, resolveReleasePoint } from '../reference-data/index.js';
 import { ok, notFound, badRequest, parseJsonArray, parseJsonObject } from '../../platform/runtime/index.js';
 import { assertStatusChangePermission } from '../process-configuration/index.js';
-import {
-  resolveDictAttr,
-  resolveSystemCodes,
-  resolveReleasePoint,
-} from '../../lib/resolver.js';
 
 // 导入/导出列定义
 const IO_COLUMNS = [
@@ -195,6 +193,7 @@ export default async function ticketRoutes(fastify) {
     const result = await listQuery({
       table: 'ticket', columns: COLUMNS, searchColumns: SEARCH,
       query: newBody, baseWhere, baseParams: params, extensionScopeKey: 'ticket', extensionEntityType: 'ticket',
+      extensionFilterBuilder: buildExtensionListFilter,
     });
 
     // 投产点与系统为主数据（量小），整表载入做编号→名称映射
@@ -315,7 +314,7 @@ export default async function ticketRoutes(fastify) {
     // 手动编号在同一 BEGIN IMMEDIATE 事务内校验唯一性，防止并发重复提交。
     const { id, reqCode } = await tx(async () => {
       let code = manualCode;
-      if (!code) code = await genTicketCode(rp?.release_date);
+      if (!code) code = await generateTicketCode(rp?.release_date);
       if (await get('SELECT id FROM ticket WHERE ticket_code = ?', code)) throw badRequest('工单编号已存在，请更换');
       const fields = ['ticket_code', 'status', 'registrar', 'register_time', ...Object.keys(data)];
       const values = [

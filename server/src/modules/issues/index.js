@@ -7,5 +7,5 @@
 
 /** Public boundary: issues currently exposes no cross-module mutable operations. */
 export { MODULE_CONTRACT as issuesContract } from './contracts/index.js';
-export { triggerIssueSyncSchedule } from '../../lib/issue-sync-scheduler.js';
-export { getIssueSyncEnvironmentDefaults } from '../../lib/pams.js';
+export { startIssueSyncScheduler, stopIssueSyncScheduler, triggerIssueSyncSchedule } from './application/issue-sync-scheduler.js';
+export { getIssueSyncEnvironmentDefaults } from './application/pams.js';

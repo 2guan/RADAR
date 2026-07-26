@@ -6,4 +6,8 @@
  */
 
 /** Public boundary: reporting is read-only and exposes no business writes. */
+export {
+  SOURCES, DIMENSIONS, CHART_TYPES, ANALYTICS_DIMENSIONS, ANALYTICS_STAGES,
+  buildContext, aggregate, extract, matchFilters, isValidDim, testTypeOf,
+} from './application/chart-dims.js';
 export { MODULE_CONTRACT as reportingContract } from './contracts/index.js';

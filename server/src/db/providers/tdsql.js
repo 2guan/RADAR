@@ -11,7 +11,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { performance } from 'node:perf_hooks';
 import mysql from 'mysql2/promise';
 import { mysqlDialect } from '../dialects/mysql.js';
-import { logger } from '../../lib/logger.js';
+import { logger } from '../../platform/runtime/index.js';
 
 const txStore = new AsyncLocalStorage();
 

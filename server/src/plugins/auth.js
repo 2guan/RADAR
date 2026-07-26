@@ -10,8 +10,8 @@ import fp from 'fastify-plugin';
 import fastifyJwt from '@fastify/jwt';
 import { config } from '../config.js';
 import { all, get } from '../db/index.js';
-import { unauthorized, forbidden } from '../lib/http.js';
-import { isPasswordExpired } from '../lib/password.js';
+import { unauthorized, forbidden } from '../platform/runtime/index.js';
+import { isPasswordExpired } from '../platform/auth/password.js';
 
 /**
  * 查询用户的全部已授予权限集合（"module:action" 字符串集）。

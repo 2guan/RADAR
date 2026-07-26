@@ -7,10 +7,9 @@
  */
 
 import { all, get, run, tx, dialect } from '../../platform/persistence/index.js';
-import { registerCrud } from '../../lib/crud.js';
-import { cascadeDictRename } from '../../lib/dict-cascade.js';
-import { listQuery } from '../../lib/query.js';
-import { exportXlsx, parseXlsx } from '../../lib/excel.js';
+import { registerCrud, exportXlsx, parseXlsx } from '../../platform/import-export/index.js';
+import { listQuery } from '../../platform/persistence/index.js';
+import { cascadeDictRename } from '../reference-data/index.js';
 import { ok, badRequest, parseJsonObject } from '../../platform/runtime/index.js';
 import { refreshStatusSemantics } from '../process-configuration/index.js';
 

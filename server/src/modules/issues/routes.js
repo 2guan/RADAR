@@ -9,9 +9,9 @@
  */
 
 import { get, run, tx, isSqlite } from '../../platform/persistence/index.js';
-import { listQuery } from '../../lib/query.js';
+import { listQuery } from '../../platform/persistence/index.js';
 import { ok, notFound, badRequest, parseJsonArray } from '../../platform/runtime/index.js';
-import { exportXlsx, parseXlsx } from '../../lib/excel.js';
+import { exportXlsx, parseXlsx } from '../../platform/import-export/index.js';
 import {
   getIssueSyncState,
   resetIssueSyncState,

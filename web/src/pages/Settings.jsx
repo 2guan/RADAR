@@ -411,6 +411,7 @@ export default function Settings() {
         key: 'code', label: '编号规则',
         children: <AppConfigForm mode="code" items={[
           { key: 'code.requirement', label: '需求编号规则', extra: '占位符：{投产窗口} {序号}' },
+          { key: 'code.ticket', label: '工单编号规则', extra: '占位符：{投产窗口} {序号}' },
           { key: 'code.dev', label: '开发任务编号规则', extra: '占位符：{需求编号} {序号}' },
           { key: 'code.test.SIT', label: '应用组装测试编号规则' },
           { key: 'code.test.UAT', label: '用户测试编号规则' },

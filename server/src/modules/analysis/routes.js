@@ -15,7 +15,7 @@ import { auditCreate, auditUpdate, auditDelete } from '../../platform/audit/inde
 import { getWorkItem } from '../delivery/index.js';
 import {
   validateChangeItem, decodeChangeItem, validateCoverageRow,
-} from '../../lib/impact-schema.js';
+} from '../delivery/index.js';
 
 // 影响性分析条目留痕字段
 const IMPACT_LABELS = {

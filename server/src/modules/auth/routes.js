@@ -11,7 +11,7 @@
 import { get, all, run } from '../../platform/persistence/index.js';
 import { verifyPassword, hashPassword, validatePasswordComplexity, isPasswordExpired, getSecurityConfig } from '../../platform/auth/index.js';
 import { ok, badRequest } from '../../platform/runtime/index.js';
-import { createCaptcha, verifyCaptcha } from '../../lib/captcha.js';
+import { createCaptcha, verifyCaptcha } from '../../platform/auth/index.js';
 
 export default async function authRoutes(fastify) {
   // 获取验证码（无需登录）

@@ -18,9 +18,9 @@ import fs from 'node:fs';
 
 import { config } from './config.js';
 import authPlugin from './plugins/auth.js';
-import { HttpError, ok } from './lib/http.js';
-import { refreshStatusSemantics } from './lib/status.js';
-import { startIssueSyncScheduler, stopIssueSyncScheduler } from './lib/issue-sync-scheduler.js';
+import { HttpError, ok } from './platform/runtime/index.js';
+import { refreshStatusSemantics } from './modules/process-configuration/index.js';
+import { startIssueSyncScheduler, stopIssueSyncScheduler } from './modules/issues/index.js';
 import { registerBusinessModules } from './platform/register-modules.js';
 
 /**

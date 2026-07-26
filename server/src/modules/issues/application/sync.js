@@ -5,7 +5,7 @@
  * 作者：hengguan
  */
 import { all, get, run, tx } from '../../../platform/persistence/index.js';
-import { fetchIssueOverview, fetchIssueDetail } from '../../../lib/pams.js';
+import { fetchIssueOverview, fetchIssueDetail } from './pams.js';
 
 const OVERVIEW_MAP = {
   status: 'status', detailed_classification: 'detailed_classification', system: 'system',

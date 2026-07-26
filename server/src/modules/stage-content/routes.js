@@ -3,7 +3,6 @@
  * 说明：遵循项目研发规约；跨模块能力仅可经公开契约访问。
  * 用途：阶段内容与公共交付件接口。系统设置通过本模块维护配置；业务详情页通过
  *       公共读取接口获取动态字段、交付件与扩展字段值。
- * 作者：Codex
  * 作者：hengguan
  */
 
@@ -28,7 +27,7 @@ import {
   saveExtensionValues,
   saveFieldDefinition,
   saveSection,
-} from '../../lib/stage-content.js';
+} from '../process-configuration/index.js';
 
 /** 仅暴露经过注册的下拉数据源，禁止配置端传入任意 SQL 或表名。 */
 async function listSource(sourceKey, keyword = '') {

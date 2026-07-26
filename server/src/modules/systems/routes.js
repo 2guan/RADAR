@@ -6,10 +6,9 @@
  */
 
 import { all, get, run } from '../../platform/persistence/index.js';
-import { registerCrud } from '../../lib/crud.js';
-import { cascadeSystemRename } from '../../lib/dict-cascade.js';
-import { registerIO } from '../../lib/io.js';
-import { listQuery } from '../../lib/query.js';
+import { registerCrud, registerIO } from '../../platform/import-export/index.js';
+import { listQuery } from '../../platform/persistence/index.js';
+import { cascadeSystemRename } from '../reference-data/index.js';
 import { ok, badRequest } from '../../platform/runtime/index.js';
 
 const COLUMNS = ['id', 'sys_code', 'sys_name', 'org', 'sector', 'out_dept', 'deploy_dept', 'sort', 'created_at'];

@@ -6,4 +6,5 @@
  */
 
 /** Public boundary: release currently exposes no cross-module mutable operations. */
+export { buildReleaseWordDoc, formatWordDateTime } from './application/release-word.js';
 export { MODULE_CONTRACT as releaseContract } from './contracts/index.js';

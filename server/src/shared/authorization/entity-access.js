@@ -6,7 +6,7 @@
  */
 
 import { get } from '../../db/index.js';
-import { badRequest, notFound } from '../../lib/http.js';
+import { badRequest, notFound } from '../../platform/runtime/index.js';
 
 const ENTITY_CONFIG = {
   requirement: { table: 'requirement', code: 'req_code', module: 'requirement' },

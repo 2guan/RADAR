@@ -13,7 +13,7 @@ import { performance } from 'node:perf_hooks';
 import fs from 'node:fs';
 import path from 'node:path';
 import { sqliteDialect } from '../dialects/sqlite.js';
-import { logger } from '../../lib/logger.js';
+import { logger } from '../../platform/runtime/index.js';
 
 /** 记录慢 SQL 的结构化摘要；不输出绑定参数，避免日志包含业务敏感数据。 */
 function measureQuery(config, operation, sql, fn) {

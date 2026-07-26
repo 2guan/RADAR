@@ -9,5 +9,10 @@
 export {
   getWorkItem, workItemCodesInReleasePoints, releaseDateMapForCodes,
 } from './application/work-items.js';
-export { formatImpactItemsText, formatCoverageText } from '../../lib/impact-schema.js';
+export {
+  validateChangeItem, decodeChangeItem, validateCoverageRow,
+  formatImpactItemsText, formatCoverageText, impactItemExportLines, coverageItemExportLines,
+} from './application/impact-schema.js';
+export { calcDeviation } from './application/deviation.js';
+export { generateDevTaskCode, generateTestTaskCode } from './application/numbering.js';
 export { MODULE_CONTRACT as deliveryContract } from './contracts/index.js';

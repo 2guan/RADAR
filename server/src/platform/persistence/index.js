@@ -6,6 +6,9 @@
  */
 
 /** Public persistence platform contract. SQLite and TDSQL/MySQL remain supported. */
+export { config } from '../../config.js';
 export { dbClient, dialect, get, all, run, exec, tx, isSqlite, isTdsql } from '../../db/index.js';
+export { listQuery } from './list-query.js';
+export { getCodeSequenceNext, reserveCodeSequence } from './code-sequence.js';
 export { getAttachmentStorageRoot } from './environment.js';
 export { MODULE_CONTRACT as persistenceContract } from './contracts/index.js';

@@ -7,9 +7,12 @@
  */
 
 import { get, run, tx, all, dialect } from '../../platform/persistence/index.js';
-import { listQuery } from '../../lib/query.js';
-import { genRequirementCode } from '../../lib/code-gen.js';
-import { defaultProcessStatus, isTerminalStatus, statusTypeForProcessStatus, validateRequiredFields } from '../process-configuration/index.js';
+import { listQuery } from '../../platform/persistence/index.js';
+import { generateRequirementCode } from './index.js';
+import {
+  buildExtensionListFilter, defaultProcessStatus, isTerminalStatus,
+  statusTypeForProcessStatus, validateRequiredFields,
+} from '../process-configuration/index.js';
 import {
   appendStageExcelValues,
   appendStageListValues,
@@ -20,16 +23,10 @@ import {
 } from '../process-configuration/index.js';
 import { auditCreate, auditUpdate, auditDelete } from '../../platform/audit/index.js';
 import { listByEntity } from '../../platform/attachments/index.js';
-import { exportXlsx, parseXlsx } from '../../lib/excel.js';
-import { windowIds, inClause } from '../../lib/window.js';
+import { exportXlsx, parseXlsx } from '../../platform/import-export/index.js';
+import { windowIds, inClause, resolveDictAttr, resolveSystemCodes, resolveReleasePoint, formatAttachments } from '../reference-data/index.js';
 import { ok, notFound, badRequest, parseJsonArray, parseJsonObject } from '../../platform/runtime/index.js';
 import { assertStatusChangePermission } from '../process-configuration/index.js';
-import {
-  resolveDictAttr,
-  resolveSystemCodes,
-  resolveReleasePoint,
-  formatAttachments,
-} from '../../lib/resolver.js';
 
 // 导入/导出列定义
 const IO_COLUMNS = [
@@ -197,6 +194,7 @@ export default async function requirementRoutes(fastify) {
     const result = await listQuery({
       table: 'requirement', columns: COLUMNS, searchColumns: SEARCH,
       query: newBody, baseWhere, baseParams: params, extensionScopeKey: 'requirement', extensionEntityType: 'requirement',
+      extensionFilterBuilder: buildExtensionListFilter,
     });
 
     // 投产点与系统为主数据（量小），整表载入做编号→名称映射
@@ -295,7 +293,7 @@ export default async function requirementRoutes(fastify) {
     const { id, reqCode } = await tx(async () => {
       let code = (body.req_code || '').trim();
       if (!code || await get('SELECT id FROM requirement WHERE req_code = ?', code)) {
-        code = await genRequirementCode(rp?.release_date);
+        code = await generateRequirementCode(rp?.release_date);
       }
       const fields = ['req_code', 'status', 'registrar', 'register_time', ...Object.keys(data)];
       const values = [
@@ -360,7 +358,7 @@ export default async function requirementRoutes(fastify) {
     if (!releasePointId) throw badRequest('缺少 releasePointId');
     const rp = await get('SELECT release_date FROM release_point WHERE id = ?', releasePointId);
     if (!rp) throw badRequest('投产点不存在');
-    return ok({ req_code: await genRequirementCode(rp.release_date) });
+    return ok({ req_code: await generateRequirementCode(rp.release_date) });
   });
 
   // 校验编号唯一性（前端实时校验调用）
@@ -599,7 +597,7 @@ export default async function requirementRoutes(fastify) {
 
           } else {
             // insert 新建
-            if (!code) code = await genRequirementCode(rpMap[rpId]);
+            if (!code) code = await generateRequirementCode(rpMap[rpId]);
             const res = await run(
               `INSERT INTO requirement 
                  (req_code, title, summary, status, req_type, is_accounting, propose_dept, proposer, yn_owner, jk_owner, 

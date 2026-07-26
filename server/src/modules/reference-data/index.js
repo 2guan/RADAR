@@ -6,4 +6,10 @@
  */
 
 /** Public boundary: reference-data capabilities are added here before cross-module use. */
+export { getCodeRuleTemplate } from './application/code-rules.js';
+export { inClause, windowIds } from './application/window.js';
+export {
+  resolveDictAttr, resolveSystemCode, resolveSystemCodes, resolveReleasePoint, formatAttachments,
+} from './application/resolver.js';
+export { cascadeDictRename, cascadeSystemRename } from './application/dict-cascade.js';
 export { MODULE_CONTRACT as referenceDataContract } from './contracts/index.js';

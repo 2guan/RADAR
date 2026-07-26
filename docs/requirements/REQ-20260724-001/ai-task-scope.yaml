@@ -10,7 +10,7 @@
     "forbidden_paths": [".env", "**/.env", "**/*secret*", "**/*credential*", "attachments/**", "data/**"]
   },
   "public_capability_change": { "required": true, "shared_change_issue": "REQ-20260724-001", "target_module": "platform/shared", "existing_method_changed": false, "new_method": "module-public-contracts", "semantic_name_confirmed": true, "old_behavior_preserved": true, "owner_approved": true },
-  "database": { "changed": false, "migration_paths": [], "mysql8_compatible": true, "historical_data_impact": "none", "rollback_or_compensation": "not_applicable" },
+  "database": { "changed": true, "migration_paths": ["server/src/db/migrations/0039_code_sequence.sql", "server/src/db/migrations/tdsql/0019_code_sequence.sql"], "mysql8_compatible": true, "historical_data_impact": "新增编号序列表；首次领号会按现有业务编号最大序号自动接续，不改写历史编号。", "rollback_or_compensation": "代码回退后保留 code_sequence 表不影响既有业务；如需重置序列，仅在停止写入并完成备份后按规则和前缀删除对应行。" },
   "external_access": { "changed": false, "api_paths": [], "readable_field_whitelist": [], "writable_field_whitelist": [], "action_whitelist": [], "audit_required": true },
   "required_tests": [{"name": "build", "command": "npm run build --prefix web"}, {"name": "unit", "command": "npm test --prefix server"}, {"name": "api", "command": "npm run test:api --prefix server"}, {"name": "permission", "command": "npm run test:rbac --prefix server"}, {"name": "external_whitelist", "command": "not_applicable"}],
   "risk": { "level": "high", "reasons": ["公共架构与 CI 变更"], "required_approvals": ["hengguan"] },

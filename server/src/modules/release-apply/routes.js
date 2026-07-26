@@ -7,13 +7,15 @@
  */
 
 import { get, run, tx, all, dialect } from '../../platform/persistence/index.js';
-import { listQuery } from '../../lib/query.js';
-import { genReleaseApplyCode } from '../../lib/code-gen.js';
+import { listQuery } from '../../platform/persistence/index.js';
+import { generateReleaseApplyCode } from './index.js';
 import { auditCreate, auditUpdate, auditDelete } from '../../platform/audit/index.js';
-import { exportXlsx, parseXlsx } from '../../lib/excel.js';
-import { windowIds, inClause } from '../../lib/window.js';
+import { exportXlsx, parseXlsx } from '../../platform/import-export/index.js';
+import { windowIds, inClause } from '../reference-data/index.js';
 import { ok, notFound, badRequest, parseJsonArray, parseJsonObject } from '../../platform/runtime/index.js';
-import { statusTypeForReleaseApply, validateRequiredFields, defaultDictAttr } from '../process-configuration/index.js';
+import {
+  buildExtensionListFilter, statusTypeForReleaseApply, validateRequiredFields, defaultDictAttr,
+} from '../process-configuration/index.js';
 import {
   appendStageExcelValues,
   appendStageListValues,
@@ -192,6 +194,7 @@ export default async function releaseApplyRoutes(fastify) {
     const result = await listQuery({
       table: 'release_apply', columns: COLUMNS, searchColumns: SEARCH,
       query: newBody, baseWhere, baseParams: params, extensionScopeKey: 'release_apply', extensionEntityType: 'release_apply',
+      extensionFilterBuilder: buildExtensionListFilter,
     });
 
     // 主数据映射
@@ -255,7 +258,7 @@ export default async function releaseApplyRoutes(fastify) {
       // 若前端传来的编号已存在（并发提交导致冲突），重新生成而非报错；
       // 空编号同样走生成逻辑。两种路径均在 BEGIN IMMEDIATE 事务内串行执行，保证唯一。
       if (!code || await get('SELECT id FROM release_apply WHERE change_code = ?', code)) {
-        code = await genReleaseApplyCode(await yearMonthOf(body.release_point_id));
+        code = await generateReleaseApplyCode(await yearMonthOf(body.release_point_id));
       }
 
       const fields = ['change_code', 'review_status', 'registrar', 'register_time', ...Object.keys(data).filter((k) => k !== 'change_code')];
@@ -327,7 +330,7 @@ export default async function releaseApplyRoutes(fastify) {
   // 生成变更编号
   fastify.get('/release-apply/gen-code', { preHandler: fastify.requirePerm('release_apply', 'view') }, async (request) => {
     const releasePointId = request.query.releasePointId;
-    return ok({ change_code: await genReleaseApplyCode(await yearMonthOf(releasePointId)) });
+    return ok({ change_code: await generateReleaseApplyCode(await yearMonthOf(releasePointId)) });
   });
 
   // 校验编号唯一性
@@ -488,7 +491,7 @@ export default async function releaseApplyRoutes(fastify) {
             stat.updated++;
             details.push({ key: code, title: r.change_content, action: 'update', status: 'success', __rowNum__: rowNum });
           } else {
-            if (!code) code = await genReleaseApplyCode(await yearMonthOf(null));
+            if (!code) code = await generateReleaseApplyCode(await yearMonthOf(null));
             const res = await run(
               `INSERT INTO release_apply
                  (change_code, change_content, impact_scope, change_system, impl_org, delivery_units,

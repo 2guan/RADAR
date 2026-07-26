@@ -6,6 +6,6 @@
  */
 
 /** Public audit platform contract. */
-export { auditCreate, auditUpdate, auditDelete } from '../../lib/audit.js';
+export { auditCreate, auditUpdate, auditDelete } from './audit.js';
 export { auditEvidenceChange } from '../../shared/evidence/audit.js';
 export { MODULE_CONTRACT as auditContract } from './contracts/index.js';

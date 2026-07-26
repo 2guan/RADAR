@@ -10,9 +10,11 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { get, all, run, tx } from '../../platform/persistence/index.js';
-import { listQuery } from '../../lib/query.js';
-import { genDevCode } from '../../lib/code-gen.js';
-import { defaultProcessStatus, statusTypeForProcessStatus, validateRequiredFields } from '../process-configuration/index.js';
+import { listQuery } from '../../platform/persistence/index.js';
+import {
+  buildExtensionListFilter, defaultProcessStatus, statusTypeForProcessStatus,
+  validateRequiredFields,
+} from '../process-configuration/index.js';
 import {
   appendStageExcelValues,
   appendStageListValues,
@@ -21,17 +23,16 @@ import {
   saveExtensionValues,
   validateStageContent,
 } from '../process-configuration/index.js';
-import { calcDeviation } from '../../lib/deviation.js';
 import { auditCreate, auditUpdate, auditDelete } from '../../platform/audit/index.js';
 import { listByEntity } from '../../platform/attachments/index.js';
-import { windowIds, inClause } from '../../lib/window.js';
+import { windowIds, inClause, resolveDictAttr, resolveSystemCode, formatAttachments } from '../reference-data/index.js';
 import { ok, notFound, badRequest } from '../../platform/runtime/index.js';
 import { assertStatusChangePermission } from '../process-configuration/index.js';
-import { exportXlsx, parseXlsx } from '../../lib/excel.js';
-import { resolveDictAttr, resolveSystemCode, formatAttachments } from '../../lib/resolver.js';
-import { getWorkItem, workItemCodesInReleasePoints, releaseDateMapForCodes } from '../delivery/index.js';
-import { decodeChangeItem } from '../../lib/impact-schema.js';
-import { formatImpactItemsText } from '../delivery/index.js';
+import { exportXlsx, parseXlsx } from '../../platform/import-export/index.js';
+import {
+  calcDeviation, decodeChangeItem, formatImpactItemsText, generateDevTaskCode,
+  getWorkItem, workItemCodesInReleasePoints, releaseDateMapForCodes,
+} from '../delivery/index.js';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
 
@@ -248,7 +249,11 @@ export default async function devTaskRoutes(fastify) {
     const newBody = { ...body, filters: normalFilters };
     const baseWhere = wh.join(' AND ');
 
-    const result = await listQuery({ table: 'dev_task', columns: COLUMNS, searchColumns: SEARCH, query: newBody, baseWhere, baseParams: params, extensionScopeKey: 'dev', extensionEntityType: 'dev' });
+    const result = await listQuery({
+      table: 'dev_task', columns: COLUMNS, searchColumns: SEARCH, query: newBody,
+      baseWhere, baseParams: params, extensionScopeKey: 'dev', extensionEntityType: 'dev',
+      extensionFilterBuilder: buildExtensionListFilter,
+    });
 
     // 仅针对当前页任务涉及的需求/工单映射计划投产点，避免随翻页整表扫描
     const pageCodes = [...new Set(result.list.map((r) => r.req_code).filter(Boolean))];
@@ -430,7 +435,7 @@ export default async function devTaskRoutes(fastify) {
       const initialStatus = await defaultProcessStatus('开发', 'initial', '开发承接');
       for (const sysCode of targets) {
         const sys = await get('SELECT * FROM system WHERE sys_code = ?', sysCode);
-        const taskCode = await genDevCode(reqCode);
+        const taskCode = await generateDevTaskCode(reqCode);
         const taskName = `RW-${req.title}-${sys?.sys_name || sysCode}`;
         const res = await run(
           `INSERT INTO dev_task (req_code, task_code, task_name, status, impl_system, impl_org, registrar, register_time)
@@ -677,7 +682,7 @@ export default async function devTaskRoutes(fastify) {
 
           } else {
             // insert 新建
-            if (!code) code = await genDevCode(r.req_code);
+            if (!code) code = await generateDevTaskCode(r.req_code);
             const devRate = calcDeviation(r.plan_start, r.plan_end, r.actual_end);
             const res = await run(
               `INSERT INTO dev_task 

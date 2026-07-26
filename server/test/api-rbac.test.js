@@ -28,6 +28,7 @@ if (!process.env.RADAR_RUN_API_TESTS) {
   const { runSeed } = await import('../src/db/seed.js');
   const { buildApp } = await import('../src/app.js');
   const { get, all, run, closeDb } = await import('../src/db/index.js');
+  const { generateRequirementCode } = await import('../src/modules/requirements/index.js');
   await runMigrations();
   await runSeed();
   const app = await buildApp();
@@ -135,5 +136,29 @@ if (!process.env.RADAR_RUN_API_TESTS) {
     assert.equal(overview.statusCode, 200);
     assert.equal(overview.json().data.page, 1);
     assert.ok(overview.json().data.total >= overview.json().data.list.length);
+  });
+
+  test('业务编号序列：首次从历史最大值接续，后续调用原子递增', async () => {
+    const releasePoint = await get('SELECT id FROM release_point ORDER BY id LIMIT 1');
+    const releaseWindow = '20990101';
+    await run(
+      `INSERT INTO requirement (req_code, title, status, release_point_id)
+       VALUES (?,?,?,?)`,
+      `RC_${releaseWindow}_007`, '编号序列历史记录', '待分析', releasePoint.id,
+    );
+
+    const [first, second] = await Promise.all([
+      generateRequirementCode(releaseWindow),
+      generateRequirementCode(releaseWindow),
+    ]);
+    assert.deepEqual(new Set([first, second]), new Set([
+      `RC_${releaseWindow}_008`,
+      `RC_${releaseWindow}_009`,
+    ]));
+    const sequence = await get(
+      'SELECT next_value FROM code_sequence WHERE rule_key = ? AND prefix = ?',
+      'code.requirement', `RC_${releaseWindow}_`,
+    );
+    assert.equal(sequence.next_value, 10);
   });
 }

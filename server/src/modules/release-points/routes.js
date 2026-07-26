@@ -8,8 +8,8 @@
  */
 
 import { get, all, run, tx } from '../../platform/persistence/index.js';
-import { listQuery } from '../../lib/query.js';
-import { registerIO } from '../../lib/io.js';
+import { listQuery } from '../../platform/persistence/index.js';
+import { registerIO } from '../../platform/import-export/index.js';
 import { auditCreate, auditUpdate, auditDelete } from '../../platform/audit/index.js';
 import { ok, notFound, badRequest } from '../../platform/runtime/index.js';
 

@@ -7,9 +7,11 @@
  */
 
 import { get, all, run, tx } from '../../platform/persistence/index.js';
-import { listQuery } from '../../lib/query.js';
-import { genTestCode } from '../../lib/code-gen.js';
-import { defaultProcessStatus, statusTypeForProcessStatus, validateRequiredFields } from '../process-configuration/index.js';
+import { listQuery } from '../../platform/persistence/index.js';
+import {
+  buildExtensionListFilter, defaultProcessStatus, statusTypeForProcessStatus,
+  validateRequiredFields,
+} from '../process-configuration/index.js';
 import {
   appendStageExcelValues,
   appendStageListValues,
@@ -18,16 +20,16 @@ import {
   saveExtensionValues,
   validateStageContent,
 } from '../process-configuration/index.js';
-import { calcDeviation } from '../../lib/deviation.js';
 import { auditCreate, auditUpdate, auditDelete } from '../../platform/audit/index.js';
 import { listByEntity } from '../../platform/attachments/index.js';
-import { windowIds, inClause } from '../../lib/window.js';
+import { windowIds, inClause, resolveDictAttr, resolveSystemCode, formatAttachments } from '../reference-data/index.js';
 import { ok, notFound, badRequest } from '../../platform/runtime/index.js';
 import { assertStatusChangePermission } from '../process-configuration/index.js';
-import { exportXlsx, parseXlsx } from '../../lib/excel.js';
-import { resolveDictAttr, resolveSystemCode, formatAttachments } from '../../lib/resolver.js';
-import { getWorkItem, workItemCodesInReleasePoints, releaseDateMapForCodes } from '../delivery/index.js';
-import { formatCoverageText } from '../delivery/index.js';
+import { exportXlsx, parseXlsx } from '../../platform/import-export/index.js';
+import {
+  calcDeviation, formatCoverageText, generateTestTaskCode,
+  getWorkItem, workItemCodesInReleasePoints, releaseDateMapForCodes,
+} from '../delivery/index.js';
 
 // 导入模板列定义
 const IO_COLUMNS = [
@@ -143,6 +145,7 @@ export default async function testTaskRoutes(fastify) {
     const result = await listQuery({
       table: 'test_task', columns: COLUMNS, searchColumns: SEARCH, query: newBody,
       baseWhere, baseParams: params, extensionScopeKey: `test.${body.testType}`, extensionEntityType: 'test',
+      extensionFilterBuilder: buildExtensionListFilter,
     });
 
     // 仅针对当前页任务涉及的需求/工单映射计划投产点，避免随翻页整表扫描
@@ -354,7 +357,7 @@ export default async function testTaskRoutes(fastify) {
       const initialStatus = await defaultProcessStatus('测试', 'initial', '测试承接');
       for (const t of targets) {
         const sys = t.sysCode ? await get('SELECT * FROM system WHERE sys_code = ?', t.sysCode) : null;
-        const taskCode = await genTestCode(testType, reqCode);
+        const taskCode = await generateTestTaskCode(testType, reqCode);
         const res = await run(
           `INSERT INTO test_task (req_code, task_code, task_name, test_type, status, impl_system, impl_org, registrar, register_time)
            VALUES (?,?,?,?,?,?,?,?,?)`,
@@ -625,7 +628,7 @@ export default async function testTaskRoutes(fastify) {
 
           } else {
             // insert 新建
-            if (!code) code = await genTestCode(testTypeCode, r.req_code);
+            if (!code) code = await generateTestTaskCode(testTypeCode, r.req_code);
             const devRate = calcDeviation(r.plan_start, r.plan_end, r.actual_end);
             const res = await run(
               `INSERT INTO test_task 

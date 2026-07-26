@@ -18,7 +18,7 @@ import {
 // 允许写入的配置键白名单
 const WRITABLE_KEYS = new Set([
   'platform.name', 'platform.shortName', 'platform.fullName', 'platform.copyright', 'platform.themeColor',
-  'code.requirement', 'code.dev', 'code.test.SIT', 'code.test.UAT', 'code.test.NFT', 'code.test.SEC',
+  'code.requirement', 'code.ticket', 'code.dev', 'code.test.SIT', 'code.test.UAT', 'code.test.NFT', 'code.test.SEC',
   'code.release_apply',
   'release.signoffRoles', 'appearance.preset',
   REQUIRED_FIELDS_CONFIG_KEY,

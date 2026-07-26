@@ -6,4 +6,5 @@
  */
 
 /** Public boundary: release-apply currently exposes no cross-module mutable operations. */
+export { generateReleaseApplyCode } from './application/numbering.js';
 export { MODULE_CONTRACT as releaseApplyContract } from './contracts/index.js';

@@ -6,9 +6,9 @@
  */
 
 import { get, all, run, tx } from '../../platform/persistence/index.js';
-import { listQuery } from '../../lib/query.js';
-import { registerIO } from '../../lib/io.js';
-import { PERM_CATALOG } from '../../lib/perm-catalog.js';
+import { listQuery } from '../../platform/persistence/index.js';
+import { registerIO } from '../../platform/import-export/index.js';
+import { PERM_CATALOG } from '../identity-access/index.js';
 import { ok, notFound, badRequest } from '../../platform/runtime/index.js';
 
 /** 把"是/否"等文本解析为布尔标识 */

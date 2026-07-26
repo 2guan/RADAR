@@ -33,6 +33,7 @@ export default function AppConfigForm({ mode, items }) {
 
   // 监听编号规则的 Form 值（用于实时生成示例预览）
   const watchReq = Form.useWatch('code.requirement', form);
+  const watchTicket = Form.useWatch('code.ticket', form);
   const watchDev = Form.useWatch('code.dev', form);
   const watchSIT = Form.useWatch('code.test.SIT', form);
   const watchUAT = Form.useWatch('code.test.UAT', form);
@@ -248,6 +249,9 @@ export default function AppConfigForm({ mode, items }) {
               <div className="form-section-title">1. 核心单据规则</div>
               <Row gutter={16}>
                 <Col span={12}>{renderFormItem('code.requirement')}</Col>
+                <Col span={12}>{renderFormItem('code.ticket')}</Col>
+              </Row>
+              <Row gutter={16} style={{ marginTop: 8 }}>
                 <Col span={12}>{renderFormItem('code.dev')}</Col>
               </Row>
             </div>
@@ -299,6 +303,12 @@ export default function AppConfigForm({ mode, items }) {
                   <div style={{ fontSize: 10, color: 'var(--radar-text-secondary)', marginBottom: 2 }}>开发单号：</div>
                   <div className="code-pill" style={{ display: 'block', textAlign: 'center', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', fontSize: 11, padding: '2px 4px' }}>
                     {mockGenerate(watchDev, '{需求编号}-DEV-{序号}')}
+                  </div>
+                </Col>
+                <Col span={12}>
+                  <div style={{ fontSize: 10, color: 'var(--radar-text-secondary)', marginBottom: 2 }}>工单单号：</div>
+                  <div className="code-pill" style={{ display: 'block', textAlign: 'center', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', fontSize: 11, padding: '2px 4px' }}>
+                    {mockGenerate(watchTicket, 'TK-{投产窗口}-{序号}')}
                   </div>
                 </Col>
                 <Col span={12}>
