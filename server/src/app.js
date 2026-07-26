@@ -139,11 +139,13 @@ export async function buildApp() {
       // Vite 产物（/assets/*.[hash].*）带内容 hash 可永久强缓存；
       // index.html 必须每次回源校验，否则新部署的资源引用无法生效。
       cacheControl: false,
-      setHeaders: (res, filePath) => {
+      // @fastify/static 10 的回调首参是 Fastify Reply，不是 Node 原生 ServerResponse。
+      // 必须经 Reply.header 设置响应头，否则首页请求会抛错并导致服务进程退出。
+      setHeaders: (reply, filePath) => {
         if (filePath.endsWith('index.html')) {
-          res.setHeader('Cache-Control', 'no-cache');
+          reply.header('Cache-Control', 'no-cache');
         } else {
-          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+          reply.header('Cache-Control', 'public, max-age=31536000, immutable');
         }
       },
     });

@@ -40,6 +40,13 @@ if (!process.env.RADAR_RUN_API_TESTS) {
     assert.equal(response.json().data.status, 'ok');
   });
 
+  test('生产静态首页可返回且使用 no-cache，避免 Fastify 静态回调导致服务退出', async () => {
+    const response = await app.inject({ method: 'GET', url: '/' });
+    assert.equal(response.statusCode, 200);
+    assert.match(response.body, /<div id="root"><\/div>/);
+    assert.equal(response.headers['cache-control'], 'no-cache');
+  });
+
   test('protected API rejects unauthenticated requests', async () => {
     const response = await app.inject({
       method: 'POST',
