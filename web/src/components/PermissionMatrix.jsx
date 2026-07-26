@@ -1,12 +1,12 @@
 /**
  * 文件：components/PermissionMatrix.jsx
+ * 说明：超级管理员拥有全部权限，不可配置。
  * 用途：权限矩阵配置。选择角色后以"模块 × 操作"矩阵形式展示复选框，
  *       覆盖页面级(查看)与页面内功能级(会签/导入导出等)权限，保存整体覆盖。
  * 作者：hengguan
- * 说明：超级管理员拥有全部权限，不可配置。
  */
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Select, Checkbox, Button, Table, message, Alert, Space } from 'antd';
 import { apiGet, apiPut } from '../api/client.js';
 
@@ -17,12 +17,14 @@ export default function PermissionMatrix() {
   const [granted, setGranted] = useState(new Set());
   const [isSuper, setIsSuper] = useState(false);
 
+  // 角色列表与权限目录可并行加载，目录决定矩阵的行和列。
   useEffect(() => {
     apiGet('/roles/all').then(setRoles);
     apiGet('/permissions/catalog').then(setCatalog);
   }, []);
 
   const loadRole = async (id) => {
+    // 切换角色时以服务端授予集合覆盖本地编辑状态。
     setRoleId(id);
     const res = await apiGet(`/roles/${id}/permissions`);
     setIsSuper(res.isSuper);
@@ -30,6 +32,7 @@ export default function PermissionMatrix() {
   };
 
   const toggle = (key, checked) => {
+    // Set 需复制后再写入，才能触发 React 状态更新。
     const next = new Set(granted);
     if (checked) next.add(key); else next.delete(key);
     setGranted(next);
@@ -54,6 +57,7 @@ export default function PermissionMatrix() {
     ...allActions.map((a) => ({
       title: a.label, key: a.key, align: 'center', width: 90,
       render: (_, mod) => {
+        // 未声明的操作显示占位符；超级管理员始终只读且拥有全部权限。
         const has = mod.actions.some((x) => x.key === a.key);
         if (!has) return <span style={{ color: '#ccc' }}>—</span>;
         const permKey = `${mod.key}:${a.key}`;

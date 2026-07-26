@@ -1,13 +1,13 @@
 /**
  * 文件：pages/Settings.jsx
+ * 说明：字典/系统/投产点/角色复用 CrudManager；投产点新增使用 DatePicker(存 YYYYMMDD)；
+ *       角色配置含"会签角色"打标；流程状态含阶段/终态（extra JSON）。
  * 用途：系统设置页面。聚合基础配置、参数配置、投产点设置、机构系统配置、人员配置；
  *       所有配置项支持新增/编辑/删除 + 导入/导出/模板下载。
  * 作者：hengguan
- * 说明：字典/系统/投产点/角色复用 CrudManager；投产点新增使用 DatePicker(存 YYYYMMDD)；
- *       角色配置含"会签角色"打标；流程状态含阶段/终态（extra JSON）。
  */
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, Tabs, Button, Tag, message, Form, Input, InputNumber, Switch, DatePicker, Select } from 'antd';
 import { StarOutlined, StarFilled } from '@ant-design/icons';
 import dayjs from 'dayjs';
@@ -21,7 +21,7 @@ import StageConfiguration from '../components/StageConfiguration.jsx';
 import DictSelect from '../components/DictSelect.jsx';
 import { MENU } from '../router/menu.js';
 import { PRESETS } from '../theme/presets.js';
-import { apiPost, apiGet } from '../api/client.js';
+import { apiPost, apiGet } from '../modules/settings/api/index.js';
 import { makeReleasePointOptions, ReleasePointText } from '../components/ReleasePointText.jsx';
 import { useAppStore } from '../stores/app.js';
 

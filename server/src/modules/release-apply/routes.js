@@ -1,19 +1,19 @@
 /**
  * 文件：modules/release-apply/routes.js
+ * 说明：ref_codes（需求/工单编号）以 JSON 数组入库；change_system 存系统编号；制品类型/摆渡状态取自字典。
  * 用途：投产申请（版本变更申请）模块接口。变更申请 CRUD（全字段可改并留痕）、变更编号生成、
  *       默认按当前投产窗口过滤、导入导出。评审状态由所关联需求的投产审批评审状态派生（取最弱）。
  * 作者：hengguan
- * 说明：ref_codes（需求/工单编号）以 JSON 数组入库；change_system 存系统编号；制品类型/摆渡状态取自字典。
  */
 
-import { get, run, tx, all, dialect } from '../../db/index.js';
+import { get, run, tx, all, dialect } from '../../platform/persistence/index.js';
 import { listQuery } from '../../lib/query.js';
 import { genReleaseApplyCode } from '../../lib/code-gen.js';
-import { auditCreate, auditUpdate, auditDelete } from '../../lib/audit.js';
+import { auditCreate, auditUpdate, auditDelete } from '../../platform/audit/index.js';
 import { exportXlsx, parseXlsx } from '../../lib/excel.js';
 import { windowIds, inClause } from '../../lib/window.js';
-import { ok, notFound, badRequest } from '../../lib/http.js';
-import { statusTypeForReleaseApply, validateRequiredFields } from '../../lib/required-fields.js';
+import { ok, notFound, badRequest, parseJsonArray, parseJsonObject } from '../../platform/runtime/index.js';
+import { statusTypeForReleaseApply, validateRequiredFields, defaultDictAttr } from '../process-configuration/index.js';
 import {
   appendStageExcelValues,
   appendStageListValues,
@@ -21,9 +21,7 @@ import {
   getStageExcelColumns,
   saveExtensionValues,
   validateStageContent,
-} from '../../lib/stage-content.js';
-import { defaultDictAttr } from '../../lib/status.js';
-import { parseJsonArray, parseJsonObject } from '../../lib/json.js';
+} from '../process-configuration/index.js';
 
 // 列表查询可排序/筛选的列白名单（不含派生 review_status）
 const COLUMNS = [

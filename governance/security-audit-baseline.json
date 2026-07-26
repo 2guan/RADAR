@@ -1,0 +1,10 @@
+{
+  "schema_version": "1.0",
+  "review_by": "2026-08-30",
+  "approved_by": "hengguan",
+  "rationale": "Existing dependency advisories are tracked as a time-boxed baseline so CI prevents regressions while upgrades are handled in a dedicated compatibility-tested security change.",
+  "packages": {
+    "server": { "info": 0, "low": 0, "moderate": 2, "high": 4, "critical": 0 },
+    "web": { "info": 0, "low": 0, "moderate": 3, "high": 2, "critical": 0 }
+  }
+}

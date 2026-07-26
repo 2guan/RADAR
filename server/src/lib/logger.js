@@ -1,8 +1,8 @@
 /**
  * 文件：lib/logger.js
+ * 说明：LOG_LEVEL 支持 info / warn / error / silent；默认生产 info，开发 warn。
  * 用途：统一运行时日志级别控制，避免生产环境被请求或初始化信息刷屏。
  * 作者：hengguan
- * 说明：LOG_LEVEL 支持 info / warn / error / silent；默认生产 info，开发 warn。
  */
 
 import path from 'node:path';

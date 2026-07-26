@@ -1,10 +1,11 @@
 /**
  * 文件：lib/perm-catalog.js
+ * 说明：action 同时覆盖页面级(view)与页面内功能级(create/edit/signoff...)。
  * 用途：权限矩阵目录定义——模块与操作的中文标签，供权限矩阵 UI 渲染与后端校验复用。
  * 作者：hengguan
- * 说明：action 同时覆盖页面级(view)与页面内功能级(create/edit/signoff...)。
  */
 
+// 权限目录是角色配置与后端权限校验共用的唯一模块/操作清单。
 export const PERM_CATALOG = [
   { key: 'dashboard', label: '效能仪表盘', actions: [{ key: 'view', label: '查看' }, { key: 'manage', label: '管理系统图表' }] },
   { key: 'overview', label: '版本概览', actions: [{ key: 'view', label: '查看' }] },
@@ -35,6 +36,7 @@ export const PERM_CATALOG = [
       { key: 'status.edit', label: '调整状态' }, { key: 'delete', label: '删除' }, { key: 'import', label: '导入' }, { key: 'export', label: '导出' },
     ],
   },
+  // 测试类型共享同一套操作，但保留独立权限键以支持按阶段授权。
   ...[
     ['SIT', '应用组装测试'],
     ['UAT', '用户测试'],

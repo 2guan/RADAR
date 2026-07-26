@@ -1,15 +1,15 @@
 /**
  * 文件：modules/roles/routes.js
+ * 说明：内置角色（is_builtin=1，如超级管理员）不可删除；超级管理员权限恒为全集。
  * 用途：角色管理与权限矩阵接口。角色 CRUD + 读取/保存某角色的权限矩阵 + 权限目录。
  * 作者：hengguan
- * 说明：内置角色（is_builtin=1，如超级管理员）不可删除；超级管理员权限恒为全集。
  */
 
-import { get, all, run, tx } from '../../db/index.js';
+import { get, all, run, tx } from '../../platform/persistence/index.js';
 import { listQuery } from '../../lib/query.js';
 import { registerIO } from '../../lib/io.js';
 import { PERM_CATALOG } from '../../lib/perm-catalog.js';
-import { ok, notFound, badRequest } from '../../lib/http.js';
+import { ok, notFound, badRequest } from '../../platform/runtime/index.js';
 
 /** 把"是/否"等文本解析为布尔标识 */
 function truthy(v) {

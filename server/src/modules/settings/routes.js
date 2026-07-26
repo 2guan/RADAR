@@ -1,20 +1,19 @@
 /**
  * 文件：modules/settings/routes.js
+ * 说明：支持公开访问的 public 配置获取，以及需进行鉴权的 app-config 获取与修改。
  * 用途：平台配置接口。读取/保存平台信息与编号规则（app_config 键值表），
  *       并提供无需登录的公开配置（平台名称、主题色等，供登录页与网页标题使用）。
  * 作者：hengguan
- * 说明：支持公开访问的 public 配置获取，以及需进行鉴权的 app-config 获取与修改。
  */
 
-import { all, get, run, tx } from '../../db/index.js';
-import { config } from '../../config.js';
-import { ok, badRequest } from '../../lib/http.js';
-import { triggerIssueSyncSchedule } from '../../lib/issue-sync-scheduler.js';
+import { all, get, run, tx } from '../../platform/persistence/index.js';
+import { ok, badRequest } from '../../platform/runtime/index.js';
+import { getIssueSyncEnvironmentDefaults, triggerIssueSyncSchedule } from '../issues/index.js';
 import {
   REQUIRED_FIELDS_CONFIG_KEY,
   normalizeRequiredFieldConfig,
   requiredFieldCatalogPayload,
-} from '../../lib/required-fields.js';
+} from '../process-configuration/index.js';
 
 // 允许写入的配置键白名单
 const WRITABLE_KEYS = new Set([
@@ -50,6 +49,7 @@ async function readKeys(keys) {
  * 这样管理员能够看到当前实际生效的地址与 API Key，而无需重复配置环境变量中的值。
  */
 function withEffectiveIssueToolConfig(rows) {
+  const environmentDefaults = getIssueSyncEnvironmentDefaults();
   const byKey = new Map(rows.map((row) => [row.key, row]));
   const ensureValue = (key, fallback, remark) => {
     const row = byKey.get(key);
@@ -57,8 +57,8 @@ function withEffectiveIssueToolConfig(rows) {
     const next = { key, value: fallback || '', remark: row?.remark || remark };
     byKey.set(key, next);
   };
-  ensureValue('issue.sync.baseUrl', config.pams.baseUrl, '问题工具地址（为空时使用部署环境变量 PAMS_BASE_URL）');
-  ensureValue('issue.sync.apiKey', config.pams.apiKey, '问题工具 API Key（为空时使用部署环境变量 PAMS_API_KEY）');
+  ensureValue('issue.sync.baseUrl', environmentDefaults.baseUrl, '问题工具地址（为空时使用部署环境变量 PAMS_BASE_URL）');
+  ensureValue('issue.sync.apiKey', environmentDefaults.apiKey, '问题工具 API Key（为空时使用部署环境变量 PAMS_API_KEY）');
   return [...byKey.values()].sort((a, b) => a.key.localeCompare(b.key));
 }
 
@@ -81,13 +81,14 @@ function validateSchedule(items, prefix, label) {
 }
 
 function validateIssueSyncSettings(items) {
+  const environmentDefaults = getIssueSyncEnvironmentDefaults();
   const hasIssueSyncSetting = Object.keys(items).some((key) => key.startsWith('issue.sync.'));
   if (!hasIssueSyncSetting) return;
   validateSchedule(items, 'issue.sync.overview', '问题概述同步');
   validateSchedule(items, 'issue.sync', '问题详情同步');
   if (asEnabled(items['issue.sync.enabled']) || asEnabled(items['issue.sync.overview.enabled'])) {
-    const baseUrl = String(items['issue.sync.baseUrl'] || config.pams.baseUrl || '').trim();
-    const apiKey = String(items['issue.sync.apiKey'] || config.pams.apiKey || '').trim();
+    const baseUrl = String(items['issue.sync.baseUrl'] || environmentDefaults.baseUrl || '').trim();
+    const apiKey = String(items['issue.sync.apiKey'] || environmentDefaults.apiKey || '').trim();
     if (!baseUrl || !apiKey) throw badRequest('启用定时同步前，请配置问题工具地址和 API Key');
     try { new URL(baseUrl); } catch { throw badRequest('问题工具地址格式不正确'); }
   }

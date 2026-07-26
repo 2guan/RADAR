@@ -1,5 +1,6 @@
 /**
  * 文件：hooks/useDefaultProcessStatus.js
+ * 说明：遵循项目研发规约；跨模块能力仅可经公开契约访问。
  * 用途：按流程阶段读取字典中的默认初始状态。
  * 作者：hengguan
  */

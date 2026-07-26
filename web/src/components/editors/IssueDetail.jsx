@@ -1,17 +1,17 @@
 /**
  * 文件：components/editors/IssueDetail.jsx
+ * 说明：数据来源于 GET /issues/:id，analysis_log 已由后端解析为对象数组；is_major/is_common 为布尔。
  * 用途：问题详情查看弹窗（只读）。展示问题全字段信息，分组呈现基本信息、归属、人员、
  *       内容文本与「分析修改记录」时间线。无任何编辑能力。
  * 作者：hengguan
- * 说明：数据来源于 GET /issues/:id，analysis_log 已由后端解析为对象数组；is_major/is_common 为布尔。
  */
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Modal, Tag, Timeline, Empty, Spin, Typography, Button, message } from 'antd';
 import { CloudSyncOutlined } from '@ant-design/icons';
 import StatusBadge from '../StatusBadge.jsx';
 import Can from '../Can.jsx';
-import { apiGet, apiPost } from '../../api/client.js';
+import { apiGet, apiPost } from '../../modules/issues/api/index.js';
 import './IssueDetail.css';
 
 const { Text } = Typography;

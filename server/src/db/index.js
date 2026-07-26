@@ -1,10 +1,10 @@
 /**
  * 文件：db/index.js
+ * 说明：业务模块只依赖本文件导出的统一接口，避免在路由和工具函数里判断底层数据库。
+ *       新增数据库类型时优先扩展 provider 与 dialect，而不是改动业务 SQL 调用点。
  * 用途：统一数据库访问入口。通过 DB_CLIENT 在 SQLite 与 TDSQL(MySQL 兼容版) 之间切换，
  *       对业务层暴露 get/all/run/exec/tx 等轻量 DAO 方法。
  * 作者：hengguan
- * 说明：业务模块只依赖本文件导出的统一接口，避免在路由和工具函数里判断底层数据库。
- *       新增数据库类型时优先扩展 provider 与 dialect，而不是改动业务 SQL 调用点。
  */
 
 import { config } from '../config.js';

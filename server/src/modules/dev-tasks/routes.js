@@ -1,19 +1,18 @@
 /**
  * 文件：modules/dev-tasks/routes.js
+ * 说明：再次承接时仅为尚未建立开发任务的系统补建，避免重复。
  * 用途：开发管理模块接口。开发承接（按主责/协同改造系统拆分默认多条）、CRUD、
  *       排期偏差率演算、终态业务校验、留痕。
  * 作者：hengguan
- * 说明：再次承接时仅为尚未建立开发任务的系统补建，避免重复。
  */
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { get, all, run, tx } from '../../db/index.js';
+import { get, all, run, tx } from '../../platform/persistence/index.js';
 import { listQuery } from '../../lib/query.js';
 import { genDevCode } from '../../lib/code-gen.js';
-import { defaultProcessStatus } from '../../lib/status.js';
-import { statusTypeForProcessStatus, validateRequiredFields } from '../../lib/required-fields.js';
+import { defaultProcessStatus, statusTypeForProcessStatus, validateRequiredFields } from '../process-configuration/index.js';
 import {
   appendStageExcelValues,
   appendStageListValues,
@@ -21,17 +20,18 @@ import {
   getStageExcelColumns,
   saveExtensionValues,
   validateStageContent,
-} from '../../lib/stage-content.js';
+} from '../process-configuration/index.js';
 import { calcDeviation } from '../../lib/deviation.js';
-import { auditCreate, auditUpdate, auditDelete } from '../../lib/audit.js';
-import { listByEntity } from '../../lib/attachment.js';
+import { auditCreate, auditUpdate, auditDelete } from '../../platform/audit/index.js';
+import { listByEntity } from '../../platform/attachments/index.js';
 import { windowIds, inClause } from '../../lib/window.js';
-import { ok, notFound, badRequest } from '../../lib/http.js';
-import { assertStatusChangePermission } from '../../lib/status-permission.js';
+import { ok, notFound, badRequest } from '../../platform/runtime/index.js';
+import { assertStatusChangePermission } from '../process-configuration/index.js';
 import { exportXlsx, parseXlsx } from '../../lib/excel.js';
 import { resolveDictAttr, resolveSystemCode, formatAttachments } from '../../lib/resolver.js';
-import { getWorkItem, workItemCodesInReleasePoints, releaseDateMapForCodes } from '../../lib/work-items.js';
-import { decodeChangeItem, formatImpactItemsText } from '../../lib/impact-schema.js';
+import { getWorkItem, workItemCodesInReleasePoints, releaseDateMapForCodes } from '../delivery/index.js';
+import { decodeChangeItem } from '../../lib/impact-schema.js';
+import { formatImpactItemsText } from '../delivery/index.js';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
 

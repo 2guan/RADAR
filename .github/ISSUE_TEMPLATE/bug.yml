@@ -1,0 +1,23 @@
+name: 缺陷报告
+description: 提交可复现的 RADAR 缺陷
+title: "[BUG] "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 复现步骤、预期结果与实际结果
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: 影响模块、权限角色和数据范围
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 已脱敏的日志或截图
+      description: 禁止提交真实账号、附件、密钥、内网地址或生产数据。
+

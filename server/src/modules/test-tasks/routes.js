@@ -1,16 +1,15 @@
 /**
  * 文件：modules/test-tasks/routes.js
+ * 说明：NFT/SEC 按需进行；不承接即无该阶段。编号前缀由测试类型决定。
  * 用途：测试管理模块接口（SIT/UAT/NFT/SEC 共用一张表，按 test_type 区分）。
  *       测试承接（默认建 1 个，可按系统拆分多个）、CRUD、偏差率、终态校验、留痕。
  * 作者：hengguan
- * 说明：NFT/SEC 按需进行；不承接即无该阶段。编号前缀由测试类型决定。
  */
 
-import { get, all, run, tx } from '../../db/index.js';
+import { get, all, run, tx } from '../../platform/persistence/index.js';
 import { listQuery } from '../../lib/query.js';
 import { genTestCode } from '../../lib/code-gen.js';
-import { defaultProcessStatus } from '../../lib/status.js';
-import { statusTypeForProcessStatus, validateRequiredFields } from '../../lib/required-fields.js';
+import { defaultProcessStatus, statusTypeForProcessStatus, validateRequiredFields } from '../process-configuration/index.js';
 import {
   appendStageExcelValues,
   appendStageListValues,
@@ -18,17 +17,17 @@ import {
   getStageExcelColumns,
   saveExtensionValues,
   validateStageContent,
-} from '../../lib/stage-content.js';
+} from '../process-configuration/index.js';
 import { calcDeviation } from '../../lib/deviation.js';
-import { auditCreate, auditUpdate, auditDelete } from '../../lib/audit.js';
-import { listByEntity } from '../../lib/attachment.js';
+import { auditCreate, auditUpdate, auditDelete } from '../../platform/audit/index.js';
+import { listByEntity } from '../../platform/attachments/index.js';
 import { windowIds, inClause } from '../../lib/window.js';
-import { ok, notFound, badRequest } from '../../lib/http.js';
-import { assertStatusChangePermission } from '../../lib/status-permission.js';
+import { ok, notFound, badRequest } from '../../platform/runtime/index.js';
+import { assertStatusChangePermission } from '../process-configuration/index.js';
 import { exportXlsx, parseXlsx } from '../../lib/excel.js';
 import { resolveDictAttr, resolveSystemCode, formatAttachments } from '../../lib/resolver.js';
-import { getWorkItem, workItemCodesInReleasePoints, releaseDateMapForCodes } from '../../lib/work-items.js';
-import { formatCoverageText } from '../../lib/impact-schema.js';
+import { getWorkItem, workItemCodesInReleasePoints, releaseDateMapForCodes } from '../delivery/index.js';
+import { formatCoverageText } from '../delivery/index.js';
 
 // 导入模板列定义
 const IO_COLUMNS = [

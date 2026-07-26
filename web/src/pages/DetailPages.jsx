@@ -1,12 +1,11 @@
 /**
  * 文件：pages/DetailPages.jsx
+ * 说明：编号来自路由参数；关闭即返回上一页（无历史则回首页）。
  * 用途：五类业务对象的「详情单页」。通过 URL 中的编号直达，复用对应编辑器的 page 模式正文。
  *       需求分析 / 开发管理 / 测试管理 / 投产申请 / 投产审批，权限与各自列表页一致（由路由守卫保证）。
  * 作者：hengguan
- * 说明：编号来自路由参数；关闭即返回上一页（无历史则回首页）。
  */
 
-import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import RequirementEditor from '../components/editors/RequirementEditor.jsx';
 import TaskEditor from '../components/editors/TaskEditor.jsx';

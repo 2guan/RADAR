@@ -1,8 +1,8 @@
 /**
  * 文件：lib/audit.js
+ * 说明：fieldLabels 提供"字段英文名 -> 中文名"映射，仅记录发生变化的字段。
  * 用途：过程留痕工具。对比新旧记录字段差异并写入 audit_log，支持创建/更新/删除。
  * 作者：hengguan
- * 说明：fieldLabels 提供"字段英文名 -> 中文名"映射，仅记录发生变化的字段。
  */
 
 import { run } from '../db/index.js';

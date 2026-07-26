@@ -1,12 +1,12 @@
 /**
  * 文件：components/ImportModal.jsx
+ * 说明：提供模板下载、Excel 拖拽上传、在线预览与错误字段高亮提示的批量导入弹出框。
  * 用途：统一数据导入弹窗组件。支持模板下载、导入模式选择（跳过/覆盖/回滚）、
  *       拖拽上传以及详细的导入结果展示（新增、更新、失败、跳过）。
  * 作者：hengguan
- * 说明：提供模板下载、Excel 拖拽上传、在线预览与错误字段高亮提示的批量导入弹出框。
  */
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Modal, Radio, Upload, Button, Alert, Tabs, Space, Table, Tag } from 'antd';
 import { InboxOutlined, DownloadOutlined, ReloadOutlined } from '@ant-design/icons';
 import { importXlsx, downloadGet } from '../utils/io.js';

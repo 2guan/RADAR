@@ -1,21 +1,20 @@
 /**
  * 文件：modules/overview/routes.js
+ * 说明：链路节点状态分 done(全部终态)/doing(进行中)/pending(无任务)；非功能/安全按需出现。
  * 用途：版本概览模块接口。按实施机构聚合当前投产窗口下的需求及其全链路进展，
  *       并提供单需求的 5 层全生命周期详情数据（需求/开发/SIT/NFT/SEC/UAT/投产）。
  * 作者：hengguan
- * 说明：链路节点状态分 done(全部终态)/doing(进行中)/pending(无任务)；非功能/安全按需出现。
  */
 
-import { get, all, dialect } from '../../db/index.js';
-import { isIssueTerminalStatus, isTerminalStatus } from '../../lib/status.js';
-import { listByEntity } from '../../lib/attachment.js';
+import { get, all, dialect } from '../../platform/persistence/index.js';
+import { isIssueTerminalStatus, isTerminalStatus } from '../process-configuration/index.js';
+import { listByEntity } from '../../platform/attachments/index.js';
 import { windowIds, inClause } from '../../lib/window.js';
-import { ok, notFound } from '../../lib/http.js';
+import { ok, notFound, parseJsonArray } from '../../platform/runtime/index.js';
 import { exportXlsx } from '../../lib/excel.js';
 import { formatAttachments } from '../../lib/resolver.js';
-import { getWorkItem } from '../../lib/work-items.js';
-import { parseJsonArray } from '../../lib/json.js';
-import { formatImpactItemsText, formatCoverageText } from '../../lib/impact-schema.js';
+import { getWorkItem } from '../delivery/index.js';
+import { formatImpactItemsText, formatCoverageText } from '../delivery/index.js';
 
 /** 计算一组任务的节点状态（含单一代表状态 status，供阶段标签展示） */
 function nodeState(tasks) {

@@ -1,5 +1,6 @@
 /**
  * 文件：components/editors/ImpactAnalysisModal.jsx
+ * 说明：遵循项目研发规约；跨模块能力仅可经公开契约访问。
  * 用途：开发阶段「影响性分析」结构化填写弹窗（接近全屏）。
  *       头部展示需求/工单编号、名称、主责系统、协同系统；「添加变更内容」按分类新增条目；
  *       每条支持逐条编辑/保存/删除，保存后转为展示态，点「修改」回到编辑态。
@@ -7,10 +8,10 @@
  * 作者：hengguan
  */
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Modal, Button, Dropdown, Select, Input, Tag, Empty, Spin, message, Popconfirm, Row, Col, Tooltip } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, SaveOutlined, CloseOutlined } from '@ant-design/icons';
-import { apiGet, apiPost, apiPut, apiDelete } from '../../api/client.js';
+import { apiGet, apiPost, apiPut, apiDelete } from '../../modules/delivery/api/index.js';
 import SystemNameInput, { SystemNamesSelect } from '../SystemNameInput.jsx';
 import AnalysisHeader from './AnalysisHeader.jsx';
 import {

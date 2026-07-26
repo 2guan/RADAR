@@ -1,13 +1,13 @@
 /**
  * 文件：components/SystemNameInput.jsx
+ * 说明：数据源复用 /systems/all 缓存；采用 tags 模式以兼容“库内检索 + 手动输入”。
  * 用途：系统名称录入。风格与「主责系统」选择器一致——检索下拉、选中项以标签展示，
  *       同时允许手动填写自由文本。
  *       SystemNameInput：单选（值为系统名称字符串）；SystemNamesSelect：多选（值为字符串数组）。
  * 作者：hengguan
- * 说明：数据源复用 /systems/all 缓存；采用 tags 模式以兼容“库内检索 + 手动输入”。
  */
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Select } from 'antd';
 import { apiGet } from '../api/client.js';
 

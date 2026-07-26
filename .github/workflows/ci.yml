@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            server/package-lock.json
+            web/package-lock.json
+      - run: npm ci --prefix server
+      - run: npm ci --prefix web
+      - run: node scripts/check-code-comments.mjs
+      - run: node scripts/check-module-boundaries.mjs
+      - run: node scripts/check-governance.mjs
+      - run: node scripts/check-migration-parity.mjs
+      - run: node scripts/check-mysql8-migrations.mjs
+      - run: npm test --prefix server
+      - run: npm run test:api --prefix server
+      - run: npm run test:rbac --prefix server
+      - run: npm run build --prefix web
+      - run: node scripts/check-dependency-audit.mjs
+      - run: node scripts/check-licenses.mjs
+
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: config
+          scan-ref: .
+          exit-code: '1'
+          severity: HIGH,CRITICAL

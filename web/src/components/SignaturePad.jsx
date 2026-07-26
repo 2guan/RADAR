@@ -1,14 +1,14 @@
 /**
  * 文件：components/SignaturePad.jsx
- * 用途：网页端手写签名板。基于原生 canvas + Pointer Events（统一鼠标/触摸/手写笔）实现，无第三方依赖
- *       （等价于业界 signature_pad 的核心做法）。支持清除、判空、导出 PNG DataURL、载入图片。
- * 作者：hengguan
  * 说明：坐标按「画布像素/显示尺寸」实时换算，修复移动端落笔与显示错位；监听 resize 重建画布并保留笔迹。
  *       笔触随书写速度变粗细（慢粗快细）并以二次贝塞尔平滑，形成笔锋与韵脚。
  *       通过 ref 暴露 clear()/isEmpty()/getDataURL()/loadImage(dataUrl)。
+ * 用途：网页端手写签名板。基于原生 canvas + Pointer Events（统一鼠标/触摸/手写笔）实现，无第三方依赖
+ *       （等价于业界 signature_pad 的核心做法）。支持清除、判空、导出 PNG DataURL、载入图片。
+ * 作者：hengguan
  */
 
-import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 
 // 笔触宽度区间（CSS 像素，绘制时再乘以设备像素比）
 const BASE_W = 2.2;

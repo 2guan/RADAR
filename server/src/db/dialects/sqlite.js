@@ -1,10 +1,10 @@
 /**
  * 文件：db/dialects/sqlite.js
+ * 说明：该文件与 mysql.js 保持同名方法，业务层通过统一 dialect 接口调用，
+ *       避免在各模块中散落数据库类型判断。
  * 用途：SQLite SQL 方言适配。集中维护当前时间表达式、忽略插入、
  *       配置项 upsert 片段，以及 SQLite json_each/json_extract 查询表达式。
  * 作者：hengguan
- * 说明：该文件与 mysql.js 保持同名方法，业务层通过统一 dialect 接口调用，
- *       避免在各模块中散落数据库类型判断。
  */
 
 export const sqliteDialect = {

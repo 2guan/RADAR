@@ -1,8 +1,8 @@
 /**
  * 文件：lib/status.js
+ * 说明：终态标识来自字典 process_status 的 extra.isTerminal。
  * 用途：流程状态相关判定工具。判断某状态是否为"终态"，用于触发终态业务校验。
  * 作者：hengguan
- * 说明：终态标识来自字典 process_status 的 extra.isTerminal。
  */
 
 import { all, get, dialect } from '../db/index.js';

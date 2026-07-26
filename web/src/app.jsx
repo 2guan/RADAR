@@ -1,11 +1,11 @@
 /**
  * 文件：app.jsx
+ * 说明：进入受保护区域前确保已加载用户/平台/投产窗口信息；无权限模块自动重定向。
  * 用途：应用路由装配。HashRouter + 登录页 + 受保护的主框架布局，并基于权限做路由守卫。
  * 作者：hengguan
- * 说明：进入受保护区域前确保已加载用户/平台/投产窗口信息；无权限模块自动重定向。
  */
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Spin } from 'antd';
 import { TOKEN_KEY } from './api/client.js';

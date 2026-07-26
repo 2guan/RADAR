@@ -1,20 +1,17 @@
 /**
  * 文件：components/AppConfigForm.jsx
+ * 说明：平台基础设置表单，包括系统全称、版权声明、配色主题、主责系统和开发/测试编号规则的管理配置。
  * 用途：平台配置表单。按给定键集合加载 app_config 值并渲染可编辑表单，统一保存。
  *       保存后刷新全局平台信息，使标题/页脚/主题色即时生效。
  * 作者：hengguan
- * 说明：平台基础设置表单，包括系统全称、版权声明、配色主题、主责系统和开发/测试编号规则的管理配置。
  */
 
-import React, { useEffect, useState } from 'react';
-import { Form, Input, Button, message, ColorPicker, Switch, InputNumber, Row, Col, Card, Space, Tag, Alert, Select } from 'antd';
+import { useEffect, useState } from 'react';
+import { Form, Input, Button, message, ColorPicker, Switch, InputNumber, Row, Col, Card, Space, Alert, Select } from 'antd';
 import { 
   ProjectOutlined, 
   GlobalOutlined, 
   CopyrightOutlined, 
-  LockOutlined, 
-  ClockCircleOutlined, 
-  SafetyOutlined, 
   SafetyCertificateOutlined, 
   KeyOutlined,
   DeploymentUnitOutlined

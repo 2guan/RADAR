@@ -1,0 +1,154 @@
+{
+  "schema_version": "1.0",
+  "repository": "RADAR",
+  "defaults": {
+    "cross_module_internal_access": "forbidden",
+    "public_contract_access": "allowed",
+    "shared_modules_ai_access": "read_only",
+    "require_owner_for_cross_module_change": true
+  },
+  "modules": {
+    "governance": {
+      "type": "platform", "description": "研发规约、模块清单、自动化治理脚本与协作工作流",
+      "owners": {"primary": "hengguan", "backup": "hengguan", "approvers": ["hengguan"]},
+      "paths": {"backend": ["governance/**", "scripts/**"], "frontend": [".github/**", "AGENTS.md", "CONTRIBUTING.md", "AI-GUIDE.md", "COLLABORATION.md", "docs/governance/**", "docs/architecture/**", "docs/planning/**", "docs/requirements/REQ-20260724-001/**"], "tests": ["server/test/governance/**"]},
+      "public_contracts": ["governance/modules.yaml", "docs/governance/**"],
+      "allowed_dependencies": ["shared/contracts"],
+      "ai_default_access": "read_write", "risk": "high", "shared_change_required": true
+    },
+    "platform/auth": {
+      "type": "platform", "description": "认证、会话和 RBAC",
+      "owners": {"primary": "hengguan", "backup": "hengguan", "approvers": ["hengguan"]},
+      "paths": {"backend": ["server/src/platform/auth/**", "server/src/modules/auth/**", "server/src/plugins/auth.js", "server/src/lib/password.js", "server/src/lib/captcha.js", "server/src/shared/authorization/entity-access.js"], "frontend": ["web/src/platform/auth/**", "web/src/pages/Login.jsx"], "tests": ["server/test/platform/auth/**"]},
+      "public_contracts": ["server/src/platform/auth/index.js", "server/src/platform/auth/contracts/**"],
+      "allowed_dependencies": ["platform/persistence", "platform/runtime", "shared/contracts"],
+      "ai_default_access": "read_only", "risk": "high", "shared_change_required": true
+    },
+    "platform/audit": {
+      "type": "platform", "description": "统一操作审计",
+      "owners": {"primary": "hengguan", "backup": "hengguan", "approvers": ["hengguan"]},
+      "paths": {"backend": ["server/src/platform/audit/**", "server/src/modules/audit/**", "server/src/lib/audit.js", "server/src/shared/evidence/audit.js"], "tests": ["server/test/platform/audit/**"]},
+      "public_contracts": ["server/src/platform/audit/index.js", "server/src/platform/audit/contracts/**"],
+      "allowed_dependencies": ["platform/auth", "platform/persistence", "platform/runtime", "shared/contracts"],
+      "ai_default_access": "read_only", "risk": "high", "shared_change_required": true
+    },
+    "platform/attachments": {
+      "type": "platform", "description": "附件、签名和存储访问控制",
+      "owners": {"primary": "hengguan", "backup": "hengguan", "approvers": ["hengguan"]},
+      "paths": {"backend": ["server/src/platform/attachments/**", "server/src/modules/attachments/**", "server/src/modules/signatures/**", "server/src/lib/attachment.js", "server/src/lib/signature.js"], "frontend": ["web/src/platform/attachments/**", "web/src/components/AttachmentField.jsx", "web/src/components/SignaturePad.jsx"], "tests": ["server/test/platform/attachments/**"]},
+      "public_contracts": ["server/src/platform/attachments/index.js", "server/src/platform/attachments/contracts/**"],
+      "allowed_dependencies": ["platform/auth", "platform/audit", "platform/persistence", "platform/runtime", "process-configuration", "shared/contracts"],
+      "ai_default_access": "read_only", "risk": "high", "shared_change_required": true
+    },
+    "platform/persistence": {
+      "type": "platform", "description": "SQLite 与 TDSQL/MySQL 8 数据适配和迁移",
+      "owners": {"primary": "hengguan", "backup": "hengguan", "approvers": ["hengguan"]},
+      "paths": {"backend": ["server/src/db/**", "server/src/config.js"], "tests": ["server/test/platform/persistence/**"]},
+      "public_contracts": ["server/src/platform/persistence/index.js", "server/src/platform/persistence/contracts/**"],
+      "allowed_dependencies": ["platform/runtime", "shared/contracts"],
+      "ai_default_access": "read_only", "risk": "high", "shared_change_required": true
+    },
+    "platform/notifications": {
+      "type": "platform", "description": "通知基础能力（当前未配置提供方）",
+      "owners": {"primary": "hengguan", "backup": "hengguan", "approvers": ["hengguan"]},
+      "paths": {"backend": ["server/src/platform/notifications/**"], "tests": ["server/test/platform/notifications/**"]},
+      "public_contracts": ["server/src/platform/notifications/index.js"],
+      "allowed_dependencies": ["platform/runtime", "shared/contracts"],
+      "ai_default_access": "read_only", "risk": "important", "shared_change_required": true
+    },
+    "platform/runtime": {
+      "type": "platform", "description": "应用装配、HTTP 和运行时工具",
+      "owners": {"primary": "hengguan", "backup": "hengguan", "approvers": ["hengguan"]},
+      "paths": {"backend": ["server/src/app.js", "server/src/server.js", "server/src/platform/register-modules.js", "server/src/platform/runtime/**", "server/src/lib/http.js", "server/src/lib/json.js", "server/src/lib/logger.js", "server/src/lib/env.js", "server/src/lib/sanitize.js"], "frontend": ["web/src/app.jsx", "web/src/main.jsx", "web/src/layout/**", "web/src/router/**", "web/src/stores/**", "web/src/api/client.js", "web/src/platform/api.js"], "tests": ["server/test/platform/runtime/**"]},
+      "public_contracts": ["server/src/platform/index.js", "server/src/platform/runtime/index.js", "web/src/platform/api.js"],
+      "allowed_dependencies": ["platform/auth", "platform/persistence", "shared/contracts"],
+      "ai_default_access": "read_only", "risk": "important", "shared_change_required": true
+    },
+    "shared/contracts": {
+      "type": "shared", "description": "稳定 DTO、事件和无业务语义纯工具",
+      "owners": {"primary": "hengguan", "backup": "hengguan", "approvers": ["hengguan"]},
+      "paths": {"backend": ["server/src/shared/contracts/**", "server/src/shared/utils/**"], "frontend": ["web/src/shared/contracts/**", "web/src/shared/utils/**"]},
+      "public_contracts": ["server/src/shared/contracts/**"], "allowed_dependencies": [],
+      "ai_default_access": "read_only", "risk": "important", "shared_change_required": true
+    },
+    "identity-access": {
+      "type": "business", "description": "用户、角色和权限管理",
+      "owners": {"primary": "hengguan", "backup": "hengguan", "approvers": ["hengguan"]},
+      "paths": {"backend": ["server/src/modules/users/**", "server/src/modules/roles/**", "server/src/modules/identity-access/**"], "frontend": ["web/src/modules/identity-access/**", "web/src/pages/Users.jsx"], "tests": ["server/test/identity-access/**"], "migrations": ["server/src/db/migrations/*user*", "server/src/db/migrations/tdsql/*user*"]},
+      "owned_tables": ["user", "role", "permission", "user_role", "login_fail_tracker"],
+      "public_contracts": ["server/src/modules/identity-access/index.js", "server/src/modules/identity-access/contracts/**"],
+      "allowed_dependencies": ["platform/auth", "platform/audit", "platform/persistence", "platform/runtime", "shared/contracts"], "ai_default_access": "read_write", "risk": "high"
+    },
+    "reference-data": {
+      "type": "business", "description": "字典、系统、投产点和平台配置",
+      "owners": {"primary": "hengguan", "backup": "hengguan", "approvers": ["hengguan"]},
+      "paths": {"backend": ["server/src/modules/dict/**", "server/src/modules/systems/**", "server/src/modules/release-points/**", "server/src/modules/settings/**", "server/src/modules/reference-data/**", "server/src/lib/dict-cascade.js"], "frontend": ["web/src/modules/settings/**", "web/src/pages/Settings.jsx"], "tests": ["server/test/reference-data/**"], "migrations": ["server/src/db/migrations/*dict*", "server/src/db/migrations/tdsql/*dict*"]},
+      "owned_tables": ["app_config", "dict_item", "dict_category", "system", "release_point"],
+      "public_contracts": ["server/src/modules/reference-data/index.js", "server/src/modules/reference-data/contracts/**"],
+      "allowed_dependencies": ["platform/auth", "platform/audit", "platform/persistence", "platform/runtime", "shared/contracts", "process-configuration", "issues"], "ai_default_access": "read_write", "risk": "important"
+    },
+    "process-configuration": {
+      "type": "platform", "description": "跨模块状态、动态必填、阶段内容和交付物配置服务",
+      "owners": {"primary": "hengguan", "backup": "hengguan", "approvers": ["hengguan"]},
+      "paths": {"backend": ["server/src/modules/stage-content/**", "server/src/modules/process-configuration/**", "server/src/lib/status.js", "server/src/lib/status-permission.js", "server/src/lib/required-fields.js", "server/src/lib/stage-content.js"], "frontend": ["web/src/modules/process-configuration/**", "web/src/components/StageContentPanel.jsx", "web/src/components/StageConfiguration.jsx", "web/src/components/StageSectionLayout.jsx"], "tests": ["server/test/process-configuration/**"], "migrations": ["server/src/db/migrations/*stage*", "server/src/db/migrations/tdsql/*stage*"]},
+      "owned_tables": ["stage_scope", "stage_section", "stage_field_definition", "stage_field_status_rule", "stage_field_value", "deliverable_definition", "deliverable_status_rule", "deliverable_template_version", "content_config_revision"],
+      "public_contracts": ["server/src/modules/process-configuration/index.js", "server/src/modules/process-configuration/contracts/**"],
+      "allowed_dependencies": ["platform/auth", "platform/audit", "platform/attachments", "platform/persistence", "platform/runtime", "shared/contracts", "reference-data"], "ai_default_access": "read_write", "risk": "high"
+    },
+    "requirements": {
+      "type": "business", "description": "需求管理",
+      "owners": {"primary": "hengguan", "backup": "hengguan", "approvers": ["hengguan"]},
+      "paths": {"backend": ["server/src/modules/requirements/**"], "frontend": ["web/src/modules/requirements/**", "web/src/pages/Requirements.jsx", "web/src/components/editors/RequirementEditor.jsx"], "tests": ["server/test/requirements/**", "web/src/modules/requirements/**/*.test.*"], "migrations": ["server/src/db/migrations/*requirement*", "server/src/db/migrations/tdsql/*requirement*"]},
+      "owned_tables": ["requirement"], "public_contracts": ["server/src/modules/requirements/index.js", "server/src/modules/requirements/contracts/**"],
+      "allowed_dependencies": ["platform/auth", "platform/audit", "platform/attachments", "platform/persistence", "platform/runtime", "shared/contracts", "reference-data", "process-configuration"], "ai_default_access": "read_write", "risk": "normal"
+    },
+    "tickets": {
+      "type": "business", "description": "工单管理",
+      "owners": {"primary": "hengguan", "backup": "hengguan", "approvers": ["hengguan"]},
+      "paths": {"backend": ["server/src/modules/tickets/**"], "frontend": ["web/src/modules/tickets/**", "web/src/pages/Tickets.jsx", "web/src/components/editors/TicketEditor.jsx"], "tests": ["server/test/tickets/**", "web/src/modules/tickets/**/*.test.*"], "migrations": ["server/src/db/migrations/*ticket*", "server/src/db/migrations/tdsql/*ticket*"]},
+      "owned_tables": ["ticket"], "public_contracts": ["server/src/modules/tickets/index.js", "server/src/modules/tickets/contracts/**"],
+      "allowed_dependencies": ["platform/auth", "platform/audit", "platform/attachments", "platform/persistence", "platform/runtime", "shared/contracts", "reference-data", "process-configuration", "issues"], "ai_default_access": "read_write", "risk": "normal"
+    },
+    "delivery": {
+      "type": "business", "description": "开发、测试、影响和覆盖分析",
+      "owners": {"primary": "hengguan", "backup": "hengguan", "approvers": ["hengguan"]},
+      "paths": {"backend": ["server/src/modules/dev-tasks/**", "server/src/modules/test-tasks/**", "server/src/modules/analysis/**", "server/src/modules/delivery/**", "server/src/lib/impact-schema.js", "server/src/lib/deviation.js"], "frontend": ["web/src/modules/delivery/**", "web/src/pages/DevTasks.jsx", "web/src/pages/TestTasks.jsx", "web/src/components/editors/TaskEditor.jsx", "web/src/components/editors/ImpactAnalysisModal.jsx", "web/src/components/editors/CoverageAnalysisModal.jsx"], "tests": ["server/test/delivery/**"], "migrations": ["server/src/db/migrations/*impact*", "server/src/db/migrations/tdsql/*impact*"]},
+      "owned_tables": ["dev_task", "test_task", "impact_change_item", "coverage_item"], "public_contracts": ["server/src/modules/delivery/index.js", "server/src/modules/delivery/contracts/**"],
+      "allowed_dependencies": ["platform/auth", "platform/audit", "platform/attachments", "platform/persistence", "platform/runtime", "shared/contracts", "reference-data", "process-configuration", "requirements", "tickets"], "ai_default_access": "read_write", "risk": "important"
+    },
+    "release-apply": {
+      "type": "business", "description": "投产申请",
+      "owners": {"primary": "hengguan", "backup": "hengguan", "approvers": ["hengguan"]},
+      "paths": {"backend": ["server/src/modules/release-apply/**"], "frontend": ["web/src/modules/release/pages/ReleaseApplyPage.jsx", "web/src/pages/ReleaseApply.jsx", "web/src/components/editors/ReleaseApplyEditor.jsx"], "tests": ["server/test/release-apply/**"], "migrations": ["server/src/db/migrations/*release_apply*", "server/src/db/migrations/tdsql/*release_apply*"]},
+      "owned_tables": ["release_apply"], "public_contracts": ["server/src/modules/release-apply/index.js", "server/src/modules/release-apply/contracts/**"],
+      "allowed_dependencies": ["platform/auth", "platform/audit", "platform/attachments", "platform/persistence", "platform/runtime", "shared/contracts", "reference-data", "process-configuration", "requirements", "tickets", "delivery", "issues"], "ai_default_access": "read_write", "risk": "important"
+    },
+    "release": {
+      "type": "business", "description": "投产审批、会签和材料",
+      "owners": {"primary": "hengguan", "backup": "hengguan", "approvers": ["hengguan"]},
+      "paths": {"backend": ["server/src/modules/release/**", "server/src/lib/release-word.js"], "frontend": ["web/src/modules/release/**", "web/src/pages/Release.jsx", "web/src/components/editors/ReleaseDetail.jsx"], "tests": ["server/test/release/**"], "migrations": ["server/src/db/migrations/*release*", "server/src/db/migrations/tdsql/*release*"]},
+      "owned_tables": ["release_task", "release_system", "release_signoff"], "public_contracts": ["server/src/modules/release/index.js", "server/src/modules/release/contracts/**"],
+      "allowed_dependencies": ["platform/auth", "platform/audit", "platform/attachments", "platform/persistence", "platform/runtime", "shared/contracts", "reference-data", "process-configuration", "requirements", "tickets", "delivery", "release-apply"], "ai_default_access": "read_write", "risk": "high"
+    },
+    "issues": {
+      "type": "business", "description": "PAMS 问题快照和同步",
+      "owners": {"primary": "hengguan", "backup": "hengguan", "approvers": ["hengguan"]},
+      "paths": {"backend": ["server/src/modules/issues/**", "server/src/lib/pams.js", "server/src/lib/issue-sync-scheduler.js"], "frontend": ["web/src/modules/issues/**", "web/src/pages/Issues.jsx", "web/src/components/editors/IssueDetail.jsx"], "tests": ["server/test/issues/**"], "migrations": ["server/src/db/migrations/*issue*", "server/src/db/migrations/tdsql/*issue*"]},
+      "owned_tables": ["issue"], "public_contracts": ["server/src/modules/issues/index.js", "server/src/modules/issues/contracts/**"],
+      "allowed_dependencies": ["platform/auth", "platform/audit", "platform/persistence", "platform/runtime", "shared/contracts", "reference-data"], "ai_default_access": "read_write", "risk": "important"
+    },
+    "reporting": {
+      "type": "business", "description": "概览、仪表盘和跨模块只读投影",
+      "owners": {"primary": "hengguan", "backup": "hengguan", "approvers": ["hengguan"]},
+      "paths": {"backend": ["server/src/modules/overview/**", "server/src/modules/dashboard/**", "server/src/modules/reporting/**", "server/src/lib/chart-dims.js"], "frontend": ["web/src/modules/reporting/**", "web/src/pages/Overview.jsx", "web/src/pages/Dashboard.jsx", "web/src/components/dashboard/**"], "tests": ["server/test/reporting/**"]},
+      "owned_tables": ["saved_filter", "dashboard_chart"], "public_contracts": ["server/src/modules/reporting/index.js", "server/src/modules/reporting/contracts/**"],
+      "allowed_dependencies": ["platform/auth", "platform/attachments", "platform/persistence", "platform/runtime", "shared/contracts", "reference-data", "process-configuration", "requirements", "tickets", "delivery", "release-apply", "release", "issues"], "ai_default_access": "read_write", "risk": "important"
+    }
+  },
+  "shared_change_policy": {
+    "issue_required": true, "one_active_change_per_public_contract": true,
+    "preserve_existing_method_semantics": true, "prefer_new_semantic_method": true,
+    "forbid_versioned_method_names": ["*V2", "*V3", "*New"],
+    "require_old_behavior_regression_tests": true, "require_owner_approval": true
+  }
+}

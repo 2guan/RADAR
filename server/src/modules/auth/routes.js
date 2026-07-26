@@ -1,17 +1,16 @@
 /**
  * 文件：modules/auth/routes.js
+ * 说明：登录成功签发 JWT；/auth/me 返回前端用于菜单/路由/按钮级权限控制的数据。
+ *       验证码使用自绘 SVG，无外部依赖。
  * 用途：鉴权相关接口——登录、获取当前用户信息（含角色与权限集）、登出。
  *       改进：统一登录失败追踪（login_fail_tracker 表），防止用户枚举；
  *       输错 2 次后需要验证码；登录接口额外限流。
  * 作者：hengguan
- * 说明：登录成功签发 JWT；/auth/me 返回前端用于菜单/路由/按钮级权限控制的数据。
- *       验证码使用自绘 SVG，无外部依赖。
  */
 
-import { get, all, run } from '../../db/index.js';
-import { verifyPassword, hashPassword, validatePasswordComplexity, isPasswordExpired, getSecurityConfig } from '../../lib/password.js';
-import { ok, badRequest, unauthorized } from '../../lib/http.js';
-import { sanitizeText } from '../../lib/sanitize.js';
+import { get, all, run } from '../../platform/persistence/index.js';
+import { verifyPassword, hashPassword, validatePasswordComplexity, isPasswordExpired, getSecurityConfig } from '../../platform/auth/index.js';
+import { ok, badRequest } from '../../platform/runtime/index.js';
 import { createCaptcha, verifyCaptcha } from '../../lib/captcha.js';
 
 export default async function authRoutes(fastify) {

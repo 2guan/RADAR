@@ -1,0 +1,26 @@
+{
+  "reason": "These SQLite migrations predate the TDSQL migration stream. New schema changes must be paired by descriptive suffix.",
+  "sqliteOnly": [
+    "accounting_and_stage_attachments.sql",
+    "clear_default_attachment_required.sql",
+    "dashboard_charts_v2.sql",
+    "default_pending_release_point.sql",
+    "fix_role_default_theme.sql",
+    "issue.sql",
+    "login_fail_tracker.sql",
+    "perf_indexes.sql",
+    "proposer_to_array.sql",
+    "release_apply.sql",
+    "release_apply_delivery_units.sql",
+    "release_review_status.sql",
+    "release_task_entity.sql",
+    "requirement_issue_no.sql",
+    "role_default_theme.sql",
+    "security_hardening.sql",
+    "signature.sql",
+    "signoff_role.sql",
+    "system_change_depts.sql",
+    "ticket_analysis.sql"
+  ],
+  "tdsqlOnly": []
+}

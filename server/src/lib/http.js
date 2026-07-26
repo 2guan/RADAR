@@ -1,8 +1,8 @@
 /**
  * 文件：lib/http.js
+ * 说明：成功用 ok()，业务错误抛 HttpError，由全局错误处理器统一格式化。
  * 用途：统一 HTTP 响应封装与业务异常类型，保证全平台返回结构一致 {code,data,message}。
  * 作者：hengguan
- * 说明：成功用 ok()，业务错误抛 HttpError，由全局错误处理器统一格式化。
  */
 
 /**

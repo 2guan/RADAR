@@ -1,24 +1,24 @@
 /**
  * 文件：components/editors/ReleaseApplyEditor.jsx
+ * 说明：评审状态由所关联需求的投产审批评审状态派生（后端计算，前端只读展示）。
  * 用途：投产申请（版本变更申请）新增/编辑弹窗。新增时上方 TAB 选择需求/工单（可多选），
  *       已选逐条列出；下方填写变更编号（可自动生成）、变更系统（按所选需求/工单推荐）、
  *       变更内容、影响范围、实施机构（按系统所属机构返显，可编辑）、制品类型、新版本号等。
  * 作者：hengguan
- * 说明：评审状态由所关联需求的投产审批评审状态派生（后端计算，前端只读展示）。
  */
 
-import React, { useEffect, useRef, useState } from 'react';
-import { Form, Input, Row, Col, Button, Select, Tabs, Tag, Space, message, Tooltip } from 'antd';
+import { useEffect, useRef, useState } from 'react';
+import { Form, Input, Row, Col, Button, Select, Tabs, Tag, message, Tooltip } from 'antd';
 import { HistoryOutlined, CloseOutlined, ThunderboltOutlined, PlusOutlined, MinusCircleOutlined } from '@ant-design/icons';
 import DictSelect from '../DictSelect.jsx';
 import SystemSelect from '../SystemSelect.jsx';
-import StatusBadge, { getStatusType } from '../StatusBadge.jsx';
+import StatusBadge from '../StatusBadge.jsx';
 import HistoryDrawer from '../HistoryDrawer.jsx';
 import StageContentPanel from '../StageContentPanel.jsx';
 import StageSectionLayout from '../StageSectionLayout.jsx';
 import CodeLink from '../CodeLink.jsx';
 import EditorShell from './EditorShell.jsx';
-import { apiGet, apiPost, apiPut } from '../../api/client.js';
+import { apiGet, apiPost, apiPut } from '../../modules/release/api/index.js';
 import { useAppStore } from '../../stores/app.js';
 import { useResponsive } from '../../hooks/useResponsive.js';
 import { useStageFormConfig } from '../../hooks/useStageFormConfig.js';

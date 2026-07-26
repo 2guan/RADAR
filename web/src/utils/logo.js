@@ -1,3 +1,10 @@
+/**
+ * 文件：web/src/utils/logo.js
+ * 说明：本文件遵循模块边界；跨模块能力必须经公开契约访问。
+ * 用途：RADAR 前端界面或交互逻辑。
+ * 作者：hengguan
+ */
+
 const BLUE_FAVICON_PRESETS = new Set(['sky', 'emerald', 'forest', 'graphite']);
 
 export const BRAND_LOGO_SRC = '/logo/Radar.png';

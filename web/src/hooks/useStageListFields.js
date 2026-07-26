@@ -1,8 +1,9 @@
 /**
  * 文件：hooks/useStageListFields.js
+ * 说明：不在各页面复制扩展字段名单；新增字段保存后刷新页面即可自动出现。
  * 用途：将阶段配置中的“列表展示、筛选”标记转换为各业务列表可复用的列与筛选项。
  * 作者：Codex
- * 说明：不在各页面复制扩展字段名单；新增字段保存后刷新页面即可自动出现。
+ * 作者：hengguan
  */
 
 import { useEffect, useMemo, useState } from 'react';

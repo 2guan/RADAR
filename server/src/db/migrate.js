@@ -1,9 +1,9 @@
 /**
  * 文件：db/migrate.js
+ * 说明：迁移文件命名规范 NNNN_描述.sql（如 0001_init.sql），按 NNNN 升序执行。
  * 用途：数据库迁移执行器。按文件名序号顺序执行 migrations/ 目录下的 *.sql 文件，
  *       已执行的迁移记录在 _migrations 表中，保证幂等、可重复启动。
  * 作者：hengguan
- * 说明：迁移文件命名规范 NNNN_描述.sql（如 0001_init.sql），按 NNNN 升序执行。
  */
 
 import fs from 'node:fs';

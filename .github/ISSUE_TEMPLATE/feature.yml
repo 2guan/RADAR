@@ -1,0 +1,35 @@
+name: 功能、重构或规约变更
+description: 创建可追踪、可验收的 RADAR 需求
+title: "[REQ-YYYYMMDD-001] "
+labels: ["requirement"]
+body:
+  - type: input
+    id: requirement
+    attributes:
+      label: 需求编号
+      placeholder: REQ-YYYYMMDD-001
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: 用户结果、范围与验收标准
+      description: 请同时说明明确不做项。
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: 模块、API、数据、权限、审计和外网影响
+    validations:
+      required: true
+  - type: checkboxes
+    id: risk
+    attributes:
+      label: 风险项
+      options:
+        - label: 涉及公共契约或 platform/shared
+        - label: 涉及数据库或历史数据
+        - label: 涉及认证、权限、审计或附件
+        - label: 涉及外网访问
+

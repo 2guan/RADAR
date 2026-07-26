@@ -1,0 +1,24 @@
+# 单维护人过渡期：所有受管路径由 hengguan 负责。
+# 多人协作启用前，按 governance/modules.yaml 中的模块 Owner 替换为实际 GitHub 用户或团队。
+* @hengguan
+
+/governance/ @hengguan
+/docs/governance/ @hengguan
+/docs/architecture/ @hengguan
+/docs/planning/ @hengguan
+/docs/requirements/ @hengguan
+/scripts/ @hengguan
+/.github/ @hengguan
+/AGENTS.md @hengguan
+/CONTRIBUTING.md @hengguan
+
+/server/src/platform/ @hengguan
+/server/src/shared/ @hengguan
+/server/src/modules/requirements/ @hengguan
+/server/src/modules/tickets/ @hengguan
+/server/src/modules/ @hengguan
+/server/test/ @hengguan
+/web/src/platform/ @hengguan
+/web/src/shared/ @hengguan
+/web/src/modules/ @hengguan
+/web/src/ @hengguan

@@ -1,12 +1,11 @@
 /**
  * 文件：components/editors/EditorShell.jsx
+ * 说明：保存/取消语义与 Modal 保持一致：onOk=保存、onCancel=关闭/返回；okButtonProps.style.display==='none' 时隐藏保存按钮（只读）。
  * 用途：详情编辑器的可切换外壳。mode='modal' 时渲染为 AntD Modal（原有弹窗形态）；
  *       mode='page' 时渲染为详情单页布局（顶部操作条 + 正文区），供通过 URL 直达的详情单页复用同一份正文。
  * 作者：hengguan
- * 说明：保存/取消语义与 Modal 保持一致：onOk=保存、onCancel=关闭/返回；okButtonProps.style.display==='none' 时隐藏保存按钮（只读）。
  */
 
-import React from 'react';
 import { Modal, Button } from 'antd';
 import { ArrowLeftOutlined } from '@ant-design/icons';
 import { getScopedPopupContainer } from '../scopedPopup.js';

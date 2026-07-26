@@ -1,10 +1,10 @@
 /**
  * 文件：db/providers/sqlite.js
+ * 说明：上层业务统一 await 数据库方法；SQLite provider 内部使用语句缓存、
+ *       WAL 与外键开关，保持原文件库场景下的性能与一致性。
  * 用途：SQLite 数据库访问适配器。封装 node:sqlite 的同步 API，
  *       对外提供 async 风格的 get/all/run/exec/tx/close 接口。
  * 作者：hengguan
- * 说明：上层业务统一 await 数据库方法；SQLite provider 内部使用语句缓存、
- *       WAL 与外键开关，保持原文件库场景下的性能与一致性。
  */
 
 import { DatabaseSync } from 'node:sqlite';

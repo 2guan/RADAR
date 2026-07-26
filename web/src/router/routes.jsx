@@ -1,32 +1,42 @@
 /**
  * 文件：router/routes.jsx
+ * 说明：遵循项目研发规约；跨模块能力仅可经公开契约访问。
  * 用途：业务路由定义。供主路由与多页签工作区共用，避免维护两份页面映射。
  * 作者：hengguan
  */
 
-import React from 'react';
+import { Suspense, lazy } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAppStore } from '../stores/app.js';
-import Dashboard from '../pages/Dashboard.jsx';
-import Overview from '../pages/Overview.jsx';
-import Requirements from '../pages/Requirements.jsx';
-import Tickets from '../pages/Tickets.jsx';
-import Issues from '../pages/Issues.jsx';
-import DevTasks from '../pages/DevTasks.jsx';
-import { SitPage, UatPage, NftPage, SecPage } from '../pages/TestTasks.jsx';
-import Release from '../pages/Release.jsx';
-import ReleaseApply from '../pages/ReleaseApply.jsx';
-import Users from '../pages/Users.jsx';
-import Settings from '../pages/Settings.jsx';
-import {
-  RequirementDetailPage,
-  DevTaskDetailPage,
-  TestTaskDetailPage,
-  ReleaseApplyDetailPage,
-  ReleaseApprovalDetailPage,
-} from '../pages/DetailPages.jsx';
 import { getHomePath } from './home.js';
 
+// 统一适配具名导出页面，确保每个业务模块都按需加载而不复制页面入口逻辑。
+const lazyNamed = (load, name) => lazy(async () => ({ default: (await load())[name] }));
+const Dashboard = lazy(() => import('../modules/reporting/pages/DashboardPage.jsx'));
+const Overview = lazy(() => import('../modules/reporting/pages/OverviewPage.jsx'));
+const Requirements = lazy(() => import('../modules/requirements/pages/RequirementsPage.jsx'));
+const Tickets = lazy(() => import('../modules/tickets/pages/TicketsPage.jsx'));
+const Issues = lazy(() => import('../modules/issues/pages/IssuesPage.jsx'));
+const DevTasks = lazy(() => import('../modules/delivery/pages/DevTasksPage.jsx'));
+const SitPage = lazyNamed(() => import('../modules/delivery/pages/TestTasksPage.jsx'), 'SitPage');
+const UatPage = lazyNamed(() => import('../modules/delivery/pages/TestTasksPage.jsx'), 'UatPage');
+const NftPage = lazyNamed(() => import('../modules/delivery/pages/TestTasksPage.jsx'), 'NftPage');
+const SecPage = lazyNamed(() => import('../modules/delivery/pages/TestTasksPage.jsx'), 'SecPage');
+const Release = lazy(() => import('../modules/release/pages/ReleasePage.jsx'));
+const ReleaseApply = lazy(() => import('../modules/release/pages/ReleaseApplyPage.jsx'));
+const Users = lazy(() => import('../modules/identity-access/pages/UsersPage.jsx'));
+const Settings = lazy(() => import('../modules/settings/pages/SettingsPage.jsx'));
+const RequirementDetailPage = lazyNamed(() => import('../pages/DetailPages.jsx'), 'RequirementDetailPage');
+const DevTaskDetailPage = lazyNamed(() => import('../pages/DetailPages.jsx'), 'DevTaskDetailPage');
+const TestTaskDetailPage = lazyNamed(() => import('../pages/DetailPages.jsx'), 'TestTaskDetailPage');
+const ReleaseApplyDetailPage = lazyNamed(() => import('../pages/DetailPages.jsx'), 'ReleaseApplyDetailPage');
+const ReleaseApprovalDetailPage = lazyNamed(() => import('../pages/DetailPages.jsx'), 'ReleaseApprovalDetailPage');
+
+function LoadingPage() {
+  return <div style={{ padding: 24, color: 'var(--radar-text-secondary)' }}>页面加载中…</div>;
+}
+
+// 路径与 RBAC 模块键的映射是前端鉴权和工作区标签的共同事实来源。
 export const ROUTE_MODULE_PREFIXES = [
   ['/dashboard', 'dashboard'], ['/overview', 'overview'],
   ['/requirements', 'requirement'], ['/tickets', 'ticket'], ['/issues', 'issue'],
@@ -36,6 +46,7 @@ export const ROUTE_MODULE_PREFIXES = [
 ];
 
 export function getRouteModule(path) {
+  // 按声明顺序匹配，使更具体的 /release/apply 优先于 /release。
   return ROUTE_MODULE_PREFIXES.find(([p]) => path === p || path.startsWith(`${p}/`))?.[1];
 }
 
@@ -45,6 +56,7 @@ function IndexRedirect() {
   return <Navigate to={homePath} replace />;
 }
 
+// 主区域和多页签工作区复用这一份路由定义，防止两处页面映射逐渐偏离。
 export const MAIN_ROUTES = [
   { index: true, element: <IndexRedirect /> },
   { path: 'dashboard', element: <Dashboard /> },
@@ -70,12 +82,13 @@ export const MAIN_ROUTES = [
 ];
 
 export function renderMainRouteElements() {
+  // 每条懒加载路由都由同一 Suspense 回退包裹，避免切换页面时出现空白区域。
   return MAIN_ROUTES.map((route) => (
     <Route
       key={route.index ? 'index' : route.path}
       index={route.index}
       path={route.path}
-      element={route.element}
+      element={<Suspense fallback={<LoadingPage />}>{route.element}</Suspense>}
     />
   ));
 }

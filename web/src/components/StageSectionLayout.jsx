@@ -1,11 +1,12 @@
 /**
  * 文件：components/StageSectionLayout.jsx
- * 用途：将详情页内置业务模块的分区配置转换为统一的布局样式。
  * 说明：历史详情页保留各自的专业表单结构，但模块所在左/右/整行及排序均从阶段配置读取。
  * 作者：Codex
+ * 用途：将详情页内置业务模块的分区配置转换为统一的布局样式。
+ * 作者：hengguan
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { apiGet } from '../api/client.js';
 import { buildStageSectionLayout } from '../utils/stageSectionLayout.js';
 

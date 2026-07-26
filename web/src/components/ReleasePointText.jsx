@@ -1,10 +1,10 @@
 /**
  * 文件：components/ReleasePointText.jsx
+ * 说明：遵循项目研发规约；跨模块能力仅可经公开契约访问。
  * 用途：统一渲染投产点文本、选项标签与投产点待定占位值。
  * 作者：hengguan
  */
 
-import React from 'react';
 
 export const PENDING_RELEASE_POINT = '投产点待定';
 

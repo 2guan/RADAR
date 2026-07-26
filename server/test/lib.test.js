@@ -1,5 +1,6 @@
 /**
  * 文件：test/lib.test.js
+ * 说明：遵循项目研发规约；跨模块能力仅可经公开契约访问。
  * 用途：核心纯函数库单元测试（密码哈希、排期偏差率）。不依赖数据库与网络，快速回归。
  * 作者：hengguan
  * 运行：cd server && npm test
@@ -15,6 +16,18 @@ import { exportXlsx } from '../src/lib/excel.js';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
 import { normalizeRequiredFieldConfig, REQUIRED_FIELD_CONFIG_MODULES, REQUIRED_FIELD_MODULES } from '../src/lib/required-fields.js';
+import { WORK_ITEM_TYPES, isWorkItemType } from '../src/shared/contracts/work-item.js';
+import { REQUIREMENT_WORK_ITEM_TYPE } from '../src/modules/requirements/contracts/work-item.js';
+import { TICKET_WORK_ITEM_TYPE } from '../src/modules/tickets/contracts/work-item.js';
+
+test('工作项公共契约：需求和工单保持独立且类型受控', () => {
+  assert.deepEqual(WORK_ITEM_TYPES, ['requirement', 'ticket']);
+  assert.equal(REQUIREMENT_WORK_ITEM_TYPE, 'requirement');
+  assert.equal(TICKET_WORK_ITEM_TYPE, 'ticket');
+  assert.equal(isWorkItemType('requirement'), true);
+  assert.equal(isWorkItemType('ticket'), true);
+  assert.equal(isWorkItemType('release'), false);
+});
 
 test('密码哈希：正确密码校验通过、错误密码失败', () => {
   const h = hashPassword('admin2026');
@@ -316,7 +329,7 @@ import { validatePasswordComplexity } from '../src/lib/password.js';
 
 test('密码复杂度校验：满足各项复杂度要求时通过，不满足时拒绝', () => {
   // 满足：大写、小写、数字、特殊字符，长度>=8
-  assert.equal(validatePasswordComplexity('Radar@2026!'), true);
+  assert.equal(validatePasswordComplexity('DemoPassword!2026!'), true);
   // 长度不够
   assert.equal(validatePasswordComplexity('Rad@12'), false);
   // 无大写

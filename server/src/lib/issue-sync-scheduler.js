@@ -1,11 +1,12 @@
 /**
  * 文件：lib/issue-sync-scheduler.js
- * 用途：按系统设置定时拉取已同步问题的详情，支持每日、每 N 小时、每 N 分钟。
  * 说明：配置保存在 app_config；单进程内只运行一个检查定时器，任务执行中不重复启动。
+ * 用途：按系统设置定时拉取已同步问题的详情，支持每日、每 N 小时、每 N 分钟。
+ * 作者：hengguan
  */
 
-import { all, get, run } from '../db/index.js';
-import { startIssueDetailSync, syncIssueOverview } from '../modules/issues/routes.js';
+import { all, run } from '../db/index.js';
+import { startIssueDetailSync, syncIssueOverview } from '../modules/issues/application/sync.js';
 import { logger } from './logger.js';
 
 const CONFIG_KEYS = [
@@ -21,6 +22,7 @@ const CONFIG_KEYS = [
   'issue.sync.overview.lastRunAt',
 ];
 
+// 进程内互斥：防止定时器重叠触发同一批问题同步。
 let timer = null;
 let ticking = false;
 
@@ -48,6 +50,7 @@ function isDue(schedule, now) {
   if (!schedule.enabled) return false;
   const parsedLast = schedule.lastRunAt ? new Date(schedule.lastRunAt) : null;
   const last = parsedLast && !Number.isNaN(parsedLast.getTime()) ? parsedLast : null;
+  // 每日模式按当天目标时刻判断；间隔模式则按最近启动时间计算。
   if (schedule.mode === 'daily') {
     const match = /^(\d{1,2}):(\d{2})$/.exec(schedule.dailyTime);
     if (!match) return false;
@@ -77,6 +80,7 @@ async function tick() {
   try {
     const now = new Date();
     const schedules = await readConfig();
+    // 概述与明细各自维护最近启动时间，可独立启停和调度。
     if (isDue(schedules.overview, now)) {
       await syncIssueOverview();
       await markRunStarted('issue.sync.overview.lastRunAt', now);

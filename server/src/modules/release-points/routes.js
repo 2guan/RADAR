@@ -1,17 +1,17 @@
 /**
  * 文件：modules/release-points/routes.js
+ * 说明：默认投产窗口判定：① 若有 is_default=1 的投产点取之；② 否则取今天起最近的未来投产点；
+ *       ③ 再否则取最新日期投产点；若只有非日期投产点则取最新一条。同一时刻最多一个默认投产点。
  * 用途：投产点（投产版本窗口）管理接口。除标准 CRUD 外，提供"设为默认/取消默认"，
  *       以及"当前投产窗口"判定接口（供顶栏全局选择器初始化）。
  * 作者：hengguan
- * 说明：默认投产窗口判定：① 若有 is_default=1 的投产点取之；② 否则取今天起最近的未来投产点；
- *       ③ 再否则取最新日期投产点；若只有非日期投产点则取最新一条。同一时刻最多一个默认投产点。
  */
 
-import { get, all, run, tx } from '../../db/index.js';
+import { get, all, run, tx } from '../../platform/persistence/index.js';
 import { listQuery } from '../../lib/query.js';
 import { registerIO } from '../../lib/io.js';
-import { auditCreate, auditUpdate, auditDelete } from '../../lib/audit.js';
-import { ok, notFound, badRequest } from '../../lib/http.js';
+import { auditCreate, auditUpdate, auditDelete } from '../../platform/audit/index.js';
+import { ok, notFound, badRequest } from '../../platform/runtime/index.js';
 
 const COLUMNS = ['id', 'release_date', 'version_type', 'remark', 'is_default', 'is_archived', 'created_at'];
 const LABELS = { release_date: '投产日期', version_type: '版本类型', remark: '备注' };

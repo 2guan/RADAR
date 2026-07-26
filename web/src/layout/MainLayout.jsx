@@ -1,12 +1,12 @@
 /**
  * 文件：layout/MainLayout.jsx
+ * 说明：左侧菜单栏、上方导航栏以及内容区的企业风格整体布局，支持抽屉式的移动端自适应。
  * 用途：主框架布局（企业风，配色随平台预设）。固定侧边栏（品牌 + 自定义导航 + 用户）+ 顶栏
  *       （页面标题 / 投产窗口胶囊 / 主题切换 / 用户菜单）+ 内容区 + 页脚。
  * 作者：hengguan
- * 说明：左侧菜单栏、上方导航栏以及内容区的企业风格整体布局，支持抽屉式的移动端自适应。
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Layout, Select, Button, Dropdown, Avatar, Drawer, Form, Input, Modal, message, theme as antdTheme, ConfigProvider, Empty, Tooltip } from 'antd';
 import {
   MenuOutlined, BulbOutlined, BulbFilled, UserOutlined, LogoutOutlined, RocketOutlined, DownOutlined,

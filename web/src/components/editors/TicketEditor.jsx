@@ -1,15 +1,15 @@
 /**
  * 文件：components/editors/TicketEditor.jsx
+ * 说明：需求明细抽屉编辑器，支持需求的创建、编辑、归属主责系统、附件关联以及各项开发/测试任务的联动修改。
  * 用途：需求新增/编辑弹窗（可复用：工单分析页与版本概览均使用）。
  *       双栏卡片布局；字体紧凑；
  *       协同改造/测试系统采用下拉选择 + 外置已选区双模式展示。
  * 作者：hengguan
- * 说明：需求明细抽屉编辑器，支持需求的创建、编辑、归属主责系统、附件关联以及各项开发/测试任务的联动修改。
  */
 
-import React, { useEffect, useRef, useState } from 'react';
-import { AutoComplete, Form, Input, DatePicker, Row, Col, Button, Select, Tag, Space, message, Tooltip } from 'antd';
-import { HistoryOutlined, CloseOutlined, CheckCircleOutlined } from '@ant-design/icons';
+import { useEffect, useRef, useState } from 'react';
+import { AutoComplete, Form, Input, DatePicker, Row, Col, Button, Select, Tag, message, Tooltip } from 'antd';
+import { HistoryOutlined, CloseOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import DictSelect from '../DictSelect.jsx';
 import PersonPicker from '../PersonPicker.jsx';
@@ -19,7 +19,7 @@ import StageSectionLayout from '../StageSectionLayout.jsx';
 import CodeLink from '../CodeLink.jsx';
 import EditorShell from './EditorShell.jsx';
 import { getStatusType, statusSelectWidth } from '../StatusBadge.jsx';
-import { apiGet, apiPost, apiPut } from '../../api/client.js';
+import { apiGet, apiPost, apiPut } from '../../modules/tickets/api/index.js';
 import { useAppStore } from '../../stores/app.js';
 import { useResponsive } from '../../hooks/useResponsive.js';
 import { useRequiredFields } from '../../hooks/useRequiredFields.js';

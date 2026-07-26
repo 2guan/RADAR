@@ -1,11 +1,11 @@
 /**
  * 文件：components/editors/AnalysisHeader.jsx
+ * 说明：遵循项目研发规约；跨模块能力仅可经公开契约访问。
  * 用途：影响性分析 / 测试覆盖性分析弹窗的公共头部，展示需求/工单编号、名称、主责系统、协同系统。
  *       风格与详情页 meta-bar 一致。
  * 作者：hengguan
  */
 
-import React from 'react';
 import { Tag } from 'antd';
 
 function SysTags({ names }) {

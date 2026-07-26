@@ -1,16 +1,16 @@
 /**
  * 文件：pages/Login.jsx
+ * 说明：验证码通过 GET /api/auth/captcha 获取，不依赖外部服务。
  * 用途：登录页。读取平台公开信息渲染标题，提交登录后保存 token 并加载用户信息跳转首页。
  *       改进：支持验证码输入（输错2次密码后自动出现）。
  * 作者：hengguan
- * 说明：验证码通过 GET /api/auth/captcha 获取，不依赖外部服务。
  */
 
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Card, Form, Input, Button, Typography, message } from 'antd';
 import { UserOutlined, LockOutlined, SafetyOutlined } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { apiPost, apiGet, TOKEN_KEY, rawClient } from '../api/client.js';
+import { apiPost, apiGet, TOKEN_KEY } from '../api/client.js';
 import { useAppStore } from '../stores/app.js';
 import { getHomePath } from '../router/home.js';
 

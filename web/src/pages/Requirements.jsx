@@ -1,15 +1,15 @@
 /**
  * 文件：pages/Requirements.jsx
+ * 说明：需求列表管理页面，支持新建、批量导入、状态筛选、模糊搜索和投产点关联，提供入口至需求编辑器。
  * 用途：需求分析页面。需求列表（默认按当前投产窗口过滤）+ 新增/编辑（复用 RequirementEditor）
  *       + 历史记录 + 导入导出/模板。
  * 作者：hengguan
- * 说明：需求列表管理页面，支持新建、批量导入、状态筛选、模糊搜索和投产点关联，提供入口至需求编辑器。
  */
 
-import React, { useRef, useState, useEffect } from 'react';
-import { Card, Button, Space, Tag, Popconfirm, message, Upload, Dropdown, Tooltip } from 'antd';
+import { useRef, useState, useEffect } from 'react';
+import { Card, Button, Space, Tag, Popconfirm, message, Tooltip } from 'antd';
 import {
-  PlusOutlined, EditOutlined, DeleteOutlined, ImportOutlined, ExportOutlined, DownloadOutlined, DownOutlined,
+  PlusOutlined, EditOutlined, DeleteOutlined, ImportOutlined, ExportOutlined,
 } from '@ant-design/icons';
 import DataTable from '../components/DataTable.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
@@ -17,8 +17,8 @@ import HistoryDrawer from '../components/HistoryDrawer.jsx';
 import RequirementEditor from '../components/editors/RequirementEditor.jsx';
 import FilterPanel from '../components/FilterPanel.jsx';
 import Can from '../components/Can.jsx';
-import { apiPost, apiDelete, apiGet } from '../api/client.js';
-import { exportXlsx, downloadGet } from '../utils/io.js';
+import { apiPost, apiDelete, apiGet } from '../modules/requirements/api/index.js';
+import { exportXlsx } from '../utils/io.js';
 import { useAppStore } from '../stores/app.js';
 import ImportModal from '../components/ImportModal.jsx';
 import { makeReleasePointOptions, ReleasePointText } from '../components/ReleasePointText.jsx';
@@ -44,6 +44,7 @@ export default function Requirements() {
   const [users, setUsers] = useState([]);
   const [systems, setSystems] = useState([]);
 
+  // 初始化需求筛选需要的字典；流程状态只保留需求阶段，避免跨模块状态混用。
   useEffect(() => {
     apiGet('/release-points/all').then(setPoints).catch(() => {});
     apiGet('/dict/by-category/org').then(setOrgs).catch(() => {});
@@ -65,6 +66,7 @@ export default function Requirements() {
   const userOptions = users.map(u => ({ value: u.name, label: `${u.name} (${u.phone})` }));
   const systemOptions = systems.map(s => ({ value: s.sys_code, label: `${s.sys_code} - ${s.sys_name}` }));
 
+  // 需求的固定筛选字段与可配置的阶段字段合并为同一份列表契约。
   const filterConfigs = [
     { field: 'org', label: '实施机构', type: 'select', op: 'in', options: orgOptions, isPrimary: true },
     { field: 'req_code', label: '需求编号', type: 'input', isPrimary: true, op: 'like', placeholder: '需求编号检索' },
@@ -82,6 +84,7 @@ export default function Requirements() {
     ...stageList.filterConfigs,
   ];
 
+  // 将筛选控件值规范为服务端识别的字段、操作符和值三元组。
   const handleFilterChange = (vals) => {
     const arr = Object.entries(vals)
       .map(([field, value]) => {
@@ -94,12 +97,14 @@ export default function Requirements() {
 
   const fetcher = (q) => apiPost('/requirements/list', q);
 
+  // 新建和编辑共用编辑器；有行数据时才携带既有记录标识。
   const openEdit = (row) => { setEditId(row?.id || null); setEditOpen(true); };
   const openCreate = () => { setEditId(null); setEditOpen(true); };
   const onDelete = async (row) => { await apiDelete(`/requirements/${row.id}`); message.success('已删除'); tableRef.current?.reload(); };
 
 
 
+  // 关联开发或测试任务的需求禁止删除，避免破坏交付链路的可追溯性。
   const columns = [
     { title: '状态', dataIndex: 'status', key: 'status', align: 'center', render: (s) => <StatusBadge status={s} /> },
     {

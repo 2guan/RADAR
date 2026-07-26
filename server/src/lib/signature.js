@@ -1,8 +1,8 @@
 /**
  * 文件：lib/signature.js
+ * 说明：签名按 signatures/<user_id>/ 分目录落盘；仅接受 PNG/JPEG，限制体积，文件名加随机前缀防冲突。
  * 用途：电子签名图片的存取辅助。解析前端 base64 DataURL、落盘存储、回读为 DataURL 供内嵌展示。
  * 作者：hengguan
- * 说明：签名按 signatures/<user_id>/ 分目录落盘；仅接受 PNG/JPEG，限制体积，文件名加随机前缀防冲突。
  */
 
 import fs from 'node:fs';

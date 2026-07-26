@@ -1,12 +1,11 @@
 /**
  * 文件：components/CodeLink.jsx
+ * 说明：module 取值见 router/detailLinks.js；无 code 时回退为纯文本占位，不可点击。
  * 用途：可点击复制详情单页链接的「编号」展示组件。复用于各详情弹窗标题栏的编号位置：
  *       点击即把该编号对应的详情单页完整链接写入剪贴板，便于分享直达。
  * 作者：hengguan
- * 说明：module 取值见 router/detailLinks.js；无 code 时回退为纯文本占位，不可点击。
  */
 
-import React from 'react';
 import { Tooltip, message } from 'antd';
 import { LinkOutlined } from '@ant-design/icons';
 import { detailUrl } from '../router/detailLinks.js';

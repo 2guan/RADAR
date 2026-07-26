@@ -1,31 +1,27 @@
 /**
  * 文件：modules/release/routes.js
- * 用途：投产审批模块接口。审批对象为「投产申请」中所选择的需求/工单/问题（逐条展开），
- *       提供列表、详情（含评审会签、投产信息、关联制品情况）、负责人/状态/评审状态更新、会签签署。
- * 作者：hengguan
  * 说明：投产任务（release_task）以「实体编号 + 申请投产点」为唯一审批实例，entity_type 区分类型；
  *       首次打开某个申请投产点下的详情时惰性创建投产任务与会签项（不再有「UAT 终态方可发起」的限制）。
  *       「各系统投产登记」改为「关联制品情况」：读取引用了该需求/工单/问题的投产申请制品信息。
+ * 用途：投产审批模块接口。审批对象为「投产申请」中所选择的需求/工单/问题（逐条展开），
+ *       提供列表、详情（含评审会签、投产信息、关联制品情况）、负责人/状态/评审状态更新、会签签署。
+ * 作者：hengguan
  */
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { get, all, run, tx, dialect } from '../../db/index.js';
-import { config } from '../../config.js';
-import { auditUpdate } from '../../lib/audit.js';
+import { get, all, run, tx, dialect } from '../../platform/persistence/index.js';
+import { auditUpdate } from '../../platform/audit/index.js';
 import { windowIds } from '../../lib/window.js';
-import { ok, notFound, badRequest, forbidden } from '../../lib/http.js';
-import { assertStatusChangePermission } from '../../lib/status-permission.js';
+import { ok, notFound, badRequest, forbidden, parseJsonArray } from '../../platform/runtime/index.js';
+import { assertStatusChangePermission, defaultDictAttr, defaultProcessStatus, statusTypeForReleaseStatus, validateRequiredFields } from '../process-configuration/index.js';
 import { exportXlsx } from '../../lib/excel.js';
-import { signatureDataUrl } from '../../lib/signature.js';
+import { signatureDataUrl, resolveAttachmentPath } from '../../platform/attachments/index.js';
 import { buildReleaseWordDoc } from '../../lib/release-word.js';
-import { getWorkItem } from '../../lib/work-items.js';
-import { defaultDictAttr, defaultProcessStatus } from '../../lib/status.js';
+import { getWorkItem } from '../delivery/index.js';
 import { formatAttachments } from '../../lib/resolver.js';
-import { parseJsonArray } from '../../lib/json.js';
-import { statusTypeForReleaseStatus, validateRequiredFields } from '../../lib/required-fields.js';
-import { appendStageExcelValues, getStageExcelColumns, validateStageContent } from '../../lib/stage-content.js';
+import { appendStageExcelValues, getStageExcelColumns, validateStageContent } from '../process-configuration/index.js';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
 
@@ -526,7 +522,7 @@ async function uploadedControlTableAttachment(releaseTaskId) {
     releaseTaskId, '投产变更控制表',
   );
   if (!attachment?.stored_path) return null;
-  const abs = path.join(config.attachmentDir, attachment.stored_path);
+  const abs = resolveAttachmentPath(attachment.stored_path);
   try {
     const buffer = await fs.readFile(abs);
     return { buffer, filename: attachment.filename || '投产变更控制表.xlsx' };

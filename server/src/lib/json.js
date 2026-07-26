@@ -1,10 +1,10 @@
 /**
  * 文件：lib/json.js
+ * 说明：业务模块读取 JSON 字段时应优先使用这里的 parseJsonArray/parseJsonObject，
+ *       避免直接 JSON.parse 导致 TDSQL 返回对象时发生异常。
  * 用途：统一处理数据库 JSON 字段的解析兼容。SQLite 通常返回 JSON 字符串，
  *       TDSQL/MySQL 驱动可能直接返回数组或对象，本工具负责抹平差异。
  * 作者：hengguan
- * 说明：业务模块读取 JSON 字段时应优先使用这里的 parseJsonArray/parseJsonObject，
- *       避免直接 JSON.parse 导致 TDSQL 返回对象时发生异常。
  */
 
 /** 按通用 JSON 值解析；对象/数组原样返回，字符串尝试 JSON.parse，失败则返回兜底值。 */

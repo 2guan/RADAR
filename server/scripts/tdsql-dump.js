@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 /**
  * 文件：scripts/tdsql-dump.js
- * 用途：TDSQL MySQL 兼容版原生卸数脚本。调用系统 mysqldump，
- *       将指定数据库导出为 .sql 或 .sql.gz 文件，不经过 SQLite 转换。
- * 作者：hengguan
  * 说明：适用于 TDSQL 到 TDSQL 的离线迁移、物理隔离交付和数据库原生逻辑备份。
  *       密码通过 MYSQL_PWD 环境变量传给子进程，避免出现在命令参数列表中。
  *
  * 示例：
  *   node scripts/tdsql-dump.js --output ./radar-tdsql-dump.sql.gz
  *   node scripts/tdsql-dump.js --source-host 127.0.0.1 --source-port 3306 --source-database radar --source-user radar --source-password secret --output ./dump.sql
+ * 用途：TDSQL MySQL 兼容版原生卸数脚本。调用系统 mysqldump，
+ *       将指定数据库导出为 .sql 或 .sql.gz 文件，不经过 SQLite 转换。
+ * 作者：hengguan
  */
 
 import fs from 'node:fs';

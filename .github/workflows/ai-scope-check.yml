@@ -1,0 +1,29 @@
+name: AI Scope Check
+
+on:
+  pull_request:
+
+jobs:
+  scope:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Resolve requirement scope from PR title or body
+        id: requirement
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          requirement_id=$(printf '%s\n%s' "$TITLE" "$BODY" | grep -oE 'REQ-[0-9]{8}-[0-9]{3}' | head -1 || true)
+          test -n "$requirement_id"
+          scope="docs/requirements/$requirement_id/ai-task-scope.yaml"
+          test -f "$scope"
+          echo "scope=$scope" >> "$GITHUB_OUTPUT"
+      - name: Enforce changed files against AI task scope
+        run: node scripts/check-ai-scope.mjs --scope "${{ steps.requirement.outputs.scope }}" --base "origin/${{ github.base_ref }}" --head HEAD
+

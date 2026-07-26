@@ -1,6 +1,8 @@
 /**
  * 文件：lib/status-permission.js
+ * 说明：遵循项目研发规约；跨模块能力仅可经公开契约访问。
  * 用途：统一校验业务阶段状态的调整权限，防止绕过前端控件直接修改状态。
+ * 作者：hengguan
  */
 
 import { forbidden } from './http.js';

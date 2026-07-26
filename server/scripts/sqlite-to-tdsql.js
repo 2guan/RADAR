@@ -1,9 +1,6 @@
 #!/usr/bin/env node
 /**
  * 文件：scripts/sqlite-to-tdsql.js
- * 用途：RADAR 应用级数据库迁移工具。支持 SQLite -> TDSQL、TDSQL -> SQLite、
- *       TDSQL -> TDSQL 三种方向，按业务表依赖顺序迁移数据并处理 JSON 字段差异。
- * 作者：hengguan
  * 说明：该脚本面向跨数据库形态和应用字段兼容场景，保留原始 id，支持 dry-run
  *       和 truncate；TDSQL 直连迁移使用 source/target 前缀参数区分源库和目标库。
  *
@@ -17,6 +14,9 @@
  *   TDSQL_HOST/TDSQL_PORT/TDSQL_USER/TDSQL_PASSWORD/TDSQL_DATABASE/TDSQL_SSL
  * 同时兼容 MySQL 习惯命名：
  *   MYSQL_HOST/MYSQL_PORT/MYSQL_USER/MYSQL_PASSWORD/MYSQL_DB/MYSQL_SSL
+ * 用途：RADAR 应用级数据库迁移工具。支持 SQLite -> TDSQL、TDSQL -> SQLite、
+ *       TDSQL -> TDSQL 三种方向，按业务表依赖顺序迁移数据并处理 JSON 字段差异。
+ * 作者：hengguan
  */
 
 import fs from 'node:fs';

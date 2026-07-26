@@ -1,0 +1,7 @@
+{
+  "schema_version": "1.0",
+  "grandfathered_route_to_legacy_edges": 0,
+  "review_by": "2026-08-30",
+  "approved_by": "hengguan",
+  "remediation": "旧路由对 lib/db/shared 的跨模块直连已完成迁移；新增此类引用将立即失败。后续继续将路由中的业务编排迁移至模块 application 与 infrastructure。"
+}

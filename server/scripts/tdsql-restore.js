@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 /**
  * 文件：scripts/tdsql-restore.js
- * 用途：TDSQL MySQL 兼容版原生装数脚本。调用系统 mysql，
- *       将 .sql 或 .sql.gz 文件恢复到目标 TDSQL 数据库。
- * 作者：hengguan
  * 说明：适用于 TDSQL 原生 SQL 离线备份恢复；默认会创建不存在的目标库，
  *       支持 --drop-database --force 重建目标库。密码通过 MYSQL_PWD 传给子进程。
  * 示例：
  *   node scripts/tdsql-restore.js --input ./radar-tdsql-dump.sql.gz
  *   node scripts/tdsql-restore.js --target-host 127.0.0.1 --target-port 3306 --target-database radar --target-user radar --target-password secret --input ./dump.sql
+ * 用途：TDSQL MySQL 兼容版原生装数脚本。调用系统 mysql，
+ *       将 .sql 或 .sql.gz 文件恢复到目标 TDSQL 数据库。
+ * 作者：hengguan
  */
 
 import fs from 'node:fs';

@@ -1,10 +1,10 @@
 /**
  * 文件：lib/pams.js
+ * 说明：基于 Node 原生 fetch（Node ≥18 内置）；接口返回结构为 { success, data, ... }，
+ *       本模块统一校验 success 并返回 data，异常抛 HttpError 由上层捕获处理。
  * 用途：外部 PAMS 问题管理系统接口客户端。封装统一鉴权（x-api-key）与超时，
  *       提供「问题概述列表」与「问题明细」两个只读拉取方法，供问题同步使用。
  * 作者：hengguan
- * 说明：基于 Node 原生 fetch（Node ≥18 内置）；接口返回结构为 { success, data, ... }，
- *       本模块统一校验 success 并返回 data，异常抛 HttpError 由上层捕获处理。
  */
 
 import { config } from '../config.js';
@@ -13,6 +13,11 @@ import { badRequest } from './http.js';
 
 const DEFAULT_OVERVIEW_API = '/PAMS/api/report/overview';
 const DEFAULT_DETAIL_API = '/PAMS/api/report/detail';
+
+/** Public issue-module defaults for authenticated configuration management. */
+export function getIssueSyncEnvironmentDefaults() {
+  return { baseUrl: config.pams.baseUrl, apiKey: config.pams.apiKey };
+}
 
 /**
  * 问题工具连接配置优先读取系统设置；未配置时兼容部署环境变量。

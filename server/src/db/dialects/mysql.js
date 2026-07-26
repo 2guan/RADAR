@@ -1,10 +1,10 @@
 /**
  * 文件：db/dialects/mysql.js
+ * 说明：业务模块只依赖 dialect 方法，不直接拼接 SQLite 或 MySQL 专属 JSON 函数，
+ *       便于同一套业务代码在 SQLite 与 TDSQL 之间切换。
  * 用途：TDSQL MySQL 兼容版 SQL 方言适配。集中维护当前时间表达式、忽略插入、
  *       配置项 upsert 片段，以及 JSON 数组/对象字段查询表达式。
  * 作者：hengguan
- * 说明：业务模块只依赖 dialect 方法，不直接拼接 SQLite 或 MySQL 专属 JSON 函数，
- *       便于同一套业务代码在 SQLite 与 TDSQL 之间切换。
  */
 
 export const mysqlDialect = {

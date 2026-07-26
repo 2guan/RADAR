@@ -1,11 +1,11 @@
 /**
  * 文件：components/FilterPanel.jsx
+ * 说明：高级过滤器面板，支持多维度的搜索与多选条件筛选组合，提供展开与折叠逻辑。
  * 用途：通用高级筛选面板。直角直边风格，支持主条件和折叠次要条件，支持多选、清空和重置。
  * 作者：hengguan
- * 说明：高级过滤器面板，支持多维度的搜索与多选条件筛选组合，提供展开与折叠逻辑。
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { Input, Select, DatePicker, Button, Badge, Space, Tooltip } from 'antd';
 import { SearchOutlined, DownOutlined, UpOutlined, UndoOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';

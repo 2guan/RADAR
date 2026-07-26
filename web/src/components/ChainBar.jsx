@@ -1,12 +1,11 @@
 /**
  * 文件：components/ChainBar.jsx
+ * 说明：每个阶段为一个 step，连线由 step::before 绘制并连续相接（见 styles.css）。
  * 用途：全流程进度条。横向连续连线（dot 到 dot）的细线时间轴，按状态着色；
  *       节点下方显示阶段名称，并用状态标签标记该阶段当前状态。
  * 作者：hengguan
- * 说明：每个阶段为一个 step，连线由 step::before 绘制并连续相接（见 styles.css）。
  */
 
-import React from 'react';
 import StatusBadge from './StatusBadge.jsx';
 
 export default function ChainBar({ nodes }) {

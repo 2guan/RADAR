@@ -1,13 +1,13 @@
 /**
  * 文件：components/editors/ReleaseDetail.jsx
+ * 说明：审批对象为需求、工单或问题，由后端 entityType 区分；首次打开惰性创建投产任务与会签项。
+ *       「各系统投产登记」已改为「关联制品情况」，按卡片只读展示投产申请的制品信息。
  * 用途：投产审批详情弹窗（可复用：投产审批页与版本概览）。展示实体（需求/工单/问题）基本信息、评审会签、
  *       投产信息、关联制品情况（引用了本需求/工单/问题的投产申请制品）。
  * 作者：hengguan
- * 说明：审批对象为需求、工单或问题，由后端 entityType 区分；首次打开惰性创建投产任务与会签项。
- *       「各系统投产登记」已改为「关联制品情况」，按卡片只读展示投产申请的制品信息。
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Modal, Card, Space, Button, Input, message, Empty, Row, Col, Radio, Tooltip, Tag, Upload, Popconfirm, Select } from 'antd';
 import { HistoryOutlined, UploadOutlined, DeleteOutlined, PlusOutlined, HighlightOutlined, DownloadOutlined } from '@ant-design/icons';
 import HistoryDrawer from '../HistoryDrawer.jsx';
@@ -26,7 +26,7 @@ import StatusBadge, { getStatusType, statusSelectWidth } from '../StatusBadge.js
 import DictSelect from '../DictSelect.jsx';
 import PersonPicker from '../PersonPicker.jsx';
 import { makeReleasePointOptions, ReleasePointText } from '../ReleasePointText.jsx';
-import { apiGet, apiPost, apiPut, apiDelete, rawClient } from '../../api/client.js';
+import { apiGet, apiPost, apiPut, apiDelete, rawClient } from '../../modules/release/api/index.js';
 import { useAppStore } from '../../stores/app.js';
 import { useStageFormConfig } from '../../hooks/useStageFormConfig.js';
 

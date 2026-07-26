@@ -1,10 +1,10 @@
 /**
  * 文件：config/impactSchema.js
+ * 说明：本文件是服务端 server/src/lib/impact-schema.js 的展示镜像，二者需保持一致。
+ *       col 为 24 栅格下的列宽（同一字段在不同分类中保持一致，保证等宽）；rows 为文本域默认行数。
  * 用途：影响性分析 / 测试覆盖性分析的前端字段模型（展示层）。
  *       驱动变更条目表单按分类渲染对应字段、字段类型、等宽栅格与校验提示。
  * 作者：hengguan
- * 说明：本文件是服务端 server/src/lib/impact-schema.js 的展示镜像，二者需保持一致。
- *       col 为 24 栅格下的列宽（同一字段在不同分类中保持一致，保证等宽）；rows 为文本域默认行数。
  */
 
 export const CHANGE_KINDS = ['修改', '新增', '删除'];

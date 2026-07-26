@@ -12,6 +12,8 @@
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
     "test": "node --test",
+    "test:api": "RADAR_RUN_API_TESTS=1 node --test test/api-rbac.test.js",
+    "test:rbac": "RADAR_RUN_API_TESTS=1 node --test test/api-rbac.test.js",
     "migrate:db": "node scripts/sqlite-to-tdsql.js",
     "migrate:tdsql": "node scripts/sqlite-to-tdsql.js --direction sqlite-to-tdsql",
     "migrate:sqlite": "node scripts/sqlite-to-tdsql.js --direction tdsql-to-sqlite",

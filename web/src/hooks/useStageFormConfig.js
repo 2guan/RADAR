@@ -1,7 +1,8 @@
 /**
  * 文件：hooks/useStageFormConfig.js
- * 用途：让详情页直接消费“输入项配置”的显示与必填规则。
  * 说明：内置字段和业务组件仍由各自专业组件渲染，但是否展示、何时必填不再依赖页面硬编码。
+ * 用途：让详情页直接消费“输入项配置”的显示与必填规则。
+ * 作者：hengguan
  */
 
 import { useEffect, useMemo, useState } from 'react';

@@ -1,12 +1,12 @@
 /**
  * 文件：pages/Release.jsx
+ * 说明：审批对象来源于投产申请的 ref_codes（需求、工单或问题）；不再列出全部投产点需求，也不再有「UAT 终态发起评审」逻辑。
  * 用途：投产审批页面。逐条展示「投产申请」中所选择的需求/工单/问题，含投产状态、评审状态、申请投产点、
  *       需求/问题/工单编号、需求标题/工单概述/问题概述、会签进度。点击行打开投产审批详情（复用 ReleaseDetail）。
  * 作者：hengguan
- * 说明：审批对象来源于投产申请的 ref_codes（需求、工单或问题）；不再列出全部投产点需求，也不再有「UAT 终态发起评审」逻辑。
  */
 
-import React, { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { Card, Button, Space, Tag } from 'antd';
 import { ExportOutlined } from '@ant-design/icons';
 import DataTable from '../components/DataTable.jsx';
@@ -14,7 +14,7 @@ import StatusBadge from '../components/StatusBadge.jsx';
 import ReleaseDetail from '../components/editors/ReleaseDetail.jsx';
 import Can from '../components/Can.jsx';
 import FilterPanel from '../components/FilterPanel.jsx';
-import { apiPost, apiGet } from '../api/client.js';
+import { apiPost, apiGet } from '../modules/release/api/index.js';
 import { useAppStore } from '../stores/app.js';
 import { exportXlsx } from '../utils/io.js';
 import { ReleasePointText } from '../components/ReleasePointText.jsx';
@@ -29,6 +29,7 @@ export default function Release() {
   const [reviews, setReviews] = useState([]);
   const [orgs, setOrgs] = useState([]);
 
+  // 仅取投产阶段的状态，避免需求、工单状态混入投产审批筛选项。
   useEffect(() => {
     apiGet('/dict/by-category/process_status').then((res) => {
       const releaseStatuses = (res || []).filter((item) => item.extra?.stage === '投产');
@@ -51,6 +52,7 @@ export default function Release() {
     { field: 'review_status', label: '评审状态', type: 'select', op: 'in', options: reviewOptions },
   ];
 
+  // 将筛选控件的原始值统一转换为后端列表接口使用的 filters 契约。
   const handleFilterChange = (vals) => {
     const arr = Object.entries(vals)
       .map(([field, value]) => {
@@ -61,10 +63,12 @@ export default function Release() {
     setFilterQuery(arr);
   };
 
+  // 投产窗口和页面筛选条件必须一并提交，确保审批范围与当前工作区一致。
   const fetcher = (q) => apiPost('/release/list', { ...q, releasePointIds, filters: filterQuery });
 
   const monoStyle = { fontFamily: 'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace' };
 
+  // 会签进度由服务端聚合，列表仅负责保持审批状态和业务对象的可读呈现。
   const columns = [
     { title: '投产状态', dataIndex: 'release_status', key: 'release_status', align: 'center', width: 96, render: (s) => <StatusBadge status={s} /> },
     {

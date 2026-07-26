@@ -1,9 +1,10 @@
 /**
- * PAMS 同款层级透视表：主维度（纵轴）和次维度（横轴）各自支持两层子维度。
- * 后端将分组树展开为 parent_y / parent_y_2、parent_x / parent_x_2；此处再还原为树行和多级表头。
+ * 文件：components/dashboard/PivotTable.jsx
+ * 说明：后端返回扁平 parent_x/parent_y 数据；前端在此恢复树行与多级表头。
+ * 用途：渲染支持两级子维度的层级透视表，并把单元格点击映射为筛选条件。
+ * 作者：hengguan
  */
 
-import React from 'react';
 import { Table } from 'antd';
 import { useResponsive } from '../../hooks/useResponsive.js';
 import { resolveChartColor } from './ColorPickerField.jsx';
@@ -13,6 +14,7 @@ const groupOf = (groups, label) => (groups || []).find((g) => g.label === label)
 const labelFor = (label, dim, groups, labelOf) => (groupOf(groups, label) ? label : labelOf(dim, label));
 
 function filtersForPath(dim, groups, path) {
+  // 点击层级节点时逐层还原筛选值，保证下钻范围与当前分组一致。
   if (!path?.length) return {};
   const filters = {};
   let currentDim = dim;
@@ -37,6 +39,7 @@ function mergeFilters(...list) {
 }
 
 function xHierarchy(data) {
+  // 将横轴扁平记录还原为 主维度 → 子维度 → 孙维度 的表头树。
   return uniq(data.filter((d) => !d.parent_x).map((d) => d.name_x)).map((main) => ({
     main,
     subs: uniq(data.filter((d) => d.parent_x === main && !d.parent_x_2).map((d) => d.name_x)).map((sub) => ({
@@ -71,6 +74,7 @@ export default function PivotTable({ cfg, data = [], labelOf, dimName = (d) => d
   const click = (filters, dimensionLabel) => onCell?.(filters, dimensionLabel);
 
   if (!is2D) {
+    // 一维数据只需要纵轴树和总计列，避免创建无意义的横轴结构。
     const hierarchy = yHierarchy(data);
     const makeRow = (main, sub, subSub, index) => {
       const path = [main, sub, subSub].filter(Boolean);
@@ -113,6 +117,7 @@ export default function PivotTable({ cfg, data = [], labelOf, dimName = (d) => d
     );
   }
 
+  // 二维数据分别构建横轴、纵轴树，再按叶子节点计算交叉单元格。
   const xNodes = xHierarchy(data);
   const yNodes = yHierarchy(data);
   const leaves = xNodes.flatMap((x) => x.subs.length

@@ -1,12 +1,12 @@
 /**
  * 文件：components/DataTable.jsx
+ * 说明：fetcher(query) 需返回 {list,total}；query 含 page/pageSize/keyword/sort/filters。
  * 用途：通用数据表格。统一封装关键字搜索、分页、列头排序、列宽拖拽、刷新，
  *       并在移动端自动从表格切换为卡片列表。通过 ref 暴露 reload()。
  * 作者：hengguan
- * 说明：fetcher(query) 需返回 {list,total}；query 含 page/pageSize/keyword/sort/filters。
  */
 
-import React, {
+import {
   forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState,
 } from 'react';
 import { Table, Input, Button, Space, Card, List, Empty } from 'antd';

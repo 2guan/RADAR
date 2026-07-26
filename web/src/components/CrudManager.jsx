@@ -1,12 +1,12 @@
 /**
  * 文件：components/CrudManager.jsx
+ * 说明：fields(form) 渲染表单项；transformOut 在提交前加工 payload（如补 category）。
  * 用途：通用配置管理器。基于统一的 list/create/update/delete 接口，渲染"列表 + 新增 + 编辑 + 删除"，
  *       供系统设置中的字典、系统、投产点、角色等配置项复用。
  * 作者：hengguan
- * 说明：fields(form) 渲染表单项；transformOut 在提交前加工 payload（如补 category）。
  */
 
-import React, { useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { Button, Space, Modal, Form, Popconfirm, message } from 'antd';
 import {
   PlusOutlined, EditOutlined, DeleteOutlined, ImportOutlined, ExportOutlined,
@@ -34,6 +34,7 @@ export default function CrudManager({
   const [filterQuery, setFilterQuery] = useState([]);
   const [isDirty, setIsDirty] = useState(false);
 
+  // DataTable 只接收统一查询函数，具体资源路径由调用方传入。
   const fetcher = (q) => apiPost(`${apiBase}/list`, q);
 
   const openEdit = (row) => {
@@ -45,6 +46,7 @@ export default function CrudManager({
   };
 
   const onSave = async () => {
+    // 先完成表单校验和出参转换，再根据是否存在主键决定新增或更新。
     const v = await form.validateFields();
     const payload = transformOut(v, current);
     if (current) await apiPut(`${apiBase}/${current[rowKey]}`, payload);
@@ -79,6 +81,7 @@ export default function CrudManager({
   };
 
   const handleFilterChange = (vals) => {
+    // 将筛选面板的展示值归一为后端可识别的字段、操作符和值。
     const arr = Object.entries(vals)
       .map(([field, value]) => {
         const conf = filterConfigs.find(c => c.field === field);
@@ -104,6 +107,7 @@ export default function CrudManager({
 
   // 移动端卡片：由列定义自动生成"字段名 ： 值"行，末行展示操作按钮，避免表格横向滚动
   const mobileCard = (row) => {
+    // 小屏幕不渲染横向表格，而是从列定义生成纵向信息卡片。
     const opCol = fullColumns.find((c) => c.key === 'op');
     const dataCols = fullColumns.filter((c) => c.key !== 'op' && (c.dataIndex || c.render));
     return (

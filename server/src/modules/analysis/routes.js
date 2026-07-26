@@ -1,5 +1,6 @@
 /**
  * 文件：modules/analysis/routes.js
+ * 说明：遵循项目研发规约；跨模块能力仅可经公开契约访问。
  * 用途：影响性分析（开发阶段）与测试覆盖性分析（应用组装阶段）接口。
  *       两者均按需求/工单（req_code）级别组织，支持逐条新增/修改/删除：
  *         - 影响性分析：登记若干「变更内容」条目（复用开发 dev 权限）；
@@ -8,10 +9,10 @@
  * 作者：hengguan
  */
 
-import { get, all, run, tx } from '../../db/index.js';
-import { ok, notFound, badRequest, forbidden } from '../../lib/http.js';
-import { auditCreate, auditUpdate, auditDelete } from '../../lib/audit.js';
-import { getWorkItem } from '../../lib/work-items.js';
+import { get, all, run, tx } from '../../platform/persistence/index.js';
+import { ok, notFound, forbidden } from '../../platform/runtime/index.js';
+import { auditCreate, auditUpdate, auditDelete } from '../../platform/audit/index.js';
+import { getWorkItem } from '../delivery/index.js';
 import {
   validateChangeItem, decodeChangeItem, validateCoverageRow,
 } from '../../lib/impact-schema.js';

@@ -1,10 +1,10 @@
 /**
  * 文件：db/providers/tdsql.js
+ * 说明：业务代码大量复用 SQLite 时代的 SQL 写法，本适配器负责处理必要的
+ *       MySQL 方言归一化、保留字表名引用、事务连接复用和返回值兼容。
  * 用途：TDSQL MySQL 兼容版数据库访问适配器。基于 mysql2/promise 连接池，
  *       对外提供与 SQLite provider 一致的 get/all/run/exec/tx/close 接口。
  * 作者：hengguan
- * 说明：业务代码大量复用 SQLite 时代的 SQL 写法，本适配器负责处理必要的
- *       MySQL 方言归一化、保留字表名引用、事务连接复用和返回值兼容。
  */
 
 import { AsyncLocalStorage } from 'node:async_hooks';

@@ -1,14 +1,14 @@
 /**
  * 文件：pages/Overview.jsx
+ * 说明：系统概览和个人待办面板，以工作流看板形式展示个人的开发和测试任务，支持拖拽状态更新。
  * 用途：版本概览页面。按实施机构分组展示当前投产窗口需求卡片（每行最多 2 条），
  *       卡片含编号、所属系统、当前阶段状态与全流程进度条；点击卡片弹出 5 列全生命周期详情，
  *       点击任一阶段卡片打开对应阶段的编辑弹窗（可编辑、保存留痕、回写概览）。
  * 作者：hengguan
- * 说明：系统概览和个人待办面板，以工作流看板形式展示个人的开发和测试任务，支持拖拽状态更新。
  */
-import React, { useEffect, useState, useMemo, useLayoutEffect, useRef } from 'react';
+import { useEffect, useState, useMemo, useLayoutEffect, useRef } from 'react';
 import {
-  Card, Row, Col, Tag, Typography, Empty, Modal, Space, Spin, Select, Avatar, Tabs, Button, Table, Radio, message, Timeline, Tooltip, List, Checkbox,
+  Card, Row, Col, Tag, Typography, Empty, Modal, Space, Spin, Tabs, Button, Table, Radio, message, Timeline, Tooltip, List, Checkbox,
 } from 'antd';
 import { SafetyCertificateOutlined, DeploymentUnitOutlined, DownloadOutlined, DownOutlined, UpOutlined, HistoryOutlined, ExportOutlined } from '@ant-design/icons';
 import { useResponsive } from '../hooks/useResponsive.js';
@@ -21,7 +21,7 @@ import ReleaseDetail from '../components/editors/ReleaseDetail.jsx';
 import ReleaseApplyEditor from '../components/editors/ReleaseApplyEditor.jsx';
 import IssueDetail from '../components/editors/IssueDetail.jsx';
 import ResizableTitle from '../components/ResizableTitle.jsx';
-import { apiPost, apiGet, rawClient } from '../api/client.js';
+import { apiPost, apiGet, rawClient } from '../modules/reporting/api/index.js';
 import FilterPanel from '../components/FilterPanel.jsx';
 import { useAppStore } from '../stores/app.js';
 import { exportXlsx } from '../utils/io.js';

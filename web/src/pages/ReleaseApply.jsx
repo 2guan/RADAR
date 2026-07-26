@@ -1,13 +1,13 @@
 /**
  * 文件：pages/ReleaseApply.jsx
+ * 说明：仿照需求分析页面，页面上方提供「新增申请」按钮；评审状态由后端按所关联需求派生。
  * 用途：投产申请页面。投产申请（版本变更申请）列表（默认按当前投产窗口过滤）+ 新增申请 / 编辑
  *       （复用 ReleaseApplyEditor）+ 导入导出/模板。
  * 作者：hengguan
- * 说明：仿照需求分析页面，页面上方提供「新增申请」按钮；评审状态由后端按所关联需求派生。
  */
 
-import React, { useRef, useState, useEffect } from 'react';
-import { Card, Button, Space, Tag, Popconfirm, message, Tooltip } from 'antd';
+import { useRef, useState, useEffect } from 'react';
+import { Card, Button, Space, Tag, Popconfirm, message } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, ImportOutlined, ExportOutlined } from '@ant-design/icons';
 import DataTable from '../components/DataTable.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
@@ -15,7 +15,7 @@ import FilterPanel from '../components/FilterPanel.jsx';
 import Can from '../components/Can.jsx';
 import ImportModal from '../components/ImportModal.jsx';
 import ReleaseApplyEditor from '../components/editors/ReleaseApplyEditor.jsx';
-import { apiPost, apiDelete, apiGet } from '../api/client.js';
+import { apiPost, apiDelete, apiGet } from '../modules/release/api/index.js';
 import { exportXlsx } from '../utils/io.js';
 import { useAppStore } from '../stores/app.js';
 import { ReleasePointText } from '../components/ReleasePointText.jsx';
@@ -35,6 +35,7 @@ export default function ReleaseApply() {
   const [artifactTypes, setArtifactTypes] = useState([]);
   const [ferryStatuses, setFerryStatuses] = useState([]);
 
+  // 编辑器与筛选器共用这些字典，首次进入页面时集中加载以保持选项口径一致。
   useEffect(() => {
     apiGet('/dict/by-category/org').then(setOrgs).catch(() => {});
     apiGet('/systems/all').then(setSystems).catch(() => {});
@@ -47,6 +48,7 @@ export default function ReleaseApply() {
   const artifactOptions = artifactTypes.map((d) => ({ value: d.attr_value, label: d.display_value }));
   const ferryOptions = ferryStatuses.map((d) => ({ value: d.attr_value, label: d.display_value }));
 
+  // 动态阶段字段由公共 Hook 注入，使列表配置与投产申请表单保持同步。
   const filterConfigs = [
     { field: 'impl_org', label: '实施机构', type: 'select', op: 'in', options: orgOptions, isPrimary: true },
     { field: 'change_code', label: '变更编号', type: 'input', isPrimary: true, op: 'like', placeholder: '变更编号检索' },
@@ -57,6 +59,7 @@ export default function ReleaseApply() {
     ...stageList.filterConfigs,
   ];
 
+  // 归一化空值和多选值，避免把无效条件传给后端查询契约。
   const handleFilterChange = (vals) => {
     const arr = Object.entries(vals)
       .map(([field, value]) => {
@@ -75,6 +78,7 @@ export default function ReleaseApply() {
 
   const monoStyle = { fontFamily: 'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace' };
 
+  // 固定业务列与阶段扩展列会在 DataTable 中合并，操作列始终保持在最右侧。
   const columns = [
     {
       title: '评审状态', dataIndex: 'review_status', key: 'review_status', width: 88, align: 'center',

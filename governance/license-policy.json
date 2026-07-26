@@ -1,0 +1,9 @@
+{
+  "schema_version": "1.0",
+  "forbidden_license_tokens": ["AGPL", "SSPL", "BUSL", "Commons Clause"],
+  "missing_license_allowlist": {
+    "server:node_modules/buffers": "npm lockfile omits this transitive package's SPDX field; review its upstream license before upgrading."
+  },
+  "review_by": "2026-08-30",
+  "approved_by": "hengguan"
+}

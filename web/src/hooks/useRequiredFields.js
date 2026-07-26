@@ -1,5 +1,6 @@
 /**
  * 文件：hooks/useRequiredFields.js
+ * 说明：遵循项目研发规约；跨模块能力仅可经公开契约访问。
  * 用途：读取并缓存字段必填配置，为表单生成统一校验规则。
  * 作者：hengguan
  */
@@ -10,6 +11,7 @@ import { apiGet } from '../api/client.js';
 let cache = null;
 let pending = null;
 
+// 多个表单并发挂载时复用同一请求，避免重复读取检查内容配置。
 function stateKeyFromType(type) {
   if (type === 'final') return 'final';
   if (type === 'initial' || type === 'not-started') return 'initial';
@@ -67,6 +69,7 @@ export function useRequiredFields(moduleKey, statusType, readonly, scopeKey) {
   const stateKey = stateKeyFromType(statusType);
 
   return useMemo(() => {
+    // 先按测试子类型选择配置，再回退模块级配置以兼容历史数据。
     const configKey = moduleConfigKey(moduleKey, scopeKey);
     const moduleConfig = payload?.config?.[configKey] || payload?.config?.[moduleKey] || {};
     const meta = moduleMeta(payload, moduleKey, scopeKey);

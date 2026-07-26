@@ -1,9 +1,9 @@
 /**
  * 文件：plugins/auth.js
+ * 说明：超级管理员（is_super=1）跳过权限校验；其余用户按角色的权限矩阵并集判定。
  * 用途：鉴权与 RBAC 权限插件。注册 @fastify/jwt，提供 authenticate 预处理钩子，
  *       并提供 requirePerm(module, action) 工厂用于路由级权限校验。
  * 作者：hengguan
- * 说明：超级管理员（is_super=1）跳过权限校验；其余用户按角色的权限矩阵并集判定。
  */
 
 import fp from 'fastify-plugin';

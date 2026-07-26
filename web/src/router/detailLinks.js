@@ -1,10 +1,10 @@
 /**
  * 文件：router/detailLinks.js
+ * 说明：采用 HashRouter，完整链接形如 `${origin}${pathname}#/dev/DEV-2026-001`。
+ *       module 取值与后端权限模块对齐：requirement/dev/test/release_apply/release。
  * 用途：详情单页的「模块 → 路由路径」统一映射，以及生成可复制的完整详情链接。
  *       供详情弹窗内点击编号复制链接、以及详情单页之间互相跳转使用。
  * 作者：hengguan
- * 说明：采用 HashRouter，完整链接形如 `${origin}${pathname}#/dev/DEV-2026-001`。
- *       module 取值与后端权限模块对齐：requirement/dev/test/release_apply/release。
  */
 
 // 各模块详情单页的 Hash 路由路径（不含 # 前缀）

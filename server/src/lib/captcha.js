@@ -1,10 +1,10 @@
 /**
  * 文件：lib/captcha.js
+ * 说明：验证码有效期为 5 分钟，单个 token 最多可尝试 3 次，
+ *       定时清理过期条目防止内存泄漏。
  * 用途：验证码生成与校验工具。使用 Node 内置 crypto 生成随机码，
  *       以 SVG 图形呈现（无外部依赖），校验码经 SHA256 哈希存储。
  * 作者：hengguan
- * 说明：验证码有效期为 5 分钟，单个 token 最多可尝试 3 次，
- *       定时清理过期条目防止内存泄漏。
  */
 
 import { randomBytes, createHash } from 'node:crypto';

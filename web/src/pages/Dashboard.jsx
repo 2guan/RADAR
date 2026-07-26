@@ -1,19 +1,19 @@
 /**
  * 文件：pages/Dashboard.jsx
+ * 说明：投产度量大屏和多维图表展示面板，汇总需求开发时效、投产通过率及任务分布等度量指标。
  * 用途：效能仪表盘。顶置原子指标卡（终态计数）+ 「系统图表」「我的图表」两分区的
  *       自定义分析图表（多维度组合/分组归并/局部过滤/透视/钻取，颜色与布局可配）。
  * 作者：hengguan
- * 说明：投产度量大屏和多维图表展示面板，汇总需求开发时效、投产通过率及任务分布等度量指标。
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Card, Row, Col, Progress, Button, Empty, message, Modal, Table, Grid, Spin, List, Tag,
 } from 'antd';
 import {
   FileTextOutlined, CodeOutlined, ExperimentOutlined, UserOutlined, RocketOutlined, PlusOutlined,
 } from '@ant-design/icons';
-import { apiGet, apiPost, apiPut, apiDelete } from '../api/client.js';
+import { apiGet, apiPost, apiPut, apiDelete } from '../modules/reporting/api/index.js';
 import { useAppStore } from '../stores/app.js';
 import { getPreset } from '../theme/presets.js';
 import { useDimensionMeta } from '../components/dashboard/useDimensionMeta.js';

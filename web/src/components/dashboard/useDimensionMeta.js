@@ -1,13 +1,13 @@
 /**
  * 文件：components/dashboard/useDimensionMeta.js
+ * 说明：维度取值随数据源变化，但 optionSource 与字典是源无关的，故显示名映射可全局复用。
  * 用途：分析图表的「维度元数据」hook。一次性预载字典/系统/投产点与各数据源维度，
  *       对外提供：数据源、图表类型、某源可用维度、维度选项、原始值→显示名 映射。
  * 作者：hengguan
- * 说明：维度取值随数据源变化，但 optionSource 与字典是源无关的，故显示名映射可全局复用。
  */
 
 import { useEffect, useState } from 'react';
-import { apiGet } from '../../api/client.js';
+import { apiGet } from '../../modules/reporting/api/index.js';
 
 // 需要预载的字典分类（覆盖所有 dict:* optionSource）
 const DICT_CATS = ['process_status', 'req_type', 'ticket_type', 'org', 'sector'];

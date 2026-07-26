@@ -1,11 +1,11 @@
 /**
  * 文件：pages/Users.jsx
+ * 说明：用户管理与角色权限配置页面，提供用户的增删改查、手机号重置和角色权限关联。
  * 用途：人员管理页面。用户列表（一人多角色）+ 新增/编辑 + 重置密码 + 导入/导出。
  * 作者：hengguan
- * 说明：用户管理与角色权限配置页面，提供用户的增删改查、手机号重置和角色权限关联。
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Card, Button, Space, Modal, Form, Input, Select, Tag, Popconfirm, message,
 } from 'antd';
@@ -19,7 +19,7 @@ import FilterPanel from '../components/FilterPanel.jsx';
 import ImportModal from '../components/ImportModal.jsx';
 import { getScopedPopupContainer } from '../components/scopedPopup.js';
 import { apiPost, apiPut, apiDelete, apiGet } from '../api/client.js';
-import { exportXlsx, downloadGet } from '../utils/io.js';
+import { exportXlsx } from '../utils/io.js';
 import { useAppStore } from '../stores/app.js';
 
 export default function Users() {

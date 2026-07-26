@@ -1,11 +1,13 @@
 /**
  * 文件：components/StageContentPanel.jsx
+ * 说明：遵循项目研发规约；跨模块能力仅可经公开契约访问。
  * 用途：业务详情页中的公共扩展输入项与交付件区域。布局、类型、数据源、显示与
  *       必填提示全部由阶段内容配置返回，业务编辑器无需维护新增字段名单。
  * 作者：Codex
+ * 作者：hengguan
  */
 
-import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { App, Button, DatePicker, Form, Input, Row, Col, Select, Space, Spin, Tag, Tooltip } from 'antd';
 import { DownloadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';

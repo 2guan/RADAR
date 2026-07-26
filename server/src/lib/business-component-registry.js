@@ -1,8 +1,9 @@
 /**
  * 文件：lib/business-component-registry.js
+ * 说明：新增安全扫描、性能压测等组件时，在此注册校验器及前端渲染器标识即可，管理员不能拼接业务 SQL。
  * 用途：复杂业务组件注册中心。公共阶段配置只引用 component_key，具体数据口径由组件实现维护。
  * 作者：Codex
- * 说明：新增安全扫描、性能压测等组件时，在此注册校验器及前端渲染器标识即可，管理员不能拼接业务 SQL。
+ * 作者：hengguan
  */
 
 import { get } from '../db/index.js';

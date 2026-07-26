@@ -1,9 +1,9 @@
 /**
  * 文件：server.js
+ * 说明：开发模式 `npm run dev`（--watch）；生产模式 `npm start`。
  * 用途：后端启动入口。执行数据库迁移与种子数据初始化，构建并启动 Fastify 实例，
  *       注册优雅退出处理。
  * 作者：hengguan
- * 说明：开发模式 `npm run dev`（--watch）；生产模式 `npm start`。
  */
 
 import { config } from './config.js';

@@ -1,9 +1,9 @@
 /**
  * 文件：api/client.js
+ * 说明：导出 request（返回 data 部分）与 rawClient（用于下载等需要原始响应的场景）。
  * 用途：Axios 实例封装。统一注入 JWT、统一处理响应结构 {code,data,message}、
  *       401 跳转登录、错误中文提示。
  * 作者：hengguan
- * 说明：导出 request（返回 data 部分）与 rawClient（用于下载等需要原始响应的场景）。
  */
 
 import axios from 'axios';

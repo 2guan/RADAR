@@ -1,9 +1,9 @@
 /**
  * 文件：lib/io.js
+ * 说明：各资源通过 list(query) 提供导出数据、upsert(row, mode) 实现按业务键的插入/更新/跳过。
  * 用途：通用导入/导出/模板路由助手。为各配置资源（字典/系统/角色/投产点等）统一提供
  *       "下载模板 / 导出 xlsx / 导入 xlsx（覆盖更新·重复跳过·出错回滚 三模式）"能力。
  * 作者：hengguan
- * 说明：各资源通过 list(query) 提供导出数据、upsert(row, mode) 实现按业务键的插入/更新/跳过。
  */
 
 import { tx } from '../db/index.js';

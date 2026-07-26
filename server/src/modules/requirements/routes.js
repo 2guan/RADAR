@@ -1,16 +1,15 @@
 /**
  * 文件：modules/requirements/routes.js
+ * 说明：JSON 数组字段（主责/协同系统）入库前序列化；终态时校验主责系统。
  * 用途：需求分析模块接口。需求 CRUD（全字段可改并留痕）、编号生成、终态业务校验、
  *       默认按当前投产窗口过滤、导入导出。
  * 作者：hengguan
- * 说明：JSON 数组字段（主责/协同系统）入库前序列化；终态时校验主责系统。
  */
 
-import { get, run, tx, all, dialect } from '../../db/index.js';
+import { get, run, tx, all, dialect } from '../../platform/persistence/index.js';
 import { listQuery } from '../../lib/query.js';
 import { genRequirementCode } from '../../lib/code-gen.js';
-import { defaultProcessStatus, isTerminalStatus } from '../../lib/status.js';
-import { statusTypeForProcessStatus, validateRequiredFields } from '../../lib/required-fields.js';
+import { defaultProcessStatus, isTerminalStatus, statusTypeForProcessStatus, validateRequiredFields } from '../process-configuration/index.js';
 import {
   appendStageExcelValues,
   appendStageListValues,
@@ -18,17 +17,15 @@ import {
   getStageExcelColumns,
   saveExtensionValues,
   validateStageContent,
-} from '../../lib/stage-content.js';
-import { auditCreate, auditUpdate, auditDelete } from '../../lib/audit.js';
-import { listByEntity } from '../../lib/attachment.js';
+} from '../process-configuration/index.js';
+import { auditCreate, auditUpdate, auditDelete } from '../../platform/audit/index.js';
+import { listByEntity } from '../../platform/attachments/index.js';
 import { exportXlsx, parseXlsx } from '../../lib/excel.js';
 import { windowIds, inClause } from '../../lib/window.js';
-import { ok, notFound, badRequest } from '../../lib/http.js';
-import { assertStatusChangePermission } from '../../lib/status-permission.js';
-import { parseJsonArray, parseJsonObject } from '../../lib/json.js';
+import { ok, notFound, badRequest, parseJsonArray, parseJsonObject } from '../../platform/runtime/index.js';
+import { assertStatusChangePermission } from '../process-configuration/index.js';
 import {
   resolveDictAttr,
-  resolveSystemCode,
   resolveSystemCodes,
   resolveReleasePoint,
   formatAttachments,

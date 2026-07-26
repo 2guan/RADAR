@@ -1,11 +1,13 @@
 /**
  * 文件：components/StageConfiguration.jsx
+ * 说明：遵循项目研发规约；跨模块能力仅可经公开契约访问。
  * 用途：系统设置中的“输入项配置”和“交付件配置”。Tab 从菜单范围动态读取，
  *       表格列和状态必填控制完全由后端元数据驱动。
  * 作者：Codex
+ * 作者：hengguan
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { App, Button, Card, Checkbox, Empty, Form, Input, InputNumber, List, Modal, Popconfirm, Row, Col, Select, Space, Table, Tabs, Tag, Tooltip, Upload } from 'antd';
 import { DeleteOutlined, EditOutlined, HolderOutlined, PlusOutlined, SettingOutlined } from '@ant-design/icons';
 import { apiDelete, apiGet, apiPost, apiPut, rawClient } from '../api/client.js';

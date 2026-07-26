@@ -1,18 +1,17 @@
 /**
  * 文件：modules/users/routes.js
+ * 说明：手机号为唯一登录名；导入支持"覆盖更新/重复跳过/事务回滚"三种冲突策略。
  * 用途：人员（用户）管理接口。CRUD（含一人多角色）、重置密码、Excel 导入/导出、
  *       人员模糊搜索（供需求/开发/测试等表单的负责人选择）。
  * 作者：hengguan
- * 说明：手机号为唯一登录名；导入支持"覆盖更新/重复跳过/事务回滚"三种冲突策略。
  */
 
-import { get, all, run, tx } from '../../db/index.js';
+import { get, all, run, tx } from '../../platform/persistence/index.js';
 import { listQuery } from '../../lib/query.js';
-import { hashPassword, validatePasswordComplexity, getSecurityConfig } from '../../lib/password.js';
+import { hashPassword, validatePasswordComplexity, getSecurityConfig } from '../../platform/auth/index.js';
 import { exportXlsx, parseXlsx } from '../../lib/excel.js';
-import { ok, notFound, badRequest } from '../../lib/http.js';
+import { ok, notFound, badRequest, sanitizeText } from '../../platform/runtime/index.js';
 import { resolveDictAttr } from '../../lib/resolver.js';
-import { sanitizeText } from '../../lib/sanitize.js';
 
 // 导出列定义（不含密码）
 const EXPORT_COLUMNS = [

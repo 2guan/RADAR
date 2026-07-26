@@ -1,17 +1,17 @@
 /**
  * 文件：components/editors/CoverageAnalysisModal.jsx
+ * 说明：需先在开发阶段填写影响性分析，才能填写本表；无影响条目时给出提示。
  * 用途：应用组装阶段「测试覆盖性分析」结构化填写弹窗（接近全屏）。
  *       头部展示需求/工单编号、名称、主责系统、协同系统；逐条列出开发阶段影响性分析条目
  *       （系统名称/变更类型/变更内容），右侧填写案例覆盖策略简述、测试覆盖检查结果、
  *       测试案例编号、测试人员。逐条编辑/保存，保存后转为展示态，点「修改」回到编辑态。
  * 作者：hengguan
- * 说明：需先在开发阶段填写影响性分析，才能填写本表；无影响条目时给出提示。
  */
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Modal, Button, Select, Input, Tag, Spin, Empty, message, Row, Col, Tooltip } from 'antd';
 import { EditOutlined, SaveOutlined, CloseOutlined } from '@ant-design/icons';
-import { apiGet, apiPut } from '../../api/client.js';
+import { apiGet, apiPut } from '../../modules/delivery/api/index.js';
 import AnalysisHeader from './AnalysisHeader.jsx';
 import { COVERAGE_RESULTS, FIELD_DEFS, visibleFieldsOf, valueTagClass } from '../../config/impactSchema.js';
 

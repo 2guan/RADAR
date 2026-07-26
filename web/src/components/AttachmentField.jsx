@@ -1,12 +1,12 @@
 /**
  * 文件：components/AttachmentField.jsx
+ * 说明：需先保存主记录拿到 entityId 后方可管理附件；下载走 blob 触发浏览器保存。
  * 用途：附件字段组件。支持"上传文件"与"填写路径"两种方式并存，列出已有附件、下载、删除。
  * 作者：hengguan
- * 说明：需先保存主记录拿到 entityId 后方可管理附件；下载走 blob 触发浏览器保存。
  */
 
-import React, { useEffect, useState } from 'react';
-import { App, Upload, Button, Input, Space, List, Tag, Popconfirm, Modal } from 'antd';
+import { useEffect, useState } from 'react';
+import { App, Upload, Button, Input, List, Tag, Popconfirm, Modal } from 'antd';
 import { UploadOutlined, LinkOutlined, DownloadOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons';
 import { apiGet, apiPost, apiDelete, rawClient, TOKEN_KEY } from '../api/client.js';
 

@@ -1,16 +1,18 @@
 /**
  * 文件：modules/stage-content/routes.js
+ * 说明：遵循项目研发规约；跨模块能力仅可经公开契约访问。
  * 用途：阶段内容与公共交付件接口。系统设置通过本模块维护配置；业务详情页通过
  *       公共读取接口获取动态字段、交付件与扩展字段值。
  * 作者：Codex
+ * 作者：hengguan
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
-import { all, get, run } from '../../db/index.js';
-import { config } from '../../config.js';
-import { ok, badRequest } from '../../lib/http.js';
+import { all, get, run } from '../../platform/persistence/index.js';
+import { resolveAttachmentPath } from '../../platform/attachments/index.js';
+import { ok, badRequest } from '../../platform/runtime/index.js';
 import {
   deleteDeliverableDefinition,
   deleteFieldDefinition,
@@ -81,7 +83,7 @@ export default async function stageContentRoutes(fastify) {
       WHERE deliverable_definition_id = ? AND enabled = 1 AND deleted_at IS NULL ORDER BY version_no DESC, id DESC LIMIT 1`, Number(request.params.id));
     if (!template) throw badRequest('该交付件未配置可下载模板');
     if (template.template_mode === 'custom') throw badRequest('该模板需由定制处理器下载');
-    const abs = path.join(config.attachmentDir, template.stored_path || '');
+    const abs = resolveAttachmentPath(template.stored_path || '');
     if (!template.stored_path || !fs.existsSync(abs)) throw badRequest('模板文件不存在');
     reply.header('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(template.filename || '模板')}`);
     return reply.send(fs.createReadStream(abs));
@@ -132,12 +134,12 @@ export default async function stageContentRoutes(fastify) {
     const ext = path.extname(file.filename || '').toLowerCase();
     if (!['.docx', '.xlsx'].includes(ext)) throw badRequest('模板仅支持 DOCX 或 XLSX 文件');
     const buffer = await file.toBuffer();
-    const dir = path.join(config.attachmentDir, 'templates', String(deliverable.id));
+    const dir = resolveAttachmentPath(path.join('templates', String(deliverable.id)));
     fs.mkdirSync(dir, { recursive: true });
     const filename = path.basename(file.filename).replace(/[/\\?%*:|"<>]/g, '_');
     const storedName = `${randomBytes(8).toString('hex')}_${filename}`;
     const relPath = path.join('templates', String(deliverable.id), storedName);
-    fs.writeFileSync(path.join(config.attachmentDir, relPath), buffer);
+    fs.writeFileSync(resolveAttachmentPath(relPath), buffer);
     const last = await get('SELECT MAX(version_no) AS n FROM deliverable_template_version WHERE deliverable_definition_id = ?', deliverable.id);
     await run('UPDATE deliverable_template_version SET enabled = 0 WHERE deliverable_definition_id = ? AND template_mode = ?', deliverable.id, 'upload');
     const res = await run(`INSERT INTO deliverable_template_version (deliverable_definition_id, template_mode, filename, stored_path, size, version_no, enabled, uploader)

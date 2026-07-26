@@ -1,9 +1,9 @@
 /**
  * 文件：stores/app.js
+ * 说明：主题与当前投产点持久化到 localStorage，刷新后保持。
  * 用途：全局状态（zustand）。管理当前用户与权限、平台信息、明暗主题、当前投产窗口，
  *       并提供权限判定方法 can()。
  * 作者：hengguan
- * 说明：主题与当前投产点持久化到 localStorage，刷新后保持。
  */
 
 import { create } from 'zustand';

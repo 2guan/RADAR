@@ -1,15 +1,15 @@
 /**
  * 文件：db/mock.js
+ * 说明：本脚本独立运行（node src/db/mock.js），用于重置演示环境。会删除除超级管理员外的全部业务数据，请谨慎执行。
+ *       数据特征：
+ *         - 问题清单只使用内置虚构样例，不读取或复制现有库中的问题内容；
+ *         - 需求、工单通过 release_apply.ref_codes 进入投产审批清单；问题仅作为工单来源与问题清单数据；
+ *         - 评审状态覆盖待评审/评审同意/评审拒绝/应急审批/评审撤销；
+ *         - 编号、偏差率、终态附件、投产制品和过程留痕均按平台规则生成，便于逐项验证。
  * 用途：生成可演示/可验证的全链路测试模拟数据。先确保库表与基础种子（角色/字典/系统/会签配置）就绪，
  *       再清空现有业务与人员数据，灌入：20+ 用户、12 个投产点、120 个需求、200+ 开发任务、
  *       SIT/UAT/NFT/SEC 测试任务、投产审批（会签）、投产申请、问题清单及关联关系与过程留痕。
  * 作者：hengguan
- * 说明：本脚本独立运行（node src/db/mock.js），用于重置演示环境。会删除除超级管理员外的全部业务数据，请谨慎执行。
- *       数据特征：
- *         - 运行时优先快照当前 issue 表中最近同步的问题，空库时使用内置兜底样例；
- *         - 需求、工单通过 release_apply.ref_codes 进入投产审批清单；问题仅作为工单来源与问题清单数据；
- *         - 评审状态覆盖待评审/评审同意/评审拒绝/应急审批/评审撤销；
- *         - 编号、偏差率、终态附件、投产制品和过程留痕均按平台规则生成，便于逐项验证。
  */
 
 import { db, get, all, run, tx, closeDb } from './index.js';
@@ -55,61 +55,38 @@ function shift(base, days) {
 const ymd = (s) => `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
 
 // ---------------------------------------------------------------------------
-// 人员清单（真实导入名单）：[手机号, 姓名, 角色标识, 所属机构]。
-// 除既有 admin 超级管理员外的全部人员；其中「超级管理员」角色以 is_super=1 建号。
+// 虚构演示人员清单：[手机号, 姓名, 角色标识, 所属机构]。
+// 用于本地演示与回归；其中「超级管理员」角色以 is_super=1 建号。
 // ---------------------------------------------------------------------------
 const USERS = [
-  ['18918688193', '李通', '测试管理', '交付事业部'],
-  ['18687112956', '谢恩宏', '测试管理', '云南农信'],
-  ['15108711537', '李昶霖', '运维负责人', '云南农信'],
-  ['13881954314', '李彪', '金科测试', '交付事业部'],
-  ['18918688029', '郭劲松', '项目管理', '交付事业部'],
-  ['13811931599', '詹同宇', '金科开发', '交付事业部'],
-  ['18652954495', '杨锡明', '项目管理', '交付事业部'],
-  ['18959228330', '李河杰', '金科开发', '大数据中心'],
-  ['18965810392', '张京', '金科开发', '厦门事业群'],
-  ['15810107688', '王凯', '金科运维', '交付事业部'],
-  ['18910053279', '王卫东', '配置管理员', '交付事业部'],
-  ['18313983383', '王冲生', '农信运维', '云南农信'],
-  ['13708487153', '鲁志兵', '机构负责人', '云南农信'],
-  ['18820995661', '胡霆', '机构负责人', '深圳事业群'],
-  ['18918689016', '胡伟钢', '机构负责人', '上海事业群'],
-  ['13706969866', '吴刚', '项目管理', '交付事业部'],
-  ['18918688309', '忻健', '测试管理', '交付事业部'],
-  ['13574870755', '彭景华', '金科业务', '交付事业部'],
-  ['15037691731', '肖乃峰', '安全管理', '交付事业部'],
-  ['18601250615', '薛潇', '超级管理员', '交付事业部'],
-  ['13308236171', '曹志学', '管理员', '成都事业群'],
-  ['15818723430', '王晓坤', '管理员', '交付事业部'],
-  ['18261598684', '盛赛荣', '架构管理', '交付事业部'],
-  ['13888920605', '陈旭', '质量管理', '云南农信'],
-  ['18787458157', '陈洁', '农信测试', '云南农信'],
-  ['15087190584', '王鲁', '需求管理', '云南农信'],
-  ['15808709229', '贺婵', '农信业务', '云南农信'],
-  ['15126311088', '崔晓林', '农信业务', '云南农信'],
-  ['13668758491', '孙雪峰', '农信业务', '云南农信'],
-  ['18918688502', '杨青', '金科业务', '交付事业部'],
+  ['13900000001', '示例用户01', '测试管理', '交付事业部'],
+  ['13900000002', '示例用户02', '测试管理', '云南农信'],
+  ['13900000003', '示例用户03', '运维负责人', '云南农信'],
+  ['13900000004', '示例用户04', '金科测试', '交付事业部'],
+  ['13900000005', '示例用户05', '项目管理', '交付事业部'],
+  ['13900000006', '示例用户06', '金科开发', '交付事业部'],
+  ['13900000007', '示例用户07', '金科开发', '大数据中心'],
+  ['13900000008', '示例用户08', '金科运维', '交付事业部'],
+  ['13900000009', '示例用户09', '配置管理员', '交付事业部'],
+  ['13900000010', '示例用户10', '机构负责人', '云南农信'],
+  ['13900000011', '示例用户11', '机构负责人', '上海事业群'],
+  ['13900000012', '示例用户12', '安全管理', '交付事业部'],
+  ['13900000013', '示例管理员', '超级管理员', '交付事业部'],
+  ['13900000014', '示例用户14', '管理员', '成都事业群'],
+  ['13900000015', '示例用户15', '架构管理', '交付事业部'],
+  ['13900000016', '示例用户16', '质量管理', '云南农信'],
+  ['13900000017', '示例用户17', '农信测试', '云南农信'],
+  ['13900000018', '示例用户18', '需求管理', '云南农信'],
+  ['13900000019', '示例用户19', '农信业务', '云南农信'],
+  ['13900000020', '示例用户20', '金科业务', '交付事业部'],
 ];
 
-// PAMS 问题兜底样例（用于空库首次运行；非空库会优先使用当前 issue 表快照）
+// PAMS 问题演示样例仅使用虚构数据。
 const FALLBACK_ISSUES = [
-  { code: 'NX20260626010', system: 'W10120', cls: '工单阻塞问题', status: '提出',   work_order_no: 'ZHQQ_202606025_004', urgency: '高',   round: '第1轮', summary: '非现场审计系统临时结果表、结果表限定为100万条，达到100万条后系统不再继续查询存储符合条件的结果，针对农信客户数量大、交易流水量大的特点，该限制导致建模过程中符合条件的数据大量丢失、建模结果不准确。' },
-  { code: 'NX20260626009', system: 'W10120', cls: '工单阻塞问题', status: '提出',   work_order_no: 'ZHQQ_202606025_003', urgency: '高',   round: '第1轮', summary: 'python建模实验室，to_sql操作页面显示成功，但结果表无数据问题。（5月27日向金科反馈该问题、6月8日组会讨论，至今未解决）' },
-  { code: 'NX20260626008', system: 'W10120', cls: '工单阻塞问题', status: '提出',   work_order_no: 'ZHQQ_202606025_002', urgency: '高',   round: '第1轮', summary: 'python建模实验室，投产演练实验室、工作空间脏数据清理问题。（5月26日向金科反馈该问题、6月8日组会讨论，至今未解决）' },
-  { code: 'NX20260626007', system: '068-01', cls: '工单阻塞问题', status: '提出',   work_order_no: 'ZHQQ_202606025_001', urgency: '紧急', round: '第1轮', summary: '识别审计问题，发送审计对象确认后：1.审计对接岗领取任务后，"配合审计问题"列表未显示该问题，选择转派、转派回复都不会更新列表，直至点击"回复审计组"后，列表才会显示该问题。2.审计对接岗选择转派后审计岗发现无法确认转派任务。' },
-  { code: 'NX20260625012', system: 'W06731', cls: '金科-应用配置', status: '提出',   work_order_no: 'ZHQQ_202606023_014', urgency: '紧急', round: '第1轮', summary: '审批进件面签"与后台通信发生错误"柜面无法办理对应交易。' },
-  { code: 'NX20260625010', system: 'YP8003', cls: '金科-应用配置', status: '提出',   work_order_no: 'ZHQQ_202606023_002', urgency: '中',   round: '第2轮', summary: '社保卡制卡产生两条制卡数据导致制卡失败，需排查批量制卡逻辑中的重复写入问题。' },
-  { code: 'NX20260625009', system: 'W06730', cls: '工单阻塞问题', status: '提出',   work_order_no: 'ZHQQ_202606023_001', urgency: '高',   round: '第1轮', summary: '同一客户同一天办理3笔协商分期还款均成功，欠款金额为0仍然可以办理分期，分期后形成溢缴款。' },
-  { code: 'NX20260623022', system: 'W05810', cls: '工单阻塞问题', status: '提出',   work_order_no: 'ZHQQ_202606022_001', urgency: '高',   round: '第1轮', summary: '行社反馈，边贸网银界面，汇款信息查询打印功能中，查询出的交易明细显示的付款账号展示错误，当前展示的是清算账号，实际应展示付款账号。' },
-  { code: 'NX20260623021', system: 'W08384', cls: '工单阻塞问题', status: '处理中', work_order_no: 'ZHQQ_202606023_004', urgency: '高',   round: '第2轮', summary: '人行反馈存在202603报送202604未报送的情况，经排查发现个贷存在放款日期与首次还款日期超过两个月的情况，以上情况需要征信系统兜底月末报送。' },
-  { code: 'NX20260623014', system: 'WP1031', cls: '工单阻塞问题', status: '处理中', work_order_no: 'ZHQQ_202606022_001', urgency: '中',   round: '第1轮', summary: '界面展示账号有误，付款账号字段取值逻辑错误，部分联机交易返回清算账号代替客户账号展示。' },
-  { code: 'NX20260622011', system: 'W08384', cls: '工单阻塞问题', status: '待验证', work_order_no: 'ZHQQ_202606017_009', urgency: '高',   round: '第2轮', summary: '对公贷款多记了一条贷款应计利息金额，造成征信报送时还款总金额与实际情况不一致。' },
-  { code: 'NX20260622010', system: 'W08384', cls: '工单阻塞问题', status: '处理中', work_order_no: 'ZHQQ_202606017_008', urgency: '高',   round: '第2轮', summary: '个人贷款系统对非循环类贷款支持一次性放款和分次放款，而目前所有的数据均按照一次性放款进行报送D1账户，存在报送口径偏差。' },
-  { code: 'NX20260622009', system: 'W08384', cls: '工单阻塞问题', status: '处理中', work_order_no: 'ZHQQ_202606017_007', urgency: '高',   round: '第2轮', summary: '征信非月度表现段还款金额、还款日期报送错误，影响个人征信数据准确性，需紧急修复。' },
-  { code: 'NX20260622008', system: 'W08384', cls: '工单阻塞问题', status: '处理中', work_order_no: 'ZHQQ_202606017_006', urgency: '中',   round: '第2轮', summary: '个人贷款R1账户没有报送保证人信息，导致征信保证担保关系缺失，需补充保证人关联逻辑。' },
-  { code: 'NX20260617017', system: 'W08384', cls: '工单阻塞问题', status: '已解决', work_order_no: 'ZHQQ_202606017_001', urgency: '紧急', round: '第1轮', summary: '调额审批进件岗-发起批量邀约调额进件时，出现"外呼【A0838Q001查询人行报告异常】"，导致批量进件中断，影响调额业务办理。' },
+  { code: 'DEMO-ISSUE-001', system: 'DEMO01', cls: '演示问题', status: '提出', work_order_no: 'DEMO-WO-001', urgency: '中', round: '第1轮', summary: '演示环境的接口校验问题。' },
+  { code: 'DEMO-ISSUE-002', system: 'DEMO02', cls: '演示问题', status: '处理中', work_order_no: 'DEMO-WO-002', urgency: '高', round: '第1轮', summary: '演示环境的批处理任务问题。' },
+  { code: 'DEMO-ISSUE-003', system: 'DEMO03', cls: '演示问题', status: '待验证', work_order_no: 'DEMO-WO-003', urgency: '低', round: '第2轮', summary: '演示环境的页面展示问题。' },
 ];
-
 function normalizeIssue(row, idx = 0) {
   const code = String(row.issue_code || row.code || '').trim();
   if (!code) return null;
@@ -143,42 +120,15 @@ function normalizeIssue(row, idx = 0) {
   };
 }
 
-async function loadIssueSnapshot(limit = 80) {
-  const rows = await all(
-    `SELECT issue_code, round, urgency, handling_method, version_codes, business_group, module, system, work_order_no,
-            create_time, plan_resolve_time, status, category, detailed_classification, summary, details,
-            tracker_name, tracker_org, reporter_name, reporter_org, handler_name, handler_org,
-            is_major, is_common, root_cause, solution, release_status, synced_at, created_at
-       FROM issue
-      WHERE issue_code IS NOT NULL AND issue_code <> ''
-      ORDER BY COALESCE(synced_at, created_at) DESC, id DESC
-      LIMIT ${limit}`,
-  ).catch(() => []);
-  const source = rows.length ? rows : FALLBACK_ISSUES;
-  const seen = new Set();
-  const out = [];
-  for (const [idx, row] of source.entries()) {
-    const item = normalizeIssue(row, idx);
-    if (!item || seen.has(item.code)) continue;
-    seen.add(item.code);
-    out.push(item);
-  }
-  return out;
+async function loadIssueSnapshot() {
+  return FALLBACK_ISSUES.map((row, idx) => normalizeIssue(row, idx)).filter(Boolean);
 }
 
-async function loadPendingVerifyIssues(limit = 20) {
-  const rows = await all(
-    `SELECT issue_code, round, urgency, handling_method, version_codes, business_group, module, system, work_order_no,
-            create_time, plan_resolve_time, status, category, detailed_classification, summary, details,
-            tracker_name, tracker_org, reporter_name, reporter_org, handler_name, handler_org,
-            is_major, is_common, root_cause, solution, release_status, synced_at, created_at
-       FROM issue
-      WHERE status = '待验证'
-        AND issue_code IS NOT NULL AND issue_code <> ''
-      ORDER BY COALESCE(synced_at, created_at) DESC, id DESC
-      LIMIT ${limit}`,
-  ).catch(() => []);
-  return rows.map((row, idx) => normalizeIssue(row, idx)).filter(Boolean);
+async function loadPendingVerifyIssues() {
+  return FALLBACK_ISSUES
+    .filter((row) => row.status === '待验证')
+    .map((row, idx) => normalizeIssue(row, idx))
+    .filter(Boolean);
 }
 
 function mergeIssuePools(primary, fallback) {
@@ -191,22 +141,10 @@ function mergeIssuePools(primary, fallback) {
   }
   return out;
 }
-
-// 12 个投产点（投产窗口）：YYYYMMDD、版本类型、是否默认、是否归档
-const RELEASE_POINTS = [
-  ['20260116', '常规版本', 0, 1], ['20260220', '常规版本', 0, 0], ['20260320', '重大版本', 0, 0],
-  ['20260417', '常规版本', 0, 0], ['20260515', '常规版本', 0, 0], ['20260619', '常规版本', 1, 0],
-  ['20260717', '应急版本', 0, 0], ['20260821', '常规版本', 0, 0], ['20260918', '常规版本', 0, 0],
-  ['20261016', '重大版本', 0, 0], ['20261120', '常规版本', 0, 0], ['20261218', '常规版本', 0, 0],
-];
-
-// 需求标题模板片段
 const REQ_TOPICS = [
-  '账户风险监测规则优化', '对公存款产品参数配置', '反洗钱可疑交易模型升级', '理财净值化估值引擎改造',
-  '客户信息联网核查接口对接', '支付结算路由策略调整', '总账系统科目映射重构', '管理会计分摊规则扩展',
-  '信贷额度审批流程优化', '第三方存管对账逻辑修复', '消息中心模板渠道扩展', '企业服务总线服务编排',
-  '高管驾驶舱指标口径统一', '惠民惠农补贴发放对接', '票据直连报文格式适配', '定价管理计算引擎性能优化',
-  '公积金缴存数据报送', '非税收入电子化收缴对接', '客户结算批量处理改造', '运营管理统计报表重构',
+  '客户查询页面优化', '规则配置能力改造', '对账任务处理优化', '报表统计口径调整',
+  '消息通知模板维护', '批处理性能优化', '系统参数配置变更', '接口字段校验完善',
+  '流程状态展示优化', '权限校验缺陷修复', '数据导入能力完善', '版本信息维护',
 ];
 const DEV_ACTIONS = ['接口改造', '数据迁移', '规则配置', '页面重构', '批处理优化', '报文适配', '性能调优', '缺陷修复'];
 
@@ -234,7 +172,7 @@ async function wipe() {
     WHERE field_definition_id IN (SELECT id FROM stage_field_definition WHERE is_builtin = 0)`);
   await run('DELETE FROM stage_field_definition WHERE is_builtin = 0');
   await run('DELETE FROM stage_section WHERE is_builtin = 0');
-  // 删除除引导超管(admin)外的全部人员（含名单内的超管薛潇，保证可重复执行；user_role 随级联删除）
+  // 删除除引导超管(admin)外的全部演示人员，保证可重复执行；user_role 随级联删除。
   await run('DELETE FROM user WHERE phone <> ?', config.superAdmin.phone);
   // release_point 被需求/投产申请引用，需在其后清空
   await run('DELETE FROM release_point');
@@ -280,9 +218,9 @@ export async function runMock() {
     await wipe();
 
     // ----------------------------------------------------------------------
-    // 1) 用户（导入真实名单 USERS；密码统一 Radar@2026；「超级管理员」角色以 is_super=1 建号）
+    // 1) 用户（导入虚构演示名单 USERS；密码由本地演示环境显式配置；「超级管理员」角色以 is_super=1 建号）
     // ----------------------------------------------------------------------
-    const pwd = hashPassword('Radar@2026');
+    const pwd = hashPassword('DemoPassword!2026');
     const roleId = {};
     for (const r of await all('SELECT id, code FROM role')) roleId[r.code] = r.id;
     const usersByRole = {}; // roleCode -> [name]
@@ -583,7 +521,7 @@ export async function runMock() {
     }
 
     // ----------------------------------------------------------------------
-    // 7) 问题清单（优先使用运行前 issue 表快照，空库时使用兜底样例）
+    // 7) 问题清单（仅使用虚构演示样例）
     // ----------------------------------------------------------------------
     const HANDLING = ['版本修复', '热修补丁', '配置调整', '数据修复'];
     const ROOT_CAUSES = [
@@ -867,7 +805,7 @@ export async function runMock() {
         .map((r) => `${r.entity_type}:${r.c}`).join('、'),
       会签记录: (await get('SELECT COUNT(*) c FROM release_signoff')).c,
       问题: (await get('SELECT COUNT(*) c FROM issue')).c,
-      问题快照来源: issuePool.length === FALLBACK_ISSUES.length ? '兜底样例/或同量快照' : `当前库快照 ${issuePool.length} 条`,
+      问题数据来源: '内置虚构演示样例',
       投产申请: (await get('SELECT COUNT(*) c FROM release_apply')).c,
       投产申请需求引用: requirementApplyRefs,
       投产申请工单引用: ticketApplyRefs,

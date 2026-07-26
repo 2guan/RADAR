@@ -1,11 +1,11 @@
 /**
  * 文件：components/DictSelect.jsx
+ * 说明：category 为字典分类；stage 可选，用于流程状态按阶段（需求/开发/测试/投产）过滤。
  * 用途：字典下拉选择器。按字典分类异步加载选项，支持输入即搜、按流程阶段过滤。
  * 作者：hengguan
- * 说明：category 为字典分类；stage 可选，用于流程状态按阶段（需求/开发/测试/投产）过滤。
  */
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Select } from 'antd';
 import { apiGet } from '../api/client.js';
 

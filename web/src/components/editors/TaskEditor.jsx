@@ -1,10 +1,10 @@
 /**
  * 文件：components/editors/TaskEditor.jsx
+ * 说明：kind='dev' 用开发表与开发阶段状态；kind='test' 用测试表与测试阶段状态。
  * 用途：开发/测试任务编辑弹窗（可复用：开发管理、测试管理 SIT/UAT/NFT/SEC、版本概览均使用）。
  *       与需求编辑器同款精致风格：双栏卡片布局、紧凑字号、标题栏内联状态选择器（按主题状态色）、
  *       历史记录改为右上角图标按钮、保存即关闭。
  * 作者：hengguan
- * 说明：kind='dev' 用开发表与开发阶段状态；kind='test' 用测试表与测试阶段状态。
  */
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -24,7 +24,7 @@ import EditorShell from './EditorShell.jsx';
 import RequirementEditor from './RequirementEditor.jsx';
 import TicketEditor from './TicketEditor.jsx';
 import StatusBadge, { getStatusType, statusSelectWidth } from '../StatusBadge.jsx';
-import { apiGet, apiPut, rawClient } from '../../api/client.js';
+import { apiGet, apiPut, rawClient } from '../../modules/delivery/api/index.js';
 import { useAppStore } from '../../stores/app.js';
 import { useResponsive } from '../../hooks/useResponsive.js';
 import { useRequiredFields } from '../../hooks/useRequiredFields.js';
