@@ -75,35 +75,130 @@ SQLite 与 TDSQL/MySQL 8 都是正式兼容目标：
 
 ```text
 RADAR/
-├── AGENTS.md                       # AI 与开发入口规则
-├── CONTRIBUTING.md                 # 贡献与提交流程
-├── README.md                       # 本文件：项目工程入口
-├── PRODUCT.md / DESIGN.md          # 产品与设计说明
-├── docker-compose.yml              # 单服务 Docker 部署
-├── Dockerfile                      # 多阶段构建镜像
-├── docker-entrypoint.sh            # 卷权限初始化并降权启动
-├── .env.example                    # 环境变量模板
-├── governance/                     # 模块边界、Owner 和治理基线
+├── AGENTS.md                       # AI 与开发人员的项目级入口规则
+├── CONTRIBUTING.md                 # 开发、提交、PR 与验收入口
+├── README.md                       # 本文件：工程入口与运行说明
+├── PRODUCT.md                      # 产品边界、流程与验收口径
+├── DESIGN.md                       # 主题、组件、响应式与无障碍约束
+├── COLLABORATION.md                # 多人协作补充说明
+├── AI-GUIDE.md                     # 开发助手项目上下文
+├── MIGRATION.md                    # SQLite/TDSQL 数据迁移与恢复手册
+├── package.json                    # 根目录并行开发启动脚本
+├── Dockerfile                      # 多阶段构建：Vite 构建 + Fastify 运行镜像
+├── docker-compose.yml              # 单服务部署、端口和卷挂载编排
+├── docker-entrypoint.sh            # 持久卷属主初始化并以 radar 用户启动
+├── .env.example                    # 全部运行、数据库、部署环境变量模板
+├── governance/
+│   ├── modules.yaml                # 模块、目录、Owner、表和公开契约唯一事实源
+│   ├── migration-parity-exceptions.json # 双数据库迁移历史例外清单
+│   └── *-baseline.json             # 依赖、许可证、边界等 CI 基线
 ├── docs/
-│   ├── governance/                 # 正式研发、AI、GitHub 规约
-│   ├── architecture/               # 模块说明与 ADR
-│   ├── planning/                   # 整体建设方案
-│   ├── requirements/               # 需求模板与任务范围
-│   └── manuals/                    # 用户和部署操作手册
-├── scripts/                        # CI 本地复用的治理检查
+│   ├── governance/                 # 项目研发、AI Coding、GitHub 协作规约
+│   ├── architecture/
+│   │   ├── MODULES.md              # 面向读者的模块职责说明
+│   │   └── decisions/              # ADR 架构决策记录
+│   ├── planning/                   # RADAR 2.0 整体建设方案
+│   ├── requirements/
+│   │   ├── TEMPLATE.md             # 需求与 AI 任务范围模板
+│   │   └── REQ-*/                  # 已受理需求及其 ai-task-scope.yaml
+│   └── manuals/                    # 用户、投产申请、投产审批、部署等操作手册
+├── scripts/                        # CI 可复用的治理、边界、迁移、依赖检查
 ├── server/
-│   ├── scripts/                    # SQLite/TDSQL 搬迁、备份和恢复工具
-│   ├── test/                       # node:test 自动化回归
+│   ├── AGENTS.md                   # 后端通用规则
+│   ├── package.json                # 后端启动、测试、数据迁移脚本
+│   ├── scripts/
+│   │   ├── sqlite-to-tdsql.js      # SQLite ↔ TDSQL 数据搬迁
+│   │   ├── tdsql-dump.js           # TDSQL 原生逻辑备份
+│   │   └── tdsql-restore.js        # TDSQL 原生恢复
+│   ├── templates/                  # 投产、开发等文档模板资产
+│   ├── test/                       # node:test 单元、API 与权限回归
 │   └── src/
-│       ├── app.js / server.js       # 应用装配与启动入口
-│       ├── config.js                # 运行配置
-│       ├── db/                      # Provider、方言、迁移和种子
-│       ├── platform/                # 横切平台能力
-│       ├── shared/                  # 公共契约与工具
-│       └── modules/                 # 领域模块
+│       ├── server.js                # 启动入口：迁移、种子、Fastify 监听、优雅退出
+│       ├── app.js                   # Fastify 插件、鉴权、错误处理、静态资源装配
+│       ├── config.js                # 运行期环境变量归一化
+│       ├── db/
+│       │   ├── index.js             # SQLite/TDSQL 统一数据库访问接口
+│       │   ├── migrate.js           # 按版本执行数据库迁移
+│       │   ├── seed.js              # 内置默认数据及种子版本控制
+│       │   ├── providers/           # sqlite.js、tdsql.js Provider
+│       │   ├── dialects/            # SQLite 与 MySQL 方言差异封装
+│       │   └── migrations/          # SQLite 迁移及 tdsql/ 等价迁移
+│       ├── platform/
+│       │   ├── auth/                # 身份、JWT、RBAC 公共能力
+│       │   ├── persistence/         # 数据持久化公开契约
+│       │   ├── attachments/         # 附件、签名与存储访问控制
+│       │   ├── audit/               # 统一操作审计
+│       │   ├── runtime/             # HTTP 响应、运行时适配与工具
+│       │   └── notifications/       # 通知能力预留入口
+│       ├── shared/
+│       │   ├── contracts/           # 跨模块稳定 DTO 与契约
+│       │   ├── authorization/       # 实体级授权工具
+│       │   ├── evidence/            # 证据与审计辅助能力
+│       │   └── workflow/            # 无业务归属的流程辅助能力
+│       ├── modules/
+│       │   ├── AGENTS.md             # 后端模块目录通用约束
+│       │   ├── requirements/        # 需求模块（独立编号、字段与公开契约）
+│       │   ├── tickets/             # 工单模块（独立编号、字段与公开契约）
+│       │   ├── delivery/            # 开发、测试、影响与覆盖分析公共编排
+│       │   ├── dev-tasks/           # 开发任务 HTTP 兼容入口
+│       │   ├── test-tasks/          # SIT/UAT/NFT/SEC 任务 HTTP 兼容入口
+│       │   ├── analysis/            # 影响与覆盖分析 HTTP 兼容入口
+│       │   ├── release-apply/       # 投产申请及关联制品
+│       │   ├── release/             # 投产审批、会签与投产材料
+│       │   ├── issues/              # PAMS 问题快照与同步
+│       │   ├── evidence/            # 证据与相关业务编排兼容入口
+│       │   ├── reporting/           # 跨模块只读投影、仪表盘与概览编排
+│       │   ├── dashboard/           # 仪表盘 HTTP 兼容入口
+│       │   ├── overview/            # 版本概览 HTTP 兼容入口
+│       │   ├── reference-data/      # 字典、系统、投产点和平台配置编排
+│       │   ├── dict/                # 字典 HTTP 兼容入口
+│       │   ├── systems/             # 系统 HTTP 兼容入口
+│       │   ├── settings/            # 平台配置 HTTP 兼容入口
+│       │   ├── release-points/      # 投产点 HTTP 兼容入口
+│       │   ├── identity-access/     # 用户、角色、权限编排与公开契约
+│       │   ├── users/               # 用户 HTTP 兼容入口
+│       │   ├── roles/               # 角色与权限 HTTP 兼容入口
+│       │   ├── process-configuration/ # 状态、动态字段、阶段内容与交付物
+│       │   ├── stage-content/       # 流程配置 HTTP 兼容入口
+│       │   ├── auth/                # 登录与会话 HTTP 适配入口
+│       │   ├── attachments/         # 附件 HTTP 适配入口
+│       │   ├── audit/               # 审计查询 HTTP 适配入口
+│       │   └── signatures/          # 电子签名 HTTP 适配入口
+│       ├── plugins/                 # Fastify 插件（鉴权等）
+│       └── lib/                     # 历史兼容工具与稳定通用实现
 └── web/
-    ├── public/                     # Logo、字体等静态资源
-    └── src/                        # React 页面、模块、组件、路由与状态
+    ├── AGENTS.md                   # 前端通用规则
+    ├── package.json                # Vite 开发、构建与预览脚本
+    ├── vite.config.js              # 开发代理、构建输出和 chunk 策略
+    ├── index.html                  # Vite HTML 入口
+    ├── public/
+    │   ├── logo/                   # RADAR Logo
+    │   └── fonts/                  # 本地字体资源
+    └── src/
+        ├── main.jsx / app.jsx       # React 入口与应用装配
+        ├── api/ / platform/         # Axios 客户端与平台 API 适配
+        ├── router/                  # 菜单、路由、首页和详情链接映射
+        ├── stores/                  # 全局状态（用户、权限、投产窗口、主题）
+        ├── layout/                  # 主布局与导航框架
+        ├── pages/                   # 路由页面及兼容页面入口
+        ├── modules/
+        │   ├── requirements/       # 需求页面与 API 适配
+        │   ├── tickets/            # 工单页面与 API 适配
+        │   ├── delivery/           # 开发、测试页面与 API 适配
+        │   ├── release/            # 投产申请、审批页面与 API 适配
+        │   ├── reporting/          # 仪表盘、概览 API 适配
+        │   ├── issues/             # 问题页面与 API 适配
+        │   ├── settings/           # 系统设置页面与 API 适配
+        │   └── identity-access/    # 用户与权限页面
+        ├── components/
+        │   ├── dashboard/          # 图表编辑、渲染和透视表
+        │   ├── editors/            # 需求、工单、任务、投产编辑器
+        │   └── *.jsx               # 通用表格、筛选、附件、状态、权限组件
+        ├── hooks/                  # 动态字段、默认状态、响应式等 Hook
+        ├── config/ / theme/        # 页面配置和主题预设
+        ├── shared/                 # 前端共享 API 与工具
+        ├── utils/                  # 下载、上传、时间等工具
+        └── styles.css              # 全局样式
 ```
 
 运行时生成的数据默认不进入 Git：`data/`、`attachments/` 和 `RADARdata/`。
