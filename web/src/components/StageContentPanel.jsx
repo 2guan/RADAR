@@ -3,7 +3,6 @@
  * 说明：遵循项目研发规约；跨模块能力仅可经公开契约访问。
  * 用途：业务详情页中的公共扩展输入项与交付件区域。布局、类型、数据源、显示与
  *       必填提示全部由阶段内容配置返回，业务编辑器无需维护新增字段名单。
- * 作者：Codex
  * 作者：hengguan
  */
 
@@ -13,6 +12,7 @@ import { DownloadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import AttachmentField from './AttachmentField.jsx';
 import { apiGet, apiPut, rawClient } from '../api/client.js';
+import { invalidateStageContentData, loadStageContentSchema, loadStageContentValues, patchStageContentValues } from '../modules/process-configuration/index.js';
 
 function SourceSelect({ sourceKey, multiple, value, onChange, disabled }) {
   const [options, setOptions] = useState([]);
@@ -48,8 +48,8 @@ const StageContentPanel = forwardRef(function StageContentPanel({ scopeKey, enti
   const load = async () => {
     if (!scopeKey) return;
     const [nextSchema, nextValues] = await Promise.all([
-      apiGet(`/stage-content/${scopeKey}/schema`),
-      entityId ? apiGet(`/stage-content/${scopeKey}/entities/${entityId}/values`) : Promise.resolve({}),
+      loadStageContentSchema(scopeKey),
+      loadStageContentValues(scopeKey, entityId),
     ]);
     setSchema(nextSchema);
     setValues(nextValues || {});
@@ -57,7 +57,10 @@ const StageContentPanel = forwardRef(function StageContentPanel({ scopeKey, enti
   };
   useEffect(() => {
     load().catch(() => {});
-    const refresh = () => load().catch(() => {});
+    const refresh = () => {
+      invalidateStageContentData(scopeKey, entityId);
+      load().catch(() => {});
+    };
     window.addEventListener('stage-content-config-updated', refresh);
     return () => window.removeEventListener('stage-content-config-updated', refresh);
   }, [scopeKey, entityId]);
@@ -75,7 +78,10 @@ const StageContentPanel = forwardRef(function StageContentPanel({ scopeKey, enti
     setSaving(true);
     try {
       const changedValues = Object.fromEntries([...changedKeysRef.current].map((key) => [key, values[key]]));
-      if (Object.keys(changedValues).length) await apiPut(`/stage-content/${scopeKey}/entities/${entityId}/values`, { values: changedValues });
+      if (Object.keys(changedValues).length) {
+        await apiPut(`/stage-content/${scopeKey}/entities/${entityId}/values`, { values: changedValues });
+        patchStageContentValues(scopeKey, entityId, changedValues);
+      }
       changedKeysRef.current.clear();
       if (notify) message.success('扩展信息已保存');
     } finally { setSaving(false); }

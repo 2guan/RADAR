@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { apiGet } from '../api/client.js';
+import { invalidateStageContentData, loadStageContentSchema } from '../modules/process-configuration/index.js';
 
 /** 根据当前状态值匹配参数配置中的真实状态 ID，规则始终绑定状态 ID。 */
 function activeStatusId(statuses, statusValue) {
@@ -19,12 +19,15 @@ export function useStageFormConfig(scopeKey, statusValue, readOnly = false) {
   useEffect(() => {
     let alive = true;
     const load = async () => {
-      const next = await apiGet(`/stage-content/${scopeKey}/schema`);
+      const next = await loadStageContentSchema(scopeKey);
       if (alive) setSchema(next);
     };
     // 网络短暂失败时保留原详情，避免把业务模块误判为“配置为隐藏”。
     load().catch(() => {});
-    const refresh = () => load().catch(() => {});
+    const refresh = () => {
+      invalidateStageContentData(scopeKey);
+      load().catch(() => {});
+    };
     window.addEventListener('stage-content-config-updated', refresh);
     return () => {
       alive = false;

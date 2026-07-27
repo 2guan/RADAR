@@ -5,14 +5,40 @@
  * 作者：hengguan
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { App, Upload, Button, Input, List, Tag, Popconfirm, Modal } from 'antd';
 import { UploadOutlined, LinkOutlined, DownloadOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons';
 import { apiGet, apiPost, apiDelete, rawClient, TOKEN_KEY } from '../api/client.js';
 
+const attachmentCache = new Map();
+const attachmentRequests = new Map();
+const attachmentCacheKey = (entityType, entityId) => `${entityType || ''}:${entityId || ''}`;
+
+/** 同一记录下的多个交付件共用附件列表，避免每张交付件卡片重复请求同一接口。 */
+async function loadEntityAttachments(entityType, entityId, { force = false } = {}) {
+  if (!entityId) return [];
+  const key = attachmentCacheKey(entityType, entityId);
+  if (force) {
+    attachmentCache.delete(key);
+    attachmentRequests.delete(key);
+  }
+  if (attachmentCache.has(key)) return attachmentCache.get(key);
+  if (attachmentRequests.has(key)) return attachmentRequests.get(key);
+  const pending = apiGet('/attachments', { entityType, entityId })
+    .then((rows) => {
+      const normalized = rows || [];
+      attachmentCache.set(key, normalized);
+      return normalized;
+    })
+    .finally(() => attachmentRequests.delete(key));
+  attachmentRequests.set(key, pending);
+  return pending;
+}
+
 export default function AttachmentField({ entityType, entityId, fieldKey, deliverableId, readOnly, inputMode = 'both' }) {
   const { message } = App.useApp();
   const [list, setList] = useState([]);
+  const [loading, setLoading] = useState(!!entityId);
   const [pathText, setPathText] = useState('');
   const allowFile = inputMode !== 'path';
   const allowPath = inputMode !== 'file';
@@ -22,17 +48,19 @@ export default function AttachmentField({ entityType, entityId, fieldKey, delive
   const [editingItem, setEditingItem] = useState(null);
   const [editText, setEditText] = useState('');
 
-  const reload = async () => {
-    if (!entityId) { setList([]); return; }
-    const rows = await apiGet('/attachments', { entityType, entityId });
+  const reload = useCallback(async ({ force = false } = {}) => {
+    if (!entityId) { setList([]); setLoading(false); return; }
+    setLoading(true);
+    const rows = await loadEntityAttachments(entityType, entityId, { force });
     setList((rows || []).filter((a) => {
       if (!deliverableId) return a.field_key === fieldKey;
       // 已切换到公共交付件的内置项，同时兼容历史上只有 field_key 的附件记录。
       return Number(a.deliverable_id) === Number(deliverableId)
         || (!a.deliverable_id && a.field_key === fieldKey);
     }));
-  };
-  useEffect(() => { reload(); }, [entityId, fieldKey, deliverableId]);
+    setLoading(false);
+  }, [deliverableId, entityId, entityType, fieldKey]);
+  useEffect(() => { reload().catch(() => setLoading(false)); }, [reload]);
 
   if (!entityId) {
     return <Tag className="status-tag status-tag-error" style={{ fontSize: 11 }}>保存记录后可管理附件</Tag>;
@@ -52,7 +80,7 @@ export default function AttachmentField({ entityType, entityId, fieldKey, delive
       });
       message.success('上传成功');
       onSuccess?.();
-      reload();
+      reload({ force: true });
     } catch (e) {
       onError?.(e);
     }
@@ -63,7 +91,7 @@ export default function AttachmentField({ entityType, entityId, fieldKey, delive
     if (!pathText.trim()) return;
     await apiPost('/attachments/path', { entityType, entityId, fieldKey, deliverableId, pathText: pathText.trim() });
     setPathText('');
-    reload();
+    reload({ force: true });
   };
 
   // 下载
@@ -76,7 +104,7 @@ export default function AttachmentField({ entityType, entityId, fieldKey, delive
     URL.revokeObjectURL(url);
   };
 
-  const remove = async (a) => { await apiDelete(`/attachments/${a.id}`); reload(); };
+  const remove = async (a) => { await apiDelete(`/attachments/${a.id}`); reload({ force: true }); };
 
   const handleEditPathClick = (item) => {
     if (readOnly) return;
@@ -87,7 +115,9 @@ export default function AttachmentField({ entityType, entityId, fieldKey, delive
 
   return (
     <div>
-      {list.length === 0 ? (
+      {loading ? (
+        <div style={{ minHeight: 24, fontSize: 11, color: 'var(--radar-text-secondary)', padding: '4px 0' }}>正在加载附件/路径…</div>
+      ) : list.length === 0 ? (
         <div style={{ fontSize: 11, color: 'var(--radar-text-secondary)', padding: '4px 0' }}>暂无附件/路径</div>
       ) : (
         <List
@@ -186,7 +216,7 @@ export default function AttachmentField({ entityType, entityId, fieldKey, delive
             await apiPost('/attachments/edit-path', { id: editingItem.id, pathText: editText.trim() });
             message.success('路径已修改');
             setEditOpen(false);
-            reload();
+            reload({ force: true });
           } catch (e) {
             message.error(e.message || '修改失败');
           }

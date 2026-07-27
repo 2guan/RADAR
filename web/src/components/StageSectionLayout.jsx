@@ -1,14 +1,13 @@
 /**
  * 文件：components/StageSectionLayout.jsx
  * 说明：历史详情页保留各自的专业表单结构，但模块所在左/右/整行及排序均从阶段配置读取。
- * 作者：Codex
  * 用途：将详情页内置业务模块的分区配置转换为统一的布局样式。
  * 作者：hengguan
  */
 
-import { useEffect, useMemo, useState } from 'react';
-import { apiGet } from '../api/client.js';
+import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { buildStageSectionLayout } from '../utils/stageSectionLayout.js';
+import { invalidateStageContentData, loadStageContentSchema } from '../modules/process-configuration/index.js';
 
 const safeScope = (scopeKey) => String(scopeKey || '').replace(/[^a-zA-Z0-9_-]/g, '-');
 const cssContent = (value) => String(value || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/[\r\n]/g, ' ');
@@ -20,10 +19,13 @@ export default function StageSectionLayout({ scopeKey, leftSpan = 14, rightSpan 
   // 创建监听器和重新排版。
   const defaultsKey = JSON.stringify(defaults);
   const stableDefaults = useMemo(() => JSON.parse(defaultsKey), [defaultsKey]);
-  const load = async () => setSections((await apiGet(`/stage-content/${scopeKey}/schema`))?.sections || []);
+  const load = async () => setSections((await loadStageContentSchema(scopeKey))?.sections || []);
   useEffect(() => {
     load().catch(() => {});
-    const refresh = () => load().catch(() => {});
+    const refresh = () => {
+      invalidateStageContentData(scopeKey);
+      load().catch(() => {});
+    };
     window.addEventListener('stage-content-config-updated', refresh);
     return () => window.removeEventListener('stage-content-config-updated', refresh);
   }, [scopeKey]);
@@ -61,80 +63,73 @@ export default function StageSectionLayout({ scopeKey, leftSpan = 14, rightSpan 
     return { css: `${columnsCss}\n${sectionsCss}`, configuredSections, layoutPlan };
   }, [scopeKey, sections, leftSpan, rightSpan, stableDefaults]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const layoutSelector = `.stage-detail-layout-${safeScope(scopeKey)}`;
-    let frameId = 0;
     const cleanups = [];
-    frameId = window.requestAnimationFrame(() => {
-      const container = document.querySelector(layoutSelector);
-      if (!container) return;
-      for (const item of css.configuredSections.filter(({ section }) => !!section.collapsed && section.show_title !== 0 && section.show_title !== false)) {
-        const card = container.querySelector(`.stage-detail-section-${item.key}`);
-        const title = card?.querySelector(':scope > .form-section-title');
-        if (!card || !title) continue;
-        card.classList.add('is-stage-section-collapsed', 'is-stage-section-collapsible');
-        title.tabIndex = 0;
-        title.setAttribute('role', 'button');
-        title.setAttribute('aria-expanded', 'false');
-        const toggle = () => {
-          const collapsed = card.classList.toggle('is-stage-section-collapsed');
-          title.setAttribute('aria-expanded', String(!collapsed));
-          // 绝对定位布局需重新测量折叠后的卡片高度与后续模块位置。
-          window.dispatchEvent(new Event('stage-section-collapse-toggled'));
-        };
-        const onKeyDown = (event) => {
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault();
-            toggle();
-          }
-        };
-        title.addEventListener('click', toggle);
-        title.addEventListener('keydown', onKeyDown);
-        cleanups.push(() => {
-          title.removeEventListener('click', toggle);
-          title.removeEventListener('keydown', onKeyDown);
-          title.removeAttribute('role');
-          title.removeAttribute('aria-expanded');
-          title.removeAttribute('tabindex');
-          card.classList.remove('is-stage-section-collapsed', 'is-stage-section-collapsible');
-        });
-      }
-    });
+    const container = document.querySelector(layoutSelector);
+    if (container) for (const item of css.configuredSections.filter(({ section }) => !!section.collapsed && section.show_title !== 0 && section.show_title !== false)) {
+      const card = container.querySelector(`.stage-detail-section-${item.key}`);
+      const title = card?.querySelector(':scope > .form-section-title');
+      if (!card || !title) continue;
+      card.classList.add('is-stage-section-collapsed', 'is-stage-section-collapsible');
+      title.tabIndex = 0;
+      title.setAttribute('role', 'button');
+      title.setAttribute('aria-expanded', 'false');
+      const toggle = () => {
+        const collapsed = card.classList.toggle('is-stage-section-collapsed');
+        title.setAttribute('aria-expanded', String(!collapsed));
+        // 绝对定位布局需重新测量折叠后的卡片高度与后续模块位置。
+        window.dispatchEvent(new Event('stage-section-collapse-toggled'));
+      };
+      const onKeyDown = (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          toggle();
+        }
+      };
+      title.addEventListener('click', toggle);
+      title.addEventListener('keydown', onKeyDown);
+      cleanups.push(() => {
+        title.removeEventListener('click', toggle);
+        title.removeEventListener('keydown', onKeyDown);
+        title.removeAttribute('role');
+        title.removeAttribute('aria-expanded');
+        title.removeAttribute('tabindex');
+        card.classList.remove('is-stage-section-collapsed', 'is-stage-section-collapsible');
+      });
+    }
     return () => {
-      window.cancelAnimationFrame(frameId);
       cleanups.forEach((cleanup) => cleanup());
     };
   }, [scopeKey, css]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const layoutSelector = `.stage-detail-layout-${safeScope(scopeKey)}`;
     let frameId = 0;
     let observer;
     let mutationObserver;
 
-    const schedule = () => {
-      window.cancelAnimationFrame(frameId);
-      frameId = window.requestAnimationFrame(() => {
-        // 移动端保持单栏自然流，避免绝对定位影响表单的响应式展开。
-        if (window.matchMedia('(max-width: 767px)').matches) {
-          setFlowCss((old) => old ? '' : old);
-          return;
-        }
-        const container = document.querySelector(layoutSelector);
-        if (!container) return;
-        const containerWidth = container.getBoundingClientRect().width;
-        if (!containerWidth) return;
+    const measure = () => {
+      // 移动端保持单栏自然流，避免绝对定位影响表单的响应式展开。
+      if (window.matchMedia('(max-width: 767px)').matches) {
+        setFlowCss((old) => old ? '' : old);
+        return;
+      }
+      const container = document.querySelector(layoutSelector);
+      if (!container) return;
+      const containerWidth = container.getBoundingClientRect().width;
+      if (!containerWidth) return;
 
-        const gap = 12;
-        const leftWidth = (containerWidth * leftSpan / 24) - gap / 2;
-        const rightWidth = (containerWidth * rightSpan / 24) - gap / 2;
-        const rightOffset = (containerWidth * leftSpan / 24) + gap / 2;
-        const rules = [];
-        let top = 0;
+      const gap = 12;
+      const leftWidth = (containerWidth * leftSpan / 24) - gap / 2;
+      const rightWidth = (containerWidth * rightSpan / 24) - gap / 2;
+      const rightOffset = (containerWidth * leftSpan / 24) + gap / 2;
+      const rules = [];
+      let top = 0;
         // 全宽模块按全局顺序作为分隔点；两个全宽模块之间，左右栏分别累加高度。
         // 因而左侧较短的“需求分析说明书”等模块会紧贴上一左侧模块，不会被右侧
         // 基本信息或负责人模块的高度向下挤压。
-        for (const segment of css.layoutPlan.segments) {
+      for (const segment of css.layoutPlan.segments) {
           const positioned = segment.items.map((item) => ({
             item,
             element: container.querySelector(`.stage-detail-section-${item.key}`),
@@ -158,14 +153,18 @@ export default function StageSectionLayout({ scopeKey, leftSpan = 14, rightSpan 
             laneTop[layout] += element.getBoundingClientRect().height + gap;
           }
           top = Math.max(laneTop.left, laneTop.right);
-        }
-        const height = Math.max(0, top - (top ? gap : 0));
-        const nextCss = `@media (min-width:768px){${layoutSelector}{display:block!important;position:relative!important;min-height:${height}px!important;}${rules.join('')}}`;
-        setFlowCss((old) => old === nextCss ? old : nextCss);
-      });
+      }
+      const height = Math.max(0, top - (top ? gap : 0));
+      const nextCss = `@media (min-width:768px){${layoutSelector}{display:block!important;position:relative!important;min-height:${height}px!important;}${rules.join('')}}`;
+      setFlowCss((old) => old === nextCss ? old : nextCss);
+    };
+    const schedule = () => {
+      window.cancelAnimationFrame(frameId);
+      frameId = window.requestAnimationFrame(measure);
     };
 
-    schedule();
+    // 首次测量在 layout effect 内同步完成，浏览器绘制前即从普通流切换为稳定布局。
+    measure();
     const container = document.querySelector(layoutSelector);
     if (container && typeof ResizeObserver !== 'undefined') {
       observer = new ResizeObserver(schedule);
