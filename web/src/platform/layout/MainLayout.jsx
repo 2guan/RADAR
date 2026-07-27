@@ -491,7 +491,7 @@ export default function MainLayout() {
           </div>
         )}
 
-        <Content className="radar-content" style={{ margin: isMobile ? 12 : (isTabMode ? 0 : 20), overflow: isTabMode ? 'hidden' : 'auto hidden' }}>
+        <Content className="radar-content" style={{ margin: isMobile ? 12 : (isTabMode ? 0 : 20), overflow: isTabMode ? 'hidden' : 'hidden auto' }}>
           {isTabMode ? (
             <TabbedWorkspace
               tabs={tabs}
