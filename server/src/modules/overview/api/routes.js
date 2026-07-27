@@ -156,7 +156,9 @@ async function appendIssueCards({ groups, body, targetReleasePointIds, sysMap, r
     raSql += ` WHERE release_point_id IN (${targetReleasePointIds.map(() => '?').join(',')})`;
     raParams.push(...targetReleasePointIds);
   } else {
-    const win = inClause('release_point_id', windowIds(body));
+    // release_apply_reference 与 release_apply 均含投产点字段；窗口筛选必须限定为申请记录，
+    // 避免 SQLite/TDSQL 在 JOIN 查询中将 release_point_id 判定为歧义列。
+    const win = inClause('ra.release_point_id', windowIds(body));
     if (win.where) { raSql += ` WHERE ${win.where}`; raParams.push(...win.params); }
   }
   const applies = await all(raSql, ...raParams);

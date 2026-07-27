@@ -53,38 +53,58 @@ function shift(base, days) {
 const ymd = (s) => `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
 
 // ---------------------------------------------------------------------------
-// 虚构演示人员清单：[手机号, 姓名, 角色标识, 所属机构]。
-// 用于本地演示与回归；其中「超级管理员」角色以 is_super=1 建号。
+// 演示人员清单：[手机号, 姓名, 所属机构, 角色标识数组]。
+// 角色数组与用户角色关系一一对应；含「超级管理员」的账号以 is_super=1 建号。
 // ---------------------------------------------------------------------------
 const USERS = [
-  ['13900000001', '示例用户01', '测试管理', '交付事业部'],
-  ['13900000002', '示例用户02', '测试管理', '云南农信'],
-  ['13900000003', '示例用户03', '运维负责人', '云南农信'],
-  ['13900000004', '示例用户04', '金科测试', '交付事业部'],
-  ['13900000005', '示例用户05', '项目管理', '交付事业部'],
-  ['13900000006', '示例用户06', '金科开发', '交付事业部'],
-  ['13900000007', '示例用户07', '金科开发', '大数据中心'],
-  ['13900000008', '示例用户08', '金科运维', '交付事业部'],
-  ['13900000009', '示例用户09', '配置管理员', '交付事业部'],
-  ['13900000010', '示例用户10', '机构负责人', '云南农信'],
-  ['13900000011', '示例用户11', '机构负责人', '上海事业群'],
-  ['13900000012', '示例用户12', '安全管理', '交付事业部'],
-  ['13900000013', '示例管理员', '超级管理员', '交付事业部'],
-  ['13900000014', '示例用户14', '管理员', '成都事业群'],
-  ['13900000015', '示例用户15', '架构管理', '交付事业部'],
-  ['13900000016', '示例用户16', '质量管理', '云南农信'],
-  ['13900000017', '示例用户17', '农信测试', '云南农信'],
-  ['13900000018', '示例用户18', '需求管理', '云南农信'],
-  ['13900000019', '示例用户19', '农信业务', '云南农信'],
-  ['13900000020', '示例用户20', '金科业务', '交付事业部'],
+  ['18015884321', '耿俊辉', '交付', ['架构管理']],
+  ['18733585536', '申永增', '北京', ['金科开发', '金科运维', '机构负责人']],
+  ['18201699022', '田振', '交付', ['金科运维', '配置管理员']],
+  ['18918688502', '杨青', '交付', ['金科业务']],
+  ['13668758491', '孙雪峰', '农信', ['农信业务']],
+  ['15126311088', '崔晓林', '农信', ['农信业务']],
+  ['15808709229', '贺婵', '农信', ['农信业务']],
+  ['15087190584', '王鲁', '农信', ['农信业务']],
+  ['18787458157', '陈洁', '农信', ['农信测试']],
+  ['13888920605', '陈旭', '农信', ['农信测试']],
+  ['18261598684', '盛赛荣', '交付', ['架构管理']],
+  ['15818723430', '王晓坤', '交付', ['管理员']],
+  ['13308236171', '曹志学', '成都', ['管理员']],
+  ['18601250615', '薛潇', '交付', ['超级管理员']],
+  ['15037691731', '肖乃峰', '交付', ['金科业务', '金科开发', '金科测试', '金科运维', '安全管理', '超级管理员']],
+  ['13574870755', '彭景华', '交付', ['金科业务', '测试管理']],
+  ['18918688309', '忻健', '交付', ['项目管理', '测试管理']],
+  ['13706969866', '吴刚', '交付', ['项目管理']],
+  ['18918689016', '胡伟钢', '上海', ['机构负责人']],
+  ['18820995661', '胡霆', '深圳', ['机构负责人']],
+  ['13708487153', '鲁志兵', '农信', ['机构负责人']],
+  ['18313983383', '王冲生', '农信', ['农信运维', '配置管理员']],
+  ['18910053279', '王卫东', '交付', ['配置管理员']],
+  ['15810107688', '王凯', '交付', ['金科运维']],
+  ['18965810392', '张京', '厦门', ['金科业务', '金科开发', '机构负责人']],
+  ['18959228330', '李河杰', '大数据', ['金科开发']],
+  ['18652954495', '杨锡明', '交付', ['项目管理']],
+  ['13811931599', '詹同宇', '交付', ['金科开发']],
+  ['18918688029', '郭劲松', '交付', ['项目管理']],
+  ['13881954314', '李彪', '交付', ['金科业务', '金科测试']],
+  ['15108711537', '李昶霖', '农信', ['农信运维']],
+  ['18687112956', '谢恩宏', '农信', ['测试管理']],
+  ['18918688193', '李通', '交付', ['测试管理']],
+  ['admin', '超级管理员', '金科', ['超级管理员']],
 ];
 
-// PAMS 问题演示样例仅使用虚构数据。
-const FALLBACK_ISSUES = [
-  { code: 'DEMO-ISSUE-001', system: 'DEMO01', cls: '演示问题', status: '提出', work_order_no: 'DEMO-WO-001', urgency: '中', round: '第1轮', summary: '演示环境的接口校验问题。' },
-  { code: 'DEMO-ISSUE-002', system: 'DEMO02', cls: '演示问题', status: '处理中', work_order_no: 'DEMO-WO-002', urgency: '高', round: '第1轮', summary: '演示环境的批处理任务问题。' },
-  { code: 'DEMO-ISSUE-003', system: 'DEMO03', cls: '演示问题', status: '待验证', work_order_no: 'DEMO-WO-003', urgency: '低', round: '第2轮', summary: '演示环境的页面展示问题。' },
+// 演示账号统一密码：仅用于 mock/演示环境，禁止用于任何真实账号或生产环境。
+export const MOCK_ACCOUNT_PASSWORD = 'Radar@2026';
+
+// 演示投产窗口：用于为需求、工单、投产审批与投产申请建立可追踪的计划关联。
+// 字段依次为 YYYYMMDD、版本类型、是否默认、是否归档；脚本每次覆盖时会重建该基准数据。
+const RELEASE_POINTS = [
+  ['20260116', '常规版本', 0, 1], ['20260220', '常规版本', 0, 0], ['20260320', '重大版本', 0, 0],
+  ['20260417', '常规版本', 0, 0], ['20260515', '常规版本', 0, 0], ['20260619', '常规版本', 1, 0],
+  ['20260717', '应急版本', 0, 0], ['20260821', '常规版本', 0, 0], ['20260918', '常规版本', 0, 0],
+  ['20261016', '重大版本', 0, 0], ['20261120', '常规版本', 0, 0], ['20261218', '常规版本', 0, 0],
 ];
+
 function normalizeIssue(row, idx = 0) {
   const code = String(row.issue_code || row.code || '').trim();
   if (!code) return null;
@@ -118,26 +138,27 @@ function normalizeIssue(row, idx = 0) {
   };
 }
 
-async function loadIssueSnapshot() {
-  return FALLBACK_ISSUES.map((row, idx) => normalizeIssue(row, idx)).filter(Boolean);
-}
-
-async function loadPendingVerifyIssues() {
-  return FALLBACK_ISSUES
-    .filter((row) => row.status === '待验证')
-    .map((row, idx) => normalizeIssue(row, idx))
-    .filter(Boolean);
-}
-
-function mergeIssuePools(primary, fallback) {
-  const seen = new Set();
-  const out = [];
-  for (const issue of [...(primary || []), ...(fallback || [])]) {
-    if (!issue?.code || seen.has(issue.code)) continue;
-    seen.add(issue.code);
-    out.push(issue);
+/**
+ * 在清空前快照本地已同步的待验证问题，供 20 条工单逐一关联。
+ * 严格排除历史 DEMO 样例，避免将模拟问题误当作同步问题再次灌入。
+ */
+async function loadPendingVerifyIssues(limit = 20) {
+  const rows = await all(
+    `SELECT issue_code, round, urgency, handling_method, business_group, module, system, work_order_no,
+            create_time, plan_resolve_time, status, category, detailed_classification, summary, details,
+            tracker_name, tracker_org, reporter_name, reporter_org, handler_name, handler_org,
+            is_major, is_common, root_cause, solution, release_status, synced_at, created_at
+       FROM issue
+      WHERE status = ? AND issue_code NOT LIKE ?
+      ORDER BY COALESCE(synced_at, created_at) DESC, id DESC
+      LIMIT ?`,
+    '待验证', 'DEMO-%', limit,
+  );
+  const issues = rows.map((row, index) => normalizeIssue(row, index)).filter(Boolean);
+  if (issues.length < limit) {
+    throw new Error(`待验证的同步问题不足 ${limit} 条，当前仅 ${issues.length} 条；请先完成问题同步后再执行 mock。`);
   }
-  return out;
+  return issues;
 }
 const REQ_TOPICS = [
   '客户查询页面优化', '规则配置能力改造', '对账任务处理优化', '报表统计口径调整',
@@ -154,9 +175,9 @@ const IMPL_ORGS = ['上海事业群', '北京事业群', '成都事业群', '深
 // 清空业务/人员数据（保留字典/系统/角色/权限/超级管理员/仪表盘图表配置）
 async function wipe() {
   const tables = [
-    'release_signoff', 'release_system', 'release_task', 'release_apply',
+    'release_signoff', 'release_system', 'release_task', 'release_apply_reference', 'release_apply',
     'test_task', 'dev_task', 'requirement', 'ticket', 'issue',
-    'attachment', 'audit_log', 'saved_filter',
+    'attachment', 'audit_log', 'saved_filter', 'login_fail_tracker',
   ];
   for (const t of tables) await run(`DELETE FROM ${t}`);
   // 公共内容填写值随演示业务数据重置；内置字段、业务组件与分区元数据由 seed 保留。
@@ -209,29 +230,46 @@ async function seedStageDeliverableDemo() {
 export async function runMock() {
   await runMigrations();
   await runSeed();
-  const pendingVerifyIssues = await loadPendingVerifyIssues(20);
-  const issuePool = mergeIssuePools(pendingVerifyIssues, await loadIssueSnapshot());
+  // 必须在 wipe 之前提取真实待验证问题；后续会将这 20 条快照重新写回问题清单并生成关联工单。
+  const issuePool = await loadPendingVerifyIssues(20);
 
   await tx(async () => {
     await wipe();
 
     // ----------------------------------------------------------------------
-    // 1) 用户（导入虚构演示名单 USERS；密码由本地演示环境显式配置；「超级管理员」角色以 is_super=1 建号）
+    // 1) 用户（按演示名单及多角色关系建号；密码由本地演示环境显式配置）
     // ----------------------------------------------------------------------
-    const pwd = hashPassword('DemoPassword!2026');
+    const pwd = hashPassword(MOCK_ACCOUNT_PASSWORD);
     const roleId = {};
     for (const r of await all('SELECT id, code FROM role')) roleId[r.code] = r.id;
     const usersByRole = {}; // roleCode -> [name]
-    for (const [phone, name, code, org] of USERS) {
-      if (!roleId[code]) throw new Error(`角色不存在：${code}（手机号 ${phone}）`);
-      const isSuper = code === '超级管理员' ? 1 : 0;
-      const res = await run(
+    for (const [phone, name, org, roleCodes] of USERS) {
+      if (!Array.isArray(roleCodes) || !roleCodes.length) throw new Error(`未配置角色：${phone}`);
+      for (const roleCode of roleCodes) {
+        if (!roleId[roleCode]) throw new Error(`角色不存在：${roleCode}（手机号 ${phone}）`);
+      }
+      const isSuper = roleCodes.includes('超级管理员') ? 1 : 0;
+      // wipe 会保留配置中的引导超管；名单若包含同手机号（如 admin），则复用并刷新其资料/角色。
+      const existing = await get('SELECT id FROM user WHERE phone = ?', phone);
+      const userId = existing?.id || (await run(
         `INSERT INTO user (phone, name, org, password_hash, status, is_super, password_changed_at)
          VALUES (?,?,?,?,?,?,datetime('now','localtime'))`,
         phone, name, org, pwd, '启用', isSuper,
-      );
-      await run('INSERT INTO user_role (user_id, role_id) VALUES (?,?)', res.lastInsertRowid, roleId[code]);
-      (usersByRole[code] ||= []).push(name);
+      )).lastInsertRowid;
+      if (existing) {
+        await run(
+          `UPDATE user
+              SET name = ?, org = ?, password_hash = ?, status = ?, is_super = ?,
+                  password_changed_at = datetime('now','localtime'), updated_at = datetime('now','localtime')
+            WHERE id = ?`,
+          name, org, pwd, '启用', isSuper, userId,
+        );
+        await run('DELETE FROM user_role WHERE user_id = ?', userId);
+      }
+      for (const roleCode of roleCodes) {
+        await run('INSERT INTO user_role (user_id, role_id) VALUES (?,?)', userId, roleId[roleCode]);
+        (usersByRole[roleCode] ||= []).push(name);
+      }
     }
     // 按角色取一名人员；该角色无人时回退到任意可用人员，保证字段不为空
     const anyUser = USERS[0][1];
@@ -566,12 +604,9 @@ export async function runMock() {
     }
 
     // ----------------------------------------------------------------------
-    // 8) 工单分析（20 条，全部来源于当前问题清单中 status=待验证 的问题）
+    // 8) 工单分析（20 条，全部来源于执行前快照的已同步待验证问题）
     // ----------------------------------------------------------------------
-    const ticketIssuePool = mergeIssuePools(pendingVerifyIssues, issuePool).slice(0, 20);
-    if (ticketIssuePool.length < 20) {
-      logger.warn(`[模拟数据] 当前问题清单中待验证问题不足 20 条，实际生成工单 ${ticketIssuePool.length} 条。`);
-    }
+    const ticketIssuePool = issuePool;
     const TICKET_PROFILE_PLAN = [
       'released', 'released',
       'sit', 'sit', 'sit', 'sit', 'sit',
@@ -735,7 +770,7 @@ export async function runMock() {
       const review = await deriveReview(refs, rp.id);
       const sys = sysByCode[changeSys] || pick(systems);
       const sysCode = sysByCode[changeSys] ? changeSys : sys.sys_code;
-      await run(
+      const result = await run(
         `INSERT INTO release_apply
            (change_code, change_content, impact_scope, change_system, impl_org, delivery_units,
             ref_codes, review_status, out_dept, deploy_dept, release_point_id, registrar, register_time)
@@ -747,7 +782,14 @@ export async function runMock() {
         JSON.stringify(refs), review,
         sys.out_dept || '建信金科', sys.deploy_dept || sys.org, rp.id, pickUser('配置管理员'), ymd(shift(ymd(rp.date), -2)),
       );
-      const id = (await get('SELECT id FROM release_apply WHERE change_code = ?', code)).id;
+      const id = Number(result.lastInsertRowid);
+      // 投产审批与版本概览读取索引读模型，不直接展开 ref_codes JSON；Mock 必须与正式写接口同步维护。
+      for (const refCode of refs) {
+        await run(
+          'INSERT INTO release_apply_reference (release_apply_id, ref_code, release_point_id) VALUES (?,?,?)',
+          id, refCode, rp.id,
+        );
+      }
       await auditCreate('release_apply', id, code, '系统初始化');
     }
 

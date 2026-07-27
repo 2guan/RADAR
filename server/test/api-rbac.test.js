@@ -131,7 +131,10 @@ if (!process.env.RADAR_RUN_API_TESTS) {
     assert.ok(metrics.json().data.requirement.total >= 2);
 
     const overview = await app.inject({
-      method: 'POST', url: '/api/overview/list', headers, payload: { page: 1, pageSize: 20 },
+      // 覆盖投产窗口筛选：概览追加投产申请关联问题时必须限定 ra.release_point_id，
+      // 防止 JOIN release_apply_reference 后出现同名字段歧义。
+      method: 'POST', url: '/api/overview/list', headers,
+      payload: { page: 1, pageSize: 20, releasePointIds: [releasePoint.id] },
     });
     assert.equal(overview.statusCode, 200);
     assert.equal(overview.json().data.page, 1);
