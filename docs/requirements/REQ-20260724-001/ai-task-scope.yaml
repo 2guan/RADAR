@@ -7,7 +7,15 @@
   "scope": {
     "writable_paths": ["AGENTS.md", "CONTRIBUTING.md", "AI-GUIDE.md", "COLLABORATION.md", "README.md", "DESIGN.md", "MIGRATION.md", "docs/**", "governance/**", ".github/**", "scripts/**", "server/scripts/**", "server/src/**", "server/test/**", "web/src/**", "web/vite.config.js", "server/package.json", "server/package-lock.json", "web/package.json", "web/package-lock.json", "Dockerfile", "docker-compose.yml", "docker-entrypoint.sh", ".env.example", ".trivyignore"],
     "read_only_paths": ["PRODUCT.md", "server/templates/**"],
-    "forbidden_paths": [".env", "**/.env", "**/*secret*", "**/*credential*", "attachments/**", "data/**"]
+    "forbidden_paths": [".env", "**/.env", "**/*secret*", "**/*credential*", "attachments/**"]
+  },
+  "local_runtime_data_exception": {
+    "allowed": true,
+    "authorized_by": "项目负责人（当前对话）",
+    "purpose": "启动 RADAR 本地开发服务并经应用界面验证功能",
+    "allowed_operations": ["application_startup", "health_check", "normal_application_runtime", "settings_configuration_snapshot_read"],
+    "readable_tables": ["stage_scope", "stage_section", "stage_field_definition", "stage_field_status_rule", "deliverable_definition", "deliverable_status_rule", "deliverable_template_version"],
+    "prohibited_operations": ["user_or_business_data_read", "attachment_content_read", "template_binary_read", "export", "copy", "display", "external_transmission", "production_connection"]
   },
   "public_capability_change": { "required": true, "shared_change_issue": "REQ-20260724-001", "target_module": "platform/shared", "existing_method_changed": false, "new_method": "module-public-contracts", "semantic_name_confirmed": true, "old_behavior_preserved": true, "owner_approved": true },
   "database": { "changed": true, "migration_paths": ["server/src/platform/persistence/migrations/0039_code_sequence.sql", "server/src/platform/persistence/migrations/tdsql/0019_code_sequence.sql"], "mysql8_compatible": true, "historical_data_impact": "新增编号序列表；首次领号会按现有业务编号最大序号自动接续，不改写历史编号。", "rollback_or_compensation": "代码回退后保留 code_sequence 表不影响既有业务；如需重置序列，仅在停止写入并完成备份后按规则和前缀删除对应行。" },

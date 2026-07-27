@@ -20,6 +20,7 @@ if (!process.env.RADAR_RUN_API_TESTS) {
   fs.mkdirSync(staticDirectory, { recursive: true });
   fs.writeFileSync(path.join(staticDirectory, 'index.html'), '<!doctype html><div id="root"></div>');
   process.env.DB_FILE = path.join(temporaryDirectory, 'radar.db');
+  process.env.ATTACHMENT_DIR = path.join(temporaryDirectory, 'attachments');
   process.env.WEB_DIST = staticDirectory;
   process.env.ADMIN_PASSWORD = 'Radar@Test2026!';
   process.env.NODE_ENV = 'test';
@@ -80,6 +81,77 @@ if (!process.env.RADAR_RUN_API_TESTS) {
     });
     assert.equal(response.statusCode, 403);
     assert.equal(response.json().code, 403);
+  });
+
+  test('交付件模板配置回显当前生效模板，并登记既有的动态模板', async () => {
+    const administrator = await get('SELECT id, phone FROM user WHERE is_super = 1 LIMIT 1');
+    const token = await app.jwt.sign({ id: administrator.id, phone: administrator.phone });
+    const headers = { authorization: `Bearer ${token}`, 'x-requested-by': 'RADAR' };
+    const devConfig = await app.inject({ method: 'GET', url: '/api/settings/stage-content/dev', headers });
+
+    assert.equal(devConfig.statusCode, 200);
+    const codingChecklist = devConfig.json().data.deliverables.find((item) => item.label === '编码检查表');
+    assert.equal(codingChecklist.template?.template_mode, 'custom');
+    assert.equal(codingChecklist.template?.handler_key, 'dev.coding-checklist');
+
+    // 历史禁用上传版本不能覆盖当前启用的动态模板，避免系统设置与详情页不一致。
+    await run(`INSERT INTO deliverable_template_version
+      (deliverable_definition_id, template_mode, filename, stored_path, version_no, enabled)
+      VALUES (?,?,?,?,?,0)`, codingChecklist.id, 'upload', '历史模板.docx', 'templates/history.docx', 99);
+    const refreshed = await app.inject({ method: 'GET', url: '/api/settings/stage-content/dev', headers });
+    const refreshedChecklist = refreshed.json().data.deliverables.find((item) => item.id === codingChecklist.id);
+    assert.equal(refreshedChecklist.template?.template_mode, 'custom');
+    assert.equal(refreshedChecklist.template?.handler_key, 'dev.coding-checklist');
+  });
+
+  test('阶段配置初始种子使用已确认的输入项与交付件布局、必填规则', async () => {
+    const administrator = await get('SELECT id, phone FROM user WHERE is_super = 1 LIMIT 1');
+    const token = await app.jwt.sign({ id: administrator.id, phone: administrator.phone });
+    const headers = { authorization: `Bearer ${token}`, 'x-requested-by': 'RADAR' };
+    const releaseApply = await app.inject({ method: 'GET', url: '/api/settings/stage-content/release_apply', headers });
+    const releaseApplySections = new Map(releaseApply.json().data.sections.map((section) => [section.section_key, section]));
+    assert.equal(releaseApplySections.get('extension').layout_mode, 'right');
+    assert.equal(releaseApplySections.get('deliverables').layout_mode, 'right');
+    assert.equal(releaseApplySections.get('artifacts').collapsed, 1);
+
+    const release = await app.inject({ method: 'GET', url: '/api/settings/stage-content/release', headers });
+    const releasePlan = release.json().data.deliverables.find((item) => item.label === '投产变更方案');
+    const releaseFinalStatuses = release.json().data.statuses.filter((status) => status.state_type === 'final');
+    assert.equal(releasePlan.rules[releaseFinalStatuses[0].id], true);
+    assert.equal(releasePlan.rules[releaseFinalStatuses[1].id], true);
+  });
+
+  test('交付件上传模板显示文件名且可删除', async () => {
+    const administrator = await get('SELECT id, phone FROM user WHERE is_super = 1 LIMIT 1');
+    const token = await app.jwt.sign({ id: administrator.id, phone: administrator.phone });
+    const headers = { authorization: `Bearer ${token}`, 'x-requested-by': 'RADAR' };
+    const configResponse = await app.inject({ method: 'GET', url: '/api/settings/stage-content/test.SIT', headers });
+    const deliverable = configResponse.json().data.deliverables.find((item) => item.label === '测试方案');
+    assert.ok(deliverable);
+    const storedPath = 'templates/template-delete.docx';
+    const filePath = path.join(process.env.ATTACHMENT_DIR, storedPath);
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, 'template fixture');
+    const insert = await run(`INSERT INTO deliverable_template_version
+      (deliverable_definition_id, template_mode, filename, stored_path, version_no, enabled)
+      VALUES (?,?,?,?,?,1)`, deliverable.id, 'upload', '测试方案模板.docx', storedPath, 1);
+
+    const withTemplate = await app.inject({ method: 'GET', url: '/api/settings/stage-content/test.SIT', headers });
+    const configured = withTemplate.json().data.deliverables.find((item) => item.id === deliverable.id);
+    assert.equal(configured.template?.filename, '测试方案模板.docx');
+    const removed = await app.inject({
+      method: 'DELETE',
+      url: `/api/settings/stage-deliverables/test.SIT/${deliverable.id}/templates/${insert.lastInsertRowid}`,
+      headers,
+    });
+    assert.equal(removed.statusCode, 200);
+    assert.equal(fs.existsSync(filePath), false);
+    const deleted = await get('SELECT enabled, deleted_at FROM deliverable_template_version WHERE id = ?', insert.lastInsertRowid);
+    assert.equal(deleted.enabled, 0);
+    assert.ok(deleted.deleted_at);
+    const afterDelete = await app.inject({ method: 'GET', url: '/api/settings/stage-content/test.SIT', headers });
+    const cleared = afterDelete.json().data.deliverables.find((item) => item.id === deliverable.id);
+    assert.equal(cleared.template, null);
   });
 
   test('投产申请写入索引关联表，投产审批列表可按关联编号读取', async () => {

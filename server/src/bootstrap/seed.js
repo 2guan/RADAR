@@ -14,7 +14,7 @@ import { parseJsonObject, logger } from '../platform/runtime/index.js';
 
 // 种子版本是“内置默认配置”而非业务数据版本；仅在首次初始化或显式升级版本时执行全量校准。
 const SEED_VERSION_KEY = 'runtime.seed.version';
-const SEED_VERSION = '20260726.1';
+const SEED_VERSION = '20260727.2';
 
 // 角色定义（角色标识、名称、是否内置、是否会签角色）
 // 会签角色（signoff:1）：投产评审会签由以下 9 个角色完成。
@@ -152,15 +152,15 @@ export const STAGE_BUILTIN_SECTION_DEFAULTS = {
     { key: 'basic', title: '基本信息', layout: 'left' },
     { key: 'systems', title: '涉及系统', layout: 'right', legacy_keys: ['analysis'] },
     { key: 'owners', title: '相关负责人', layout: 'right' },
-    { key: 'extension', title: '扩展信息', layout: 'left' },
-    { key: 'deliverables', title: '交付件', layout: 'left', show_title: false },
+    { key: 'extension', title: '扩展信息', layout: 'right' },
+    { key: 'deliverables', title: '交付件', layout: 'right', show_title: false },
   ],
   ticket: [
     { key: 'basic', title: '基本信息', layout: 'left' },
     { key: 'systems', title: '涉及系统', layout: 'right', legacy_keys: ['analysis'] },
     { key: 'owners', title: '相关负责人', layout: 'right' },
-    { key: 'extension', title: '扩展信息', layout: 'left' },
-    { key: 'deliverables', title: '交付件', layout: 'left', show_title: false },
+    { key: 'extension', title: '扩展信息', layout: 'right' },
+    { key: 'deliverables', title: '交付件', layout: 'right', show_title: false },
   ],
   dev: [
     { key: 'task', title: '基本信息', layout: 'left' },
@@ -168,7 +168,7 @@ export const STAGE_BUILTIN_SECTION_DEFAULTS = {
     // 排期与交付件/扩展信息继续按各自列独立堆叠。
     { key: 'impact', title: '影响性分析', layout: 'right' },
     { key: 'schedule', title: '排期', layout: 'left' },
-    { key: 'extension', title: '扩展信息', layout: 'left' },
+    { key: 'extension', title: '扩展信息', layout: 'right' },
     { key: 'deliverables', title: '交付件', layout: 'right', show_title: false },
   ],
   test: [
@@ -176,16 +176,16 @@ export const STAGE_BUILTIN_SECTION_DEFAULTS = {
     // 覆盖性分析当前仅在应用组装测试（SIT）详情页实现，其他测试类型预留后续组件接入。
     { key: 'coverage', title: '测试覆盖性分析', layout: 'right', scope_keys: ['test.SIT'] },
     { key: 'schedule', title: '排期', layout: 'left' },
-    { key: 'extension', title: '扩展信息', layout: 'left' },
+    { key: 'extension', title: '扩展信息', layout: 'right' },
     { key: 'deliverables', title: '交付件', layout: 'right', show_title: false },
   ],
   release_apply: [
     { key: 'references', title: '关联需求/工单', layout: 'left' },
     { key: 'content', title: '变更内容', layout: 'left' },
     { key: 'change', title: '变更明细', layout: 'right' },
-    { key: 'artifacts', title: '交付制品', layout: 'full' },
-    { key: 'extension', title: '扩展信息', layout: 'left' },
-    { key: 'deliverables', title: '交付件', layout: 'left', show_title: false },
+    { key: 'artifacts', title: '交付制品', layout: 'full', collapsed: true },
+    { key: 'extension', title: '扩展信息', layout: 'right' },
+    { key: 'deliverables', title: '交付件', layout: 'right', show_title: false },
   ],
   release: [
     { key: 'basic', title: '基本信息', layout: 'left' },
@@ -193,7 +193,7 @@ export const STAGE_BUILTIN_SECTION_DEFAULTS = {
     { key: 'release_info', title: '投产信息', layout: 'right', legacy_keys: ['approval'] },
     { key: 'artifacts', title: '关联制品情况', layout: 'right' },
     { key: 'extension', title: '扩展信息', layout: 'left' },
-    { key: 'deliverables', title: '交付件', layout: 'left', show_title: false },
+    { key: 'deliverables', title: '交付件', layout: 'right', show_title: false },
   ],
 };
 

@@ -138,7 +138,7 @@ const StageContentPanel = forwardRef(function StageContentPanel({ scopeKey, enti
         <div className="form-section-title" style={{ margin: '0 0 6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           <span>{item.label}</span>
           <Space size={2}>
-            {item.template && <Tooltip title="下载模板"><Button type="text" size="small" icon={<DownloadOutlined style={{ fontSize: 12 }} />} onClick={() => downloadTemplate(item)} aria-label={`下载${item.label}模板`} /></Tooltip>}
+            {item.template?.template_mode === 'upload' && <Tooltip title="下载模板"><Button type="text" size="small" icon={<DownloadOutlined style={{ fontSize: 12 }} />} onClick={() => downloadTemplate(item)} aria-label={`下载${item.label}模板`} /></Tooltip>}
             {renderDeliverableAction?.(item)}
           </Space>
         </div>

@@ -343,6 +343,7 @@ function FieldEditor({ open, field, config, sourceOptions, messageApi, onClose, 
 function DeliverableEditor({ open, deliverable, config, messageApi, onClose, onSaved, isMobile }) {
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
+  const [removingTemplate, setRemovingTemplate] = useState(false);
   useEffect(() => {
     if (!open) return;
     form.setFieldsValue(deliverable ? { ...deliverable, visible: !!deliverable.visible, rulesSelected: rulesToSelected(deliverable.rules, config?.statuses) } : { input_mode: 'both', visible: true, sort: 0, rulesSelected: [] });
@@ -369,6 +370,16 @@ function DeliverableEditor({ open, deliverable, config, messageApi, onClose, onS
       onSaved();
     } catch (err) { onError?.(err); }
   };
+  const removeTemplate = async () => {
+    if (!deliverable?.template || deliverable.template.template_mode !== 'upload') return;
+    setRemovingTemplate(true);
+    try {
+      await apiDelete(`/settings/stage-deliverables/${config.scope.scope_key}/${deliverable.id}/templates/${deliverable.template.id}`);
+      messageApi.success('模板已删除');
+      onSaved();
+    } finally { setRemovingTemplate(false); }
+  };
+  const template = deliverable?.template;
   return (
     <Modal open={open} title={deliverable ? `交付件详情 · ${deliverable.label}` : '新增交付件'} width={isMobile ? 'calc(100vw - 16px)' : 720} onCancel={onClose} destroyOnHidden className="stage-config-editor-modal"
       footer={<Space><Button onClick={onClose}>取消</Button><Button type="primary" loading={saving} onClick={save}>保存</Button></Space>}
@@ -386,7 +397,7 @@ function DeliverableEditor({ open, deliverable, config, messageApi, onClose, onS
         </div>
         <div className="form-section-card">
           <div className="form-section-title">模板</div>
-          <Form.Item label="当前模板" style={{ marginBottom: 0 }}><Space wrap><Tag>{deliverable?.template ? (deliverable.template.template_mode === 'custom' ? '定制模板' : '上传模板') : '无'}</Tag>{deliverable && <Upload accept=".docx,.xlsx" showUploadList={false} customRequest={uploadTemplate}><Button size="small">上传 DOCX/XLSX 模板</Button></Upload>}</Space><div style={{ marginTop: 6, color: 'var(--radar-text-secondary)', fontSize: 12 }}>上传模板仅供静态下载；复杂模板请后续通过定制业务组件实现。</div></Form.Item>
+          <Form.Item label="当前模板" style={{ marginBottom: 0 }}><Space wrap><Tag>{template ? (template.template_mode === 'custom' ? '定制模板' : '上传模板') : '无'}</Tag>{template?.filename && <Tooltip title={template.filename}><span style={{ maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{template.filename}</span></Tooltip>}{template?.template_mode === 'upload' && <Popconfirm title="删除后该交付件将不再提供此上传模板，确认删除？" onConfirm={removeTemplate}><Button size="small" danger loading={removingTemplate}>删除模板</Button></Popconfirm>}{deliverable && template?.template_mode !== 'custom' && <Upload accept=".docx,.xlsx" showUploadList={false} customRequest={uploadTemplate}><Button size="small">{template?.template_mode === 'upload' ? '上传新模板' : '上传 DOCX/XLSX 模板'}</Button></Upload>}</Space><div style={{ marginTop: 6, color: 'var(--radar-text-secondary)', fontSize: 12 }}>{template?.template_mode === 'custom' ? '该模板由定制业务组件生成，请在业务详情页下载。' : '上传新模板会替换当前上传版本；复杂模板请通过定制业务组件下载。'}</div></Form.Item>
         </div>
         <div className="form-section-card">
           <div className="form-section-title">必填控制</div>
@@ -454,7 +465,7 @@ export default function StageConfiguration({ mode }) {
     { title: '交付件名称', dataIndex: 'label' },
     { title: '是否显示', dataIndex: 'visible', render: (v) => v ? '是' : '否' },
     { title: '提交方式', dataIndex: 'input_mode', render: (v) => ({ file: '上传文件', path: '填写路径', both: '都可以' }[v] || v) },
-    { title: '模板', render: (_, row) => row.template ? (row.template.template_mode === 'custom' ? '定制模板' : '上传模板') : '无' },
+    { title: '模板', render: (_, row) => row.template ? (row.template.template_mode === 'custom' ? '定制模板' : `上传模板：${row.template.filename || '未命名文件'}`) : '无' },
     { title: '必填控制', render: (_, row) => <RequiredRuleTags statuses={config?.statuses || []} rules={row.rules} /> },
     { title: '排序', dataIndex: 'sort' },
     { title: '操作', render: (_, row) => <ConfigurationActions

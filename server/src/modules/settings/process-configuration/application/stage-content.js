@@ -94,6 +94,39 @@ const DELIVERABLE_DEFAULTS = {
   release: ['投产变更方案', '投产变更控制表'],
 };
 
+// 来源于当前本地配置基线；新库仅在首次种子化时写入，后续由系统设置维护。
+const DELIVERABLE_DEFAULT_METADATA = {
+  requirement: { 需求说明书: { layout: 'right', required_from: 'final' } },
+  dev: {
+    概要设计: { layout: 'left' },
+    详细设计: { layout: 'left' },
+    代码走查: { layout: 'left' },
+    单元测试报告: { layout: 'left' },
+    编码检查表: { layout: 'left', required_from: 'final' },
+    技术方案确认单: { layout: 'left', required_from: 'final' },
+  },
+  test: { 测试方案: { layout: 'left' }, 测试报告: { layout: 'left' } },
+  'test.UAT': { 测试报告: { required_from: 'final' } },
+  release_apply: { 摆渡证明: { layout: 'right' } },
+  release: {
+    投产变更方案: { layout: 'right', required_from: 'final' },
+    投产变更控制表: { layout: 'right', required_from: 'final' },
+  },
+};
+
+// 这些模板由所属业务模块根据当前单据数据动态生成，不能按静态附件下载。
+// 仅登记稳定的处理器标识，设置模块不依赖业务模块的私有实现。
+const CUSTOM_DELIVERABLE_TEMPLATE_HANDLERS = {
+  dev: {
+    编码检查表: 'dev.coding-checklist',
+    技术方案确认单: 'dev.tech-solution-confirmation',
+  },
+  release: {
+    投产变更方案: 'release.change-plan',
+    投产变更控制表: 'release.change-control',
+  },
+};
+
 const BUILTIN_METADATA_VERSION_KEY = 'stage.content.builtin-metadata.v1';
 // v4：开发、测试阶段的默认模块改为左右分栏，避免新库详情页全部堆叠在左侧。
 const BUILTIN_LAYOUT_VERSION_KEY = 'stage.content.builtin-layout.v4';
@@ -236,7 +269,8 @@ export async function getStageContentConfig(scopeKey, { includeDeleted = false }
     rulesFor('deliverable_status_rule', 'deliverable_definition_id', deliverables.map((row) => row.id)),
   ]);
   const templates = deliverables.length
-    ? await all(`SELECT * FROM deliverable_template_version WHERE deliverable_definition_id IN (${deliverables.map(() => '?').join(',')}) AND deleted_at IS NULL ORDER BY version_no DESC, id DESC`, ...deliverables.map((row) => row.id))
+    // 配置回显与详情页下载必须读取同一份当前生效模板，不能被历史禁用版本覆盖。
+    ? await all(`SELECT * FROM deliverable_template_version WHERE deliverable_definition_id IN (${deliverables.map(() => '?').join(',')}) AND enabled = 1 AND deleted_at IS NULL ORDER BY version_no DESC, id DESC`, ...deliverables.map((row) => row.id))
     : [];
   const templateMap = new Map();
   for (const template of templates) {
@@ -711,7 +745,7 @@ export async function seedStageContentDefaults({ builtinMetadata = {}, sectionDe
       const sectionKey = definition.key;
       let section = await get('SELECT id FROM stage_section WHERE scope_key = ? AND section_key = ?', scopeKey, sectionKey);
       if (!section) {
-        const res = await run('INSERT INTO stage_section (scope_key, section_key, title, sort, is_builtin, layout_mode, show_title) VALUES (?,?,?,?,1,?,?)', scopeKey, sectionKey, definition.title, index * 10, definition.layout || 'left', definition.show_title === false ? 0 : 1);
+        const res = await run('INSERT INTO stage_section (scope_key, section_key, title, sort, collapsed, is_builtin, layout_mode, show_title) VALUES (?,?,?,?,?,1,?,?)', scopeKey, sectionKey, definition.title, index * 10, definition.collapsed ? 1 : 0, definition.layout || 'left', definition.show_title === false ? 0 : 1);
         section = { id: res.lastInsertRowid };
       }
       sectionIds.set(sectionKey, section.id);
@@ -732,8 +766,19 @@ export async function seedStageContentDefaults({ builtinMetadata = {}, sectionDe
     }
     for (const [index, labelText] of (DELIVERABLE_DEFAULTS[root] || []).entries()) {
       const deliverableKey = `builtin_${index + 1}`;
-      if (!await get('SELECT id FROM deliverable_definition WHERE scope_key = ? AND deliverable_key = ?', scopeKey, deliverableKey)) {
-        await run('INSERT INTO deliverable_definition (scope_key, deliverable_key, label, input_mode, visible, sort) VALUES (?,?,?,?,?,?)', scopeKey, deliverableKey, labelText, 'both', 1, index * 10);
+      const metadata = { ...(DELIVERABLE_DEFAULT_METADATA[root]?.[labelText] || {}), ...(DELIVERABLE_DEFAULT_METADATA[scopeKey]?.[labelText] || {}) };
+      let deliverable = await get('SELECT id FROM deliverable_definition WHERE scope_key = ? AND deliverable_key = ?', scopeKey, deliverableKey);
+      if (!deliverable) {
+        const res = await run('INSERT INTO deliverable_definition (scope_key, deliverable_key, label, input_mode, visible, sort, layout_mode) VALUES (?,?,?,?,?,?,?)', scopeKey, deliverableKey, labelText, 'both', 1, index * 10, metadata.layout || 'left');
+        deliverable = { id: res.lastInsertRowid };
+        await replaceRules('deliverable_status_rule', 'deliverable_definition_id', deliverable.id, nativeRequiredRules(statuses, metadata.required_from), statuses);
+      }
+      const handlerKey = CUSTOM_DELIVERABLE_TEMPLATE_HANDLERS[root]?.[labelText];
+      if (handlerKey && !await get(`SELECT id FROM deliverable_template_version
+        WHERE deliverable_definition_id = ? AND template_mode = ? AND handler_key = ? AND enabled = 1 AND deleted_at IS NULL`, deliverable.id, 'custom', handlerKey)) {
+        // 版本号 0 是内置动态模板的回退位：不会覆盖既有管理员上传模板（其版本从 1 开始）。
+        await run(`INSERT INTO deliverable_template_version (deliverable_definition_id, template_mode, handler_key, version_no, enabled)
+          VALUES (?,?,?,?,1)`, deliverable.id, 'custom', handlerKey, 0);
       }
     }
   }
@@ -806,9 +851,9 @@ async function synchronizeBuiltinLayout(sectionDefaults, builtinMetadata) {
       if (!row) row = (definition.legacy_keys || []).map((key) => rowsByKey.get(key)).find(Boolean);
       if (row) {
         // 旧分区编码只在这里由种子定义迁移，后台保存接口仍禁止修改内置编码。
-        await run(`UPDATE stage_section SET section_key=?, title=?, sort=?, layout_mode=?, show_title=?, updated_at=${dialect.now} WHERE id=?`, definition.key, definition.title, index * 10, definition.layout || 'left', definition.show_title === false ? 0 : 1, row.id);
+        await run(`UPDATE stage_section SET section_key=?, title=?, sort=?, collapsed=?, layout_mode=?, show_title=?, updated_at=${dialect.now} WHERE id=?`, definition.key, definition.title, index * 10, definition.collapsed ? 1 : 0, definition.layout || 'left', definition.show_title === false ? 0 : 1, row.id);
       } else {
-        const res = await run('INSERT INTO stage_section (scope_key, section_key, title, sort, is_builtin, layout_mode, show_title) VALUES (?,?,?,?,1,?,?)', scopeKey, definition.key, definition.title, index * 10, definition.layout || 'left', definition.show_title === false ? 0 : 1);
+        const res = await run('INSERT INTO stage_section (scope_key, section_key, title, sort, collapsed, is_builtin, layout_mode, show_title) VALUES (?,?,?,?,?,1,?,?)', scopeKey, definition.key, definition.title, index * 10, definition.collapsed ? 1 : 0, definition.layout || 'left', definition.show_title === false ? 0 : 1);
         row = { id: res.lastInsertRowid };
       }
       sectionIds.set(definition.key, row.id);

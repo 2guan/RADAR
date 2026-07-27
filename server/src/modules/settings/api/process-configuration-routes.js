@@ -11,7 +11,7 @@ import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { all, get, run } from '../../../platform/persistence/index.js';
 import { resolveAttachmentPath } from '../../../platform/attachments/index.js';
-import { ok, badRequest } from '../../../platform/runtime/index.js';
+import { ok, badRequest, notFound } from '../../../platform/runtime/index.js';
 import {
   deleteDeliverableDefinition,
   deleteFieldDefinition,
@@ -145,5 +145,23 @@ export default async function stageContentRoutes(fastify) {
       VALUES (?,?,?,?,?,?,1,?)`, deliverable.id, 'upload', filename, relPath, buffer.length, Number(last?.n || 0) + 1, request.currentUser?.name);
     await recordConfigRevision(request.params.scopeKey, 'deliverable', request.currentUser?.name);
     return ok({ id: res.lastInsertRowid, filename, version_no: Number(last?.n || 0) + 1 }, '模板已上传');
+  });
+  fastify.delete('/settings/stage-deliverables/:scopeKey/:id/templates/:templateId', { preHandler: fastify.requirePerm('settings', 'edit') }, async (request) => {
+    const deliverable = await get('SELECT id FROM deliverable_definition WHERE id = ? AND scope_key = ? AND deleted_at IS NULL', Number(request.params.id), request.params.scopeKey);
+    if (!deliverable) throw notFound('交付件不存在');
+    const template = await get(`SELECT * FROM deliverable_template_version
+      WHERE id = ? AND deliverable_definition_id = ? AND template_mode = 'upload' AND enabled = 1 AND deleted_at IS NULL`, Number(request.params.templateId), deliverable.id);
+    if (!template) throw notFound('当前上传模板不存在');
+
+    await run(`UPDATE deliverable_template_version
+      SET enabled = 0, deleted_at = CURRENT_TIMESTAMP WHERE id = ?`, template.id);
+    if (template.stored_path) {
+      const abs = resolveAttachmentPath(template.stored_path);
+      if (fs.existsSync(abs)) {
+        try { fs.unlinkSync(abs); } catch { /* 配置已删除；残留文件由存储清理任务兜底处理。 */ }
+      }
+    }
+    await recordConfigRevision(request.params.scopeKey, 'deliverable', request.currentUser?.name);
+    return ok(null, '模板已删除');
   });
 }

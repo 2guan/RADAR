@@ -2,7 +2,7 @@
  * 文件：server/scripts/mock-data.js
  * 说明：本脚本独立运行（node scripts/mock-data.js），用于重置演示环境。会删除除超级管理员外的全部业务数据，请谨慎执行。
  *       数据特征：
- *         - 问题清单只使用内置虚构样例，不读取或复制现有库中的问题内容；
+ *         - 问题清单从当前本地库中快照 20 条已同步的待验证问题，不生成虚构问题；
  *         - 需求、工单通过 release_apply.ref_codes 进入投产审批清单；问题仅作为工单来源与问题清单数据；
  *         - 评审状态覆盖待评审/评审同意/评审拒绝/应急审批/评审撤销；
  *         - 编号、偏差率、终态附件、投产制品和过程留痕均按平台规则生成，便于逐项验证。
@@ -143,6 +143,9 @@ function normalizeIssue(row, idx = 0) {
  * 严格排除历史 DEMO 样例，避免将模拟问题误当作同步问题再次灌入。
  */
 async function loadPendingVerifyIssues(limit = 20) {
+  // TDSQL 对 LIMIT 的预编译占位符兼容性不稳定；数量仅来自本脚本固定值，
+  // 先限制为安全整数后拼入 SQL，其他业务筛选条件仍保持参数化。
+  const safeLimit = Math.min(100, Math.max(1, Number.parseInt(limit, 10) || 20));
   const rows = await all(
     `SELECT issue_code, round, urgency, handling_method, business_group, module, system, work_order_no,
             create_time, plan_resolve_time, status, category, detailed_classification, summary, details,
@@ -151,12 +154,12 @@ async function loadPendingVerifyIssues(limit = 20) {
        FROM issue
       WHERE status = ? AND issue_code NOT LIKE ?
       ORDER BY COALESCE(synced_at, created_at) DESC, id DESC
-      LIMIT ?`,
-    '待验证', 'DEMO-%', limit,
+      LIMIT ${safeLimit}`,
+    '待验证', 'DEMO-%',
   );
   const issues = rows.map((row, index) => normalizeIssue(row, index)).filter(Boolean);
-  if (issues.length < limit) {
-    throw new Error(`待验证的同步问题不足 ${limit} 条，当前仅 ${issues.length} 条；请先完成问题同步后再执行 mock。`);
+  if (issues.length < safeLimit) {
+    throw new Error(`待验证的同步问题不足 ${safeLimit} 条，当前仅 ${issues.length} 条；请先完成问题同步后再执行 mock。`);
   }
   return issues;
 }
@@ -183,7 +186,6 @@ async function wipe() {
   // 公共内容填写值随演示业务数据重置；内置字段、业务组件与分区元数据由 seed 保留。
   await run('DELETE FROM stage_field_value');
   await run('DELETE FROM content_config_revision');
-  await run('DELETE FROM deliverable_template_version');
   await run(`DELETE FROM deliverable_status_rule
     WHERE deliverable_definition_id IN (SELECT id FROM deliverable_definition WHERE deliverable_key NOT LIKE 'builtin_%')`);
   await run("DELETE FROM deliverable_definition WHERE deliverable_key NOT LIKE 'builtin_%'");
@@ -199,38 +201,27 @@ async function wipe() {
 
 /**
  * 为演示环境建立公共交付件凭证样例。
- * 扩展字段属于管理员运行时配置，不在 seed 或 mock 中预置，避免污染初始配置。
+ * Mock 只使用现有内置交付件，不能新增定义、规则或模板，从而保持系统设置配置不变。
  */
 async function seedStageDeliverableDemo() {
   const reviewer = await get('SELECT id, name, phone FROM user WHERE status = ? ORDER BY id LIMIT 1', '启用');
   const applies = await all('SELECT id FROM release_apply ORDER BY id LIMIT 6');
-
-  const addDeliverable = async (scopeKey, key, label, mode, sort) => {
-    const res = await run('INSERT INTO deliverable_definition (scope_key, deliverable_key, label, input_mode, visible, sort) VALUES (?,?,?,?,?,?)', scopeKey, key, label, mode, 1, sort);
-    return Number(res.lastInsertRowid);
-  };
-  const rollbackPlan = await addDeliverable('dev', 'rollback_plan', '回退方案', 'both', 90);
-  // “摆渡证明”已作为投产申请内置交付件由 seed 创建；Mock 只复用该定义，
-  // 避免再次生成同名自定义交付件导致配置页出现重复项。
-  const builtinApplyProof = await get(`SELECT id FROM deliverable_definition
+  const designDocument = await get(`SELECT id, label FROM deliverable_definition
+    WHERE scope_key = ? AND deliverable_key = ? AND deleted_at IS NULL`, 'dev', 'builtin_1');
+  const builtinApplyProof = await get(`SELECT id, label FROM deliverable_definition
     WHERE scope_key = ? AND deliverable_key = ? AND deleted_at IS NULL`, 'release_apply', 'builtin_1');
-  const applyProof = Number(builtinApplyProof?.id || await addDeliverable('release_apply', 'ferry_proof', '摆渡证明', 'file', 90));
-  // 状态的阶段归属保存在参数配置 extra 中；这里在 JS 侧筛选，避免 Mock 脚本依赖 SQLite JSON 函数。
-  const devFinalStatus = (await all('SELECT id, extra FROM dict_item WHERE category = ? ORDER BY sort DESC, id DESC', 'process_status'))
-    .find((row) => parseJsonObject(row.extra).stage === '开发');
-  if (devFinalStatus) await run('INSERT INTO deliverable_status_rule (deliverable_definition_id, status_dict_item_id, required) VALUES (?,?,1)', rollbackPlan, devFinalStatus.id);
   const demoDev = await get('SELECT id FROM dev_task WHERE status <> ? ORDER BY id LIMIT 1', '开发完成');
-  if (demoDev) await run(`INSERT INTO attachment (entity_type, entity_id, field_key, kind, path_text, deliverable_id, uploader)
-    VALUES (?,?,?,?,?,?,?)`, 'dev', demoDev.id, 'deliverable:rollback_plan', 'path', '/mock/rollback-plan.md', rollbackPlan, reviewer?.name || '系统初始化');
+  if (demoDev && designDocument) await run(`INSERT INTO attachment (entity_type, entity_id, field_key, kind, path_text, deliverable_id, uploader)
+    VALUES (?,?,?,?,?,?,?)`, 'dev', demoDev.id, designDocument.label, 'path', '/mock/design-document.md', designDocument.id, reviewer?.name || '系统初始化');
   const demoApply = applies[0];
-  if (demoApply) await run(`INSERT INTO attachment (entity_type, entity_id, field_key, kind, filename, stored_path, size, deliverable_id, uploader)
-    VALUES (?,?,?,?,?,?,?,?,?)`, 'release_apply', demoApply.id, 'deliverable:ferry_proof', 'file', 'mock-ferry-proof.txt', 'mock/ferry-proof.txt', 128, applyProof, reviewer?.name || '系统初始化');
+  if (demoApply && builtinApplyProof) await run(`INSERT INTO attachment (entity_type, entity_id, field_key, kind, filename, stored_path, size, deliverable_id, uploader)
+    VALUES (?,?,?,?,?,?,?,?,?)`, 'release_apply', demoApply.id, builtinApplyProof.label, 'file', 'mock-ferry-proof.txt', 'mock/ferry-proof.txt', 128, builtinApplyProof.id, reviewer?.name || '系统初始化');
 }
 
 export async function runMock() {
   await runMigrations();
   await runSeed();
-  // 必须在 wipe 之前提取真实待验证问题；后续会将这 20 条快照重新写回问题清单并生成关联工单。
+  // 必须在 wipe 之前提取本地已同步的待验证问题；后续会将这 20 条快照重新写回问题清单并生成关联工单。
   const issuePool = await loadPendingVerifyIssues(20);
 
   await tx(async () => {
@@ -845,7 +836,7 @@ export async function runMock() {
         .map((r) => `${r.entity_type}:${r.c}`).join('、'),
       会签记录: (await get('SELECT COUNT(*) c FROM release_signoff')).c,
       问题: (await get('SELECT COUNT(*) c FROM issue')).c,
-      问题数据来源: '内置虚构演示样例',
+      问题数据来源: '本地已同步待验证问题快照（20 条）',
       投产申请: (await get('SELECT COUNT(*) c FROM release_apply')).c,
       投产申请需求引用: requirementApplyRefs,
       投产申请工单引用: ticketApplyRefs,
