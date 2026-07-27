@@ -237,7 +237,8 @@ body {
 .radar-tab-workspace {
   display: flex;
   flex-direction: column;
-  min-height: calc(100vh - 139px);
+  height: 100%;
+  min-height: 0;
   background: transparent;
 }
 .radar-tab-workspace.empty {
@@ -330,21 +331,26 @@ body {
   position: relative;
   flex: 1;
   min-height: 0;
-  min-height: inherit;
 }
 .radar-tab-pane {
   position: relative;
-  min-height: inherit;
-  padding: 20px;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
   display: none;
 }
 .radar-tab-pane.active {
   display: block;
 }
+.radar-tab-scroll {
+  box-sizing: border-box;
+  height: 100%;
+  overflow: auto;
+  padding: 20px;
+}
 .radar-tab-popup-root {
   position: absolute;
   inset: 0;
-  min-height: 100%;
   pointer-events: none;
   z-index: 50;
 }
@@ -354,12 +360,15 @@ body {
 .radar-tab-popup-root .ant-modal-root {
   position: absolute;
   inset: 0;
+  /* 关闭后的 Modal 根节点不能覆盖并拦截页签正文。 */
   pointer-events: none;
 }
 .radar-tab-popup-root .ant-modal-root .ant-modal-mask,
 .radar-tab-popup-root .ant-modal-root .ant-modal-wrap {
   position: absolute;
   inset: 0;
+  /* 遮罩只覆盖当前页签，同时恢复父层关闭的指针事件。 */
+  pointer-events: auto;
 }
 
 @media (max-width: 576px) {

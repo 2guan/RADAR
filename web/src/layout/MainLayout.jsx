@@ -80,9 +80,11 @@ function TabPane({ tab, active }) {
 
   return (
     <div className={`radar-tab-pane ${active ? 'active' : ''}`} aria-hidden={!active}>
-      <ConfigProvider getPopupContainer={getPopupContainer}>
-        <WorkspaceRoutes location={tab.location} />
-      </ConfigProvider>
+      <div className="radar-tab-scroll">
+        <ConfigProvider getPopupContainer={getPopupContainer}>
+          <WorkspaceRoutes location={tab.location} />
+        </ConfigProvider>
+      </div>
       <div ref={portalRef} className="radar-tab-popup-root" />
     </div>
   );
@@ -440,7 +442,7 @@ export default function MainLayout() {
         </Sider>
       )}
 
-      <Layout>
+      <Layout style={{ height: '100vh', minHeight: 0 }}>
         <Header className="radar-header">
           {!isMobile && (
             <Button
@@ -489,7 +491,7 @@ export default function MainLayout() {
           </div>
         )}
 
-        <Content className="radar-content" style={{ margin: isMobile ? 12 : (isTabMode ? 0 : 20), overflow: 'auto hidden' }}>
+        <Content className="radar-content" style={{ margin: isMobile ? 12 : (isTabMode ? 0 : 20), overflow: isTabMode ? 'hidden' : 'auto hidden' }}>
           {isTabMode ? (
             <TabbedWorkspace
               tabs={tabs}
