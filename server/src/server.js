@@ -1,15 +1,15 @@
 /**
- * 文件：server.js
+ * 文件：server/src/server.js
  * 说明：开发模式 `npm run dev`（--watch）；生产模式 `npm start`。
  * 用途：后端启动入口。执行数据库迁移与种子数据初始化，构建并启动 Fastify 实例，
  *       注册优雅退出处理。
  * 作者：hengguan
  */
 
-import { config } from './config.js';
+import { config } from './platform/runtime/config.js';
 import { performance } from 'node:perf_hooks';
-import { runMigrations } from './db/migrate.js';
-import { runSeed } from './db/seed.js';
+import { runMigrations } from './platform/persistence/migrate.js';
+import { runSeed } from './bootstrap/seed.js';
 import { buildApp } from './app.js';
 import { logger } from './platform/runtime/index.js';
 

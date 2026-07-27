@@ -1,5 +1,5 @@
 /**
- * 文件：modules/issues/application/pams.js
+ * 文件：server/src/modules/issues/application/pams.js
  * 说明：基于 Node 原生 fetch（Node ≥18 内置）；接口返回结构为 { success, data, ... }，
  *       本模块统一校验 success 并返回 data，异常抛 HttpError 由上层捕获处理。
  * 用途：外部 PAMS 问题管理系统接口客户端。封装统一鉴权（x-api-key）与超时，

@@ -1,5 +1,5 @@
 /**
- * 文件：modules/issues/application/sync.js
+ * 文件：server/src/modules/issues/application/sync.js
  * 说明：同步仅写入 issues 模块拥有的问题快照表，失败明细会被隔离记录。
  * 用途：执行问题概述与明细的同步编排，不依赖 Fastify 路由。
  * 作者：hengguan

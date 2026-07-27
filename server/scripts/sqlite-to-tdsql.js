@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 文件：scripts/sqlite-to-tdsql.js
+ * 文件：server/scripts/sqlite-to-tdsql.js
  * 说明：该脚本面向跨数据库形态和应用字段兼容场景，保留原始 id，支持 dry-run
  *       和 truncate；TDSQL 直连迁移使用 source/target 前缀参数区分源库和目标库。
  *
@@ -24,13 +24,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import mysql from 'mysql2/promise';
-import { loadEnvFile } from '../src/lib/env.js';
-import { logger } from '../src/lib/logger.js';
+import { loadEnvFile } from '../src/platform/runtime/index.js';
+import { logger } from '../src/platform/observability/logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER_ROOT = path.resolve(__dirname, '..');
 const REPO_ROOT = path.resolve(SERVER_ROOT, '..');
-const SQLITE_MIGRATIONS_DIR = path.join(SERVER_ROOT, 'src', 'db', 'migrations');
+const SQLITE_MIGRATIONS_DIR = path.join(SERVER_ROOT, 'src', 'platform', 'persistence', 'migrations');
 const TDSQL_MIGRATIONS_DIR = path.join(SQLITE_MIGRATIONS_DIR, 'tdsql');
 loadEnvFile(path.join(REPO_ROOT, '.env'));
 

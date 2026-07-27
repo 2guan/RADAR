@@ -24,10 +24,10 @@ if (!process.env.RADAR_RUN_API_TESTS) {
   process.env.ADMIN_PASSWORD = 'Radar@Test2026!';
   process.env.NODE_ENV = 'test';
 
-  const { runMigrations } = await import('../src/db/migrate.js');
-  const { runSeed } = await import('../src/db/seed.js');
+  const { runMigrations } = await import('../src/platform/persistence/migrate.js');
+  const { runSeed } = await import('../src/bootstrap/seed.js');
   const { buildApp } = await import('../src/app.js');
-  const { get, all, run, closeDb } = await import('../src/db/index.js');
+  const { get, all, run, closeDb } = await import('../src/platform/persistence/engine/index.js');
   const { claimRequirementCode, generateRequirementCode, previewRequirementCode } = await import('../src/modules/requirements/index.js');
   await runMigrations();
   await runSeed();

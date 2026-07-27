@@ -1,5 +1,5 @@
 /**
- * 文件：pages/DevTasks.jsx
+ * 文件：web/src/modules/development/pages/DevTasksPage.jsx
  * 说明：开发任务列表与进度跟踪页面，记录开发责任人、开发状态、设计/编码/联调完成情况。
  * 用途：开发管理页面。开发任务列表 + 开发承接（按系统拆分）+ 编辑（复用 TaskEditor）+ 历史。
  * 作者：hengguan
@@ -8,21 +8,17 @@
 import { useRef, useState, useMemo, useEffect } from 'react';
 import { Card, Button, Space, Modal, Tag, Popconfirm, message, Table, Input, Spin, List, Radio, Checkbox } from 'antd';
 import { ToolOutlined, EditOutlined, DeleteOutlined, ImportOutlined, ExportOutlined } from '@ant-design/icons';
-import DataTable from '../../../components/DataTable.jsx';
-import StatusBadge from '../../../components/StatusBadge.jsx';
-import SystemSelect from '../../../components/SystemSelect.jsx';
-import HistoryDrawer from '../../../components/HistoryDrawer.jsx';
-import TaskEditor from '../../../components/editors/TaskEditor.jsx';
-import FilterPanel from '../../../components/FilterPanel.jsx';
-import Can from '../../../components/Can.jsx';
+import { DataTable, FilterPanel, ResizableTitle } from '../../../shared/ui/index.js';
+import { StatusBadge, TaskEditor } from '../../../shared/workflow/index.js';
+import { SystemSelect, makeReleasePointOptions, ReleasePointText } from '../../settings/reference-data/index.js';
+import { HistoryDrawer } from '../../../platform/audit/index.js';
+import Can from '../../../platform/auth/Can.jsx';
 import { apiPost, apiDelete, apiGet } from '../api/index.js';
-import { useAppStore } from '../../../stores/app.js';
-import { useResponsive } from '../../../hooks/useResponsive.js';
-import ResizableTitle from '../../../components/ResizableTitle.jsx';
-import { exportXlsx } from '../../../utils/io.js';
-import ImportModal from '../../../components/ImportModal.jsx';
-import { makeReleasePointOptions, ReleasePointText } from '../../../components/ReleasePointText.jsx';
-import { useStageListFields } from '../../../hooks/useStageListFields.js';
+import { useAppStore } from '../../../platform/state/app.js';
+import { useResponsive } from '../../../platform/ui/useResponsive.js';
+import { exportXlsx } from '../../../platform/import-export/io.js';
+import { ImportModal } from '../../../platform/import-export/index.js';
+import { useStageListFields } from '../../settings/process-configuration/index.js';
 
 export default function DevTasks() {
   const stageList = useStageListFields('dev');

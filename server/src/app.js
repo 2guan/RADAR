@@ -1,5 +1,5 @@
 /**
- * 文件：app.js
+ * 文件：server/src/app.js
  * 说明：所有业务路由集中在 registerRoutes 中注册，便于维护与按阶段扩展。
  * 用途：装配 Fastify 应用实例——注册安全插件（helmet/cors/rate-limit/multipart）、
  *       鉴权插件、全局错误处理、业务路由（/api 前缀）与前端静态资源（生产模式）。
@@ -16,8 +16,8 @@ import fastifyStatic from '@fastify/static';
 import compress from '@fastify/compress';
 import fs from 'node:fs';
 
-import { config } from './config.js';
-import authPlugin from './plugins/auth.js';
+import { config } from './platform/runtime/config.js';
+import authPlugin from './platform/auth/fastify-plugin.js';
 import { HttpError, ok } from './platform/runtime/index.js';
 import { refreshStatusSemantics } from './modules/settings/process-configuration/index.js';
 import { startIssueSyncScheduler, stopIssueSyncScheduler } from './modules/issues/index.js';

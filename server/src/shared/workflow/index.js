@@ -1,21 +1,8 @@
 /**
  * 文件：server/src/shared/workflow/index.js
- * 说明：本文件遵循模块边界；跨模块能力必须经公开契约访问。
- * 用途：RADAR 后端业务或平台逻辑。
+ * 说明：仅导出不访问数据库、无模块归属的流程值对象与纯规则。
+ * 用途：跨业务模块共同维护的流程基础契约入口。
  * 作者：hengguan
  */
 
-/** Public workflow configuration and validation boundary. */
-export {
-  validateRequiredFields,
-  assertAttachmentInputAllowed,
-  statusTypeForProcessStatus,
-  statusTypeForReleaseApply,
-} from '../../modules/settings/process-configuration/index.js';
-export {
-  getStageContentConfig,
-  validateStageContent,
-  assertDeliverableInputAllowed,
-  assertDeliverableRemovable,
-} from '../../modules/settings/process-configuration/index.js';
-export { assertStatusChangePermission } from '../../modules/settings/process-configuration/index.js';
+export { normalizeWorkflowStatusType } from './status.js';

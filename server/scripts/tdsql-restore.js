@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 文件：scripts/tdsql-restore.js
+ * 文件：server/scripts/tdsql-restore.js
  * 说明：适用于 TDSQL 原生 SQL 离线备份恢复；默认会创建不存在的目标库，
  *       支持 --drop-database --force 重建目标库。密码通过 MYSQL_PWD 传给子进程。
  * 示例：
@@ -17,8 +17,8 @@ import { spawn } from 'node:child_process';
 import { createGunzip } from 'node:zlib';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
-import { loadEnvFile } from '../src/lib/env.js';
-import { logger } from '../src/lib/logger.js';
+import { loadEnvFile } from '../src/platform/runtime/index.js';
+import { logger } from '../src/platform/observability/logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..');

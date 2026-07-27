@@ -1,5 +1,5 @@
 /**
- * 文件：pages/TestTasks.jsx
+ * 文件：web/src/modules/testing/pages/TestTasksPage.jsx
  * 说明：测试任务工作流管理页面，用于跟踪测试阶段（SIT/UAT/等）、测试结论及主测试责任人。
  * 用途：测试管理。SIT/UAT/NFT/SEC 拆为 4 个独立页面，复用同一面板（TestPanel）：
  *       列表 + 测试承接 + 编辑（复用 TaskEditor）+ 历史。各页面对应侧栏"测试管理"子菜单。
@@ -9,21 +9,17 @@
 import { useRef, useState, useMemo, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { Card, Button, Space, Modal, Tag, Popconfirm, message, Table, Input, Spin, List, Radio, Checkbox } from 'antd';
 import { ExperimentOutlined, EditOutlined, DeleteOutlined, ImportOutlined, ExportOutlined } from '@ant-design/icons';
-import DataTable from '../../../components/DataTable.jsx';
-import StatusBadge from '../../../components/StatusBadge.jsx';
-import SystemSelect from '../../../components/SystemSelect.jsx';
-import HistoryDrawer from '../../../components/HistoryDrawer.jsx';
-import TaskEditor from '../../../components/editors/TaskEditor.jsx';
-import FilterPanel from '../../../components/FilterPanel.jsx';
-import Can from '../../../components/Can.jsx';
+import { DataTable, FilterPanel, ResizableTitle } from '../../../shared/ui/index.js';
+import { StatusBadge, TaskEditor } from '../../../shared/workflow/index.js';
+import { SystemSelect, makeReleasePointOptions, ReleasePointText } from '../../settings/reference-data/index.js';
+import { HistoryDrawer } from '../../../platform/audit/index.js';
+import Can from '../../../platform/auth/Can.jsx';
 import { apiPost, apiDelete, apiGet } from '../api/index.js';
-import { useAppStore } from '../../../stores/app.js';
-import { useResponsive } from '../../../hooks/useResponsive.js';
-import ResizableTitle from '../../../components/ResizableTitle.jsx';
-import { exportXlsx } from '../../../utils/io.js';
-import ImportModal from '../../../components/ImportModal.jsx';
-import { makeReleasePointOptions, ReleasePointText } from '../../../components/ReleasePointText.jsx';
-import { useStageListFields } from '../../../hooks/useStageListFields.js';
+import { useAppStore } from '../../../platform/state/app.js';
+import { useResponsive } from '../../../platform/ui/useResponsive.js';
+import { exportXlsx } from '../../../platform/import-export/io.js';
+import { ImportModal } from '../../../platform/import-export/index.js';
+import { useStageListFields } from '../../settings/process-configuration/index.js';
 
 const TYPE_LABEL = { SIT: '应用组装测试', UAT: '用户测试', NFT: '非功能测试', SEC: '安全测试' };
 const moduleForTestType = (testType) => `test.${testType}`;

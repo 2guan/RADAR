@@ -1,5 +1,5 @@
 /**
- * 文件：modules/reporting/application/chart-dims.js
+ * 文件：server/src/modules/dashboard/application/chart-dims.js
  * 说明：RADAR 为多源模型（需求/开发/测试/投产系统），维度取值随源变化；含 JSON
  *       数组维度（系统/机构/板块）按元素展开计数。聚合在内存完成，贴合跨表/JSON 维度。
  * 用途：分析图表的「数据源 × 维度」注册表与聚合引擎。声明每个数据源可用的维度、

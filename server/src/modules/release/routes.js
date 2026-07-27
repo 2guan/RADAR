@@ -1,5 +1,5 @@
 /**
- * 文件：modules/release/routes.js
+ * 文件：server/src/modules/release/routes.js
  * 说明：投产任务（release_task）以「实体编号 + 申请投产点」为唯一审批实例，entity_type 区分类型；
  *       首次打开某个申请投产点下的详情时惰性创建投产任务与会签项（不再有「UAT 终态方可发起」的限制）。
  *       「各系统投产登记」改为「关联制品情况」：读取引用了该需求/工单/问题的投产申请制品信息。

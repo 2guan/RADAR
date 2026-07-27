@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const root = process.cwd();
-const sqliteDir = path.join(root, 'server/src/db/migrations');
+const sqliteDir = path.join(root, 'server/src/platform/persistence/migrations');
 const tdsqlDir = path.join(sqliteDir, 'tdsql');
 const exceptions = JSON.parse(fs.readFileSync(path.join(root, 'governance/migration-parity-exceptions.json'), 'utf8'));
 const suffix = (name) => name.replace(/^\d+_/, '');

@@ -1,0 +1,12 @@
+-- ============================================================================
+-- 文件：server/src/platform/persistence/migrations/0029_advance_release_after_review_approval.sql
+-- 说明：RADAR 历史数据库迁移脚本，按对应数据库方言和版本顺序执行。
+-- 用途：以可追踪、可审计的方式演进数据结构，并保持 SQLite 与 TDSQL/MySQL 8 迁移配对。
+-- 作者：hengguan
+-- ============================================================================
+-- 0029_advance_release_after_review_approval.sql
+-- 用途：补齐既有数据的评审通过联动规则：评审同意时，待评审自动进入待投产。
+
+UPDATE release_task
+SET status = '待投产', updated_at = datetime('now','localtime')
+WHERE status = '待评审' AND review_status = '评审同意';

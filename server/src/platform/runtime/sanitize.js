@@ -1,5 +1,5 @@
 /**
- * 文件：platform/runtime/sanitize.js
+ * 文件：server/src/platform/runtime/sanitize.js
  * 说明：采用白名单策略——仅允许中文、字母、数字和少量安全标点，
  *       其余字符实体编码。适用于用户名、备注等文本字段的前端 XSS 防御。
  *       注：React 已默认转义 JSX 文本，此处做后端双重防御。

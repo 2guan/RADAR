@@ -9,5 +9,5 @@
 export { HttpError, ok, badRequest, unauthorized, forbidden, notFound } from './http.js';
 export { parseJsonArray, parseJsonObject } from './json.js';
 export { sanitizeText } from './sanitize.js';
-export { logger, normalizeLogLevel } from './logger.js';
+export { logger, normalizeLogLevel } from '../observability/logger.js';
 export { loadEnvFile } from './env.js';

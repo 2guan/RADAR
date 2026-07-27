@@ -1,5 +1,5 @@
 /**
- * 文件：modules/stage-content/routes.js
+ * 文件：server/src/modules/settings/api/process-configuration-routes.js
  * 说明：遵循项目研发规约；跨模块能力仅可经公开契约访问。
  * 用途：阶段内容与公共交付件接口。系统设置通过本模块维护配置；业务详情页通过
  *       公共读取接口获取动态字段、交付件与扩展字段值。

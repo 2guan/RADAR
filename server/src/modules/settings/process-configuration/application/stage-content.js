@@ -1,5 +1,5 @@
 /**
- * 文件：modules/process-configuration/application/stage-content.js
+ * 文件：server/src/modules/settings/process-configuration/application/stage-content.js
  * 说明：具体状态始终读取 dict_item；范围注册仅描述实体与状态来源，不保存状态名称。
  * 用途：阶段内容与公共交付件的领域服务。集中处理阶段范围、参数状态、输入项、
  *       扩展字段值、交付件规则和配置版本，避免各业务模块维护重复硬编码。

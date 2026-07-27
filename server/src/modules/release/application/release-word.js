@@ -1,5 +1,5 @@
 /**
- * 文件：modules/release/application/release-word.js
+ * 文件：server/src/modules/release/application/release-word.js
  * 说明：遵循项目研发规约；跨模块能力仅可经公开契约访问。
  * 用途：投产审批「版本发布评审单」Word 文档生成。按模板格式输出：
  *       一、投产基本信息；二、需求/工单/问题信息；三、开发情况；四、测试情况；

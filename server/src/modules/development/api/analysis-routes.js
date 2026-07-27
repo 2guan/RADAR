@@ -1,5 +1,5 @@
 /**
- * 文件：modules/analysis/routes.js
+ * 文件：server/src/modules/development/api/analysis-routes.js
  * 说明：遵循项目研发规约；跨模块能力仅可经公开契约访问。
  * 用途：影响性分析（开发阶段）与测试覆盖性分析（应用组装阶段）接口。
  *       两者均按需求/工单（req_code）级别组织，支持逐条新增/修改/删除：

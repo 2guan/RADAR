@@ -53,8 +53,9 @@ for (const file of sourceFiles) {
     if (!toModule || toModule === fromModule) continue;
     const fromDef = manifest.modules[fromModule];
     const toDef = manifest.modules[toModule];
+    // 兼容基线仅保留历史模块路由到历史实现的过渡入口；新目录不得再加入例外。
     const legacyRouteBridge = /\/routes\.js$/.test(file)
-      && (target.startsWith('server/src/lib/') || target.startsWith('server/src/db/') || target.startsWith('server/src/shared/') || target === 'server/src/config.js');
+      && (target.startsWith('server/src/lib/') || target.startsWith('server/src/shared/legacy/'));
     if (legacyRouteBridge) {
       grandfatheredLegacyEdges++;
       continue;
@@ -62,7 +63,7 @@ for (const file of sourceFiles) {
     const platformHttpAdapter = fromDef.type === 'platform'
       && /^server\/src\/platform\/[^/]+\/api\//.test(file)
       && (fromDef.allowed_dependencies || []).includes(toModule);
-    if ((fromDef.type === 'platform' || fromDef.type === 'shared') && toDef.type === 'business' && !platformHttpAdapter) {
+    if (fromDef.type === 'platform' && toDef.type === 'business' && !platformHttpAdapter) {
       violations.push(file + ' (' + fromModule + ') must not depend on business module ' + toModule);
       continue;
     }

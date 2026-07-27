@@ -8,7 +8,7 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { readJsonYaml, matches, normalize, root } from './governance-utils.mjs';
+import { readJsonYaml, matches, moduleForFile, normalize, root } from './governance-utils.mjs';
 
 const args = process.argv.slice(2);
 // 未传入的可选参数应返回 undefined，不能回退读取命令行第一个参数。
@@ -82,8 +82,23 @@ for (const file of changed) {
   else if (matches(file, scope.scope.read_only_paths)) violations.push(file + ': read-only path');
   else if (!matches(file, scope.scope.writable_paths)) violations.push(file + ': outside writable_paths');
 }
-// 平台、共享契约和模块公开入口变更都必须有公共能力审批记录。
-const publicChange = changed.some((file) => file.startsWith('server/src/platform/') || file.startsWith('server/src/shared/contracts/') || file.startsWith('server/src/modules/') && /\/index\.js$/.test(file));
+// platform 是由业务模块只读使用的底层能力；非平台治理任务不得直接修改。
+// shared 允许跨模块读写，但仍须通过公共能力变更流程，避免破坏公共复用能力。
+for (const file of changed) {
+  const targetModule = moduleForFile(manifest, file);
+  const targetDefinition = targetModule ? manifest.modules[targetModule] : null;
+  if (targetDefinition?.type === 'platform' && assignment.module !== targetModule && assignment.module !== 'governance') {
+    violations.push(file + ': platform module is read-only outside its owner or governance task');
+  }
+}
+// 平台、共享能力和模块公开入口变更都必须有公共能力审批记录。
+const publicChange = changed.some((file) => {
+  const targetModule = moduleForFile(manifest, file);
+  const targetDefinition = targetModule ? manifest.modules[targetModule] : null;
+  return targetDefinition?.type === 'platform'
+    || targetDefinition?.type === 'shared'
+    || targetDefinition?.type === 'business' && /\/index\.js$/.test(file);
+});
 if (publicChange) {
   const change = scope.public_capability_change || {};
   if (!change.required || !change.shared_change_issue || !change.old_behavior_preserved || !change.owner_approved) {

@@ -1,5 +1,5 @@
 /**
- * 文件：pages/Dashboard.jsx
+ * 文件：web/src/modules/dashboard/pages/DashboardPage.jsx
  * 说明：投产度量大屏和多维图表展示面板，汇总需求开发时效、投产通过率及任务分布等度量指标。
  * 用途：效能仪表盘。顶置原子指标卡（终态计数）+ 「系统图表」「我的图表」两分区的
  *       自定义分析图表（多维度组合/分组归并/局部过滤/透视/钻取，颜色与布局可配）。
@@ -14,19 +14,19 @@ import {
   FileTextOutlined, CodeOutlined, ExperimentOutlined, UserOutlined, RocketOutlined, PlusOutlined,
 } from '@ant-design/icons';
 import { apiGet, apiPost, apiPut, apiDelete } from '../api/index.js';
-import { useAppStore } from '../../../stores/app.js';
-import { getPreset } from '../../../theme/presets.js';
-import { useDimensionMeta } from '../../../components/dashboard/useDimensionMeta.js';
-import { useResponsive } from '../../../hooks/useResponsive.js';
+import { useAppStore } from '../../../platform/state/app.js';
+import { getPreset } from '../../../platform/theme/presets.js';
+import { useDimensionMeta } from '../components/useDimensionMeta.js';
+import { useResponsive } from '../../../platform/ui/useResponsive.js';
 
 // 图表、编辑器和概览详情仅在用户打开相应交互时下载，避免仪表盘首屏加载 ECharts 与多个表单模块。
-const ChartEditor = lazy(() => import('../../../components/dashboard/ChartEditor.jsx'));
-const DashboardChart = lazy(() => import('../../../components/dashboard/DashboardChart.jsx'));
-const ReleaseDetail = lazy(() => import('../../../components/editors/ReleaseDetail.jsx'));
-const ReleaseApplyEditor = lazy(() => import('../../../components/editors/ReleaseApplyEditor.jsx'));
-const RequirementEditor = lazy(() => import('../../../components/editors/RequirementEditor.jsx'));
-const TicketEditor = lazy(() => import('../../../components/editors/TicketEditor.jsx'));
-const TaskEditor = lazy(() => import('../../../components/editors/TaskEditor.jsx'));
+const ChartEditor = lazy(() => import('../components/ChartEditor.jsx'));
+const DashboardChart = lazy(() => import('../components/DashboardChart.jsx'));
+const ReleaseDetail = lazy(async () => ({ default: (await import('../../release/index.js')).ReleaseDetail }));
+const ReleaseApplyEditor = lazy(async () => ({ default: (await import('../../release/index.js')).ReleaseApplyEditor }));
+const RequirementEditor = lazy(async () => ({ default: (await import('../../requirements/index.js')).RequirementEditor }));
+const TicketEditor = lazy(async () => ({ default: (await import('../../tickets/index.js')).TicketEditor }));
+const TaskEditor = lazy(async () => ({ default: (await import('../../../shared/workflow/index.js')).TaskEditor }));
 const DevIntakeModal = lazy(() => import('../../overview/pages/OverviewPage.jsx').then((module) => ({ default: module.DevIntakeModal })));
 const TestIntakeModal = lazy(() => import('../../overview/pages/OverviewPage.jsx').then((module) => ({ default: module.TestIntakeModal })));
 const VersionOverviewWorkItemDetail = lazy(() => import('../../overview/pages/OverviewPage.jsx').then((module) => ({ default: module.VersionOverviewWorkItemDetail })));

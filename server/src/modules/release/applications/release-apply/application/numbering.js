@@ -1,5 +1,5 @@
 /**
- * 文件：modules/release-apply/application/numbering.js
+ * 文件：server/src/modules/release/applications/release-apply/application/numbering.js
  * 说明：投产申请编号继续使用 code.release_apply 模板和 {版本年月}-10bg{序号} 默认格式；预览不会占用序列。
  * 用途：投产申请模块的编号领域服务，按版本年月提供预览、保存确认和并发领号能力。
  * 作者：hengguan

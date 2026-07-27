@@ -1,6 +1,6 @@
 /**
- * 文件：modules/delivery/application/impact-schema.js
- * 说明：前端 web/src/config/impactSchema.js 是本文件的展示层镜像，二者需保持一致；
+ * 文件：server/src/modules/development/application/impact-schema.js
+ * 说明：前端 web/src/modules/development/components/impactSchema.js 是本文件的展示层镜像，二者需保持一致；
  *       本文件为服务端校验的唯一权威来源。
  * 用途：影响性分析 / 测试覆盖性分析的权威字段模型与校验。
  *       定义 11 类变更内容各自需要填写的字段集合、字段规则，并提供后端入库前校验。

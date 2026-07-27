@@ -37,7 +37,7 @@ RADAR（Requirement Agile Delivery & Acceleration Resource）是面向日常需�
         ▼
 RADAR 单体服务（Fastify）
   platform/ 认证、持久化、附件、审计、导入导出、运行时、通知
-  shared/   稳定 DTO 与无业务语义工具
+  shared/   稳定 DTO、共享 UI 与无数据所有权的协作能力
   modules/  按领域拆分的业务模块及公开契约
         │
         ├── SQLite（文件库，WAL）
@@ -53,12 +53,15 @@ RADAR 单体服务（Fastify）
 | 层级 | 职责 |
 | --- | --- |
 | `server/src/platform/` | 认证、持久化、附件、审计、导入导出、运行时和通知等横切能力 |
-| `server/src/shared/` | 稳定 DTO、契约和无业务语义的纯工具 |
+| `server/src/shared/` | 稳定 DTO、纯工具和无数据所有权的流程协作能力；可按共享变更流程协作维护 |
 | `server/src/modules/` | 领域业务模块；公开入口为模块 `index.js` 和 `contracts/` |
 | `web/src/modules/` | 前端领域页面与 API 适配层 |
-| `web/src/pages/` | 路由页面与兼容入口 |
+| `web/src/platform/` | HTTP、路由、布局、全局状态、主题、附件、导入导出等前端基础设施 |
+| `web/src/shared/` | 跨模块复用的 UI、时间工具和流程展示能力；不拥有业务数据 |
 
-前后端统一采用十个一级业务模块：`requirements`、`tickets`、`development`、`testing`、`release`、`overview`、`dashboard`、`issues`、`settings`、`identity-access`。模块之间只能通过已登记的公开契约协作，不能直接依赖其他模块内部实现或写入其表。
+前后端统一采用十个一级业务模块：`requirements`、`tickets`、`development`、`testing`、`release`、`overview`、`dashboard`、`issues`、`settings`、`identity-access`。模块之间只能通过已登记的公开契约协作，不能直接依赖其他模块内部实现或写入其表。`platform` 对其他模块只读；`shared` 可按共享变更流程读写，但不得取得业务数据所有权。
+
+系统设置是配置的唯一业务 Owner：`settings/reference-data` 管理字典、系统、投产点与编号规则；`settings/process-configuration` 管理内置字段、扩展字段、交付件定义、分区布局、状态规则和配置版本。
 
 ### 数据库兼容
 
@@ -130,28 +133,21 @@ RADAR/
 │   └── src/
 │       ├── server.js                # 启动入口：迁移、种子、Fastify 监听、优雅退出
 │       ├── app.js                   # Fastify 插件、鉴权、错误处理、静态资源装配
-│       ├── config.js                # 运行期环境变量归一化
-│       ├── db/
-│       │   ├── index.js             # SQLite/TDSQL 统一数据库访问接口
-│       │   ├── migrate.js           # 按版本执行数据库迁移
-│       │   ├── seed.js              # 内置默认数据及种子版本控制
-│       │   ├── providers/           # sqlite.js、tdsql.js Provider
-│       │   ├── dialects/            # SQLite 与 MySQL 方言差异封装
-│       │   └── migrations/          # SQLite 迁移及 tdsql/ 等价迁移（含编号序列表）
+│       ├── bootstrap/
+│       │   └── seed.js              # 应用装配时的内置默认数据与种子版本控制
 │       ├── platform/
-│       │   ├── auth/                # index.js 公开认证、密码和验证码能力
-│       │   ├── persistence/         # index.js、list-query.js、code-sequence.js
+│       │   ├── auth/                # 认证、会话、RBAC、验证码和 Fastify 适配
+│       │   ├── persistence/         # 统一访问、编号、迁移、SQLite/TDSQL 引擎及方言
 │       │   ├── attachments/         # 附件、签名与存储访问控制
 │       │   ├── audit/               # 统一操作审计能力
 │       │   ├── import-export/       # Excel、导入导出和简单配置 CRUD
-│       │   ├── runtime/             # HTTP 响应、JSON、日志、环境变量和清洗工具
+│       │   ├── runtime/             # 配置、HTTP 响应、JSON、环境变量和清洗工具
+│       │   ├── observability/       # 统一日志能力
 │       │   └── notifications/       # 通知能力预留入口
 │       ├── shared/
 │       │   ├── contracts/           # 跨模块稳定 DTO 与契约
 │       │   ├── utils/               # 无业务归属的纯函数工具（如编号模板）
-│       │   ├── authorization/       # 实体级授权工具
-│       │   ├── evidence/            # 证据与审计辅助能力
-│       │   └── workflow/            # 无业务归属的流程辅助能力
+│       │   └── workflow/            # 无数据所有权的流程状态协作能力
 │       ├── modules/
 │       │   ├── AGENTS.md            # 后端模块目录通用约束
 │       │   ├── requirements/        # 需求、编号与公开读取契约
@@ -164,7 +160,6 @@ RADAR/
 │       │   ├── overview/            # 待办、工作台与生命周期只读聚合
 │       │   ├── settings/            # 字典、系统、投产点、编号与流程配置
 │       │   └── identity-access/     # 登录、用户、角色与权限
-│       └── plugins/                 # Fastify 插件（鉴权等）
 └── web/
     ├── AGENTS.md                   # 前端通用规则
     ├── package.json                # Vite 开发、构建与预览脚本
@@ -175,30 +170,30 @@ RADAR/
     │   └── fonts/                  # 本地字体资源
     └── src/
         ├── main.jsx / app.jsx       # React 入口与应用装配
-        ├── api/ / platform/         # Axios 客户端与平台 API 适配
-        ├── router/                  # 菜单、路由、首页和详情链接映射
-        ├── stores/                  # 全局状态（用户、权限、投产窗口、主题）
-        ├── layout/                  # 主布局与导航框架
-        ├── pages/                   # 跨模块详情路由的兼容页面入口
+        ├── platform/
+        │   ├── api.js / http/       # HTTP 平台公开入口与请求客户端
+        │   ├── routing/             # 菜单、路由、首页、详情链接、编号链接与返回导航
+        │   ├── layout/ / state/     # 主布局、用户/权限/投产窗口等应用状态
+        │   ├── theme/ / branding/   # 主题预设、主题切换与品牌资源
+        │   ├── attachments/         # 附件字段与电子签名组件
+        │   ├── audit/               # 历史审计抽屉
+        │   ├── import-export/       # 导入、导出与下载能力
+        │   └── auth/ / ui/ / status/ # 权限展示、响应式、弹层与状态目录能力
+        ├── shared/
+        │   ├── ui/                  # 表格、筛选、编辑器壳、分栏标题与链路展示
+        │   ├── workflow/            # 状态标签、任务编辑器与详情分区布局
+        │   └── utils/               # 时间格式化等无领域归属工具
         ├── modules/
-        │   ├── requirements/       # 需求页面与 API 适配
-        │   ├── tickets/            # 工单页面与 API 适配
-        │   ├── development/        # 开发管理页面与 API 适配
-        │   ├── testing/            # 测试管理页面与 API 适配
-        │   ├── release/            # 投产申请、审批页面与 API 适配
+        │   ├── requirements/       # 需求 API、列表、详情与编辑器
+        │   ├── tickets/            # 工单 API、列表与编辑器
+        │   ├── development/        # 开发 API、任务页和影响性分析组件
+        │   ├── testing/            # 测试 API、任务页和覆盖性分析组件
+        │   ├── release/            # 投产申请、审批 API、页面与编辑器
         │   ├── overview/           # 概览、待办与工作台页面
-        │   ├── dashboard/          # 仪表盘、指标和图表页面
-        │   ├── issues/             # 问题页面与 API 适配
-        │   ├── settings/           # 系统设置页面与 API 适配
-        │   └── identity-access/    # 用户与权限页面
-        ├── components/
-        │   ├── dashboard/          # 图表编辑、渲染和透视表
-        │   ├── editors/            # 需求、工单、任务、投产编辑器
-        │   └── *.jsx               # 通用表格、筛选、附件、状态、权限组件
-        ├── hooks/                  # 动态字段、默认状态、响应式等 Hook
-        ├── config/ / theme/        # 页面配置和主题预设
-        ├── shared/                 # 前端共享 API 与工具
-        ├── utils/                  # 下载、上传、时间等工具
+        │   ├── dashboard/          # 仪表盘 API、指标、图表、钻取和编辑器
+        │   ├── issues/             # 问题 API、列表与详情组件
+        │   ├── settings/           # 设置 API、通用设置、参考数据与流程配置
+        │   └── identity-access/    # 登录、用户、角色与权限页面
         └── styles.css              # 全局样式
 ```
 

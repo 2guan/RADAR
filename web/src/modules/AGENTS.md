@@ -1,4 +1,7 @@
 # 前端业务模块规则
 
-每个模块拥有自己的 pages、components、api、状态和测试。共享 UI 放 web/src/shared，应用壳/API client 放 web/src/platform。不要从其他模块复制或直接导入私有业务组件；跨模块复用须先形成公开组件或契约。
+每个模块拥有自己的 `pages/`、`components/`、`api/`、状态和测试。共享 UI、流程展示和无领域工具放 `web/src/shared/`，应用壳、HTTP client、路由、布局、状态、主题、附件和审计入口放 `web/src/platform/`。
 
+- 不要从其他模块复制或直接导入私有业务组件；跨模块复用须先形成公开组件或契约。
+- `platform` 对业务模块只读；`shared` 可受控协作维护，但不能成为业务数据或业务流程决策的 Owner。
+- 字典、系统、投产点、编号规则、内置字段、扩展字段、交付件和布局均由 `settings` 模块公开契约提供，业务页面不得复制配置实现。

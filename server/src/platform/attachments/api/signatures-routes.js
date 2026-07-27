@@ -1,5 +1,5 @@
 /**
- * 文件：modules/signatures/routes.js
+ * 文件：server/src/platform/attachments/api/signatures-routes.js
  * 说明：签名为用户私有资源，所有操作仅作用于登录用户自身；图片以 base64 DataURL 出入参，便于内嵌展示。
  * 用途：当前用户的电子签名库接口。列出/新增（手绘或上传的 DataURL）/设默认/删除自己的签名。
  * 作者：hengguan

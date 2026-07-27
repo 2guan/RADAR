@@ -7,11 +7,11 @@ RADAR 保持 Node.js + Fastify + React 的模块化单体部署，不拆分微�
 ## 架构原则
 
 1. 需求与工单是独立业务模块，分别拥有数据和公开契约。
-2. `platform` 承担认证、审计、附件、持久化等横切基础能力；`shared` 只承载 DTO 和纯工具。
-3. 模块内按 `api / application / infrastructure / contracts` 分层；跨模块只使用 `index.js` 和 `contracts`。
+2. `platform` 承担认证、审计、附件、导入导出、持久化、运行时和可观测性等横切基础能力，并对业务模块只读；`shared` 承载稳定 DTO、共享 UI、流程展示和纯工具，但不拥有业务数据。
+3. 后端模块按 `api / application / contracts` 分层，数据能力通过 `platform/persistence` 访问；前端模块按 `api / pages / components` 分层。跨模块只使用 `index.js` 和登记的 `contracts`。
 4. 内网完成全部业务流程；外网只在获批需求后以受控子集形式增加，当前不实施。
 5. 规约、任务范围、CODEOWNERS、CI 和主分支保护共同形成可执行治理。
 
 ## 实施路线
 
-第一阶段固化规约、需求模板、模块清单、AI 入口和 CI；第二阶段抽取 platform 与公开契约；第三阶段以 tickets 为试点迁移前后端模块，再依次迁移 requirements、delivery、release、reporting；第四阶段收口迁移验证、审计与可选外网网关。迁移期间使用兼容导出与 API 回归测试，确认无调用方后再删除旧入口。
+第一阶段已完成规约、需求模板、模块清单、AI 入口和 CI 基线；第二阶段已完成 `platform`、`shared` 与公开契约抽取；第三阶段已完成十个一级业务模块的前后端目录对齐，开发与测试、仪表盘与版本概览保持独立模块。当前进入持续治理阶段：每项变更以任务范围、公开契约、双数据库迁移检查、注释检查和页面回归作为交付门槛。外网辅助入口仍不实施。

@@ -1,5 +1,5 @@
 /**
- * 文件：main.jsx
+ * 文件：web/src/main.jsx
  * 说明：应用程序的顶层入口，负责全局 ConfigProvider 的装配、中文本地化、CSS 变量同步与 React 挂载。
  * 用途：前端应用渲染入口。挂载 React 根、注入 AntD 中文 ConfigProvider，
  *       根据 配色预设 + 明暗模式 同步 AntD token 与 CSS 变量。
@@ -12,9 +12,9 @@ import { ConfigProvider, theme as antdTheme, App as AntdApp } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import dayjs from 'dayjs';
 import 'dayjs/locale/zh-cn';
-import { useAppStore } from './stores/app.js';
-import { getPreset } from './theme/presets.js';
-import { syncFaviconLogo } from './utils/logo.js';
+import { useAppStore } from './platform/state/app.js';
+import { getPreset } from './platform/theme/presets.js';
+import { syncFaviconLogo } from './platform/branding/logo.js';
 import AppRouter from './app.jsx';
 import './styles.css';
 

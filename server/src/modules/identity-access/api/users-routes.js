@@ -1,5 +1,5 @@
 /**
- * 文件：modules/users/routes.js
+ * 文件：server/src/modules/identity-access/api/users-routes.js
  * 说明：手机号为唯一登录名；导入支持"覆盖更新/重复跳过/事务回滚"三种冲突策略。
  * 用途：人员（用户）管理接口。CRUD（含一人多角色）、重置密码、Excel 导入/导出、
  *       人员模糊搜索（供需求/开发/测试等表单的负责人选择）。

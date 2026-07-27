@@ -8,7 +8,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const directory = path.join(process.cwd(), 'server/src/db/migrations/tdsql');
+const directory = path.join(process.cwd(), 'server/src/platform/persistence/migrations/tdsql');
 const forbidden = [
   { pattern: /\bPRAGMA\b/i, name: 'SQLite PRAGMA' },
   { pattern: /\bAUTOINCREMENT\b/i, name: 'SQLite AUTOINCREMENT' },

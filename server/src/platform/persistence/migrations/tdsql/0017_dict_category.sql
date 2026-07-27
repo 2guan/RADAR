@@ -1,0 +1,19 @@
+-- ============================================================================
+-- 文件：server/src/platform/persistence/migrations/tdsql/0017_dict_category.sql
+-- 说明：RADAR 历史数据库迁移脚本，按对应数据库方言和版本顺序执行。
+-- 用途：以可追踪、可审计的方式演进数据结构，并保持 SQLite 与 TDSQL/MySQL 8 迁移配对。
+-- 作者：hengguan
+-- ============================================================================
+-- ============================================================================
+-- 文件：0017_dict_category.sql
+-- 用途：TDSQL 版字典分类中文展示名称。
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS dict_category (
+  category   VARCHAR(128) PRIMARY KEY,
+  label      VARCHAR(255) NOT NULL,
+  sort       INT NOT NULL DEFAULT 0,
+  enabled    TINYINT NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

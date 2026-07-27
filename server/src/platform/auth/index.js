@@ -6,11 +6,11 @@
  */
 
 /** Public authentication and RBAC platform contract. */
-export { default as authPlugin } from '../../plugins/auth.js';
+export { default as authPlugin } from './fastify-plugin.js';
 export {
   hashPassword, verifyPassword, validatePasswordComplexity,
   isPasswordExpired, getSecurityConfig,
 } from './password.js';
 export { createCaptcha, verifyCaptcha } from './captcha.js';
-export { authorizeEntity, resolveEntityAccess } from '../../shared/authorization/entity-access.js';
+export { authorizeEntity, resolveEntityAccess } from './entity-access.js';
 export { MODULE_CONTRACT as authContract } from './contracts/index.js';

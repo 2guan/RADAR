@@ -19,9 +19,12 @@
 
 ```text
 server/scripts/sqlite-to-tdsql.js   # 应用级迁移工具
+server/src/platform/persistence/migrations/ # SQLite 迁移及 tdsql/ 等价迁移
 data/radar.db                       # 默认 SQLite 数据库文件
 attachments/                        # 默认附件目录
 ```
+
+迁移脚本只追加、不改写历史版本；SQLite 与 TDSQL/MySQL 8 迁移须成对维护，并通过 `node scripts/check-migration-parity.mjs` 和 `node scripts/check-mysql8-migrations.mjs` 验证。
 
 进入后端目录：
 

@@ -1,5 +1,5 @@
 /**
- * 文件：modules/systems/routes.js
+ * 文件：server/src/modules/settings/api/systems-routes.js
  * 说明：用于主责系统和关联系统的录入、查询与状态变更管理，包含对系统内阁编号的解析。
  * 用途：所属系统（物理子系统清单）管理接口。标准 CRUD + 全量读取（供下拉框）+ 导入/导出/模板。
  * 作者：hengguan

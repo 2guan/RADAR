@@ -1,5 +1,5 @@
 /**
- * 文件：pages/Settings.jsx
+ * 文件：web/src/modules/settings/pages/SettingsPage.jsx
  * 说明：字典/系统/投产点/角色复用 CrudManager；投产点新增使用 DatePicker(存 YYYYMMDD)；
  *       角色配置含"会签角色"打标；流程状态含阶段/终态（extra JSON）。
  * 用途：系统设置页面。聚合基础配置、参数配置、投产点设置、机构系统配置、人员配置；
@@ -12,18 +12,17 @@ import { Card, Tabs, Button, Tag, message, Form, Input, InputNumber, Switch, Dat
 import { StarOutlined, StarFilled } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import customParseFormat from 'dayjs/plugin/customParseFormat.js';
-import { useResponsive } from '../../../hooks/useResponsive.js';
-import CrudManager from '../../../components/CrudManager.jsx';
-import AppConfigForm from '../../../components/AppConfigForm.jsx';
-import AppearanceSettings from '../../../components/AppearanceSettings.jsx';
-import PermissionMatrix from '../../../components/PermissionMatrix.jsx';
-import StageConfiguration from '../../../components/StageConfiguration.jsx';
-import DictSelect from '../../../components/DictSelect.jsx';
-import { MENU } from '../../../router/menu.js';
-import { PRESETS } from '../../../theme/presets.js';
+import { useResponsive } from '../../../platform/ui/useResponsive.js';
+import CrudManager from '../components/CrudManager.jsx';
+import AppConfigForm from '../components/AppConfigForm.jsx';
+import AppearanceSettings from '../components/AppearanceSettings.jsx';
+import PermissionMatrix from '../components/PermissionMatrix.jsx';
+import { StageConfiguration } from '../process-configuration/index.js';
+import { DictSelect, makeReleasePointOptions, ReleasePointText } from '../reference-data/index.js';
+import { MENU } from '../../../platform/routing/menu.js';
+import { PRESETS } from '../../../platform/theme/presets.js';
 import { apiPost, apiGet } from '../api/index.js';
-import { makeReleasePointOptions, ReleasePointText } from '../../../components/ReleasePointText.jsx';
-import { useAppStore } from '../../../stores/app.js';
+import { useAppStore } from '../../../platform/state/app.js';
 
 const PENDING_RELEASE_DATE = '投产点待定';
 const RELEASE_DATE_RE = /^\d{8}$/;

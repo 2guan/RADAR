@@ -1,5 +1,5 @@
 /**
- * 文件：modules/dict/routes.js
+ * 文件：server/src/modules/settings/api/dictionaries-routes.js
  * 说明：流程状态等字典的 extra 字段存 JSON（stage/isTerminal）。
  * 用途：字典管理接口。提供标准 CRUD（受 settings 权限约束）、面向全平台下拉框的按分类读取，
  *       以及按分类的导入/导出/模板下载（流程状态额外含"阶段/终态"列）。

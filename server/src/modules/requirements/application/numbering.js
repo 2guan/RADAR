@@ -1,5 +1,5 @@
 /**
- * 文件：modules/requirements/application/numbering.js
+ * 文件：server/src/modules/requirements/application/numbering.js
  * 说明：需求编号继续使用 code.requirement 模板和 RC_{投产窗口}_{序号} 默认格式；预览不会占用序列。
  * 用途：需求模块的编号领域服务，负责预览、保存确认和并发领号三种编号场景。
  * 作者：hengguan

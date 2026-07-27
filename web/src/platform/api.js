@@ -6,4 +6,4 @@
  */
 
 /** Platform-owned HTTP client boundary. */
-export * from '../api/client.js';
+export * from './http/client.js';

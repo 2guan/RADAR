@@ -1,5 +1,5 @@
 /**
- * 文件：modules/test-tasks/routes.js
+ * 文件：server/src/modules/testing/api/routes.js
  * 说明：NFT/SEC 按需进行；不承接即无该阶段。编号前缀由测试类型决定。
  * 用途：测试管理模块接口（SIT/UAT/NFT/SEC 共用一张表，按 test_type 区分）。
  *       测试承接（默认建 1 个，可按系统拆分多个）、CRUD、偏差率、终态校验、留痕。

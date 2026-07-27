@@ -1,5 +1,5 @@
 /**
- * 文件：platform/import-export/excel.js
+ * 文件：server/src/platform/import-export/excel.js
  * 说明：columns 形如 [{ key:'name', title:'姓名' }]，导入时按 title 匹配表头列。
  * 用途：通用 Excel（.xlsx）导入导出工具，基于 exceljs。导出生成带表头的工作簿 Buffer；
  *       导入解析首行为表头并按中文列名映射回字段。

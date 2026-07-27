@@ -1,5 +1,5 @@
 /**
- * 文件：modules/identity-access/application/perm-catalog.js
+ * 文件：server/src/modules/identity-access/application/perm-catalog.js
  * 说明：action 同时覆盖页面级(view)与页面内功能级(create/edit/signoff...)。
  * 用途：权限矩阵目录定义——模块与操作的中文标签，供权限矩阵 UI 渲染与后端校验复用。
  * 作者：hengguan

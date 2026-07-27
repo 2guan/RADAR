@@ -5,7 +5,7 @@
  * 作者：hengguan
  */
 
-import { config } from '../../config.js';
+import { config } from '../runtime/config.js';
 
 /** Internal platform-only storage root accessor. Business modules use attachment APIs instead. */
 export function getAttachmentStorageRoot() {

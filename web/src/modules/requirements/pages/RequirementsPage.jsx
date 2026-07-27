@@ -1,5 +1,5 @@
 /**
- * 文件：pages/Requirements.jsx
+ * 文件：web/src/modules/requirements/pages/RequirementsPage.jsx
  * 说明：需求列表管理页面，支持新建、批量导入、状态筛选、模糊搜索和投产点关联，提供入口至需求编辑器。
  * 用途：需求分析页面。需求列表（默认按当前投产窗口过滤）+ 新增/编辑（复用 RequirementEditor）
  *       + 历史记录 + 导入导出/模板。
@@ -11,18 +11,17 @@ import { Card, Button, Space, Tag, Popconfirm, message, Tooltip } from 'antd';
 import {
   PlusOutlined, EditOutlined, DeleteOutlined, ImportOutlined, ExportOutlined,
 } from '@ant-design/icons';
-import DataTable from '../../../components/DataTable.jsx';
-import StatusBadge from '../../../components/StatusBadge.jsx';
-import HistoryDrawer from '../../../components/HistoryDrawer.jsx';
-import RequirementEditor from '../../../components/editors/RequirementEditor.jsx';
-import FilterPanel from '../../../components/FilterPanel.jsx';
-import Can from '../../../components/Can.jsx';
+import { DataTable, FilterPanel } from '../../../shared/ui/index.js';
+import { StatusBadge } from '../../../shared/workflow/index.js';
+import { HistoryDrawer } from '../../../platform/audit/index.js';
+import RequirementEditor from '../components/RequirementEditor.jsx';
+import Can from '../../../platform/auth/Can.jsx';
 import { apiPost, apiDelete, apiGet } from '../api/index.js';
-import { exportXlsx } from '../../../utils/io.js';
-import { useAppStore } from '../../../stores/app.js';
-import ImportModal from '../../../components/ImportModal.jsx';
-import { makeReleasePointOptions, ReleasePointText } from '../../../components/ReleasePointText.jsx';
-import { useStageListFields } from '../../../hooks/useStageListFields.js';
+import { exportXlsx } from '../../../platform/import-export/io.js';
+import { useAppStore } from '../../../platform/state/app.js';
+import { ImportModal } from '../../../platform/import-export/index.js';
+import { makeReleasePointOptions, ReleasePointText } from '../../settings/reference-data/index.js';
+import { useStageListFields } from '../../settings/process-configuration/index.js';
 
 export default function Requirements() {
   const stageList = useStageListFields('requirement');

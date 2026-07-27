@@ -1,5 +1,5 @@
 /**
- * 文件：modules/delivery/application/work-items.js
+ * 文件：server/src/modules/development/application/work-items.js
  * 说明：本服务不拥有也不写入需求/工单数据，只统一 DTO 与查询结果。
  * 用途：将需求和工单两个独立只读契约组合为交付链路可消费的工作项。
  * 作者：hengguan

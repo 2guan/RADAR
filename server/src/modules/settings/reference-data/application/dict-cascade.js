@@ -1,5 +1,5 @@
 /**
- * 文件：modules/reference-data/application/dict-cascade.js
+ * 文件：server/src/modules/settings/reference-data/application/dict-cascade.js
  * 说明：*_REFERENCES 集中登记“配置项 → 引用其值的业务表字段”。引用分三类：
  *       plain          ：普通文本列，整列等值替换；
  *       jsonKey        ：JSON 对象数组列，逐元素替换其 jsonKey 字段（如投产申请 delivery_units）；

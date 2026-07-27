@@ -1,5 +1,5 @@
 /**
- * 文件：pages/Release.jsx
+ * 文件：web/src/modules/release/pages/ReleasePage.jsx
  * 说明：审批对象来源于投产申请的 ref_codes（需求、工单或问题）；不再列出全部投产点需求，也不再有「UAT 终态发起评审」逻辑。
  * 用途：投产审批页面。逐条展示「投产申请」中所选择的需求/工单/问题，含投产状态、评审状态、申请投产点、
  *       需求/问题/工单编号、需求标题/工单概述/问题概述、会签进度。点击行打开投产审批详情（复用 ReleaseDetail）。
@@ -9,15 +9,14 @@
 import { useRef, useState, useEffect } from 'react';
 import { Card, Button, Space, Tag } from 'antd';
 import { ExportOutlined } from '@ant-design/icons';
-import DataTable from '../../../components/DataTable.jsx';
-import StatusBadge from '../../../components/StatusBadge.jsx';
-import ReleaseDetail from '../../../components/editors/ReleaseDetail.jsx';
-import Can from '../../../components/Can.jsx';
-import FilterPanel from '../../../components/FilterPanel.jsx';
+import { DataTable, FilterPanel } from '../../../shared/ui/index.js';
+import { StatusBadge } from '../../../shared/workflow/index.js';
+import ReleaseDetail from '../components/ReleaseDetail.jsx';
+import Can from '../../../platform/auth/Can.jsx';
 import { apiPost, apiGet } from '../api/index.js';
-import { useAppStore } from '../../../stores/app.js';
-import { exportXlsx } from '../../../utils/io.js';
-import { ReleasePointText } from '../../../components/ReleasePointText.jsx';
+import { useAppStore } from '../../../platform/state/app.js';
+import { exportXlsx } from '../../../platform/import-export/io.js';
+import { ReleasePointText } from '../../settings/reference-data/index.js';
 
 export default function Release() {
   const tableRef = useRef();

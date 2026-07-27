@@ -1,5 +1,5 @@
 /**
- * 文件：modules/auth/routes.js
+ * 文件：server/src/modules/identity-access/api/auth-routes.js
  * 说明：登录成功签发 JWT；/auth/me 返回前端用于菜单/路由/按钮级权限控制的数据。
  *       验证码使用自绘 SVG，无外部依赖。
  * 用途：鉴权相关接口——登录、获取当前用户信息（含角色与权限集）、登出。

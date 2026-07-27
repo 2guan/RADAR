@@ -1,5 +1,5 @@
 /**
- * 文件：modules/tickets/application/numbering.js
+ * 文件：server/src/modules/tickets/application/numbering.js
  * 说明：工单编号继续使用 code.ticket 模板和 TK_{投产窗口}_{序号} 默认格式；首次领号会扫描历史记录。
  * 用途：工单模块的编号领域服务，负责将业务模板、历史数据和平台序列表组合为唯一编号。
  * 作者：hengguan

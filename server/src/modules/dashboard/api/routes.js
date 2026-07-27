@@ -1,5 +1,5 @@
 /**
- * 文件：modules/dashboard/routes.js
+ * 文件：server/src/modules/dashboard/api/routes.js
  * 说明：聚合在内存按维度分桶（见 reporting/application/chart-dims.js）；系统图表(scope=system)由 dashboard:manage
  *       权限维护、对所有人可见；我的图表(scope=user)按用户隔离。
  * 用途：效能仪表盘接口。5 原子指标卡（终态计数）、分析图表数据聚合（多维度组合/分组归并/

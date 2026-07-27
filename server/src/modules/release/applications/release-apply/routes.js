@@ -1,5 +1,5 @@
 /**
- * 文件：modules/release-apply/routes.js
+ * 文件：server/src/modules/release/applications/release-apply/routes.js
  * 说明：ref_codes（需求/工单编号）以 JSON 数组入库；change_system 存系统编号；制品类型/摆渡状态取自字典。
  * 用途：投产申请（版本变更申请）模块接口。变更申请 CRUD（全字段可改并留痕）、变更编号生成、
  *       默认按当前投产窗口过滤、导入导出。评审状态由所关联需求的投产审批评审状态派生（取最弱）。

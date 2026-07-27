@@ -1,5 +1,5 @@
 /**
- * 文件：pages/ReleaseApply.jsx
+ * 文件：web/src/modules/release/pages/ReleaseApplyPage.jsx
  * 说明：仿照需求分析页面，页面上方提供「新增申请」按钮；评审状态由后端按所关联需求派生。
  * 用途：投产申请页面。投产申请（版本变更申请）列表（默认按当前投产窗口过滤）+ 新增申请 / 编辑
  *       （复用 ReleaseApplyEditor）+ 导入导出/模板。
@@ -9,17 +9,16 @@
 import { useRef, useState, useEffect } from 'react';
 import { Card, Button, Space, Tag, Popconfirm, message } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, ImportOutlined, ExportOutlined } from '@ant-design/icons';
-import DataTable from '../../../components/DataTable.jsx';
-import StatusBadge from '../../../components/StatusBadge.jsx';
-import FilterPanel from '../../../components/FilterPanel.jsx';
-import Can from '../../../components/Can.jsx';
-import ImportModal from '../../../components/ImportModal.jsx';
-import ReleaseApplyEditor from '../../../components/editors/ReleaseApplyEditor.jsx';
+import { DataTable, FilterPanel } from '../../../shared/ui/index.js';
+import { StatusBadge } from '../../../shared/workflow/index.js';
+import Can from '../../../platform/auth/Can.jsx';
+import { ImportModal } from '../../../platform/import-export/index.js';
+import ReleaseApplyEditor from '../components/ReleaseApplyEditor.jsx';
 import { apiPost, apiDelete, apiGet } from '../api/index.js';
-import { exportXlsx } from '../../../utils/io.js';
-import { useAppStore } from '../../../stores/app.js';
-import { ReleasePointText } from '../../../components/ReleasePointText.jsx';
-import { useStageListFields } from '../../../hooks/useStageListFields.js';
+import { exportXlsx } from '../../../platform/import-export/io.js';
+import { useAppStore } from '../../../platform/state/app.js';
+import { ReleasePointText } from '../../settings/reference-data/index.js';
+import { useStageListFields } from '../../settings/process-configuration/index.js';
 
 export default function ReleaseApply() {
   const stageList = useStageListFields('release_apply');

@@ -1,5 +1,5 @@
 /**
- * 文件：modules/process-configuration/application/extension-list-filter.js
+ * 文件：server/src/modules/settings/process-configuration/application/extension-list-filter.js
  * 说明：扩展字段定义和字段值都属于阶段配置领域；表名与实体类型由业务模块传入的受信任配置决定。
  * 用途：将扩展字段筛选转换为安全的 EXISTS SQL 片段，供通用列表查询通过公开契约调用。
  * 作者：hengguan

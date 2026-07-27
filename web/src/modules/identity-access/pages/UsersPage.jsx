@@ -1,5 +1,5 @@
 /**
- * 文件：pages/Users.jsx
+ * 文件：web/src/modules/identity-access/pages/UsersPage.jsx
  * 说明：用户管理与角色权限配置页面，提供用户的增删改查、手机号重置和角色权限关联。
  * 用途：人员管理页面。用户列表（一人多角色）+ 新增/编辑 + 重置密码 + 导入/导出。
  * 作者：hengguan
@@ -12,15 +12,14 @@ import {
 import {
   PlusOutlined, EditOutlined, DeleteOutlined, KeyOutlined, UnlockOutlined, ImportOutlined, ExportOutlined,
 } from '@ant-design/icons';
-import DataTable from '../../../components/DataTable.jsx';
-import DictSelect from '../../../components/DictSelect.jsx';
-import Can from '../../../components/Can.jsx';
-import FilterPanel from '../../../components/FilterPanel.jsx';
-import ImportModal from '../../../components/ImportModal.jsx';
-import { getScopedPopupContainer } from '../../../components/scopedPopup.js';
+import { DataTable, FilterPanel } from '../../../shared/ui/index.js';
+import { DictSelect } from '../../settings/reference-data/index.js';
+import Can from '../../../platform/auth/Can.jsx';
+import { ImportModal } from '../../../platform/import-export/index.js';
+import { getScopedPopupContainer } from '../../../platform/ui/scopedPopup.js';
 import { apiPost, apiPut, apiDelete, apiGet } from '../api/index.js';
-import { exportXlsx } from '../../../utils/io.js';
-import { useAppStore } from '../../../stores/app.js';
+import { exportXlsx } from '../../../platform/import-export/io.js';
+import { useAppStore } from '../../../platform/state/app.js';
 
 export default function Users() {
   const tableRef = useRef();

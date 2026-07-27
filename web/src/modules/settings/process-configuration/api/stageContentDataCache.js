@@ -1,11 +1,11 @@
 /**
- * 文件：modules/process-configuration/api/stageContentDataCache.js
+ * 文件：web/src/modules/settings/process-configuration/api/stageContentDataCache.js
  * 说明：阶段配置、扩展字段值属于同一详情页的只读初始化数据；同页多个布局区域应复用同一请求。
  * 用途：为阶段内容模块提供按阶段和实体去重的短生命周期内存缓存，并在配置变更或保存后按键失效。
  * 作者：hengguan
  */
 
-import { apiGet } from '../../../../api/client.js';
+import { apiGet } from '../../../../platform/api.js';
 
 const schemaCache = new Map();
 const schemaRequests = new Map();

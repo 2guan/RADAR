@@ -1,5 +1,5 @@
 /**
- * 文件：modules/delivery/application/deviation.js
+ * 文件：server/src/modules/development/application/deviation.js
  * 说明：公式 = round((实际结束 - 计划结束) / max(计划结束 - 计划开始, 1天) * 100)，
  *       正值表示延期，负值表示提前；信息不全时返回 null。
  * 用途：排期偏差率演算。基于计划/实际起止时间计算延期百分比，集中实现便于后续调整公式。

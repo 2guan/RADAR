@@ -1,5 +1,5 @@
 /**
- * 文件：app.jsx
+ * 文件：web/src/app.jsx
  * 说明：进入受保护区域前确保已加载用户/平台/投产窗口信息；无权限模块自动重定向。
  * 用途：应用路由装配。HashRouter + 登录页 + 受保护的主框架布局，并基于权限做路由守卫。
  * 作者：hengguan
@@ -8,12 +8,12 @@
 import { useEffect, useState } from 'react';
 import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Spin } from 'antd';
-import { TOKEN_KEY } from './api/client.js';
-import { useAppStore } from './stores/app.js';
-import MainLayout from './layout/MainLayout.jsx';
-import Login from './pages/Login.jsx';
-import { getHomePath } from './router/home.js';
-import { getRouteModule, renderMainRouteElements } from './router/routes.jsx';
+import { TOKEN_KEY } from './platform/api.js';
+import { useAppStore } from './platform/state/app.js';
+import MainLayout from './platform/layout/MainLayout.jsx';
+import LoginPage from './modules/identity-access/pages/LoginPage.jsx';
+import { getHomePath } from './platform/routing/home.js';
+import { getRouteModule, renderMainRouteElements } from './platform/routing/routes.jsx';
 
 /**
  * 受保护区域容器：首次加载拉取用户/平台/投产窗口；未登录跳转登录页。
@@ -69,7 +69,7 @@ export default function AppRouter() {
   return (
     <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Routes>
-        <Route path="/login" element={<Login />} />
+        <Route path="/login" element={<LoginPage />} />
         <Route
           path="/"
           element={<Protected><MainLayout /></Protected>}

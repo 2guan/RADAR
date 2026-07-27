@@ -1,5 +1,5 @@
 /**
- * 文件：modules/issues/application/issue-sync-scheduler.js
+ * 文件：server/src/modules/issues/application/issue-sync-scheduler.js
  * 说明：配置保存在 app_config；单进程内只运行一个检查定时器，任务执行中不重复启动。
  * 用途：按系统设置定时拉取已同步问题的详情，支持每日、每 N 小时、每 N 分钟。
  * 作者：hengguan

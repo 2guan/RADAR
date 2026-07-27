@@ -1,5 +1,5 @@
 /**
- * 文件：modules/process-configuration/application/required-fields.js
+ * 文件：server/src/modules/settings/process-configuration/application/required-fields.js
  * 说明：必填字段配置存放在 app_config JSON 中。SQLite 读取为字符串，TDSQL JSON 字段可能
  *       直接返回对象，因此统一通过 parseJsonObject 解析，保证两类数据库行为一致。
  * 用途：维护各业务模块字段必填配置目录、默认值、状态归类与保存校验。

@@ -1,5 +1,5 @@
 /**
- * 文件：pages/Overview.jsx
+ * 文件：web/src/modules/overview/pages/OverviewPage.jsx
  * 说明：系统概览和个人待办面板，以工作流看板形式展示个人的开发和测试任务，支持拖拽状态更新。
  * 用途：版本概览页面。按实施机构分组展示当前投产窗口需求卡片（每行最多 2 条），
  *       卡片含编号、所属系统、当前阶段状态与全流程进度条；点击卡片弹出 5 列全生命周期详情，
@@ -11,25 +11,21 @@ import {
   Card, Row, Col, Tag, Typography, Empty, Modal, Space, Spin, Tabs, Button, Table, Radio, message, Timeline, Tooltip, List, Checkbox,
 } from 'antd';
 import { SafetyCertificateOutlined, DeploymentUnitOutlined, DownloadOutlined, DownOutlined, UpOutlined, HistoryOutlined, ExportOutlined } from '@ant-design/icons';
-import { useResponsive } from '../../../hooks/useResponsive.js';
-import ChainBar from '../../../components/ChainBar.jsx';
-import StatusBadge, { getStatusType } from '../../../components/StatusBadge.jsx';
-import RequirementEditor from '../../../components/editors/RequirementEditor.jsx';
-import TicketEditor from '../../../components/editors/TicketEditor.jsx';
-import TaskEditor from '../../../components/editors/TaskEditor.jsx';
-import ReleaseDetail from '../../../components/editors/ReleaseDetail.jsx';
-import ReleaseApplyEditor from '../../../components/editors/ReleaseApplyEditor.jsx';
-import IssueDetail from '../../../components/editors/IssueDetail.jsx';
-import ResizableTitle from '../../../components/ResizableTitle.jsx';
+import { useResponsive } from '../../../platform/ui/useResponsive.js';
+import { ChainBar, FilterPanel, ResizableTitle } from '../../../shared/ui/index.js';
+import { StatusBadge, TaskEditor, getStatusType } from '../../../shared/workflow/index.js';
+import { RequirementEditor } from '../../requirements/index.js';
+import { TicketEditor } from '../../tickets/index.js';
+import { ReleaseDetail, ReleaseApplyEditor } from '../../release/index.js';
+import { IssueDetail } from '../../issues/index.js';
 import { apiPost, apiGet, rawClient } from '../api/index.js';
-import FilterPanel from '../../../components/FilterPanel.jsx';
-import { useAppStore } from '../../../stores/app.js';
-import { exportXlsx } from '../../../utils/io.js';
-import Can from '../../../components/Can.jsx';
-import { makeReleasePointOptions, ReleasePointText } from '../../../components/ReleasePointText.jsx';
-import { formatBeijingDateTime } from '../../../utils/time.js';
-import { logger } from '../../../utils/logger.js';
-import { useRequiredFields } from '../../../hooks/useRequiredFields.js';
+import { useAppStore } from '../../../platform/state/app.js';
+import { exportXlsx } from '../../../platform/import-export/io.js';
+import Can from '../../../platform/auth/Can.jsx';
+import { makeReleasePointOptions, ReleasePointText } from '../../settings/reference-data/index.js';
+import { formatBeijingDateTime } from '../../../shared/utils/index.js';
+import { logger } from '../../../platform/observability/logger.js';
+import { useRequiredFields } from '../../settings/process-configuration/index.js';
 
 const AV_COLORS = ['#2E6BFF', '#22C55E', '#F59E0B', '#8B5CF6', '#06B6D4', '#EC4899', '#F1683C'];
 

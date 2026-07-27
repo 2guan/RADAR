@@ -1,5 +1,5 @@
 /**
- * 文件：shared/utils/code-template.js
+ * 文件：server/src/shared/utils/code-template.js
  * 说明：仅处理编号模板的变量替换、日期归一化和历史编号尾号解析，不访问数据库或业务表。
  * 用途：为各业务模块复用稳定的编号格式规则，保持原有模板和三位补零输出完全兼容。
  * 作者：hengguan

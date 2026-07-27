@@ -1,5 +1,5 @@
 /**
- * 文件：platform/auth/captcha.js
+ * 文件：server/src/platform/auth/captcha.js
  * 说明：验证码有效期为 5 分钟，单个 token 最多可尝试 3 次，
  *       定时清理过期条目防止内存泄漏。
  * 用途：验证码生成与校验工具。使用 Node 内置 crypto 生成随机码，

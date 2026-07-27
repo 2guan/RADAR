@@ -1,12 +1,12 @@
 /**
- * 文件：platform/persistence/list-query.js
+ * 文件：server/src/platform/persistence/list-query.js
  * 说明：所有列名均经白名单校验，杜绝注入；keyword 跨多列模糊；filters 支持等值/包含/区间。
  * 用途：列表通用查询构建器。把前端统一的 {page,pageSize,keyword,filters,sort} 入参，
  *       转换为安全的参数化 SQL 片段（WHERE / ORDER BY / LIMIT），供各模块复用。
  * 作者：hengguan
  */
 
-import { all, get } from '../../db/index.js';
+import { all, get } from './engine/index.js';
 
 /**
  * 构建并执行分页列表查询。

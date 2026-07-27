@@ -14,7 +14,8 @@ AI 任务必须关联状态为 `ready` 的 `requirement.md` 和完整 `ai-task-s
 
 - AI 仅能写入 `writable_paths`；不得以重命名、批量格式化或“顺手修复”扩大范围。
 - 跨模块只能调用公开契约；不得直接写其他模块数据表。
-- 修改 `platform`、`shared/contracts` 或模块公开契约时，任务范围必须声明 `public_capability_change`、Shared Change Issue、Owner 审批及旧行为回归测试。
+- `platform` 对非所属模块只读；只有平台 Owner 或经批准的治理任务可以修改。`shared` 可由获授权模块协作修改，但不得新增业务数据写入权或直接依赖业务私有实现。
+- 修改 `platform`、`shared` 或模块公开契约时，任务范围必须声明 `public_capability_change`、Shared Change Issue、Owner 审批及旧行为回归测试。
 - 默认新增语义明确的方法；修改已有公共方法行为仅限缺陷或安全修复，并必须说明兼容性。
 
 ## 完成报告

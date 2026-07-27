@@ -1,5 +1,5 @@
 /**
- * 文件：modules/attachments/routes.js
+ * 文件：server/src/platform/attachments/api/routes.js
  * 说明：上传走 multipart，校验扩展名与大小；下载按相对路径回读磁盘。
  * 用途：附件接口。上传文件、登记路径、按实体读取、下载、删除。
  * 作者：hengguan

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 文件：scripts/tdsql-dump.js
+ * 文件：server/scripts/tdsql-dump.js
  * 说明：适用于 TDSQL 到 TDSQL 的离线迁移、物理隔离交付和数据库原生逻辑备份。
  *       密码通过 MYSQL_PWD 环境变量传给子进程，避免出现在命令参数列表中。
  *
@@ -18,8 +18,8 @@ import { spawn } from 'node:child_process';
 import { createGzip } from 'node:zlib';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
-import { loadEnvFile } from '../src/lib/env.js';
-import { logger } from '../src/lib/logger.js';
+import { loadEnvFile } from '../src/platform/runtime/index.js';
+import { logger } from '../src/platform/observability/logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..');

@@ -6,5 +6,5 @@
  */
 
 /** Runtime/platform public boundary. */
-export { config } from '../config.js';
-export { dbClient, dialect, get, all, run, exec, tx } from '../db/index.js';
+export { config } from './runtime/config.js';
+export { dbClient, dialect, get, all, run, exec, tx } from './persistence/index.js';

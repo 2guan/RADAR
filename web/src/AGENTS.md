@@ -1,8 +1,8 @@
 # RADAR 前端开发指令
 
-- 新页面、业务组件、模块 API 和测试写入 web/src/modules/<module>/；旧 pages/、components/editors/ 仅作为迁移兼容实现。
-- 模块页面只能调用本模块 api/，通用 API client、认证、路由和应用壳属于 platform。
+- 新页面、业务组件、模块 API 和测试写入 `web/src/modules/<module>/`；不得在已移除的顶层 `pages/`、`components/`、`hooks/`、`utils/` 或 `config/` 下新增实现。
+- 模块页面只能调用本模块 api/；通用 API client、认证、路由、布局、应用状态、主题和附件能力统一位于 `web/src/platform/`，且只能经登记的公开契约访问。
+- `platform` 对业务模块只读；`shared` 可承载跨模块协作的 UI、流程展示和纯工具，但不得拥有业务表、业务写入权或绕过模块公开契约。
 - 复用既有共享 UI、状态与权限组件；前端权限不构成安全边界。
 - 页面必须覆盖加载、空数据、失败、无权限和提交中状态，并检查 PC、平板、手机及明暗主题。
 - 不在前端保存密钥、数据库信息或内部配置；未获批前不得实现外网入口或以客户端过滤敏感字段。
-

@@ -1,5 +1,5 @@
 /**
- * 文件：platform/auth/password.js
+ * 文件：server/src/platform/auth/password.js
  * 说明：哈希格式为 "scrypt$<saltHex>$<hashHex>"，校验使用时间安全比较。
  * 用途：密码哈希与校验工具，基于 Node 内置 crypto 的 scrypt 算法 + 随机盐，
  *       不引入第三方依赖，安全存储用户口令。

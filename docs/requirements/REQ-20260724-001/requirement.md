@@ -12,7 +12,7 @@ module_owner: "hengguan"
 contains_confidential_information: false
 external_access_required: false
 internet_ai_coding_allowed: true
-last_updated: "2026-07-26"
+last_updated: "2026-07-27"
 ---
 
 # [REQ-20260724-001] 多人共创架构治理
@@ -26,6 +26,7 @@ last_updated: "2026-07-26"
 1. 建立正式治理入口、完整模块清单、需求和任务范围模板。
 2. 建立公开契约、平台能力和兼容入口的目录基础。
 3. 将 CI 改为检查任务范围、模块依赖、迁移配对和质量基线。
+4. 固化前后端十个业务模块、`platform`、`shared` 与设置配置子域的目录归属，并以代码注释检查持续校验文件头规范。
 
 ## 明确不做
 

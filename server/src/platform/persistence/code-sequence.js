@@ -1,11 +1,11 @@
 /**
- * 文件：platform/persistence/code-sequence.js
+ * 文件：server/src/platform/persistence/code-sequence.js
  * 说明：序列以“规则键 + 不含序号的编号前缀”为唯一键；首次使用由调用方提供历史最大值后的起始序号。
  * 用途：封装业务编号序列的原子领号，兼容 SQLite 的写事务和 TDSQL/MySQL 的行锁事务，支持在保存时按真实已用编号校正预览遗留序列。
  * 作者：hengguan
  */
 
-import { get, isSqlite, isTdsql, run, tx } from '../../db/index.js';
+import { get, isSqlite, isTdsql, run, tx } from './engine/index.js';
 
 // node:sqlite 使用单连接；并发事务会被底层直接拒绝，因此仅对“领号”这一极短临界区串行。
 // TDSQL 保持数据库行锁并发，不经过该队列。

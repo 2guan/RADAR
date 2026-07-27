@@ -1,5 +1,5 @@
 /**
- * 文件：platform/runtime/json.js
+ * 文件：server/src/platform/runtime/json.js
  * 说明：业务模块读取 JSON 字段时应优先使用这里的 parseJsonArray/parseJsonObject，
  *       避免直接 JSON.parse 导致 TDSQL 返回对象时发生异常。
  * 用途：统一处理数据库 JSON 字段的解析兼容。SQLite 通常返回 JSON 字符串，

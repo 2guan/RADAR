@@ -1,5 +1,5 @@
 /**
- * 文件：modules/delivery/application/numbering.js
+ * 文件：server/src/modules/development/application/numbering.js
  * 说明：开发与测试任务共用平台序列表，但通过规则键和前缀隔离，保留各自原有模板格式。
  * 用途：交付模块的任务编号领域服务，生成开发任务和各测试类型任务的唯一编号。
  * 作者：hengguan

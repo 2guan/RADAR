@@ -1,5 +1,5 @@
 /**
- * 文件：vite.config.js
+ * 文件：web/vite.config.js
  * 说明：遵循项目研发规约；跨模块能力仅可经公开契约访问。
  * 用途：Vite 构建配置。配置 React 插件、开发服务器代理（/api 转后端）、构建产物目录。
  * 作者：hengguan

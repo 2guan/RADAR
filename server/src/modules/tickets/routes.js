@@ -1,5 +1,5 @@
 /**
- * 文件：modules/tickets/routes.js
+ * 文件：server/src/modules/tickets/routes.js
  * 说明：JSON 数组字段（主责/协同系统）入库前序列化；终态时校验主责系统。
  * 用途：工单分析模块接口。工单 CRUD（全字段可改并留痕）、编号唯一性校验、终态业务校验、
  *       默认按当前投产窗口过滤、导入导出。

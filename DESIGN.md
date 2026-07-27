@@ -4,7 +4,7 @@
 
 RADAR 是金融研发交付的工作台，而不是营销页面。界面应呈现“**精确、沉稳、高密度、可核对**”的感觉：用户能快速扫描状态和负责人，在不拥挤的前提下处理大量字段，并随时追溯依据。
 
-产品采用固定侧栏、顶栏和内容工作区的企业控制台布局；PC 是主场景，PAD 与手机保留关键查看和操作能力。实现以 `web/src/main.jsx`、`web/src/theme/presets.js` 和 `web/src/styles.css` 为准。
+产品采用固定侧栏、顶栏和内容工作区的企业控制台布局；PC 是主场景，PAD 与手机保留关键查看和操作能力。实现以 `web/src/main.jsx`、`web/src/platform/theme/presets.js` 和 `web/src/styles.css` 为准。
 
 ## 主题与颜色
 
@@ -20,7 +20,7 @@ RADAR 是金融研发交付的工作台，而不是营销页面。界面应呈�
 | 页面、表面、文本、边框 | `--radar-bg`、`--radar-surface`、`--radar-ink`、`--radar-text-secondary`、`--radar-border` |
 | 补充强调 | `--radar-highlight`、`--radar-accent` 及对应 `soft` / `fade` 变量 |
 
-状态表达必须由 `StatusBadge` 和中文文字承载，颜色只用于加强，不得成为唯一信息来源。图表优先复用 `components/dashboard/chartOption.js` 和 `ColorPickerField.jsx` 的调色规则。
+状态表达必须由 `web/src/shared/workflow/StatusBadge.jsx` 和中文文字承载，颜色只用于加强，不得成为唯一信息来源。图表优先复用 `web/src/modules/dashboard/components/chartOption.js` 与 `ColorPickerField.jsx` 的调色规则。
 
 ## 版式与层级
 
@@ -39,7 +39,7 @@ RADAR 是金融研发交付的工作台，而不是营销页面。界面应呈�
 | 筛选 | `FilterPanel` | 筛选项以业务口径组织，投产点支持多选时须传递完整数组。 |
 | 状态 | `StatusBadge`、`ChainBar` | 状态中文文案、流程节点和阶段颜色必须保持一致。 |
 | 表单选择 | `DictSelect`、`SystemSelect`、`PersonPicker`、`SystemNameInput` | 不在业务页重复实现字典、系统或人员查询。 |
-| 详情与编辑 | `EditorShell`、`editors/` | 保持原位处理与历史入口；删除/驳回使用明确的二次确认。 |
+| 详情与编辑 | `web/src/shared/ui/EditorShell.jsx`、所属模块 `components/` | 编辑器与详情组件归所属模块；删除/驳回使用明确的二次确认。 |
 | 附件与签名 | `AttachmentField`、`SignaturePad` | 使用现有实体、字段键和权限规则，不能直接操作文件路径。 |
 | 权限 | `Can` | 用于按钮和区域可见性；后端权限仍必须同步实现。 |
 

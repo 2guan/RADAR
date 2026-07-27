@@ -1,5 +1,5 @@
 /**
- * 文件：pages/Issues.jsx
+ * 文件：web/src/modules/issues/pages/IssuesPage.jsx
  * 说明：列表显示 问题编号/工单编号/状态/详细分类/所属系统/问题概述；手动上传以问题编号新增或更新数据。
  * 用途：问题管理页面。展示从外部 PAMS 系统同步或手动上传的问题清单，点击查看问题详情；
  *       提供「手动上传问题」「同步问题」（拉取概述列表）与「同步问题详情」（后台逐条慢速更新明细）操作。
@@ -10,13 +10,12 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { Card, Button, Space, message, Modal } from 'antd';
 import { SyncOutlined, CloudSyncOutlined, LoadingOutlined, CheckCircleOutlined, DeleteOutlined, UploadOutlined } from '@ant-design/icons';
-import DataTable from '../../../components/DataTable.jsx';
-import StatusBadge from '../../../components/StatusBadge.jsx';
-import FilterPanel from '../../../components/FilterPanel.jsx';
-import Can from '../../../components/Can.jsx';
-import IssueDetail from '../../../components/editors/IssueDetail.jsx';
-import ImportModal from '../../../components/ImportModal.jsx';
-import { getScopedPopupContainer } from '../../../components/scopedPopup.js';
+import { DataTable, FilterPanel } from '../../../shared/ui/index.js';
+import { StatusBadge } from '../../../shared/workflow/index.js';
+import Can from '../../../platform/auth/Can.jsx';
+import IssueDetail from '../components/IssueDetail.jsx';
+import { ImportModal } from '../../../platform/import-export/index.js';
+import { getScopedPopupContainer } from '../../../platform/ui/scopedPopup.js';
 import { apiDelete, apiGet, apiPost } from '../api/index.js';
 
 export default function Issues() {
