@@ -95,11 +95,13 @@ function quoteIdentifiersOutsideStrings(sql, identifiers) {
  * 或 ON DUPLICATE KEY UPDATE 等 SQL 关键字。
  */
 function quoteAppConfigKeyColumn(sql) {
+  if (!/\bapp_config\b/i.test(sql)) return sql;
+
   return sql
-    .replace(/\bSELECT\s+key\s+FROM\s+app_config\b/gi, 'SELECT `key` FROM app_config')
-    .replace(/\bSELECT\s+key\s*,\s*value\s*,\s*remark\s+FROM\s+app_config\b/gi, 'SELECT `key`, value, remark FROM app_config')
+    // 覆盖 SELECT key、SELECT key, value 等读取配置的常见列组合。
+    .replace(/\bSELECT\s+key(?=\s*(?:,\s*[A-Za-z0-9_`]+\s*)*\s+FROM\s+app_config\b)/gi, 'SELECT `key`')
     .replace(/\bORDER\s+BY\s+key\b/gi, 'ORDER BY `key`')
-    .replace(/\bWHERE\s+key\s*=/gi, 'WHERE `key` =')
+    .replace(/\bWHERE\s+key\b/gi, 'WHERE `key`')
     .replace(/\bINSERT\s+INTO\s+app_config\s*\(\s*key\s*,/gi, 'INSERT INTO app_config (`key`,')
     .replace(/\bON\s+CONFLICT\s*\(\s*key\s*\)/gi, 'ON CONFLICT (`key`)');
 }
@@ -108,7 +110,7 @@ function quoteAppConfigKeyColumn(sql) {
  * 将项目中少量 SQLite 写法转换为 TDSQL/MySQL 兼容写法。
  * 这里保持“窄转换”原则：只转换项目已知 SQL 片段，避免通用正则误伤复杂 SQL。
  */
-function normalizeSql(sql) {
+export function normalizeTdsqlSql(sql) {
   const normalized = quoteAppConfigKeyColumn(String(sql))
     .replace(/datetime\('now','localtime'\)/g, 'CURRENT_TIMESTAMP')
     .replace(/date\('now'\)/g, 'CURRENT_DATE')
@@ -154,15 +156,15 @@ export function createTdsqlProvider(config) {
     dialect: mysqlDialect,
     raw: pool,
     async get(sql, params = []) {
-      const [rows] = await measureQuery(config, 'get', sql, () => current(pool).execute(normalizeSql(sql), params));
+      const [rows] = await measureQuery(config, 'get', sql, () => current(pool).execute(normalizeTdsqlSql(sql), params));
       return rows[0];
     },
     async all(sql, params = []) {
-      const [rows] = await measureQuery(config, 'all', sql, () => current(pool).execute(normalizeSql(sql), params));
+      const [rows] = await measureQuery(config, 'all', sql, () => current(pool).execute(normalizeTdsqlSql(sql), params));
       return rows;
     },
     async run(sql, params = []) {
-      const [result] = await measureQuery(config, 'run', sql, () => current(pool).execute(normalizeSql(sql), params));
+      const [result] = await measureQuery(config, 'run', sql, () => current(pool).execute(normalizeTdsqlSql(sql), params));
       return {
         changes: result.affectedRows ?? 0,
         lastInsertRowid: result.insertId ?? 0,
@@ -170,7 +172,7 @@ export function createTdsqlProvider(config) {
       };
     },
     async exec(sql) {
-      return measureQuery(config, 'exec', sql, () => current(pool).query(normalizeSql(sql)));
+      return measureQuery(config, 'exec', sql, () => current(pool).query(normalizeTdsqlSql(sql)));
     },
     async tx(fn) {
       const existing = txStore.getStore();
