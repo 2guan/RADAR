@@ -28,7 +28,7 @@ if (!process.env.RADAR_RUN_API_TESTS) {
   const { runSeed } = await import('../src/db/seed.js');
   const { buildApp } = await import('../src/app.js');
   const { get, all, run, closeDb } = await import('../src/db/index.js');
-  const { generateRequirementCode } = await import('../src/modules/requirements/index.js');
+  const { claimRequirementCode, generateRequirementCode, previewRequirementCode } = await import('../src/modules/requirements/index.js');
   await runMigrations();
   await runSeed();
   const app = await buildApp();
@@ -160,5 +160,46 @@ if (!process.env.RADAR_RUN_API_TESTS) {
       'code.requirement', `RC_${releaseWindow}_`,
     );
     assert.equal(sequence.next_value, 10);
+  });
+
+  test('业务编号预览：未保存不占号，保存确认后才推进序列', async () => {
+    const releasePoint = await get('SELECT id FROM release_point ORDER BY id LIMIT 1');
+    const releaseWindow = '20990102';
+    await run(
+      `INSERT INTO requirement (req_code, title, status, release_point_id)
+       VALUES (?,?,?,?)`,
+      `RC_${releaseWindow}_004`, '编号预览历史记录', '待分析', releasePoint.id,
+    );
+    // 模拟旧版本已多次点击“生成”但未保存，序列表被错误推进的历史数据。
+    await run(
+      'INSERT INTO code_sequence (rule_key, prefix, next_value) VALUES (?,?,?)',
+      'code.requirement', `RC_${releaseWindow}_`, 50,
+    );
+
+    const [firstPreview, secondPreview] = await Promise.all([
+      previewRequirementCode(releaseWindow),
+      previewRequirementCode(releaseWindow),
+    ]);
+    assert.equal(firstPreview, `RC_${releaseWindow}_005`);
+    assert.equal(secondPreview, firstPreview);
+    const beforeClaim = await get(
+      'SELECT next_value FROM code_sequence WHERE rule_key = ? AND prefix = ?',
+      'code.requirement', `RC_${releaseWindow}_`,
+    );
+    assert.equal(beforeClaim.next_value, 50);
+
+    const claimed = await claimRequirementCode(releaseWindow, firstPreview);
+    assert.equal(claimed, firstPreview);
+    const afterClaim = await get(
+      'SELECT next_value FROM code_sequence WHERE rule_key = ? AND prefix = ?',
+      'code.requirement', `RC_${releaseWindow}_`,
+    );
+    assert.equal(afterClaim.next_value, 6);
+    await run(
+      `INSERT INTO requirement (req_code, title, status, release_point_id)
+       VALUES (?,?,?,?)`,
+      claimed, '编号预览保存记录', '待分析', releasePoint.id,
+    );
+    assert.equal(await previewRequirementCode(releaseWindow), `RC_${releaseWindow}_006`);
   });
 }

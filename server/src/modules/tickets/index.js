@@ -6,7 +6,7 @@
  */
 
 import { get, all } from '../../platform/persistence/index.js';
-import { inClause } from '../reference-data/index.js';
+import { inClause } from '../settings/reference-data/index.js';
 import { TICKET_WORK_ITEM_TYPE } from './contracts/work-item.js';
 
 export { generateTicketCode } from './application/numbering.js';

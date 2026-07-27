@@ -1,7 +1,7 @@
 /**
  * 文件：platform/persistence/code-sequence.js
  * 说明：序列以“规则键 + 不含序号的编号前缀”为唯一键；首次使用由调用方提供历史最大值后的起始序号。
- * 用途：封装业务编号序列的原子领号，兼容 SQLite 的写事务和 TDSQL/MySQL 的行锁事务。
+ * 用途：封装业务编号序列的原子领号，兼容 SQLite 的写事务和 TDSQL/MySQL 的行锁事务，支持在保存时按真实已用编号校正预览遗留序列。
  * 作者：hengguan
  */
 
@@ -42,7 +42,7 @@ export async function getCodeSequenceNext(ruleKey, prefix) {
  * 在事务中领用一个序号；并发调用会得到不同的递增值。
  * SQLite 的 BEGIN IMMEDIATE 与 TDSQL 的事务连接均由统一 provider 保障。
  */
-export async function reserveCodeSequence({ ruleKey, prefix, initialValue = 1 }) {
+export async function reserveCodeSequence({ ruleKey, prefix, initialValue = 1, reconcile = false }) {
   assertSequenceInput(ruleKey, prefix, initialValue);
   const reserve = () => tx(async () => {
     // 已存在时忽略插入，首次领号才使用从历史编号计算出的 initialValue。
@@ -60,7 +60,9 @@ export async function reserveCodeSequence({ ruleKey, prefix, initialValue = 1 })
       ruleKey,
       prefix,
     );
-    const sequence = Number(row?.next_value);
+    // 仅在“保存实际业务记录”时按已用编号重置序列。这样旧版本中由预览动作
+    // 留下的空号可以复用；普通领号仍完全保持严格递增和并发唯一性。
+    const sequence = reconcile ? initialValue : Number(row?.next_value);
     if (!Number.isSafeInteger(sequence) || sequence < 1) {
       throw new Error(`编号序列异常：${ruleKey}/${prefix}`);
     }

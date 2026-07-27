@@ -58,7 +58,7 @@ RADAR 单体服务（Fastify）
 | `web/src/modules/` | 前端领域页面与 API 适配层 |
 | `web/src/pages/` | 路由页面与兼容入口 |
 
-业务模块包括：身份与权限、参考数据、流程配置、需求、工单、交付、投产申请、投产审批、问题和报表。模块之间只能通过已登记的公开契约协作，不能直接依赖其他模块内部实现或写入其表。
+前后端统一采用十个一级业务模块：`requirements`、`tickets`、`development`、`testing`、`release`、`overview`、`dashboard`、`issues`、`settings`、`identity-access`。模块之间只能通过已登记的公开契约协作，不能直接依赖其他模块内部实现或写入其表。
 
 ### 数据库兼容
 
@@ -84,7 +84,7 @@ SQLite 与 TDSQL/MySQL 8 都是正式兼容目标：
 | 测试任务 | `code.test.SIT/UAT/NFT/SEC` | `SIT_{需求编号}_{序号}` 等 | `{需求编号}`、`{序号}` |
 | 投产申请 | `code.release_apply` | `{版本年月}-10bg{序号}` | `{版本年月}`、`{序号}` |
 
-`{序号}` 保持至少三位补零。修改模板导致固定前缀变化时，会为新前缀建立独立序列并从同前缀历史编号接续；恢复旧模板时会继续旧前缀已有序列。编号序列只增不回收，因此创建失败或撤销可能留下编号空档，这是并发场景下避免重复编号的预期行为。
+`{序号}` 保持至少三位补零。修改模板导致固定前缀变化时，会为新前缀建立独立序列并从同前缀历史编号接续；恢复旧模板时会继续旧前缀已有序列。需求和投产申请的“生成编号”仅作预览，不写入序列表；只有保存成功才会原子确认并推进序号。因此未保存或取消编辑不会占用编号，历史预览造成的空号也会按已保存编号自动回收。
 
 ## 目录结构
 
@@ -149,39 +149,21 @@ RADAR/
 │       ├── shared/
 │       │   ├── contracts/           # 跨模块稳定 DTO 与契约
 │       │   ├── utils/               # 无业务归属的纯函数工具（如编号模板）
-│       │   ├── application/         # 跨领域但不归属具体模块的业务编排辅助
 │       │   ├── authorization/       # 实体级授权工具
 │       │   ├── evidence/            # 证据与审计辅助能力
 │       │   └── workflow/            # 无业务归属的流程辅助能力
 │       ├── modules/
-│       │   ├── AGENTS.md             # 后端模块目录通用约束
-│       │   ├── requirements/        # application/numbering.js、公开契约和 HTTP 入口
-│       │   ├── tickets/             # application/numbering.js、公开契约和 HTTP 入口
-│       │   ├── delivery/            # application/numbering.js、偏差、影响与覆盖分析
-│       │   ├── dev-tasks/           # 开发任务 HTTP 兼容入口
-│       │   ├── test-tasks/          # SIT/UAT/NFT/SEC 任务 HTTP 兼容入口
-│       │   ├── analysis/            # 影响与覆盖分析 HTTP 兼容入口
-│       │   ├── release-apply/       # 投产申请及关联制品
-│       │   ├── release/             # 投产审批、会签与投产材料
+│       │   ├── AGENTS.md            # 后端模块目录通用约束
+│       │   ├── requirements/        # 需求、编号与公开读取契约
+│       │   ├── tickets/             # 工单、编号与公开读取契约
+│       │   ├── development/         # 开发任务、影响性分析与开发交付信息
+│       │   ├── testing/             # 测试任务与覆盖性分析
+│       │   ├── release/             # 投产审批；applications/release-apply/ 为投产申请
 │       │   ├── issues/              # PAMS 问题快照与同步
-│       │   ├── evidence/            # 证据与相关业务编排兼容入口
-│       │   ├── reporting/           # 跨模块只读投影、仪表盘与概览编排
-│       │   ├── dashboard/           # 仪表盘 HTTP 兼容入口
-│       │   ├── overview/            # 版本概览 HTTP 兼容入口
-│       │   ├── reference-data/      # 字典、系统、投产点和平台配置编排
-│       │   ├── dict/                # 字典 HTTP 兼容入口
-│       │   ├── systems/             # 系统 HTTP 兼容入口
-│       │   ├── settings/            # 平台配置 HTTP 兼容入口
-│       │   ├── release-points/      # 投产点 HTTP 兼容入口
-│       │   ├── identity-access/     # 用户、角色、权限编排与公开契约
-│       │   ├── users/               # 用户 HTTP 兼容入口
-│       │   ├── roles/               # 角色与权限 HTTP 兼容入口
-│       │   ├── process-configuration/ # 状态、动态字段、交付物与扩展筛选契约
-│       │   ├── stage-content/       # 流程配置 HTTP 兼容入口
-│       │   ├── auth/                # 登录与会话 HTTP 适配入口
-│       │   ├── attachments/         # 附件 HTTP 适配入口
-│       │   ├── audit/               # 审计查询 HTTP 适配入口
-│       │   └── signatures/          # 电子签名 HTTP 适配入口
+│       │   ├── dashboard/           # 指标、图表、钻取与图表配置
+│       │   ├── overview/            # 待办、工作台与生命周期只读聚合
+│       │   ├── settings/            # 字典、系统、投产点、编号与流程配置
+│       │   └── identity-access/     # 登录、用户、角色与权限
 │       └── plugins/                 # Fastify 插件（鉴权等）
 └── web/
     ├── AGENTS.md                   # 前端通用规则
@@ -197,13 +179,15 @@ RADAR/
         ├── router/                  # 菜单、路由、首页和详情链接映射
         ├── stores/                  # 全局状态（用户、权限、投产窗口、主题）
         ├── layout/                  # 主布局与导航框架
-        ├── pages/                   # 路由页面及兼容页面入口
+        ├── pages/                   # 跨模块详情路由的兼容页面入口
         ├── modules/
         │   ├── requirements/       # 需求页面与 API 适配
         │   ├── tickets/            # 工单页面与 API 适配
-        │   ├── delivery/           # 开发、测试页面与 API 适配
+        │   ├── development/        # 开发管理页面与 API 适配
+        │   ├── testing/            # 测试管理页面与 API 适配
         │   ├── release/            # 投产申请、审批页面与 API 适配
-        │   ├── reporting/          # 仪表盘、概览 API 适配
+        │   ├── overview/           # 概览、待办与工作台页面
+        │   ├── dashboard/          # 仪表盘、指标和图表页面
         │   ├── issues/             # 问题页面与 API 适配
         │   ├── settings/           # 系统设置页面与 API 适配
         │   └── identity-access/    # 用户与权限页面

@@ -6,7 +6,7 @@
  */
 
 import { all, getCodeSequenceNext, reserveCodeSequence } from '../../../platform/persistence/index.js';
-import { getCodeRuleTemplate } from '../../reference-data/index.js';
+import { getCodeRuleTemplate } from '../../settings/reference-data/index.js';
 import {
   codePrefix, formatCode, nextSequenceFromCodes, normalizeReleaseWindow,
 } from '../../../shared/utils/code-template.js';

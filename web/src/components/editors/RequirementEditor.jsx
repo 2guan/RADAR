@@ -283,7 +283,7 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
       form.setFieldValue('req_code', res.req_code);
       // 触发校验以更新状态
       form.validateFields(['req_code']);
-      message.success(`已生成编号：${res.req_code}`);
+      message.success(`已预览编号：${res.req_code}（保存后正式占用）`);
     } catch (e) {
       message.error('生成失败，请稍后重试');
     } finally {
@@ -415,7 +415,7 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
                         readOnly={readonly || codeLocked}
                         style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', letterSpacing: '0.3px' }}
                         suffix={(codeLocked || readonly) ? null : (
-                          <Tooltip title="根据所选投产点自动生成编号">
+                          <Tooltip title="根据所选投产点预览编号；保存成功后才正式占用">
                             <Button
                               type="link"
                               size="small"

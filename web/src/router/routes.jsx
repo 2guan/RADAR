@@ -12,16 +12,16 @@ import { getHomePath } from './home.js';
 
 // 统一适配具名导出页面，确保每个业务模块都按需加载而不复制页面入口逻辑。
 const lazyNamed = (load, name) => lazy(async () => ({ default: (await load())[name] }));
-const Dashboard = lazy(() => import('../modules/reporting/pages/DashboardPage.jsx'));
-const Overview = lazy(() => import('../modules/reporting/pages/OverviewPage.jsx'));
+const Dashboard = lazy(() => import('../modules/dashboard/pages/DashboardPage.jsx'));
+const Overview = lazy(() => import('../modules/overview/pages/OverviewPage.jsx'));
 const Requirements = lazy(() => import('../modules/requirements/pages/RequirementsPage.jsx'));
 const Tickets = lazy(() => import('../modules/tickets/pages/TicketsPage.jsx'));
 const Issues = lazy(() => import('../modules/issues/pages/IssuesPage.jsx'));
-const DevTasks = lazy(() => import('../modules/delivery/pages/DevTasksPage.jsx'));
-const SitPage = lazyNamed(() => import('../modules/delivery/pages/TestTasksPage.jsx'), 'SitPage');
-const UatPage = lazyNamed(() => import('../modules/delivery/pages/TestTasksPage.jsx'), 'UatPage');
-const NftPage = lazyNamed(() => import('../modules/delivery/pages/TestTasksPage.jsx'), 'NftPage');
-const SecPage = lazyNamed(() => import('../modules/delivery/pages/TestTasksPage.jsx'), 'SecPage');
+const DevTasks = lazy(() => import('../modules/development/pages/DevTasksPage.jsx'));
+const SitPage = lazyNamed(() => import('../modules/testing/pages/TestTasksPage.jsx'), 'SitPage');
+const UatPage = lazyNamed(() => import('../modules/testing/pages/TestTasksPage.jsx'), 'UatPage');
+const NftPage = lazyNamed(() => import('../modules/testing/pages/TestTasksPage.jsx'), 'NftPage');
+const SecPage = lazyNamed(() => import('../modules/testing/pages/TestTasksPage.jsx'), 'SecPage');
 const Release = lazy(() => import('../modules/release/pages/ReleasePage.jsx'));
 const ReleaseApply = lazy(() => import('../modules/release/pages/ReleaseApplyPage.jsx'));
 const Users = lazy(() => import('../modules/identity-access/pages/UsersPage.jsx'));

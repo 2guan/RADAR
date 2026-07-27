@@ -1,22 +1,20 @@
 # RADAR 模块说明
 
-机器可读边界、路径、表、依赖、风险和 Owner 以 [`governance/modules.yaml`](../../governance/modules.yaml) 为唯一来源。本文件描述职责，不重复审批配置。
+模块边界、路径、Owner、依赖与公开契约以 [`governance/modules.yaml`](../../governance/modules.yaml) 为唯一机器可读事实源。本文件解释当前前后端一致的十个一级业务模块。
 
-| 模块 | 职责 |
-| --- | --- |
-| `governance` | 研发规约、模块清单、自动化治理脚本与协作工作流 |
-| `platform/auth` | 登录、JWT、RBAC、会话、密码与验证码基础能力 |
-| `platform/audit` | 统一操作审计契约与记录 |
-| `platform/attachments` | 附件、签名和存储访问控制 |
-| `platform/import-export` | Excel、导入导出和简单配置 CRUD 技术能力 |
-| `platform/persistence` | SQLite/TDSQL 适配、迁移与编号序列基础能力 |
-| `reference-data` | 字典、系统、投产点与平台配置 |
-| `requirements` | 需求登记、分析和独立公开读取契约 |
-| `tickets` | 工单登记、分析和独立公开读取契约 |
-| `delivery` | 开发、测试、影响和覆盖分析 |
-| `process-configuration` | 动态状态、必填项、阶段内容与交付物配置 |
-| `release-apply` / `release` | 投产申请、审批、会签与材料 |
-| `issues` | PAMS 问题快照与同步集成 |
-| `reporting` | 概览、仪表盘和跨模块只读投影 |
+| 模块 | 前端页面 | 后端职责 |
+| --- | --- | --- |
+| `requirements` | 需求管理 | 需求登记、编号、状态与需求交付信息 |
+| `tickets` | 工单管理 | 工单登记、编号、状态与独立写入边界 |
+| `development` | 开发管理 | 开发任务、影响性分析与开发交付信息 |
+| `testing` | 测试管理 | SIT/UAT/NFT/SEC 测试任务与覆盖性分析 |
+| `release` | 投产申请、投产审批 | 投产申请、审批、会签、材料与投产记录 |
+| `overview` | 概览 | 待办、工作台、生命周期只读聚合 |
+| `dashboard` | 仪表盘 | 指标、图表、钻取与图表配置 |
+| `issues` | 问题管理 | PAMS 问题快照、同步与问题详情 |
+| `settings` | 系统设置 | 字典、系统、投产点、编号规则、流程、动态字段与交付物配置 |
+| `identity-access` | 用户与权限 | 登录、会话、用户、角色与权限管理 |
 
-`server/src/lib/` 已移除。跨模块能力必须从 `platform/*/index.js` 或业务模块 `index.js` 的公开契约访问；新增代码必须写入所属模块分层目录。
+后端的 `platform/` 仅提供认证、持久化、附件/签名、审计、导入导出和运行时能力；`shared/` 仅存放稳定 DTO 与无领域归属的纯工具。附件、审计和签名的 HTTP 入口属于平台适配层，不再作为一级业务模块。
+
+每个业务模块对外只通过 `index.js` 和登记的 `contracts/**` 协作。旧 REST 地址保持兼容；路由文件只负责 HTTP 适配，业务规则与数据所有权仍归对应模块。

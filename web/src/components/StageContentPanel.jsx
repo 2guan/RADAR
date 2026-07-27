@@ -12,7 +12,7 @@ import { DownloadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import AttachmentField from './AttachmentField.jsx';
 import { apiGet, apiPut, rawClient } from '../api/client.js';
-import { invalidateStageContentData, loadStageContentSchema, loadStageContentValues, patchStageContentValues } from '../modules/process-configuration/index.js';
+import { invalidateStageContentData, loadStageContentSchema, loadStageContentValues, patchStageContentValues } from '../modules/settings/process-configuration/index.js';
 
 function SourceSelect({ sourceKey, multiple, value, onChange, disabled }) {
   const [options, setOptions] = useState([]);

@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { apiGet } from '../../modules/reporting/api/index.js';
+import { apiGet } from '../../modules/dashboard/api/index.js';
 
 // 需要预载的字典分类（覆盖所有 dict:* optionSource）
 const DICT_CATS = ['process_status', 'req_type', 'ticket_type', 'org', 'sector'];

@@ -231,7 +231,7 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
       const res = await apiGet('/release-apply/gen-code', releasePointId ? { releasePointId } : {});
       form.setFieldValue('change_code', res.change_code);
       form.validateFields(['change_code']);
-      message.success(`已生成编号：${res.change_code}`);
+      message.success(`已预览编号：${res.change_code}（保存后正式占用）`);
     } catch {
       message.error('生成失败，请稍后重试');
     } finally {
@@ -402,7 +402,7 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
                       <Input placeholder="手填或点击「生成」" size="small" readOnly={readonly || isEdit}
                         style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', letterSpacing: '0.3px' }}
                         suffix={(readonly || isEdit) ? null : (
-                          <Tooltip title="按编号规则自动生成">
+                          <Tooltip title="按编号规则预览；保存成功后才正式占用">
                             <Button type="link" size="small" icon={<ThunderboltOutlined />} loading={genLoading} onClick={generateCode}
                               style={{ padding: 0, height: 'auto', fontSize: 13, color: 'var(--radar-primary)' }}>生成</Button>
                           </Tooltip>

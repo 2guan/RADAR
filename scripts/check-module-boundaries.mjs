@@ -59,7 +59,10 @@ for (const file of sourceFiles) {
       grandfatheredLegacyEdges++;
       continue;
     }
-    if ((fromDef.type === 'platform' || fromDef.type === 'shared') && toDef.type === 'business') {
+    const platformHttpAdapter = fromDef.type === 'platform'
+      && /^server\/src\/platform\/[^/]+\/api\//.test(file)
+      && (fromDef.allowed_dependencies || []).includes(toModule);
+    if ((fromDef.type === 'platform' || fromDef.type === 'shared') && toDef.type === 'business' && !platformHttpAdapter) {
       violations.push(file + ' (' + fromModule + ') must not depend on business module ' + toModule);
       continue;
     }

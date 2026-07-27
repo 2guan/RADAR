@@ -7,7 +7,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { buildStageSectionLayout } from '../utils/stageSectionLayout.js';
-import { invalidateStageContentData, loadStageContentSchema } from '../modules/process-configuration/index.js';
+import { invalidateStageContentData, loadStageContentSchema } from '../modules/settings/process-configuration/index.js';
 
 const safeScope = (scopeKey) => String(scopeKey || '').replace(/[^a-zA-Z0-9_-]/g, '-');
 const cssContent = (value) => String(value || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/[\r\n]/g, ' ');

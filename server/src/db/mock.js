@@ -20,8 +20,8 @@ import { hashPassword } from '../platform/auth/index.js';
 import { parseJsonArray, parseJsonObject, logger } from '../platform/runtime/index.js';
 import { auditCreate, auditUpdate } from '../platform/audit/index.js';
 import { generateRequirementCode } from '../modules/requirements/index.js';
-import { generateDevTaskCode, generateTestTaskCode, calcDeviation } from '../modules/delivery/index.js';
-import { generateReleaseApplyCode } from '../modules/release-apply/index.js';
+import { generateDevTaskCode, generateTestTaskCode, calcDeviation } from '../modules/development/index.js';
+import { generateReleaseApplyCode } from '../modules/release/applications/release-apply/index.js';
 
 // ---------------------------------------------------------------------------
 // 确定性随机数（mulberry32），保证每次生成结果一致，便于复现与对照验证

@@ -13,14 +13,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { get, all, run, tx, dialect } from '../../platform/persistence/index.js';
 import { auditUpdate } from '../../platform/audit/index.js';
-import { windowIds, formatAttachments } from '../reference-data/index.js';
+import { windowIds, formatAttachments } from '../settings/reference-data/index.js';
 import { ok, notFound, badRequest, forbidden, parseJsonArray } from '../../platform/runtime/index.js';
-import { assertStatusChangePermission, defaultDictAttr, defaultProcessStatus, statusTypeForReleaseStatus, validateRequiredFields } from '../process-configuration/index.js';
+import { assertStatusChangePermission, defaultDictAttr, defaultProcessStatus, statusTypeForReleaseStatus, validateRequiredFields } from '../settings/process-configuration/index.js';
 import { exportXlsx } from '../../platform/import-export/index.js';
 import { signatureDataUrl, resolveAttachmentPath } from '../../platform/attachments/index.js';
 import { buildReleaseWordDoc } from './index.js';
-import { getWorkItem } from '../delivery/index.js';
-import { appendStageExcelValues, getStageExcelColumns, validateStageContent } from '../process-configuration/index.js';
+import { getWorkItem } from '../development/index.js';
+import { appendStageExcelValues, getStageExcelColumns, validateStageContent } from '../settings/process-configuration/index.js';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
 

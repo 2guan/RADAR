@@ -14,7 +14,7 @@ import {
   HeadingLevel, AlignmentType, WidthType, BorderStyle, ShadingType,
   ImageRun, VerticalAlign, TableLayoutType, convertInchesToTwip,
 } from 'docx';
-import { coverageItemExportLines, decodeChangeItem, impactItemExportLines } from '../../delivery/index.js';
+import { coverageItemExportLines, decodeChangeItem, impactItemExportLines } from '../../development/index.js';
 
 // ── 基础常量 ──────────────────────────────────────────────────────────────
 const FONT = '微软雅黑';

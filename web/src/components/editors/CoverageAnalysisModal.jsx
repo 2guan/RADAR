@@ -11,7 +11,7 @@
 import { useEffect, useState } from 'react';
 import { Modal, Button, Select, Input, Tag, Spin, Empty, message, Row, Col, Tooltip } from 'antd';
 import { EditOutlined, SaveOutlined, CloseOutlined } from '@ant-design/icons';
-import { apiGet, apiPut } from '../../modules/delivery/api/index.js';
+import { apiGet, apiPut } from '../../modules/testing/api/index.js';
 import AnalysisHeader from './AnalysisHeader.jsx';
 import { COVERAGE_RESULTS, FIELD_DEFS, visibleFieldsOf, valueTagClass } from '../../config/impactSchema.js';
 

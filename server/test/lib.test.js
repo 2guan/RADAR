@@ -10,17 +10,17 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { hashPassword, verifyPassword, validatePasswordComplexity } from '../src/platform/auth/index.js';
 import { exportXlsx } from '../src/platform/import-export/index.js';
-import { calcDeviation, formatCoverageText, formatImpactItemsText } from '../src/modules/delivery/index.js';
+import { calcDeviation, formatCoverageText, formatImpactItemsText } from '../src/modules/development/index.js';
 import { buildReleaseWordDoc, formatWordDateTime } from '../src/modules/release/index.js';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
 import {
   normalizeRequiredFieldConfig, REQUIRED_FIELD_CONFIG_MODULES, REQUIRED_FIELD_MODULES,
-} from '../src/modules/process-configuration/index.js';
+} from '../src/modules/settings/process-configuration/index.js';
 import { WORK_ITEM_TYPES, isWorkItemType } from '../src/shared/contracts/work-item.js';
 import { REQUIREMENT_WORK_ITEM_TYPE } from '../src/modules/requirements/contracts/work-item.js';
 import { TICKET_WORK_ITEM_TYPE } from '../src/modules/tickets/contracts/work-item.js';
-import { workItemCodesInReleasePoints } from '../src/modules/delivery/index.js';
+import { workItemCodesInReleasePoints } from '../src/modules/development/index.js';
 
 test('工作项公共契约：需求和工单保持独立且类型受控', () => {
   assert.deepEqual(WORK_ITEM_TYPES, ['requirement', 'ticket']);
@@ -249,7 +249,7 @@ test('检查内容设置：支持投产审批负责人和投产变更文档', ()
   assert.equal(config.release['attachment:投产变更方案'].mode.final, 'both');
 });
 
-import { reqOrg } from '../src/modules/overview/routes.js';
+import { reqOrg } from '../src/modules/overview/api/routes.js';
 
 test('reqOrg 实施机构分组逻辑：第一优先级（主责系统第一个开发任务的开发实施方）', () => {
   const req = {
@@ -347,7 +347,7 @@ test('密码复杂度校验：满足各项复杂度要求时通过，不满足�
   assert.equal(validatePasswordComplexity('Radar2026x'), false);
 });
 
-import { extract, matchFilters } from '../src/modules/reporting/index.js';
+import { extract, matchFilters } from '../src/modules/dashboard/index.js';
 
 test('chart-dims 维度提取与过滤：阶段与任务状态，以及全部（all）数据源', () => {
   const req = {

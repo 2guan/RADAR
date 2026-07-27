@@ -8,11 +8,11 @@
 
 import { get, run, tx, all, dialect } from '../../platform/persistence/index.js';
 import { listQuery } from '../../platform/persistence/index.js';
-import { generateRequirementCode } from './index.js';
+import { claimRequirementCode, previewRequirementCode } from './index.js';
 import {
   buildExtensionListFilter, defaultProcessStatus, isTerminalStatus,
   statusTypeForProcessStatus, validateRequiredFields,
-} from '../process-configuration/index.js';
+} from '../settings/process-configuration/index.js';
 import {
   appendStageExcelValues,
   appendStageListValues,
@@ -20,13 +20,13 @@ import {
   getStageExcelColumns,
   saveExtensionValues,
   validateStageContent,
-} from '../process-configuration/index.js';
+} from '../settings/process-configuration/index.js';
 import { auditCreate, auditUpdate, auditDelete } from '../../platform/audit/index.js';
 import { listByEntity } from '../../platform/attachments/index.js';
 import { exportXlsx, parseXlsx } from '../../platform/import-export/index.js';
-import { windowIds, inClause, resolveDictAttr, resolveSystemCodes, resolveReleasePoint, formatAttachments } from '../reference-data/index.js';
+import { windowIds, inClause, resolveDictAttr, resolveSystemCodes, resolveReleasePoint, formatAttachments } from '../settings/reference-data/index.js';
 import { ok, notFound, badRequest, parseJsonArray, parseJsonObject } from '../../platform/runtime/index.js';
-import { assertStatusChangePermission } from '../process-configuration/index.js';
+import { assertStatusChangePermission } from '../settings/process-configuration/index.js';
 
 // 导入/导出列定义
 const IO_COLUMNS = [
@@ -288,13 +288,12 @@ export default async function requirementRoutes(fastify) {
     if (data.title === undefined) data.title = '';
     delete data.req_code;
     delete data.status;
-    // 编号生成与 INSERT 在同一 BEGIN IMMEDIATE 事务内，防止并发提交时编号冲突；
-    // 若前端传来的编号已被抢占，自动重新生成而非报错。
+    // 自动编号在真正 INSERT 前才确认占号；若前端预览编号已被抢占则重新生成，
+    // 未保存即关闭页面不会推进序列。
     const { id, reqCode } = await tx(async () => {
       let code = (body.req_code || '').trim();
-      if (!code || await get('SELECT id FROM requirement WHERE req_code = ?', code)) {
-        code = await generateRequirementCode(rp?.release_date);
-      }
+      const used = code && await get('SELECT id FROM requirement WHERE req_code = ?', code);
+      code = used ? await claimRequirementCode(rp?.release_date) : await claimRequirementCode(rp?.release_date, code);
       const fields = ['req_code', 'status', 'registrar', 'register_time', ...Object.keys(data)];
       const values = [
         code,
@@ -352,13 +351,13 @@ export default async function requirementRoutes(fastify) {
     return ok({ id });
   });
 
-  // 生成编号（前端点击「生成」按钮调用）
+  // 预览编号（前端点击「生成」按钮调用；不占用序列）
   fastify.get('/requirements/gen-code', { preHandler: fastify.requirePerm('requirement', 'view') }, async (request) => {
     const releasePointId = request.query.releasePointId;
     if (!releasePointId) throw badRequest('缺少 releasePointId');
     const rp = await get('SELECT release_date FROM release_point WHERE id = ?', releasePointId);
     if (!rp) throw badRequest('投产点不存在');
-    return ok({ req_code: await generateRequirementCode(rp.release_date) });
+    return ok({ req_code: await previewRequirementCode(rp.release_date) });
   });
 
   // 校验编号唯一性（前端实时校验调用）
@@ -597,7 +596,8 @@ export default async function requirementRoutes(fastify) {
 
           } else {
             // insert 新建
-            if (!code) code = await generateRequirementCode(rpMap[rpId]);
+            // 导入自动补号同样在真正插入前确认，保持与详情页生成规则一致。
+            if (!code) code = await claimRequirementCode(rpMap[rpId]);
             const res = await run(
               `INSERT INTO requirement 
                  (req_code, title, summary, status, req_type, is_accounting, propose_dept, proposer, yn_owner, jk_owner, 

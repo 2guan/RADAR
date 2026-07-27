@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { invalidateStageContentData, loadStageContentSchema } from '../modules/process-configuration/index.js';
+import { invalidateStageContentData, loadStageContentSchema } from '../modules/settings/process-configuration/index.js';
 
 /** 根据当前状态值匹配参数配置中的真实状态 ID，规则始终绑定状态 ID。 */
 function activeStatusId(statuses, statusValue) {

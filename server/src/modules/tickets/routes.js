@@ -12,7 +12,7 @@ import { generateTicketCode } from './index.js';
 import {
   buildExtensionListFilter, defaultProcessStatus, isTerminalStatus,
   statusTypeForProcessStatus, validateRequiredFields,
-} from '../process-configuration/index.js';
+} from '../settings/process-configuration/index.js';
 import {
   appendStageExcelValues,
   appendStageListValues,
@@ -20,12 +20,12 @@ import {
   getStageExcelColumns,
   saveExtensionValues,
   validateStageContent,
-} from '../process-configuration/index.js';
+} from '../settings/process-configuration/index.js';
 import { auditCreate, auditUpdate, auditDelete } from '../../platform/audit/index.js';
 import { exportXlsx, parseXlsx } from '../../platform/import-export/index.js';
-import { windowIds, inClause, resolveDictAttr, resolveSystemCodes, resolveReleasePoint } from '../reference-data/index.js';
+import { windowIds, inClause, resolveDictAttr, resolveSystemCodes, resolveReleasePoint } from '../settings/reference-data/index.js';
 import { ok, notFound, badRequest, parseJsonArray, parseJsonObject } from '../../platform/runtime/index.js';
-import { assertStatusChangePermission } from '../process-configuration/index.js';
+import { assertStatusChangePermission } from '../settings/process-configuration/index.js';
 
 // 导入/导出列定义
 const IO_COLUMNS = [

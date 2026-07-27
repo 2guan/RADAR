@@ -24,7 +24,7 @@ import EditorShell from './EditorShell.jsx';
 import RequirementEditor from './RequirementEditor.jsx';
 import TicketEditor from './TicketEditor.jsx';
 import StatusBadge, { getStatusType, statusSelectWidth } from '../StatusBadge.jsx';
-import { apiGet, apiPut, rawClient } from '../../modules/delivery/api/index.js';
+import { apiGet, apiPut, rawClient } from '../../platform/api.js';
 import { useAppStore } from '../../stores/app.js';
 import { useResponsive } from '../../hooks/useResponsive.js';
 import { useRequiredFields } from '../../hooks/useRequiredFields.js';

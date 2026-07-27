@@ -9,7 +9,7 @@
 import { get, run, tx, all } from './index.js';
 import { hashPassword } from '../platform/auth/index.js';
 import { config } from '../config.js';
-import { DEFAULT_REQUIRED_FIELD_CONFIG, REQUIRED_FIELDS_CONFIG_KEY, seedStageContentDefaults } from '../modules/process-configuration/index.js';
+import { DEFAULT_REQUIRED_FIELD_CONFIG, REQUIRED_FIELDS_CONFIG_KEY, seedStageContentDefaults } from '../modules/settings/process-configuration/index.js';
 import { parseJsonObject, logger } from '../platform/runtime/index.js';
 
 // 种子版本是“内置默认配置”而非业务数据版本；仅在首次初始化或显式升级版本时执行全量校准。

@@ -7,7 +7,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { apiGet } from '../api/client.js';
-import { loadStageContentSchema } from '../modules/process-configuration/index.js';
+import { loadStageContentSchema } from '../modules/settings/process-configuration/index.js';
 
 function optionType(field) {
   return ['select', 'person', 'release_point'].includes(field.input_type) ? 'select' : 'input';
