@@ -2,7 +2,7 @@
  * 文件：server/scripts/mock-data.js
  * 说明：本脚本独立运行（node scripts/mock-data.js），用于重置演示环境。会删除除超级管理员外的全部业务数据，请谨慎执行。
  *       数据特征：
- *         - 问题清单从当前本地库中快照 20 条已同步的待验证问题，不生成虚构问题；
+ *         - 问题清单使用仓库内固定的 20 条待验证问题快照，并与同编号工单一对一关联；
  *         - 需求、工单通过 release_apply.ref_codes 进入投产审批清单；问题仅作为工单来源与问题清单数据；
  *         - 评审状态覆盖待评审/评审同意/评审拒绝/应急审批/评审撤销；
  *         - 编号、偏差率、终态附件、投产制品和过程留痕均按平台规则生成，便于逐项验证。
@@ -138,28 +138,340 @@ function normalizeIssue(row, idx = 0) {
   };
 }
 
+export const MOCK_ISSUE_SNAPSHOT = [
+  // 前半组：覆盖不同系统、处理方式与分类，供问题列表和工单关联演示。
+  {
+    "code": "NX20260721015",
+    "round": "投产",
+    "urgency": "中",
+    "handling_method": "换版",
+    "business_group": "厦门事业群",
+    "module": "对公金融板块",
+    "system": "客户管理与维护-对公",
+    "work_order_no": "36",
+    "status": "待验证",
+    "category": "金科技术",
+    "cls": "金科-应用配置",
+    "summary": "管护权分配**",
+    "details": "管护权分配时，查询辖**",
+    "release_status": "未评审"
+  },
+  {
+    "code": "NX20260721010",
+    "round": "投产",
+    "urgency": "中",
+    "handling_method": "换版",
+    "business_group": "交付事业部",
+    "module": "计划财务板块",
+    "system": "监管应用-BASS_集中银行账户报送",
+    "work_order_no": "36",
+    "status": "待验证",
+    "category": "金科技术",
+    "cls": "金科-批量问题-业务操作",
+    "summary": "BASS-**",
+    "details": "问题现象：\nbass**",
+    "release_status": "36"
+  },
+  {
+    "code": "NX20260720014",
+    "round": "投产",
+    "urgency": "中",
+    "handling_method": "换版",
+    "business_group": "大数据中心",
+    "module": "风险管理板块",
+    "system": "反欺诈运营管理",
+    "work_order_no": "ZHQQ_20260716_008",
+    "status": "待验证",
+    "category": "工单问题",
+    "cls": "工单阻塞问题",
+    "summary": "反欺诈系统**",
+    "details": "反欺诈系统近一个月经**",
+    "release_status": "36"
+  },
+  {
+    "code": "NX20260717013",
+    "round": "投产",
+    "urgency": "中",
+    "handling_method": "换版",
+    "business_group": "深圳事业群",
+    "module": "信贷管理板块",
+    "system": "P2-个人贷款领域",
+    "work_order_no": "36",
+    "status": "待验证",
+    "category": "金科技术",
+    "cls": "金科-应用配置",
+    "summary": "个贷贷款账**",
+    "details": "个人贷款账户2615**",
+    "release_status": "36"
+  },
+  {
+    "code": "NX20260716007",
+    "round": "投产",
+    "urgency": "中",
+    "handling_method": "换版",
+    "business_group": "深圳事业群",
+    "module": "信贷管理板块",
+    "system": "新一代个人贷款",
+    "work_order_no": "36",
+    "status": "待验证",
+    "category": "金科技术",
+    "cls": "金科-应用配置",
+    "summary": "个贷新增删**",
+    "details": "问题拆分，原问题单N**",
+    "release_status": "已摆渡"
+  },
+  {
+    "code": "NX20260715009",
+    "round": "投产",
+    "urgency": "中",
+    "handling_method": "换版",
+    "business_group": "交付事业部",
+    "module": "计划财务板块",
+    "system": "监管应用-BASS_集中银行账户报送",
+    "work_order_no": "36",
+    "status": "待验证",
+    "category": "金科技术",
+    "cls": "金科-批量问题-其他",
+    "summary": "bass **",
+    "details": "BASS 当前无预警**",
+    "release_status": "36"
+  },
+  {
+    "code": "NX20260714012",
+    "round": "投产",
+    "urgency": "中",
+    "handling_method": "换版",
+    "business_group": "交付事业部",
+    "module": "计划财务板块",
+    "system": "监管应用-PBOC_人行金融统计",
+    "work_order_no": "36",
+    "status": "待验证",
+    "category": "金科技术",
+    "cls": "金科-应用配置",
+    "summary": "3324报**",
+    "details": "3324报表：发生额**",
+    "release_status": "36"
+  },
+  {
+    "code": "NX20260714003",
+    "round": "投产",
+    "urgency": "中",
+    "handling_method": "换版",
+    "business_group": "成都事业群",
+    "module": "渠道运营板块",
+    "system": "智慧柜员机",
+    "work_order_no": "ZHQQ_20260710_005",
+    "status": "待验证",
+    "category": "工单问题",
+    "cls": "工单阻塞问题",
+    "summary": "智慧柜员机**",
+    "details": "智慧柜员机票箱进行清**",
+    "release_status": "36"
+  },
+  {
+    "code": "NX20260714002",
+    "round": "投产",
+    "urgency": "中",
+    "handling_method": "换版",
+    "business_group": "厦门事业群",
+    "module": "信贷管理板块",
+    "system": "对公信贷-合同支用",
+    "work_order_no": "36",
+    "status": "待验证",
+    "category": "金科技术",
+    "cls": "金科-应用配置",
+    "summary": "合同支用提**",
+    "details": "一个信贷资料管理系统**",
+    "release_status": "已摆渡"
+  },
+  {
+    "code": "NX20260713013",
+    "round": "投产",
+    "urgency": "中",
+    "handling_method": "换版",
+    "business_group": "深圳事业群",
+    "module": "信贷管理板块",
+    "system": "零售贷款账务核心",
+    "work_order_no": "ZHQQ_20260710_010",
+    "status": "待验证",
+    "category": "工单问题",
+    "cls": "工单阻塞问题",
+    "summary": "bbi岗普**",
+    "details": "bbi岗普惠贴息报表**",
+    "release_status": "未评审"
+  },
+  // 后半组：保留批量、应用配置与工单阻塞等不同问题形态。
+  {
+    "code": "NX20260713002",
+    "round": "投产",
+    "urgency": "中",
+    "handling_method": "换版",
+    "business_group": "深圳事业群",
+    "module": "信贷管理板块",
+    "system": "新一代个人贷款",
+    "work_order_no": "36",
+    "status": "待验证",
+    "category": "金科技术",
+    "cls": "金科-批量问题",
+    "summary": "7月10新**",
+    "details": "作业流名称：XCPL**",
+    "release_status": "36"
+  },
+  {
+    "code": "NX20260709019",
+    "round": "投产",
+    "urgency": "中",
+    "handling_method": "换版",
+    "business_group": "深圳事业群",
+    "module": "信贷管理板块",
+    "system": "新一代个人贷款",
+    "work_order_no": "36",
+    "status": "待验证",
+    "category": "金科技术",
+    "cls": "金科-应用配置",
+    "summary": "个人贷款借**",
+    "details": "个人贷款借据编号06**",
+    "release_status": "36"
+  },
+  {
+    "code": "NX20260709012",
+    "round": "投产",
+    "urgency": "中",
+    "handling_method": "换版",
+    "business_group": "大数据中心",
+    "module": "计划财务板块",
+    "system": "大额风险暴露管理",
+    "work_order_no": "36",
+    "status": "待验证",
+    "category": "金科技术",
+    "cls": "金科-批量问题-数据库问题",
+    "summary": "0707-**",
+    "details": "0707-0707大**",
+    "release_status": "36"
+  },
+  {
+    "code": "NX20260709011",
+    "round": "投产",
+    "urgency": "中",
+    "handling_method": "换版",
+    "business_group": "交付事业部",
+    "module": "计划财务板块",
+    "system": "监管应用",
+    "work_order_no": "36",
+    "status": "待验证",
+    "category": "金科技术",
+    "cls": "金科-批量问题-数据库问题",
+    "summary": "0701-**",
+    "details": "0701-0707监**",
+    "release_status": "36"
+  },
+  {
+    "code": "NX20260709004",
+    "round": "投产",
+    "urgency": "中",
+    "handling_method": "换版",
+    "business_group": "深圳事业群",
+    "module": "信贷管理板块",
+    "system": "新一代个人贷款",
+    "work_order_no": "36",
+    "status": "待验证",
+    "category": "金科技术",
+    "cls": "金科-批量问题",
+    "summary": "7月8日新**",
+    "details": "作业流名称：CRED**",
+    "release_status": "36"
+  },
+  {
+    "code": "NX20260708001",
+    "round": "投产",
+    "urgency": "中",
+    "handling_method": "换版",
+    "business_group": "成都事业群",
+    "module": "对私金融板块",
+    "system": "P2-业务咨询领域",
+    "work_order_no": "36",
+    "status": "待验证",
+    "category": "金科技术",
+    "cls": "金科-应用配置",
+    "summary": "我的客户，**",
+    "details": "\n【问题现象描述】进**",
+    "release_status": "已摆渡"
+  },
+  {
+    "code": "NX20260707008",
+    "round": "投产",
+    "urgency": "中",
+    "handling_method": "换版",
+    "business_group": "厦门事业群",
+    "module": "信贷管理板块",
+    "system": "对公信贷-业务审批",
+    "work_order_no": "36",
+    "status": "待验证",
+    "category": "金科技术",
+    "cls": "金科-应用配置",
+    "summary": "对公信贷业**",
+    "details": "1.展期，期限调整，**",
+    "release_status": "已摆渡"
+  },
+  {
+    "code": "NX20260707007",
+    "round": "投产",
+    "urgency": "中",
+    "handling_method": "换版",
+    "business_group": "厦门事业群",
+    "module": "信贷管理板块",
+    "system": "授信管理-对公",
+    "work_order_no": "36",
+    "status": "待验证",
+    "category": "金科技术",
+    "cls": "金科-应用配置",
+    "summary": "授信管理对**",
+    "details": "1.展期，期限调整，**",
+    "release_status": "已摆渡"
+  },
+  {
+    "code": "NX20260707004",
+    "round": "投产",
+    "urgency": "中",
+    "handling_method": "换版",
+    "business_group": "厦门事业群",
+    "module": "信贷管理板块",
+    "system": "对公信贷-押品管理流程",
+    "work_order_no": "36",
+    "status": "待验证",
+    "category": "金科技术",
+    "cls": "金科-批量问题",
+    "summary": "7月6日对**",
+    "details": "作业流名称：MPP_**",
+    "release_status": "已摆渡"
+  },
+  {
+    "code": "NX20260707003",
+    "round": "投产",
+    "urgency": "中",
+    "handling_method": "换版",
+    "business_group": "厦门事业群",
+    "module": "风险管理板块",
+    "system": "不良资产智能处置平台",
+    "work_order_no": "36",
+    "status": "待验证",
+    "category": "金科技术",
+    "cls": "金科-应用配置",
+    "summary": "不良资产管**",
+    "details": "1、修改对公催收-对**",
+    "release_status": "已摆渡"
+  }
+];
+
 /**
- * 在清空前快照本地已同步的待验证问题，供 20 条工单逐一关联。
- * 严格排除历史 DEMO 样例，避免将模拟问题误当作同步问题再次灌入。
+ * 读取仓库内固定问题快照，避免 mock 运行依赖本地问题表中的当前数据。
+ * 快照必须保持 20 条且问题编号唯一，以便与工单建立稳定的一对一关联。
  */
-async function loadPendingVerifyIssues(limit = 20) {
-  // TDSQL 对 LIMIT 的预编译占位符兼容性不稳定；数量仅来自本脚本固定值，
-  // 先限制为安全整数后拼入 SQL，其他业务筛选条件仍保持参数化。
-  const safeLimit = Math.min(100, Math.max(1, Number.parseInt(limit, 10) || 20));
-  const rows = await all(
-    `SELECT issue_code, round, urgency, handling_method, business_group, module, system, work_order_no,
-            create_time, plan_resolve_time, status, category, detailed_classification, summary, details,
-            tracker_name, tracker_org, reporter_name, reporter_org, handler_name, handler_org,
-            is_major, is_common, root_cause, solution, release_status, synced_at, created_at
-       FROM issue
-      WHERE status = ? AND issue_code NOT LIKE ?
-      ORDER BY COALESCE(synced_at, created_at) DESC, id DESC
-      LIMIT ${safeLimit}`,
-    '待验证', 'DEMO-%',
-  );
-  const issues = rows.map((row, index) => normalizeIssue(row, index)).filter(Boolean);
-  if (issues.length < safeLimit) {
-    throw new Error(`待验证的同步问题不足 ${safeLimit} 条，当前仅 ${issues.length} 条；请先完成问题同步后再执行 mock。`);
+function loadMockIssueSnapshot() {
+  const issues = MOCK_ISSUE_SNAPSHOT.map((row, index) => normalizeIssue(row, index)).filter(Boolean);
+  const codes = new Set(issues.map((issue) => issue.code));
+  if (issues.length !== 20 || codes.size !== 20 || issues.some((issue) => issue.status !== '待验证')) {
+    throw new Error('静态问题快照必须包含 20 条编号唯一的待验证问题');
   }
   return issues;
 }
@@ -221,8 +533,7 @@ async function seedStageDeliverableDemo() {
 export async function runMock() {
   await runMigrations();
   await runSeed();
-  // 必须在 wipe 之前提取本地已同步的待验证问题；后续会将这 20 条快照重新写回问题清单并生成关联工单。
-  const issuePool = await loadPendingVerifyIssues(20);
+  const issuePool = loadMockIssueSnapshot();
 
   await tx(async () => {
     await wipe();
@@ -595,7 +906,7 @@ export async function runMock() {
     }
 
     // ----------------------------------------------------------------------
-    // 8) 工单分析（20 条，全部来源于执行前快照的已同步待验证问题）
+    // 8) 工单分析（20 条，与静态问题快照按编号一对一关联）
     // ----------------------------------------------------------------------
     const ticketIssuePool = issuePool;
     const TICKET_PROFILE_PLAN = [
@@ -836,7 +1147,7 @@ export async function runMock() {
         .map((r) => `${r.entity_type}:${r.c}`).join('、'),
       会签记录: (await get('SELECT COUNT(*) c FROM release_signoff')).c,
       问题: (await get('SELECT COUNT(*) c FROM issue')).c,
-      问题数据来源: '本地已同步待验证问题快照（20 条）',
+      问题数据来源: '仓库内静态待验证问题快照（20 条）',
       投产申请: (await get('SELECT COUNT(*) c FROM release_apply')).c,
       投产申请需求引用: requirementApplyRefs,
       投产申请工单引用: ticketApplyRefs,

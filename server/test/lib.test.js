@@ -24,6 +24,7 @@ import { WORK_ITEM_TYPES, isWorkItemType } from '../src/shared/contracts/work-it
 import { REQUIREMENT_WORK_ITEM_TYPE } from '../src/modules/requirements/contracts/work-item.js';
 import { TICKET_WORK_ITEM_TYPE } from '../src/modules/tickets/contracts/work-item.js';
 import { workItemCodesInReleasePoints } from '../src/modules/development/index.js';
+import { MOCK_ISSUE_SNAPSHOT } from '../scripts/mock-data.js';
 
 test('运行时路径：平台配置从仓库根目录解析静态资源与持久化默认目录', () => {
   const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -262,6 +263,16 @@ test('检查内容设置：支持投产审批负责人和投产变更文档', ()
   assert.equal(config.release['attachment:投产变更方案'].mode.initial, 'path');
   assert.equal(config.release['attachment:投产变更方案'].mode.inProgress, 'file');
   assert.equal(config.release['attachment:投产变更方案'].mode.final, 'both');
+});
+
+test('静态 mock 问题快照：数量、状态、脱敏和处理方式保持稳定', () => {
+  assert.equal(MOCK_ISSUE_SNAPSHOT.length, 20);
+  assert.equal(new Set(MOCK_ISSUE_SNAPSHOT.map((issue) => issue.code)).size, 20);
+  assert.ok(MOCK_ISSUE_SNAPSHOT.every((issue) => issue.status === '待验证'));
+  assert.ok(MOCK_ISSUE_SNAPSHOT.every((issue) => issue.code && issue.summary && issue.details));
+  assert.ok(MOCK_ISSUE_SNAPSHOT.every((issue) => issue.summary.length === 7 && issue.summary.endsWith('**')));
+  assert.ok(MOCK_ISSUE_SNAPSHOT.every((issue) => issue.details.length === 12 && issue.details.endsWith('**')));
+  assert.ok(MOCK_ISSUE_SNAPSHOT.every((issue) => issue.handling_method === '换版'));
 });
 
 import { reqOrg } from '../src/modules/overview/api/routes.js';
