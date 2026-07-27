@@ -1164,6 +1164,8 @@ export function VersionOverviewWorkItemDetail({
 
 export default function Overview() {
   const releasePointIds = useAppStore((s) => s.releasePointIds);
+  const contentMode = useAppStore((s) => s.contentMode);
+  const { isMobile } = useResponsive();
   const [groups, setGroups] = useState([]);
   const [collapsedGroups, setCollapsedGroups] = useState({});
   const [loading, setLoading] = useState(false);
@@ -1416,7 +1418,11 @@ export default function Overview() {
       )}
 
       {/* 全生命周期详情（宽屏5列看板式，窄屏自动切换为页签式以避免横向滚动） */}
-      <Modal open={detailOpen} width={isTabMode ? "86%" : "96%"} footer={null} onCancel={() => setDetailOpen(false)} style={{ top: 20, maxWidth: isTabMode ? '1000px' : '1700px' }}
+      <Modal open={detailOpen} width={isTabMode ? "86%" : "96%"} footer={null} onCancel={() => setDetailOpen(false)} style={{
+        top: contentMode === 'tabs' && !isMobile ? '50vh' : 20,
+        transform: contentMode === 'tabs' && !isMobile ? 'translateY(-50%)' : undefined,
+        maxWidth: isTabMode ? '1000px' : '1700px',
+      }}
         styles={{ body: { minHeight: 360, overflowX: 'hidden' } }}
         title={detail && (
           <div className="lc-modal-title" style={{ paddingRight: 76 }}>
