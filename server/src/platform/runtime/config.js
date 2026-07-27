@@ -12,7 +12,9 @@ import { randomBytes } from 'node:crypto';
 import { loadEnvFile, normalizeLogLevel } from './index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(__dirname, '..', '..');
+// 当前文件位于 server/src/platform/runtime；配置中的相对路径必须回到仓库根目录，
+// 才能与 Docker 镜像内的 /app/web、/app/data 和根目录 .env 保持一致。
+const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 loadEnvFile(path.join(REPO_ROOT, '.env'));
 
 const isProd = process.env.NODE_ENV === 'production';

@@ -8,7 +8,10 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { hashPassword, verifyPassword, validatePasswordComplexity } from '../src/platform/auth/index.js';
+import { config } from '../src/platform/runtime/config.js';
 import { exportXlsx } from '../src/platform/import-export/index.js';
 import { calcDeviation, formatCoverageText, formatImpactItemsText } from '../src/modules/development/index.js';
 import { buildReleaseWordDoc, formatWordDateTime } from '../src/modules/release/index.js';
@@ -21,6 +24,18 @@ import { WORK_ITEM_TYPES, isWorkItemType } from '../src/shared/contracts/work-it
 import { REQUIREMENT_WORK_ITEM_TYPE } from '../src/modules/requirements/contracts/work-item.js';
 import { TICKET_WORK_ITEM_TYPE } from '../src/modules/tickets/contracts/work-item.js';
 import { workItemCodesInReleasePoints } from '../src/modules/development/index.js';
+
+test('运行时路径：平台配置从仓库根目录解析静态资源与持久化默认目录', () => {
+  const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+  const resolveFromProjectRoot = (value, fallback) => {
+    const target = value || fallback;
+    return path.isAbsolute(target) ? target : path.resolve(projectRoot, target);
+  };
+  assert.equal(config.REPO_ROOT, projectRoot);
+  assert.equal(config.webDist, resolveFromProjectRoot(process.env.WEB_DIST, 'web/dist'));
+  assert.equal(config.dbFile, resolveFromProjectRoot(process.env.DB_FILE, 'data/radar.db'));
+  assert.equal(config.attachmentDir, resolveFromProjectRoot(process.env.ATTACHMENT_DIR, 'attachments'));
+});
 
 test('工作项公共契约：需求和工单保持独立且类型受控', () => {
   assert.deepEqual(WORK_ITEM_TYPES, ['requirement', 'ticket']);
