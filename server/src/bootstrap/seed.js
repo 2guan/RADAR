@@ -14,7 +14,7 @@ import { parseJsonObject, logger } from '../platform/runtime/index.js';
 
 // 种子版本是“内置默认配置”而非业务数据版本；仅在首次初始化或显式升级版本时执行全量校准。
 const SEED_VERSION_KEY = 'runtime.seed.version';
-const SEED_VERSION = '20260727.2';
+const SEED_VERSION = '20260728.1';
 
 // 角色定义（角色标识、名称、是否内置、是否会签角色）
 // 会签角色（signoff:1）：投产评审会签由以下 9 个角色完成。
@@ -205,7 +205,7 @@ export const STAGE_BUILTIN_FIELD_METADATA = {
   requirement: {
     req_code: { section: 'basic', required_from: 'initial', list: 1, filter: 1 }, status: { section: 'basic', list: 1, filter: 1, dashboard: 1 },
     req_type: { section: 'basic', required_from: 'initial', list: 1, filter: 1, dashboard: 1 }, release_point_id: { section: 'basic', required_from: 'initial', list: 1, filter: 1, dashboard: 1 },
-    propose_time: { section: 'basic', required_from: 'initial', list: 1, dashboard: 1 }, issue_no: { section: 'basic', filter: 1 }, is_accounting: { section: 'basic', required_from: 'initial', filter: 1 },
+    propose_time: { section: 'basic', required_from: 'initial', list: 1, dashboard: 1 }, issue_no: { section: 'basic', filter: 1 }, priority: { section: 'basic', required_from: 'initial', list: 1, filter: 1 }, is_accounting: { section: 'basic', required_from: 'initial', filter: 1 },
     title: { section: 'basic', required_from: 'initial', list: 1 }, summary: { section: 'basic', required_from: 'initial' }, main_systems: { section: 'systems', required_from: 'initial', list: 1, filter: 1, dashboard: 1 },
     collab_dev_systems: { section: 'systems', list: 1, filter: 1 }, collab_test_systems: { section: 'systems', filter: 1 }, propose_dept: { section: 'owners', required_from: 'initial', filter: 1, dashboard: 1 },
     proposer: { section: 'owners', required_from: 'initial', list: 1, filter: 1 }, yn_owner: { section: 'owners' }, jk_owner: { section: 'owners' },

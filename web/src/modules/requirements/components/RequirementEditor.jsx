@@ -223,7 +223,7 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
     } else {
       setCurrent(null);
       form.resetFields();
-      form.setFieldsValue({ status: initialStatus, is_accounting: '否', release_point_id: defaultReleasePointId });
+      form.setFieldsValue({ status: initialStatus, is_accounting: '否', priority: '中', release_point_id: defaultReleasePointId });
     }
   }, [open, reqId, code, mode, initialStatus]);
 
@@ -431,6 +431,17 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
                   <Col span={12}>
                     <Form.Item name="req_type" label="需求类型" rules={required.rules('req_type', '需求类型', { action: '请选择' })} style={{ marginBottom: 8 }}>
                       <DictSelect category="req_type" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} size="small" />
+                    </Form.Item>
+                  </Col>
+                )}
+                {visible('priority') && (
+                  <Col span={12}>
+                    <Form.Item name="priority" label="优先级" rules={required.rules('priority', '优先级', { action: '请选择' })} initialValue="中" style={{ marginBottom: 8 }}>
+                      <Select size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined}>
+                        <Select.Option value="高">高</Select.Option>
+                        <Select.Option value="中">中</Select.Option>
+                        <Select.Option value="低">低</Select.Option>
+                      </Select>
                     </Form.Item>
                   </Col>
                 )}

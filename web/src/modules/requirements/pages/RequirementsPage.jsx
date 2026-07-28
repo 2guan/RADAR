@@ -147,6 +147,16 @@ export default function Requirements() {
     },
     { title: '需求类型', dataIndex: 'req_type', key: 'req_type' },
     {
+      title: '优先级',
+      dataIndex: 'priority',
+      key: 'priority',
+      width: 80,
+      render: (value) => {
+        const colorMap = { 高: '#f5222d', 中: '#fa8c16', 低: '#52c41a' };
+        return value ? <Tag color={colorMap[value]}>{value}</Tag> : <Tag color="orange">中</Tag>;
+      },
+    },
+    {
       title: '提出人',
       dataIndex: 'proposer',
       key: 'proposer',

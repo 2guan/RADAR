@@ -39,7 +39,7 @@ const NATIVE_FIELD_DEFAULTS = {
   requirement: [
     ['req_code', '需求编号', 'text'], ['status', '需求状态', 'select'], ['req_type', '需求类型', 'select', 'dict:req_type'],
     ['release_point_id', '计划投产点', 'release_point', 'release_point'], ['propose_time', '提出时间', 'datetime'],
-    ['issue_no', '关联问题/工单编号', 'text'], ['is_accounting', '是否涉账', 'select'], ['title', '需求标题', 'text'],
+    ['issue_no', '关联问题/工单编号', 'text'], ['priority', '优先级', 'select'], ['is_accounting', '是否涉账', 'select'], ['title', '需求标题', 'text'],
     ['summary', '需求概述', 'textarea'], ['main_systems', '主责系统', 'select', 'system', 1],
     ['collab_dev_systems', '协同改造系统', 'select', 'system', 1], ['collab_test_systems', '协同测试系统', 'select', 'system', 1],
     ['propose_dept', '提出部门', 'select', 'dict:req_dept'], ['proposer', '提出人', 'person', 'person', 1],

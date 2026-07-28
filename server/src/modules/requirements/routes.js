@@ -46,10 +46,11 @@ const IO_COLUMNS = [
   { key: 'collab_dev_systems', title: '协同改造系统' },
   { key: 'collab_test_systems', title: '协同测试系统' },
   { key: 'issue_no', title: '关联问题/工单编号' },
+  { key: 'priority', title: '需求优先级' },
 ];
 
 const COLUMNS = [
-  'id', 'req_code', 'title', 'summary', 'status', 'req_type', 'propose_dept', 'proposer',
+  'id', 'req_code', 'title', 'summary', 'status', 'req_type', 'priority', 'propose_dept', 'proposer',
   'yn_owner', 'jk_owner', 'propose_time', 'release_point_id', 'registrar', 'register_time', 'created_at',
   'issue_no', 'is_accounting',
 ];
@@ -58,7 +59,7 @@ const JSON_FIELDS = ['main_systems', 'collab_dev_systems', 'collab_test_systems'
 const WRITABLE = [
   'req_code', 'title', 'summary', 'status', 'req_type', 'propose_dept', 'proposer', 'yn_owner', 'jk_owner',
   'propose_time', 'main_systems', 'collab_dev_systems', 'collab_test_systems', 'release_point_id',
-  'issue_no', 'is_accounting',
+  'issue_no', 'is_accounting', 'priority',
 ];
 const LABELS = {
   req_code: '需求编号', title: '需求标题', summary: '需求概述', status: '需求状态', req_type: '需求类型',
@@ -67,6 +68,7 @@ const LABELS = {
   jk_owner: '建信金科业务负责人', propose_time: '提出时间', main_systems: '主责系统',
   collab_dev_systems: '协同改造系统', collab_test_systems: '协同测试系统', release_point_id: '计划投产点',
   issue_no: '关联问题/工单编号',
+  priority: '需求优先级',
 };
 
 /** 把 JSON 字符串字段解析为数组返回给前端 */
@@ -565,17 +567,17 @@ export default async function requirementRoutes(fastify) {
             if (changes.length > 0) {
               await run(
                 `UPDATE requirement SET 
-                   title=?, summary=?, status=?, req_type=?, is_accounting=?, propose_dept=?, proposer=?, yn_owner=?, jk_owner=?, 
+                   title=?, summary=?, status=?, req_type=?, priority=?, is_accounting=?, propose_dept=?, proposer=?, yn_owner=?, jk_owner=?, 
                    propose_time=?, release_point_id=?, main_systems=?, collab_dev_systems=?, collab_test_systems=?, 
                    issue_no=?,
                    updated_at=datetime('now','localtime') 
                  WHERE id=?`,
-                r.title, r.summary || null, status, reqType || null, isAccounting, proposeDept || null, proposerJson,
+                r.title, r.summary || null, status, reqType || null, r.priority || '中', isAccounting, proposeDept || null, proposerJson,
                 r.yn_owner || null, r.jk_owner || null, r.propose_time || null, rpId,
                 mainSystems, collabDevSystems, collabTestSystems, r.issue_no || null, exists.id
               );
               await auditUpdate('requirement', exists.id, code, request.currentUser?.name, exists, {
-                title: r.title, summary: r.summary || null, status, req_type: reqType || null, is_accounting: isAccounting,
+                title: r.title, summary: r.summary || null, status, req_type: reqType || null, priority: r.priority || '中', is_accounting: isAccounting,
                 propose_dept: proposeDept || null, proposer: proposerJson, yn_owner: r.yn_owner || null,
                 jk_owner: r.jk_owner || null, propose_time: r.propose_time || null, release_point_id: rpId,
                 main_systems: mainSystems, collab_dev_systems: collabDevSystems, collab_test_systems: collabTestSystems,
@@ -600,10 +602,10 @@ export default async function requirementRoutes(fastify) {
             if (!code) code = await claimRequirementCode(rpMap[rpId]);
             const res = await run(
               `INSERT INTO requirement 
-                 (req_code, title, summary, status, req_type, is_accounting, propose_dept, proposer, yn_owner, jk_owner, 
+                 (req_code, title, summary, status, req_type, priority, is_accounting, propose_dept, proposer, yn_owner, jk_owner, 
                   propose_time, release_point_id, main_systems, collab_dev_systems, collab_test_systems, registrar, register_time, issue_no)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-              code, r.title, r.summary || null, status, reqType || null, isAccounting, proposeDept || null, proposerJson,
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+              code, r.title, r.summary || null, status, reqType || null, r.priority || '中', isAccounting, proposeDept || null, proposerJson,
               r.yn_owner || null, r.jk_owner || null, r.propose_time || null, rpId,
               mainSystems, collabDevSystems, collabTestSystems, request.currentUser?.name, new Date().toISOString().slice(0, 10),
               r.issue_no || null
