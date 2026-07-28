@@ -37,15 +37,21 @@ function inspectHeader(file, source) {
     ? lines.findIndex((line, index) => index >= start && line.trim() === '*/')
     : lines.findIndex((line, index) => index >= start && /^\s*$/.test(line));
   if (end < 0) return { error: '文件头注释未闭合', bodyStart: start };
-  const header = lines.slice(start, end + 1).join('\n');
-  const markers = ['文件：', '说明：', '用途：', '作者：hengguan'];
-  const positions = markers.map((marker) => header.indexOf(marker));
+  const headerLines = lines.slice(start, end + 1);
+  const header = headerLines.join('\n');
+  const markers = ['文件：', '说明：', '用途：', '作者：'];
+  const headerTexts = headerLines.map((line) => line
+    .replace(/^\s*(?:\/\*\*?|\*\/|\*|--|#)?\s*/, '')
+    .trim());
+  const positions = markers.map((marker) => headerTexts.findIndex((line) => line.startsWith(marker)));
   for (let index = 0; index < markers.length; index++) {
     if (positions[index] < 0) return { error: '文件头缺少“' + markers[index] + '”', bodyStart: end + 1 };
     if (index > 0 && positions[index] < positions[index - 1]) {
       return { error: '文件头字段必须按“文件、说明、用途、作者”顺序书写', bodyStart: end + 1 };
     }
   }
+  const author = headerTexts[positions[3]]?.slice('作者：'.length).trim();
+  if (!author) return { error: '文件头“作者”不能为空', bodyStart: end + 1 };
   const declaredFile = header.match(/文件：\s*([^\r\n*#]+)/)?.[1]?.trim();
   if (declaredFile !== file) return { error: '文件头“文件”必须填写仓库相对路径，当前为“' + (declaredFile || '空') + '”', bodyStart: end + 1 };
   if (!/[\u4e00-\u9fff]/.test(header)) return { error: '文件头必须使用中文说明', bodyStart: end + 1 };

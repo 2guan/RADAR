@@ -2,7 +2,7 @@
  * 文件：web/src/modules/settings/process-configuration/components/StageBuiltinFields.jsx
  * 说明：内置输入项与扩展输入项共用阶段配置中的分区、排序和宽度，不再由业务页面写死。
  * 用途：以 Portal 将业务页面保留的专业字段控件投放到配置指定的分区卡片。
- * 作者：hengguan
+ * 作者：Codex
  */
 
 import { Children, createContext, createPortal, useContext, useEffect, useMemo, useState } from 'react';
