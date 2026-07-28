@@ -98,14 +98,14 @@ const DELIVERABLE_DEFAULTS = {
 const DELIVERABLE_DEFAULT_METADATA = {
   requirement: { 需求说明书: { layout: 'right', required_from: 'final' } },
   dev: {
-    概要设计: { layout: 'left' },
-    详细设计: { layout: 'left' },
-    代码走查: { layout: 'left' },
-    单元测试报告: { layout: 'left' },
-    编码检查表: { layout: 'left', required_from: 'final' },
-    技术方案确认单: { layout: 'left', required_from: 'final' },
+    概要设计: { layout: 'right' },
+    详细设计: { layout: 'right' },
+    代码走查: { layout: 'right' },
+    单元测试报告: { layout: 'right' },
+    编码检查表: { layout: 'right', required_from: 'final' },
+    技术方案确认单: { layout: 'right', required_from: 'final' },
   },
-  test: { 测试方案: { layout: 'left' }, 测试报告: { layout: 'left' } },
+  test: { 测试方案: { layout: 'right' }, 测试报告: { layout: 'right' } },
   'test.UAT': { 测试报告: { required_from: 'final' } },
   release_apply: { 摆渡证明: { layout: 'right' } },
   release: {
@@ -128,8 +128,8 @@ const CUSTOM_DELIVERABLE_TEMPLATE_HANDLERS = {
 };
 
 const BUILTIN_METADATA_VERSION_KEY = 'stage.content.builtin-metadata.v1';
-// v4：开发、测试阶段的默认模块改为左右分栏，避免新库详情页全部堆叠在左侧。
-const BUILTIN_LAYOUT_VERSION_KEY = 'stage.content.builtin-layout.v4';
+// v6：按本地详情页已确认的两列纵向顺序校准内置分区，供新库与 mock 重建共用。
+const BUILTIN_LAYOUT_VERSION_KEY = 'stage.content.builtin-layout.v6';
 const DELIVERABLE_SECTION_PRESENTATION_VERSION_KEY = 'stage.content.deliverable-section-presentation.v1';
 
 function baseScope(scopeKey) {

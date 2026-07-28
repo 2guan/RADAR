@@ -108,10 +108,30 @@ if (!process.env.RADAR_RUN_API_TESTS) {
     const administrator = await get('SELECT id, phone FROM user WHERE is_super = 1 LIMIT 1');
     const token = await app.jwt.sign({ id: administrator.id, phone: administrator.phone });
     const headers = { authorization: `Bearer ${token}`, 'x-requested-by': 'RADAR' };
+
+    const expectedLayouts = {
+      requirement: [['basic', 'left'], ['systems', 'right'], ['owners', 'right'], ['extension', 'right'], ['deliverables', 'right']],
+      ticket: [['basic', 'left'], ['systems', 'right'], ['owners', 'right'], ['extension', 'right'], ['deliverables', 'right']],
+      dev: [['task', 'left'], ['impact', 'right'], ['schedule', 'left'], ['deliverables', 'right'], ['extension', 'right']],
+      'test.SIT': [['task', 'left'], ['coverage', 'right'], ['schedule', 'left'], ['deliverables', 'right'], ['extension', 'right']],
+      'test.UAT': [['task', 'left'], ['schedule', 'left'], ['deliverables', 'right'], ['extension', 'right']],
+      'test.NFT': [['task', 'left'], ['schedule', 'left'], ['deliverables', 'right'], ['extension', 'right']],
+      'test.SEC': [['task', 'left'], ['schedule', 'left'], ['deliverables', 'right'], ['extension', 'right']],
+      release_apply: [['references', 'left'], ['content', 'left'], ['change', 'right'], ['deliverables', 'right'], ['extension', 'right'], ['artifacts', 'full']],
+      release: [['basic', 'left'], ['signoff', 'left'], ['release_info', 'right'], ['deliverables', 'right'], ['extension', 'left'], ['artifacts', 'right']],
+    };
+    for (const [scopeKey, expected] of Object.entries(expectedLayouts)) {
+      const response = await app.inject({ method: 'GET', url: `/api/settings/stage-content/${scopeKey}`, headers });
+      assert.equal(response.statusCode, 200);
+      assert.deepEqual(
+        response.json().data.sections.map((section) => [section.section_key, section.layout_mode]),
+        expected,
+        `${scopeKey} 的初始分区顺序与列位置应与详情页一致`,
+      );
+    }
+
     const releaseApply = await app.inject({ method: 'GET', url: '/api/settings/stage-content/release_apply', headers });
     const releaseApplySections = new Map(releaseApply.json().data.sections.map((section) => [section.section_key, section]));
-    assert.equal(releaseApplySections.get('extension').layout_mode, 'right');
-    assert.equal(releaseApplySections.get('deliverables').layout_mode, 'right');
     assert.equal(releaseApplySections.get('artifacts').collapsed, 1);
 
     const release = await app.inject({ method: 'GET', url: '/api/settings/stage-content/release', headers });
