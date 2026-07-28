@@ -13,6 +13,7 @@ export {
 } from './api/stageContentDataCache.js';
 export { default as StageConfiguration } from './components/StageConfiguration.jsx';
 export { default as StageContentPanel } from './components/StageContentPanel.jsx';
+export { default as StageBuiltinFields, StageBuiltinField } from './components/StageBuiltinFields.jsx';
 export { default as StageSectionLayout } from './components/StageSectionLayout.jsx';
 export { useDefaultProcessStatus } from './hooks/useDefaultProcessStatus.js';
 export { useRequiredFields } from './hooks/useRequiredFields.js';

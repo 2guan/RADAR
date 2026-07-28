@@ -12,7 +12,7 @@ import { Form, Input, DatePicker, Row, Col, Button, Tooltip, message } from 'ant
 import { DownloadOutlined, HistoryOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { DictSelect, SystemSelect, PersonPicker } from '../../modules/settings/reference-data/index.js';
-import { StageContentPanel, StageSectionLayout, useRequiredFields } from '../../modules/settings/process-configuration/index.js';
+import { StageBuiltinField, StageBuiltinFields, StageContentPanel, StageSectionLayout, useRequiredFields } from '../../modules/settings/process-configuration/index.js';
 import { ImpactAnalysisModal } from '../../modules/development/index.js';
 import { CoverageAnalysisModal } from '../../modules/testing/index.js';
 import { HistoryDrawer } from '../../platform/audit/index.js';
@@ -257,71 +257,54 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
             extension: { layout_mode: 'left', sort: 30 },
             deliverables: { layout_mode: 'right', sort: 40 },
           }} />
-          {/* ── 左栏：基本信息 + 排期 ── */}
-          <Col xs={24} md={14} style={{ display: 'contents' }}>
-            <div className="form-section-card stage-detail-section-task">
-              <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>基本信息</div>
-
-              {visible('task_name') && (
+          <StageBuiltinFields scopeKey={kind === 'test' ? `test.${current?.test_type || cfg.testType || 'SIT'}` : 'dev'} defaults={{
+            task: { title: '基本信息', layout_mode: 'left', sort: 0 },
+            impact: { title: '影响性分析', layout_mode: 'right', sort: 10 },
+            coverage: { title: '测试覆盖性分析', layout_mode: 'right', sort: 10 },
+            schedule: { title: '排期', layout_mode: 'left', sort: 20 },
+          }}>
+              <StageBuiltinField fieldKey="task_name" defaultSection="task" defaultColumnSpan={24}>
                 <Form.Item name="task_name" label="任务名称" rules={required.rules('task_name', '任务名称', { message: '请输入任务名称' })} style={{ marginBottom: 8 }}>
                   <Input placeholder="请输入任务名称" size="small" readOnly={readonly} />
                 </Form.Item>
-              )}
+              </StageBuiltinField>
 
-              {kind === 'dev' && visible('content') && (
+              {kind === 'dev' && <StageBuiltinField fieldKey="content" defaultSection="task" defaultColumnSpan={24}>
                 <Form.Item name="content" label="开发内容概述" rules={required.rules('content', '开发内容概述')} style={{ marginBottom: 8 }}>
                   <Input.TextArea rows={2} placeholder="简要描述开发内容" style={{ fontSize: 12 }} readOnly={readonly} />
                 </Form.Item>
-              )}
+              </StageBuiltinField>}
 
               {/* 负责人、实施系统、实施方：手机端各占一行（充满），PC 端双栏不变。 */}
-              <Row gutter={8}>
-                {visible('owner') && (
-                  <Col span={isMobile ? 24 : 12}>
+              <StageBuiltinField fieldKey="owner" defaultSection="task">
                     <Form.Item name="owner" label={cfg.ownerLabel} rules={required.rules('owner', cfg.ownerLabel, { action: '请选择' })} style={{ marginBottom: 8 }}>
                       <PersonPicker style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} size="small" placeholder="选择负责人" />
                     </Form.Item>
-                  </Col>
-                )}
-                {visible('impl_system') && (
-                  <Col span={isMobile ? 24 : 12}>
+              </StageBuiltinField>
+              <StageBuiltinField fieldKey="impl_system" defaultSection="task">
                     <Form.Item name="impl_system" label="实施系统" rules={required.rules('impl_system', '实施系统', { action: '请选择' })} style={{ marginBottom: 8 }}>
                       <SystemSelect single size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择实施系统" />
                     </Form.Item>
-                  </Col>
-                )}
-                {visible('impl_org') && (
-                  <Col span={isMobile ? 24 : 12}>
+              </StageBuiltinField>
+              <StageBuiltinField fieldKey="impl_org" defaultSection="task">
                     <Form.Item name="impl_org" label={cfg.orgLabel} rules={required.rules('impl_org', cfg.orgLabel, { action: '请选择' })} style={{ marginBottom: (kind === 'test' && !isMobile) ? 8 : 0 }}>
                       <DictSelect category="org" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} size="small" />
                     </Form.Item>
-                  </Col>
-                )}
-              </Row>
-            </div>
+              </StageBuiltinField>
+              <StageBuiltinField fieldKey="plan_start" defaultSection="schedule">
+                <Form.Item name="plan_start" label="计划开始" rules={required.rules('plan_start', '计划开始', { action: '请选择' })} style={{ marginBottom: 8 }}><DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" /></Form.Item>
+              </StageBuiltinField>
+              <StageBuiltinField fieldKey="plan_end" defaultSection="schedule">
+                <Form.Item name="plan_end" label="计划结束" rules={required.rules('plan_end', '计划结束', { action: '请选择' })} style={{ marginBottom: 8 }}><DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" /></Form.Item>
+              </StageBuiltinField>
+              <StageBuiltinField fieldKey="actual_start" defaultSection="schedule">
+                <Form.Item name="actual_start" label="实际开始" rules={required.rules('actual_start', '实际开始', { action: '请选择' })} style={{ marginBottom: 0 }}><DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" /></Form.Item>
+              </StageBuiltinField>
+              <StageBuiltinField fieldKey="actual_end" defaultSection="schedule">
+                <Form.Item name="actual_end" label="实际结束" rules={required.rules('actual_end', '实际结束', { action: '请选择' })} style={{ marginBottom: 0 }}><DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" /></Form.Item>
+              </StageBuiltinField>
 
-            {['plan_start', 'plan_end', 'actual_start', 'actual_end'].some(visible) && (
-              <div className="form-section-card stage-detail-section-schedule">
-                <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>排期</div>
-                <Row gutter={8}>
-                  {visible('plan_start') && <Col span={12}><Form.Item name="plan_start" label="计划开始" rules={required.rules('plan_start', '计划开始', { action: '请选择' })} style={{ marginBottom: 8 }}><DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" /></Form.Item></Col>}
-                  {visible('plan_end') && <Col span={12}><Form.Item name="plan_end" label="计划结束" rules={required.rules('plan_end', '计划结束', { action: '请选择' })} style={{ marginBottom: 8 }}><DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" /></Form.Item></Col>}
-                  {visible('actual_start') && <Col span={12}><Form.Item name="actual_start" label="实际开始" rules={required.rules('actual_start', '实际开始', { action: '请选择' })} style={{ marginBottom: 0 }}><DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" /></Form.Item></Col>}
-                  {visible('actual_end') && <Col span={12}><Form.Item name="actual_end" label="实际结束" rules={required.rules('actual_end', '实际结束', { action: '请选择' })} style={{ marginBottom: 0 }}><DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" /></Form.Item></Col>}
-                </Row>
-              </div>
-            )}
-
-            {/* 公共扩展信息默认在左栏显示，保持与任务信息、排期模块一致的卡片宽度。 */}
-            <StageContentPanel ref={extensionPanelRef} scopeKey={kind === 'test' ? `test.${current?.test_type || cfg.testType || 'SIT'}` : 'dev'} entityType={cfg.entity} entityId={current?.id} readOnly={readonly} renderDeliverableAction={renderDeliverableAction} onDirtyChange={() => setIsDirty(true)} />
-          </Col>
-
-          {/* ── 右栏：阶段附件 ── */}
-          <Col xs={24} md={10} style={{ display: 'contents' }}>
-            {/* 影响性分析（开发阶段）/ 测试覆盖性分析（应用组装 SIT）——结构化表单 */}
-            {kind === 'dev' && visible('impact_analysis') && (
-              <div className="form-section-card stage-detail-section-impact" style={{ marginBottom: 12 }}>
-                <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>影响性分析</div>
+              {kind === 'dev' && <StageBuiltinField fieldKey="impact_analysis" defaultSection="impact" defaultColumnSpan={24}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <Button size="small" type="primary" ghost onClick={() => setImpactOpen(true)}>
                     {readonly ? '查看影响性分析' : '填写影响性分析'}
@@ -330,12 +313,9 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
                     {analysisCount == null ? '' : `已填写 ${analysisCount} 条`}
                   </span>
                 </div>
-              </div>
-            )}
+              </StageBuiltinField>}
             {/* SIT 覆盖性分析由已注册业务组件提供，不再依赖旧检查内容设置。 */}
-            {isSit && (
-              <div className="form-section-card stage-detail-section-coverage" style={{ marginBottom: 12 }}>
-                <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>测试覆盖性分析</div>
+            {isSit && <StageBuiltinField fieldKey="coverage_analysis" defaultSection="coverage" defaultColumnSpan={24}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <Button size="small" type="primary" ghost onClick={() => setCoverageOpen(true)}>
                     {readonly ? '查看测试覆盖性分析' : '填写测试覆盖性分析'}
@@ -344,10 +324,11 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
                     {analysisCount == null ? '' : `已覆盖登记 ${analysisCount} 条`}
                   </span>
                 </div>
-              </div>
-            )}
-            <StageContentPanel ref={extensionRightPanelRef} scopeKey={kind === 'test' ? `test.${current?.test_type || cfg.testType || 'SIT'}` : 'dev'} entityType={cfg.entity} entityId={current?.id} readOnly={readonly} position="right" renderDeliverableAction={renderDeliverableAction} onDirtyChange={() => setIsDirty(true)} />
-          </Col>
+            </StageBuiltinField>}
+          </StageBuiltinFields>
+          {/* 公共扩展信息仍由配置渲染，且作为布局 Row 的直接子项参与分区排序。 */}
+          <StageContentPanel ref={extensionPanelRef} scopeKey={kind === 'test' ? `test.${current?.test_type || cfg.testType || 'SIT'}` : 'dev'} entityType={cfg.entity} entityId={current?.id} readOnly={readonly} renderDeliverableAction={renderDeliverableAction} onDirtyChange={() => setIsDirty(true)} />
+          <StageContentPanel ref={extensionRightPanelRef} scopeKey={kind === 'test' ? `test.${current?.test_type || cfg.testType || 'SIT'}` : 'dev'} entityType={cfg.entity} entityId={current?.id} readOnly={readonly} position="right" renderDeliverableAction={renderDeliverableAction} onDirtyChange={() => setIsDirty(true)} />
           <StageContentPanel ref={extensionFullPanelRef} scopeKey={kind === 'test' ? `test.${current?.test_type || cfg.testType || 'SIT'}` : 'dev'} entityType={cfg.entity} entityId={current?.id} readOnly={readonly} position="full" renderDeliverableAction={renderDeliverableAction} onDirtyChange={() => setIsDirty(true)} />
         </Row>
       </Form>

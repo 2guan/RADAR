@@ -12,7 +12,7 @@ import { AutoComplete, Form, Input, DatePicker, Row, Col, Button, Select, Tag, m
 import { HistoryOutlined, CloseOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { DictSelect, PersonPicker, makeReleasePointOptions } from '../../settings/reference-data/index.js';
-import { StageContentPanel, StageSectionLayout, useDefaultProcessStatus, useRequiredFields } from '../../settings/process-configuration/index.js';
+import { StageBuiltinField, StageBuiltinFields, StageContentPanel, StageSectionLayout, useDefaultProcessStatus, useRequiredFields } from '../../settings/process-configuration/index.js';
 import { HistoryDrawer } from '../../../platform/audit/index.js';
 import { CodeLink } from '../../../platform/routing/index.js';
 import { EditorShell } from '../../../shared/ui/index.js';
@@ -424,20 +424,15 @@ export default function TicketEditor({ open, mode = 'modal', code, reqId, defaul
           <StageSectionLayout scopeKey="ticket" defaults={{
             basic: { layout_mode: 'left', sort: 0 }, systems: { layout_mode: 'right', sort: 10 }, owners: { layout_mode: 'right', sort: 20 },
           }} />
-          {/* ── 左栏 ── */}
-          <Col xs={24} md={14} style={{ display: 'contents' }}>
-
-            {/* 基本信息 */}
-            <div className="form-section-card stage-detail-section-basic">
-              <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>基本信息</div>
-
-              {/* 工单状态改由标题栏内联编辑，此处保留隐藏字段以保证保存 */}
-              <Form.Item name="status" hidden><Input /></Form.Item>
-
-              <Row gutter={8}>
+          {/* 工单状态改由标题栏内联编辑，此处保留隐藏字段以保证保存。 */}
+          <Form.Item name="status" hidden><Input /></Form.Item>
+          <StageBuiltinFields scopeKey="ticket" defaults={{
+            basic: { title: '基本信息', layout_mode: 'left', sort: 0 },
+            systems: { title: '涉及系统', layout_mode: 'right', sort: 10 },
+            owners: { title: '相关负责人', layout_mode: 'right', sort: 20 },
+          }}>
                 {/* 工单编号 + 工单类型 */}
-                {visible('ticket_code') && (
-                  <Col span={12}>
+                <StageBuiltinField fieldKey="ticket_code" defaultSection="basic">
                     <Form.Item
                       name="ticket_code"
                       label={(
@@ -470,18 +465,14 @@ export default function TicketEditor({ open, mode = 'modal', code, reqId, defaul
                         style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', letterSpacing: '0.3px' }}
                       />
                     </Form.Item>
-                  </Col>
-                )}
-                {visible('ticket_type') && (
-                  <Col span={12}>
+                </StageBuiltinField>
+                <StageBuiltinField fieldKey="ticket_type" defaultSection="basic">
                     <Form.Item name="ticket_type" label="工单类型" rules={required.rules('ticket_type', '工单类型', { action: '请选择' })} style={{ marginBottom: 8 }}>
                       <DictSelect category="ticket_type" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} size="small" />
                     </Form.Item>
-                  </Col>
-                )}
+                </StageBuiltinField>
                 {/* 计划投产点 + 提出时间 */}
-                {visible('release_point_id') && (
-                  <Col span={12}>
+                <StageBuiltinField fieldKey="release_point_id" defaultSection="basic">
                     <Form.Item name="release_point_id" label="计划投产点" rules={required.rules('release_point_id', '计划投产点', { action: '请选择' })} style={{ marginBottom: 8 }}>
                       <Select
                         placeholder="选择计划投产点"
@@ -493,25 +484,19 @@ export default function TicketEditor({ open, mode = 'modal', code, reqId, defaul
                         options={makeReleasePointOptions(points, { includeVersionType: true })}
                       />
                     </Form.Item>
-                  </Col>
-                )}
-                {visible('propose_time') && (
-                  <Col span={12}>
+                </StageBuiltinField>
+                <StageBuiltinField fieldKey="propose_time" defaultSection="basic">
                     <Form.Item name="propose_time" label="提出时间" rules={required.rules('propose_time', '提出时间', { action: '请选择' })} style={{ marginBottom: 8 }}>
                       <DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" />
                     </Form.Item>
-                  </Col>
-                )}
+                </StageBuiltinField>
                 {/* 关联问题/工单编号 + 是否涉账 */}
-                {visible('issue_no') && (
-                  <Col span={12}>
+                <StageBuiltinField fieldKey="issue_no" defaultSection="basic">
                     <Form.Item name="issue_no" label="关联问题/工单编号" rules={required.rules('issue_no', '关联问题/工单编号')} style={{ marginBottom: 8 }}>
                       <Input placeholder="手动输入关联问题/工单编号（选填）" size="small" readOnly={readonly} />
                     </Form.Item>
-                  </Col>
-                )}
-                {visible('is_accounting') && (
-                  <Col span={12}>
+                </StageBuiltinField>
+                <StageBuiltinField fieldKey="is_accounting" defaultSection="basic">
                     <Form.Item name="is_accounting" label="是否涉账" initialValue="否" rules={required.rules('is_accounting', '是否涉账', { action: '请选择' })} style={{ marginBottom: 8 }}>
                       <Select
                         size="small"
@@ -520,93 +505,65 @@ export default function TicketEditor({ open, mode = 'modal', code, reqId, defaul
                         tabIndex={readonly ? -1 : undefined}
                       />
                     </Form.Item>
-                  </Col>
-                )}
-              </Row>
+                </StageBuiltinField>
 
               {/* 工单概述 */}
-              {visible('title') && (
+              <StageBuiltinField fieldKey="title" defaultSection="basic" defaultColumnSpan={24}>
                 <Form.Item name="title" label="工单概述" rules={required.rules('title', '工单概述', { message: '请输入工单概述' })} style={{ marginBottom: 8 }}>
                   <Input placeholder="请输入工单概述" size="small" readOnly={readonly} />
                 </Form.Item>
-              )}
-              {visible('summary') && (
+              </StageBuiltinField>
+              <StageBuiltinField fieldKey="summary" defaultSection="basic" defaultColumnSpan={24}>
                 <Form.Item name="summary" label="工单详情" rules={required.rules('summary', '工单详情', { message: '请填写工单详情', extraRules: [{ max: 2000, message: '不超过 2000 字' }] })} style={{ marginBottom: 18 }}>
                   <Input.TextArea rows={7} placeholder="描述该工单的核心背景与业务诉求（2000字以内）" showCount={!readonly} maxLength={2000} style={{ fontSize: 12 }} readOnly={readonly} />
                 </Form.Item>
-              )}
-            </div>
-
-            <StageContentPanel ref={extensionPanelRef} scopeKey="ticket" entityType="ticket" entityId={current?.id} readOnly={readonly} onDirtyChange={() => setIsDirty(true)} />
-
-          </Col>
-
-          {/* ── 右栏 ── */}
-          <Col xs={24} md={10} style={{ display: 'contents' }}>
-
-            {/* 涉及系统 */}
-            {['main_systems', 'collab_dev_systems', 'collab_test_systems'].some(visible) && (
-            <div className="form-section-card stage-detail-section-systems">
-              <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>涉及系统</div>
+              </StageBuiltinField>
 
               {/* 主责系统：标题右侧选择框，单选（再选自动替换），已选展示在下方 */}
-              {visible('main_systems') && (
+              <StageBuiltinField fieldKey="main_systems" defaultSection="systems" defaultColumnSpan={24}>
                 <Form.Item name="main_systems" rules={required.rules('main_systems', '主责系统', { action: '请选择', type: 'array', min: 1 })}>
                   <SystemPickerField title="主责系统" single placeholder="主责系统检索" readonly={readonly} />
                 </Form.Item>
-              )}
+              </StageBuiltinField>
 
               {/* 协同改造系统：标题右侧选择框，可多选，已选展示在下方 */}
-              {visible('collab_dev_systems') && (
+              <StageBuiltinField fieldKey="collab_dev_systems" defaultSection="systems" defaultColumnSpan={24}>
                 <Form.Item name="collab_dev_systems" rules={required.rules('collab_dev_systems', '协同改造系统', { action: '请选择', type: 'array', min: 1 })}>
                   <SystemPickerField title="协同改造系统" placeholder="协同改造系统检索" readonly={readonly} />
                 </Form.Item>
-              )}
+              </StageBuiltinField>
 
               {/* 协同测试系统：标题右侧选择框，可多选，已选展示在下方 */}
-              {visible('collab_test_systems') && (
+              <StageBuiltinField fieldKey="collab_test_systems" defaultSection="systems" defaultColumnSpan={24}>
                 <Form.Item name="collab_test_systems" rules={required.rules('collab_test_systems', '协同测试系统', { action: '请选择', type: 'array', min: 1 })}>
                   <SystemPickerField title="协同测试系统" placeholder="协同测试系统检索" readonly={readonly} />
                 </Form.Item>
-              )}
-            </div>
-            )}
+              </StageBuiltinField>
 
-            {/* 相关负责人 */}
-            {['propose_dept', 'proposer', 'yn_owner', 'jk_owner'].some(visible) && (
-            <div className="form-section-card stage-detail-section-owners">
-              <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>相关负责人</div>
-              <Row gutter={8}>
                 {/* 提出部门 + 提出人：手机端各占一行（充满），PC 端双栏 */}
-                {visible('propose_dept') && (
-                  <Col span={isMobile ? 24 : 12}>
+                <StageBuiltinField fieldKey="propose_dept" defaultSection="owners">
                     <Form.Item name="propose_dept" label="提出部门" rules={required.rules('propose_dept', '提出部门', { action: '请选择' })} style={{ marginBottom: 8 }}>
                       <DictSelect category="req_dept" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} size="small" />
                     </Form.Item>
-                  </Col>
-                )}
-                {visible('proposer') && (
-                  <Col span={isMobile ? 24 : 12}>
+                </StageBuiltinField>
+                <StageBuiltinField fieldKey="proposer" defaultSection="owners">
                     <Form.Item name="proposer" label="提出人" rules={required.rules('proposer', '提出人', { action: '请选择', type: 'array', min: 1 })} style={{ marginBottom: 8 }}>
                       <PersonPickerField readonly={readonly} placeholder="选择提出人" />
                     </Form.Item>
-                  </Col>
-                )}
-              </Row>
-              {visible('yn_owner') && (
+                </StageBuiltinField>
+              <StageBuiltinField fieldKey="yn_owner" defaultSection="owners" defaultColumnSpan={24}>
                 <Form.Item name="yn_owner" label="云南农信工单负责人" rules={required.rules('yn_owner', '云南农信工单负责人', { action: '请选择' })} style={{ marginBottom: 8 }}>
                   <PersonPicker style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择云南农信工单负责人" size="small" />
                 </Form.Item>
-              )}
-              {visible('jk_owner') && (
+              </StageBuiltinField>
+              <StageBuiltinField fieldKey="jk_owner" defaultSection="owners" defaultColumnSpan={24}>
                 <Form.Item name="jk_owner" label="建信金科工单负责人" rules={required.rules('jk_owner', '建信金科工单负责人', { action: '请选择' })} style={{ marginBottom: 0 }}>
                   <PersonPicker style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择建信金科工单负责人" size="small" />
                 </Form.Item>
-              )}
-            </div>
-            )}
-            <StageContentPanel ref={extensionRightPanelRef} scopeKey="ticket" entityType="ticket" entityId={current?.id} readOnly={readonly} position="right" onDirtyChange={() => setIsDirty(true)} />
-          </Col>
+              </StageBuiltinField>
+          </StageBuiltinFields>
+          <StageContentPanel ref={extensionPanelRef} scopeKey="ticket" entityType="ticket" entityId={current?.id} readOnly={readonly} onDirtyChange={() => setIsDirty(true)} />
+          <StageContentPanel ref={extensionRightPanelRef} scopeKey="ticket" entityType="ticket" entityId={current?.id} readOnly={readonly} position="right" onDirtyChange={() => setIsDirty(true)} />
           <StageContentPanel ref={extensionFullPanelRef} scopeKey="ticket" entityType="ticket" entityId={current?.id} readOnly={readonly} position="full" onDirtyChange={() => setIsDirty(true)} />
         </Row>
       </Form>
