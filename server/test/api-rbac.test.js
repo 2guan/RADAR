@@ -141,6 +141,38 @@ if (!process.env.RADAR_RUN_API_TESTS) {
     assert.equal(releasePlan.rules[releaseFinalStatuses[1].id], true);
   });
 
+  test('系统设置可新增扩展字段并保存配置修订', async () => {
+    const administrator = await get('SELECT id, phone FROM user WHERE is_super = 1 LIMIT 1');
+    const token = await app.jwt.sign({ id: administrator.id, phone: administrator.phone });
+    const headers = { authorization: `Bearer ${token}`, 'x-requested-by': 'RADAR' };
+    const before = await get("SELECT COUNT(*) AS count FROM content_config_revision WHERE scope_key = 'requirement' AND config_type = 'content'");
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/settings/stage-content/requirement/fields',
+      headers,
+      payload: {
+        label: '接口回归扩展字段',
+        field_kind: 'extension',
+        input_type: 'text',
+        source_key: '',
+        multiple: false,
+        column_span: 12,
+        visible: true,
+        list_visible: false,
+        filterable: false,
+        dashboard_dimension: false,
+        sort: 0,
+        rules: {},
+      },
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.json().data.field_kind, 'extension');
+    assert.equal(response.json().data.label, '接口回归扩展字段');
+    const after = await get("SELECT COUNT(*) AS count FROM content_config_revision WHERE scope_key = 'requirement' AND config_type = 'content'");
+    assert.equal(after.count, before.count + 1);
+  });
+
   test('交付件上传模板显示文件名且可删除', async () => {
     const administrator = await get('SELECT id, phone FROM user WHERE is_super = 1 LIMIT 1');
     const token = await app.jwt.sign({ id: administrator.id, phone: administrator.phone });
