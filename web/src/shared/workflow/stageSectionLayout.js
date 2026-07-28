@@ -2,7 +2,7 @@
  * 文件：web/src/shared/workflow/stageSectionLayout.js
  * 说明：sort 是全局顺序；每个分区只通过 layout_mode 决定占左、右或整行。
  * 用途：统一计算阶段分区在详情页和分区配置预览中的行、列位置。
- * 作者：Codex、hengguan
+ * 作者：hengguan
  */
 
 /**
