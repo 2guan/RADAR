@@ -29,7 +29,7 @@ import {
   calcDeviation, formatCoverageText, generateTestTaskCode,
   getWorkItem, workItemCodesInReleasePoints, releaseDateMapForCodes,
 } from '../../development/index.js';
-import { codePrefix, formatCode } from '../../../shared/utils/code-template.js';
+import { codePrefix, codeTemplateValues, formatCode } from '../../../shared/utils/code-template.js';
 
 // 导入模板列定义
 const IO_COLUMNS = [
@@ -219,6 +219,7 @@ export default async function testTaskRoutes(fastify) {
     if (!testType) throw badRequest('请选择测试类型');
     const req = await getWorkItem(reqCode);
     if (!req) throw notFound('需求/工单不存在');
+    const releaseWindow = (await releaseDateMapForCodes([reqCode]))[reqCode];
 
     const main = req.main_systems || [];
     const collab = req.collab_test_systems || [];
@@ -229,8 +230,9 @@ export default async function testTaskRoutes(fastify) {
     const sysMap = new Map(systems.map(s => [s.sys_code, s.sys_name]));
 
     const tplRow = await get(`SELECT value FROM app_config WHERE key = 'code.test.${testType}'`);
-    const tpl = tplRow?.value || `${testType}_{需求/工单编号}_{序号}`;
-    const prefix = codePrefix(tpl, { '需求/工单编号': reqCode });
+    const tpl = tplRow?.value || `${testType}_{需求/工单编号}_{序号[3]}`;
+    const codeValues = codeTemplateValues({ releaseWindow, workItemCode: reqCode });
+    const prefix = codePrefix(tpl, codeValues);
 
     const existingCodes = await all(`SELECT task_code FROM test_task WHERE task_code LIKE ?`, `${prefix}%`);
     let max = 0;
@@ -250,8 +252,7 @@ export default async function testTaskRoutes(fastify) {
       overallTaskCode = overallExist.task_code;
       overallTaskName = overallExist.task_name;
     } else {
-      const seq = String(currentMax + 1).padStart(3, '0');
-      overallTaskCode = formatCode(tpl, { '需求/工单编号': reqCode }, seq);
+      overallTaskCode = formatCode(tpl, codeValues, currentMax + 1);
     }
 
     const firstMainSysCode = main[0] || null;
@@ -300,8 +301,7 @@ export default async function testTaskRoutes(fastify) {
         });
       } else {
         splitMax++;
-        const seq = String(splitMax).padStart(3, '0');
-        const taskCode = formatCode(tpl, { '需求/工单编号': reqCode }, seq);
+        const taskCode = formatCode(tpl, codeValues, splitMax);
         const taskName = `${testType}-${req.title}-${sysName}`;
         splitRows.push({
           sysCode: item.sysCode,

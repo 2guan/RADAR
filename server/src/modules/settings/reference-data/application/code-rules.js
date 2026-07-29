@@ -17,8 +17,14 @@ export async function getCodeRuleTemplate(key, fallback) {
 
 /** 需求、工单尚未生成自身编号，不能将自身作为编号模板变量。 */
 export function validateCodeRuleTemplate(key, template) {
+  const value = String(template || '');
+  const invalidSequenceWidth = [...value.matchAll(/\{序号\[([^\]]*)\]\}/g)]
+    .some((match) => !/^[1-9]\d*$/.test(match[1]) || Number(match[1]) > 64);
+  if (invalidSequenceWidth || (value.includes('{序号[') && !/\{序号\[[^\]]*\]\}/.test(value))) {
+    return '序号位数必须是 1 至 64 的正整数，例如 {序号[3]}';
+  }
   if (['code.requirement', 'code.ticket'].includes(key)
-    && WORK_ITEM_CODE_PLACEHOLDERS.some((placeholder) => String(template || '').includes(placeholder))) {
+    && WORK_ITEM_CODE_PLACEHOLDERS.some((placeholder) => value.includes(placeholder))) {
     return `${key === 'code.requirement' ? '需求' : '工单'}编号规则不能使用 {需求/工单编号}`;
   }
   return null;

@@ -41,6 +41,11 @@ export default function AppConfigForm({ mode, items }) {
   const watchSEC = Form.useWatch('code.test.SEC', form);
   const watchRelApply = Form.useWatch('code.release_apply', form);
 
+  const normalizeCodeTemplate = (value) => String(value || '')
+    .replaceAll('{投产点（投产窗口）}', '{投产点}')
+    .replaceAll('{投产窗口}', '{投产点}')
+    .replaceAll('{序号}', '{序号[3]}');
+
   useEffect(() => {
     apiGet('/settings/app-config').then((rows) => {
       const map = {};
@@ -52,7 +57,9 @@ export default function AppConfigForm({ mode, items }) {
           } else if (def.type === 'number') {
             map[r.key] = r.value !== null && r.value !== '' ? Number(r.value) : undefined;
           } else {
-            map[r.key] = r.value;
+            map[r.key] = mode === 'code' && r.key.startsWith('code.')
+              ? normalizeCodeTemplate(r.value)
+              : r.value;
           }
         } else {
           map[r.key] = r.value;
@@ -127,14 +134,15 @@ export default function AppConfigForm({ mode, items }) {
     const activePattern = pattern || fallbackDefault;
     if (!activePattern) return '—';
     return activePattern
-      .replace('{投产窗口}', '20260630')
-      .replace('{投产点（投产窗口）}', '20260630')
-      .replace('{版本年月}', '202606')
-      .replace('{需求/工单编号}', 'REQ-20260630-003')
-      .replace('{需求编号}', 'REQ-20260630-003')
-      .replace('{当前年月}', '202607')
-      .replace('{当前年月日}', '20260729')
-      .replace('{序号}', '001');
+      .replaceAll('{投产点}', '20260630')
+      .replaceAll('{投产窗口}', '20260630')
+      .replaceAll('{投产点（投产窗口）}', '20260630')
+      .replaceAll('{版本年月}', '202606')
+      .replaceAll('{需求/工单编号}', 'REQ-20260630-003')
+      .replaceAll('{需求编号}', 'REQ-20260630-003')
+      .replaceAll('{当前年月}', '202607')
+      .replaceAll('{当前年月日}', '20260729')
+      .replace(/\{序号(?:\[(\d+)\])?\}/g, (_, width) => String(1).padStart(Number(width || 3), '0'));
   };
 
   // 1. 平台信息自定义布局
@@ -300,49 +308,49 @@ export default function AppConfigForm({ mode, items }) {
                 <Col span={12}>
                   <div style={{ fontSize: 10, color: 'var(--radar-text-secondary)', marginBottom: 2 }}>需求单号：</div>
                   <div className="code-pill" style={{ display: 'block', textAlign: 'center', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', fontSize: 11, padding: '2px 4px' }}>
-                    {mockGenerate(watchReq, 'REQ-{投产窗口}-{序号}')}
+                    {mockGenerate(watchReq, 'REQ-{投产点}-{序号[3]}')}
                   </div>
                 </Col>
                 <Col span={12}>
                   <div style={{ fontSize: 10, color: 'var(--radar-text-secondary)', marginBottom: 2 }}>开发单号：</div>
                   <div className="code-pill" style={{ display: 'block', textAlign: 'center', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', fontSize: 11, padding: '2px 4px' }}>
-                    {mockGenerate(watchDev, '{需求/工单编号}-DEV-{序号}')}
+                    {mockGenerate(watchDev, '{需求/工单编号}-DEV-{序号[3]}')}
                   </div>
                 </Col>
                 <Col span={12}>
                   <div style={{ fontSize: 10, color: 'var(--radar-text-secondary)', marginBottom: 2 }}>工单单号：</div>
                   <div className="code-pill" style={{ display: 'block', textAlign: 'center', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', fontSize: 11, padding: '2px 4px' }}>
-                    {mockGenerate(watchTicket, 'TK-{投产窗口}-{序号}')}
+                    {mockGenerate(watchTicket, 'TK-{投产点}-{序号[3]}')}
                   </div>
                 </Col>
                 <Col span={12}>
                   <div style={{ fontSize: 10, color: 'var(--radar-text-secondary)', marginBottom: 2 }}>SIT测试单号：</div>
                   <div className="code-pill" style={{ display: 'block', textAlign: 'center', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', fontSize: 11, padding: '2px 4px' }}>
-                    {mockGenerate(watchSIT, '{需求/工单编号}-SIT-{序号}')}
+                    {mockGenerate(watchSIT, '{需求/工单编号}-SIT-{序号[3]}')}
                   </div>
                 </Col>
                 <Col span={12}>
                   <div style={{ fontSize: 10, color: 'var(--radar-text-secondary)', marginBottom: 2 }}>UAT测试单号：</div>
                   <div className="code-pill" style={{ display: 'block', textAlign: 'center', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', fontSize: 11, padding: '2px 4px' }}>
-                    {mockGenerate(watchUAT, '{需求/工单编号}-UAT-{序号}')}
+                    {mockGenerate(watchUAT, '{需求/工单编号}-UAT-{序号[3]}')}
                   </div>
                 </Col>
                 <Col span={12}>
                   <div style={{ fontSize: 10, color: 'var(--radar-text-secondary)', marginBottom: 2 }}>NFT测试单号：</div>
                   <div className="code-pill" style={{ display: 'block', textAlign: 'center', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', fontSize: 11, padding: '2px 4px' }}>
-                    {mockGenerate(watchNFT, '{需求/工单编号}-NFT-{序号}')}
+                    {mockGenerate(watchNFT, '{需求/工单编号}-NFT-{序号[3]}')}
                   </div>
                 </Col>
                 <Col span={12}>
                   <div style={{ fontSize: 10, color: 'var(--radar-text-secondary)', marginBottom: 2 }}>SEC测试单号：</div>
                   <div className="code-pill" style={{ display: 'block', textAlign: 'center', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', fontSize: 11, padding: '2px 4px' }}>
-                    {mockGenerate(watchSEC, '{需求/工单编号}-SEC-{序号}')}
+                    {mockGenerate(watchSEC, '{需求/工单编号}-SEC-{序号[3]}')}
                   </div>
                 </Col>
                 <Col span={12}>
                   <div style={{ fontSize: 10, color: 'var(--radar-text-secondary)', marginBottom: 2 }}>投产变更单号：</div>
                   <div className="code-pill" style={{ display: 'block', textAlign: 'center', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', fontSize: 11, padding: '2px 4px' }}>
-                    {mockGenerate(watchRelApply, '{版本年月}-10bg{序号}')}
+                    {mockGenerate(watchRelApply, '{版本年月}-10bg{序号[3]}')}
                   </div>
                 </Col>
               </Row>
@@ -354,14 +362,13 @@ export default function AppConfigForm({ mode, items }) {
               message="占位符说明"
               description={
                 <div style={{ fontSize: 11, lineHeight: '1.6' }}>
-                  规则输入框中可使用以下花括号占位符：
+                  规则输入框中可使用以下{}占位符：
                   <ul style={{ paddingLeft: 16, margin: '4px 0 0' }}>
-                    <li><strong>{"{投产窗口}"}</strong>：投产点（投产窗口），如 `20260630`；也兼容 {"{投产点（投产窗口）}"}</li>
-                    <li><strong>{"{序号}"}</strong>：流水序号，如 `001`</li>
-                    <li><strong>{"{当前年月}"}</strong>：系统当前年月，如 `202607`</li>
-                    <li><strong>{"{当前年月日}"}</strong>：系统当前年月日，如 `20260729`</li>
-                    <li><strong>{"{需求/工单编号}"}</strong>：关联工作项编号，如 `REQ-20260630-003`；需求、工单自身编号规则不可使用</li>
-                    <li><strong>{"{版本年月}"}</strong>：投产申请编号规则的历史兼容占位符，如 `202606`</li>
+                    <li><strong>{"{投产点}"}</strong>：投产点，如 `20260630`。</li>
+                    <li><strong>{"{序号[3]}"}</strong>：流水序号，如 `001`，[3]为序号位数。</li>
+                    <li><strong>{"{当前年月}"}</strong>：系统当前年月，如 `202607`。</li>
+                    <li><strong>{"{当前年月日}"}</strong>：系统当前年月日，如 `20260729`。</li>
+                    <li><strong>{"{需求/工单编号}"}</strong>：需求或工单编号，如 `REQ-20260630-003`；需求、工单自身编号规则不可使用。</li>
                   </ul>
                 </div>
               }

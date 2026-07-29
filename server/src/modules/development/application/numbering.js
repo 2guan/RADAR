@@ -19,7 +19,7 @@ async function initialSequence(ruleKey, prefix, table) {
 /** 生成开发任务编号。 */
 export async function generateDevTaskCode(reqCode, releaseWindow) {
   const 需求工单编号 = String(reqCode || '').trim();
-  const template = await getCodeRuleTemplate('code.dev', 'RW_{需求/工单编号}_{序号}');
+  const template = await getCodeRuleTemplate('code.dev', 'RW_{需求/工单编号}_{序号[3]}');
   const values = codeTemplateValues({ releaseWindow, workItemCode: 需求工单编号 });
   const prefix = codePrefix(template, values);
   const sequence = await reserveCodeSequence({
@@ -35,7 +35,7 @@ export async function generateTestTaskCode(testType, reqCode, releaseWindow) {
   const 类型 = String(testType || '').trim();
   const 需求工单编号 = String(reqCode || '').trim();
   const ruleKey = `code.test.${类型}`;
-  const template = await getCodeRuleTemplate(ruleKey, `${类型}_{需求/工单编号}_{序号}`);
+  const template = await getCodeRuleTemplate(ruleKey, `${类型}_{需求/工单编号}_{序号[3]}`);
   const values = { 类型, ...codeTemplateValues({ releaseWindow, workItemCode: 需求工单编号 }) };
   const prefix = codePrefix(template, values);
   const sequence = await reserveCodeSequence({

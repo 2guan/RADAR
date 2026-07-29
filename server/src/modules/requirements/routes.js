@@ -276,7 +276,7 @@ export default async function requirementRoutes(fastify) {
     const rp = body.release_point_id ? await get('SELECT * FROM release_point WHERE id = ?', body.release_point_id) : null;
     if (body.release_point_id && !rp) throw badRequest('投产点不存在');
     if (!String(body.req_code || '').trim() && await requirementCodeRequiresReleasePoint() && !rp) {
-      throw badRequest('当前需求编号规则使用投产点（投产窗口），请先选择计划投产点');
+      throw badRequest('当前需求编号规则使用投产点，请先选择计划投产点');
     }
     const initialStatus = await defaultProcessStatus('需求', 'initial', '需求登记');
 
@@ -359,7 +359,7 @@ export default async function requirementRoutes(fastify) {
     const releasePointId = request.query.releasePointId;
     const requiresReleasePoint = await requirementCodeRequiresReleasePoint();
     if (requiresReleasePoint && !releasePointId) {
-      throw badRequest('当前需求编号规则使用投产点（投产窗口），请先选择计划投产点');
+      throw badRequest('当前需求编号规则使用投产点，请先选择计划投产点');
     }
     const rp = releasePointId ? await get('SELECT release_date FROM release_point WHERE id = ?', releasePointId) : null;
     if (releasePointId && !rp) throw badRequest('投产点不存在');

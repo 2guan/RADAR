@@ -17,10 +17,10 @@ export function normalizeReleaseWindow(releaseWindow) {
   return /^\d{8}$/.test(value) ? value : currentDateStr();
 }
 
-/** 判断模板是否依赖计划投产点。保留旧 {投产窗口}，并支持设置页展示的完整别名。 */
+/** 判断模板是否依赖计划投产点。保留历史占位符，规范写法为 {投产点}。 */
 export function templateUsesReleaseWindow(template) {
   const value = String(template || '');
-  return value.includes('{投产窗口}') || value.includes('{投产点（投产窗口）}');
+  return value.includes('{投产点}') || value.includes('{投产窗口}') || value.includes('{投产点（投产窗口）}');
 }
 
 /**
@@ -31,12 +31,29 @@ export function codeTemplateValues({ releaseWindow, workItemCode, now = new Date
   const 当前年月日 = currentDateStr(now);
   const 投产窗口 = normalizeReleaseWindow(releaseWindow);
   return {
+    投产点: 投产窗口,
     投产窗口,
     '投产点（投产窗口）': 投产窗口,
     当前年月: 当前年月日.slice(0, 6),
     当前年月日,
     '需求/工单编号': String(workItemCode || '').trim(),
   };
+}
+
+/** 解析序号位数；无显式位数时保持历史三位补零，非法位数不替换。 */
+function sequenceValue(sequence, width) {
+  if (sequence === '') return '';
+  const digits = width === undefined ? 3 : Number(width);
+  if (!Number.isInteger(digits) || digits < 1 || digits > 64) return null;
+  return String(sequence).padStart(digits, '0');
+}
+
+/** 替换 {序号} 与 {序号[n]}，用于前缀计算和最终编号生成。 */
+function applySequencePlaceholder(template, sequence) {
+  return String(template || '').replace(/\{序号(?:\[(\d+)\])?\}/g, (placeholder, width) => {
+    const value = sequenceValue(sequence, width);
+    return value === null ? placeholder : value;
+  });
 }
 
 /** 将业务变量替换进模板；序号由调用方单独传入，便于先计算固定前缀。 */
@@ -53,12 +70,12 @@ export function applyCodeTemplate(template, values = {}) {
 
 /** 返回模板固定部分，作为编号序列的隔离维度。 */
 export function codePrefix(template, values) {
-  return applyCodeTemplate(template, { ...values, 序号: '' });
+  return applySequencePlaceholder(applyCodeTemplate(template, values), '');
 }
 
-/** 保留既有三位补零规则，并允许序号超过三位时自然扩展。 */
+/** 保留既有三位补零规则，并支持以 {序号[n]} 指定流水号位数。 */
 export function formatCode(template, values, sequence) {
-  return applyCodeTemplate(template, { ...values, 序号: String(sequence).padStart(3, '0') });
+  return applySequencePlaceholder(applyCodeTemplate(template, values), sequence);
 }
 
 /** 从已有编号集中计算历史最大值后的下一序号，只接受纯数字尾号。 */

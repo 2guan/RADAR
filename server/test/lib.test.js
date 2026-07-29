@@ -62,16 +62,21 @@ test('编号模板：需求/工单编号为标准占位符，并兼容历史需�
   assert.equal(formatCode('RW_{需求编号}_{序号}', values, 2), 'RW_TK_20260630_003_002');
 });
 
-test('编号模板：公共占位符提供投产窗口、当前日期与关联工作项编号', () => {
+test('编号模板：公共占位符提供投产点、当前日期与关联工作项编号', () => {
   const values = codeTemplateValues({
     releaseWindow: '20261231', workItemCode: 'REQ_001', now: new Date(2026, 6, 29),
   });
   assert.equal(formatCode(
-    '{投产点（投产窗口）}_{当前年月}_{当前年月日}_{需求/工单编号}_{序号}', values, 7,
-  ), '20261231_202607_20260729_REQ_001_007');
+    '{投产点}_{当前年月}_{当前年月日}_{需求/工单编号}_{序号[2]}', values, 7,
+  ), '20261231_202607_20260729_REQ_001_07');
+  assert.equal(formatCode('RC_{投产点}_{序号[4]}', values, 7), 'RC_20261231_0007');
+  assert.equal(codePrefix('RC_{投产点}_{序号[4]}', values), 'RC_20261231_');
+  assert.equal(formatCode('RC_{投产窗口}_{序号}', values, 7), 'RC_20261231_007');
+  assert.equal(templateUsesReleaseWindow('{投产点}_{序号[3]}'), true);
   assert.equal(templateUsesReleaseWindow('{投产窗口}_{序号}'), true);
   assert.equal(templateUsesReleaseWindow('{当前年月}_{序号}'), false);
   assert.match(validateCodeRuleTemplate('code.requirement', '{需求/工单编号}_{序号}'), /不能使用/);
+  assert.match(validateCodeRuleTemplate('code.dev', '{序号[0]}'), /位数/);
   assert.equal(validateCodeRuleTemplate('code.dev', '{需求/工单编号}_{序号}'), null);
 });
 

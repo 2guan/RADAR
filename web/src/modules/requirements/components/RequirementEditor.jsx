@@ -401,7 +401,7 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
                         readOnly={readonly || codeLocked}
                         style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', letterSpacing: '0.3px' }}
                         suffix={(codeLocked || readonly) ? null : (
-                          <Tooltip title="根据当前编号规则预览编号；规则包含投产点（投产窗口）时需先选择计划投产点，保存成功后才正式占用">
+                          <Tooltip title="根据当前编号规则预览编号；规则包含投产点时需先选择计划投产点，保存成功后才正式占用">
                             <Button
                               type="link"
                               size="small"

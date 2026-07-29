@@ -32,7 +32,7 @@ import {
   calcDeviation, decodeChangeItem, formatImpactItemsText, generateDevTaskCode,
   getWorkItem, workItemCodesInReleasePoints, releaseDateMapForCodes,
 } from '../index.js';
-import { codePrefix, formatCode } from '../../../shared/utils/code-template.js';
+import { codePrefix, codeTemplateValues, formatCode } from '../../../shared/utils/code-template.js';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
 
@@ -339,6 +339,7 @@ export default async function devTaskRoutes(fastify) {
     if (!reqCode) throw badRequest('请选择需求/工单');
     const req = await getWorkItem(reqCode);
     if (!req) throw notFound('需求/工单不存在');
+    const releaseWindow = (await releaseDateMapForCodes([reqCode]))[reqCode];
 
     const main = req.main_systems || [];
     const collab = req.collab_dev_systems || [];
@@ -365,8 +366,9 @@ export default async function devTaskRoutes(fastify) {
     }
 
     const tplRow = await get("SELECT value FROM app_config WHERE key = 'code.dev'");
-    const tpl = tplRow?.value || 'RW_{需求/工单编号}_{序号}';
-    const prefix = codePrefix(tpl, { '需求/工单编号': reqCode });
+    const tpl = tplRow?.value || 'RW_{需求/工单编号}_{序号[3]}';
+    const codeValues = codeTemplateValues({ releaseWindow, workItemCode: reqCode });
+    const prefix = codePrefix(tpl, codeValues);
 
     const existingCodes = await all(`SELECT task_code FROM dev_task WHERE task_code LIKE ?`, `${prefix}%`);
     let max = 0;
@@ -394,8 +396,7 @@ export default async function devTaskRoutes(fastify) {
         });
       } else {
         currentMax++;
-        const seq = String(currentMax).padStart(3, '0');
-        const taskCode = formatCode(tpl, { '需求/工单编号': reqCode }, seq);
+        const taskCode = formatCode(tpl, codeValues, currentMax);
         const taskName = `RW-${req.title}-${sysName}`;
         list.push({
           sysCode: item.sysCode,

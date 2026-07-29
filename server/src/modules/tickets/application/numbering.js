@@ -1,6 +1,6 @@
 /**
  * 文件：server/src/modules/tickets/application/numbering.js
- * 说明：工单编号继续使用 code.ticket 模板和 TK_{投产窗口}_{序号} 默认格式；首次领号会扫描历史记录。
+ * 说明：工单编号继续使用 code.ticket 模板和 TK_{投产点}_{序号[3]} 默认格式；首次领号会扫描历史记录。
  * 用途：工单模块的编号领域服务，负责将业务模板、历史数据和平台序列表组合为唯一编号。
  * 作者：hengguan
  */
@@ -20,7 +20,7 @@ async function initialSequence(ruleKey, prefix) {
 
 /** 生成工单编号。 */
 export async function generateTicketCode(releaseWindow) {
-  const template = await getCodeRuleTemplate('code.ticket', 'TK_{投产窗口}_{序号}');
+  const template = await getCodeRuleTemplate('code.ticket', 'TK_{投产点}_{序号[3]}');
   const values = codeTemplateValues({ releaseWindow });
   const prefix = codePrefix(template, values);
   const sequence = await reserveCodeSequence({
@@ -32,5 +32,5 @@ export async function generateTicketCode(releaseWindow) {
 }
 
 export async function ticketCodeRequiresReleasePoint() {
-  return templateUsesReleaseWindow(await getCodeRuleTemplate('code.ticket', 'TK_{投产窗口}_{序号}'));
+  return templateUsesReleaseWindow(await getCodeRuleTemplate('code.ticket', 'TK_{投产点}_{序号[3]}'));
 }
