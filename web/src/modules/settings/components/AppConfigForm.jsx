@@ -129,6 +129,7 @@ export default function AppConfigForm({ mode, items }) {
     return activePattern
       .replace('{投产窗口}', '20260630')
       .replace('{版本年月}', '202606')
+      .replace('{需求/工单编号}', 'REQ-20260630-003')
       .replace('{需求编号}', 'REQ-20260630-003')
       .replace('{序号}', '001');
   };
@@ -302,7 +303,7 @@ export default function AppConfigForm({ mode, items }) {
                 <Col span={12}>
                   <div style={{ fontSize: 10, color: 'var(--radar-text-secondary)', marginBottom: 2 }}>开发单号：</div>
                   <div className="code-pill" style={{ display: 'block', textAlign: 'center', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', fontSize: 11, padding: '2px 4px' }}>
-                    {mockGenerate(watchDev, '{需求编号}-DEV-{序号}')}
+                    {mockGenerate(watchDev, '{需求/工单编号}-DEV-{序号}')}
                   </div>
                 </Col>
                 <Col span={12}>
@@ -314,25 +315,25 @@ export default function AppConfigForm({ mode, items }) {
                 <Col span={12}>
                   <div style={{ fontSize: 10, color: 'var(--radar-text-secondary)', marginBottom: 2 }}>SIT测试单号：</div>
                   <div className="code-pill" style={{ display: 'block', textAlign: 'center', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', fontSize: 11, padding: '2px 4px' }}>
-                    {mockGenerate(watchSIT, '{需求编号}-SIT-{序号}')}
+                    {mockGenerate(watchSIT, '{需求/工单编号}-SIT-{序号}')}
                   </div>
                 </Col>
                 <Col span={12}>
                   <div style={{ fontSize: 10, color: 'var(--radar-text-secondary)', marginBottom: 2 }}>UAT测试单号：</div>
                   <div className="code-pill" style={{ display: 'block', textAlign: 'center', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', fontSize: 11, padding: '2px 4px' }}>
-                    {mockGenerate(watchUAT, '{需求编号}-UAT-{序号}')}
+                    {mockGenerate(watchUAT, '{需求/工单编号}-UAT-{序号}')}
                   </div>
                 </Col>
                 <Col span={12}>
                   <div style={{ fontSize: 10, color: 'var(--radar-text-secondary)', marginBottom: 2 }}>NFT测试单号：</div>
                   <div className="code-pill" style={{ display: 'block', textAlign: 'center', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', fontSize: 11, padding: '2px 4px' }}>
-                    {mockGenerate(watchNFT, '{需求编号}-NFT-{序号}')}
+                    {mockGenerate(watchNFT, '{需求/工单编号}-NFT-{序号}')}
                   </div>
                 </Col>
                 <Col span={12}>
                   <div style={{ fontSize: 10, color: 'var(--radar-text-secondary)', marginBottom: 2 }}>SEC测试单号：</div>
                   <div className="code-pill" style={{ display: 'block', textAlign: 'center', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', fontSize: 11, padding: '2px 4px' }}>
-                    {mockGenerate(watchSEC, '{需求编号}-SEC-{序号}')}
+                    {mockGenerate(watchSEC, '{需求/工单编号}-SEC-{序号}')}
                   </div>
                 </Col>
                 <Col span={12}>
@@ -354,7 +355,7 @@ export default function AppConfigForm({ mode, items }) {
                   <ul style={{ paddingLeft: 16, margin: '4px 0 0' }}>
                     <li><strong>{"{投产窗口}"}</strong>：如 `20260630`</li>
                     <li><strong>{"{版本年月}"}</strong>：如 `202606`</li>
-                    <li><strong>{"{需求编号}"}</strong>：如 `REQ-20260630-003`</li>
+                    <li><strong>{"{需求/工单编号}"}</strong>：如 `REQ-20260630-003`</li>
                     <li><strong>{"{序号}"}</strong>：流水序号，如 `001`</li>
                   </ul>
                 </div>

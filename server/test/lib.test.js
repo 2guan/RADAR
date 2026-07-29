@@ -24,6 +24,7 @@ import { WORK_ITEM_TYPES, isWorkItemType } from '../src/shared/contracts/work-it
 import { REQUIREMENT_WORK_ITEM_TYPE } from '../src/modules/requirements/contracts/work-item.js';
 import { TICKET_WORK_ITEM_TYPE } from '../src/modules/tickets/contracts/work-item.js';
 import { workItemCodesInReleasePoints } from '../src/modules/development/index.js';
+import { codePrefix, formatCode } from '../src/shared/utils/code-template.js';
 import { MOCK_ISSUE_SNAPSHOT } from '../scripts/mock-data.js';
 
 test('运行时路径：平台配置从仓库根目录解析静态资源与持久化默认目录', () => {
@@ -49,6 +50,13 @@ test('工作项公共契约：需求和工单保持独立且类型受控', () =>
 
 test('工作项投产点筛选：空集合代表全部投产点，不追加空编号条件', async () => {
   assert.equal(await workItemCodesInReleasePoints([]), null);
+});
+
+test('编号模板：需求/工单编号为标准占位符，并兼容历史需求编号占位符', () => {
+  const values = { '需求/工单编号': 'TK_20260630_003' };
+  assert.equal(codePrefix('RW_{需求/工单编号}_{序号}', values), 'RW_TK_20260630_003_');
+  assert.equal(formatCode('RW_{需求/工单编号}_{序号}', values, 1), 'RW_TK_20260630_003_001');
+  assert.equal(formatCode('RW_{需求编号}_{序号}', values, 2), 'RW_TK_20260630_003_002');
 });
 
 test('密码哈希：正确密码校验通过、错误密码失败', () => {

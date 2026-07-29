@@ -173,6 +173,33 @@ if (!process.env.RADAR_RUN_API_TESTS) {
     assert.equal(after.count, before.count + 1);
   });
 
+  test('系统设置新增交付件时由服务端生成编码并保存配置修订', async () => {
+    const administrator = await get('SELECT id, phone FROM user WHERE is_super = 1 LIMIT 1');
+    const token = await app.jwt.sign({ id: administrator.id, phone: administrator.phone });
+    const headers = { authorization: `Bearer ${token}`, 'x-requested-by': 'RADAR' };
+    const before = await get("SELECT COUNT(*) AS count FROM content_config_revision WHERE scope_key = 'requirement' AND config_type = 'deliverable'");
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/settings/stage-deliverables/requirement',
+      headers,
+      payload: {
+        deliverable_key: 'client_supplied_key',
+        label: '接口回归交付件',
+        input_mode: 'both',
+        visible: true,
+        sort: 0,
+        rules: {},
+      },
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.json().data.label, '接口回归交付件');
+    assert.match(response.json().data.deliverable_key, /^deliverable_[a-f0-9]{32}$/);
+    assert.notEqual(response.json().data.deliverable_key, 'client_supplied_key');
+    const after = await get("SELECT COUNT(*) AS count FROM content_config_revision WHERE scope_key = 'requirement' AND config_type = 'deliverable'");
+    assert.equal(after.count, before.count + 1);
+  });
+
   test('交付件上传模板显示文件名且可删除', async () => {
     const administrator = await get('SELECT id, phone FROM user WHERE is_super = 1 LIMIT 1');
     const token = await app.jwt.sign({ id: administrator.id, phone: administrator.phone });

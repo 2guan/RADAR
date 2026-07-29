@@ -29,6 +29,7 @@ import {
   calcDeviation, formatCoverageText, generateTestTaskCode,
   getWorkItem, workItemCodesInReleasePoints, releaseDateMapForCodes,
 } from '../../development/index.js';
+import { codePrefix, formatCode } from '../../../shared/utils/code-template.js';
 
 // 导入模板列定义
 const IO_COLUMNS = [
@@ -228,8 +229,8 @@ export default async function testTaskRoutes(fastify) {
     const sysMap = new Map(systems.map(s => [s.sys_code, s.sys_name]));
 
     const tplRow = await get(`SELECT value FROM app_config WHERE key = 'code.test.${testType}'`);
-    const tpl = tplRow?.value || `${testType}_{需求编号}_{序号}`;
-    const prefix = tpl.replace('{需求编号}', reqCode).replace('{序号}', '');
+    const tpl = tplRow?.value || `${testType}_{需求/工单编号}_{序号}`;
+    const prefix = codePrefix(tpl, { '需求/工单编号': reqCode });
 
     const existingCodes = await all(`SELECT task_code FROM test_task WHERE task_code LIKE ?`, `${prefix}%`);
     let max = 0;
@@ -250,7 +251,7 @@ export default async function testTaskRoutes(fastify) {
       overallTaskName = overallExist.task_name;
     } else {
       const seq = String(currentMax + 1).padStart(3, '0');
-      overallTaskCode = tpl.replace('{需求编号}', reqCode).replace('{序号}', seq);
+      overallTaskCode = formatCode(tpl, { '需求/工单编号': reqCode }, seq);
     }
 
     const firstMainSysCode = main[0] || null;
@@ -300,7 +301,7 @@ export default async function testTaskRoutes(fastify) {
       } else {
         splitMax++;
         const seq = String(splitMax).padStart(3, '0');
-        const taskCode = tpl.replace('{需求编号}', reqCode).replace('{序号}', seq);
+        const taskCode = formatCode(tpl, { '需求/工单编号': reqCode }, seq);
         const taskName = `${testType}-${req.title}-${sysName}`;
         splitRows.push({
           sysCode: item.sysCode,

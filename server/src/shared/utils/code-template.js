@@ -20,7 +20,11 @@ export function normalizeReleaseWindow(releaseWindow) {
 
 /** 将业务变量替换进模板；序号由调用方单独传入，便于先计算固定前缀。 */
 export function applyCodeTemplate(template, values = {}) {
-  return Object.entries(values).reduce(
+  const workItemCode = values['需求/工单编号'] ?? values.需求编号;
+  const compatibleValues = workItemCode === undefined
+    ? values
+    : { ...values, '需求/工单编号': workItemCode, 需求编号: workItemCode };
+  return Object.entries(compatibleValues).reduce(
     (result, [key, value]) => result.replaceAll(`{${key}}`, String(value ?? '')),
     String(template || ''),
   );

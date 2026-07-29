@@ -269,38 +269,45 @@ function SectionEditor({ open, config, messageApi, onClose, onSaved, isMobile })
 function FieldEditor({ open, field, config, sourceOptions, messageApi, onClose, onSaved, isMobile }) {
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
-  const isNew = !field;
+  const isNew = !field || field.__new === true;
   const isExtension = isNew || field?.field_kind === 'extension';
   useEffect(() => {
     if (!open) return;
-    form.setFieldsValue(field ? {
-      ...field,
-      rulesSelected: rulesToSelected(field.rules, config?.statuses),
-      multiple: !!field.multiple,
-      visible: !!field.visible,
-      list_visible: !!field.list_visible,
-      filterable: !!field.filterable,
-      dashboard_dimension: !!field.dashboard_dimension,
-    } : {
+    form.resetFields();
+    if (!isNew) {
+      form.setFieldsValue({
+        ...field,
+        rulesSelected: rulesToSelected(field.rules, config?.statuses),
+        multiple: !!field.multiple,
+        visible: !!field.visible,
+        list_visible: !!field.list_visible,
+        filterable: !!field.filterable,
+        dashboard_dimension: !!field.dashboard_dimension,
+      });
+      return;
+    }
+    const extensionSection = (config?.sections || []).find((item) => item.section_key === 'extension');
+    form.setFieldsValue({
       field_kind: 'extension', input_type: 'text', source_key: '', multiple: false,
       // 新增字段默认仅显示在详情页；列表、筛选和仪表盘由管理员按实际口径主动启用。
+      section_id: extensionSection?.id,
       column_span: 12, visible: true, list_visible: false, filterable: false, dashboard_dimension: false, sort: 0, rulesSelected: [],
     });
-  }, [open, field, form]);
+  }, [open, field, isNew, config?.sections, config?.statuses, form]);
   const save = async () => {
     const values = await form.validateFields();
     setSaving(true);
     try {
       const data = { ...values, rules: selectedToRules(values.rulesSelected, config?.statuses) };
       delete data.rulesSelected;
-      if (field) await apiPut(`/settings/stage-content/${config.scope.scope_key}/fields/${field.id}`, data);
-      else await apiPost(`/settings/stage-content/${config.scope.scope_key}/fields`, data);
+      if (isNew) await apiPost(`/settings/stage-content/${config.scope.scope_key}/fields`, data);
+      else await apiPut(`/settings/stage-content/${config.scope.scope_key}/fields/${field.id}`, data);
       messageApi.success('输入项配置已保存');
       onSaved();
     } finally { setSaving(false); }
   };
   return (
-    <Modal open={open} title={field ? `输入项详情 · ${field.label}` : '新增扩展输入项'} width={isMobile ? 'calc(100vw - 16px)' : 760} onCancel={onClose} destroyOnHidden className="stage-config-editor-modal"
+    <Modal open={open} title={isNew ? '新增扩展输入项' : `输入项详情 · ${field.label}`} width={isMobile ? 'calc(100vw - 16px)' : 760} onCancel={onClose} destroyOnHidden className="stage-config-editor-modal"
       footer={<Space><Button onClick={onClose}>取消</Button><Button type="primary" loading={saving} onClick={save}>保存</Button></Space>}
       styles={{ body: { fontSize: 12, paddingTop: 14 } }}>
       <Form form={form} layout="vertical" className="editor-form stage-config-editor-form">
@@ -344,18 +351,22 @@ function DeliverableEditor({ open, deliverable, config, messageApi, onClose, onS
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
   const [removingTemplate, setRemovingTemplate] = useState(false);
+  const isNew = !deliverable;
   useEffect(() => {
     if (!open) return;
-    form.setFieldsValue(deliverable ? { ...deliverable, visible: !!deliverable.visible, rulesSelected: rulesToSelected(deliverable.rules, config?.statuses) } : { input_mode: 'both', visible: true, sort: 0, rulesSelected: [] });
-  }, [open, deliverable, form]);
+    form.resetFields();
+    form.setFieldsValue(isNew
+      ? { input_mode: 'both', visible: true, sort: 0, rulesSelected: [] }
+      : { ...deliverable, visible: !!deliverable.visible, rulesSelected: rulesToSelected(deliverable.rules, config?.statuses) });
+  }, [open, deliverable, isNew, config?.statuses, form]);
   const save = async () => {
     const values = await form.validateFields();
     setSaving(true);
     try {
       const data = { ...values, rules: selectedToRules(values.rulesSelected, config?.statuses) };
       delete data.rulesSelected;
-      if (deliverable) await apiPut(`/settings/stage-deliverables/${config.scope.scope_key}/${deliverable.id}`, data);
-      else await apiPost(`/settings/stage-deliverables/${config.scope.scope_key}`, data);
+      if (isNew) await apiPost(`/settings/stage-deliverables/${config.scope.scope_key}`, data);
+      else await apiPut(`/settings/stage-deliverables/${config.scope.scope_key}/${deliverable.id}`, data);
       messageApi.success('交付件配置已保存');
       onSaved();
     } finally { setSaving(false); }
@@ -381,15 +392,14 @@ function DeliverableEditor({ open, deliverable, config, messageApi, onClose, onS
   };
   const template = deliverable?.template;
   return (
-    <Modal open={open} title={deliverable ? `交付件详情 · ${deliverable.label}` : '新增交付件'} width={isMobile ? 'calc(100vw - 16px)' : 720} onCancel={onClose} destroyOnHidden className="stage-config-editor-modal"
+    <Modal open={open} title={isNew ? '新增交付件' : `交付件详情 · ${deliverable.label}`} width={isMobile ? 'calc(100vw - 16px)' : 720} onCancel={onClose} destroyOnHidden className="stage-config-editor-modal"
       footer={<Space><Button onClick={onClose}>取消</Button><Button type="primary" loading={saving} onClick={save}>保存</Button></Space>}
       styles={{ body: { fontSize: 12, paddingTop: 14 } }}>
       <Form form={form} layout="vertical" className="editor-form stage-config-editor-form">
         <div className="form-section-card">
           <div className="form-section-title">基本信息</div>
           <Row gutter={[16, 0]}>
-            {!deliverable && <Col span={12} xs={24}><Form.Item name="deliverable_key" label="交付件编码" extra="创建后不可修改，仅支持字母、数字和下划线" rules={[{ required: true }]}><Input placeholder="例如 rollback_plan" /></Form.Item></Col>}
-            <Col span={deliverable ? 24 : 12} xs={24}><Form.Item name="label" label="交付件名称" rules={[{ required: true }]}><Input /></Form.Item></Col>
+            <Col span={24} xs={24}><Form.Item name="label" label="交付件名称" rules={[{ required: true }]}><Input /></Form.Item></Col>
             <Col span={12} xs={24}><Form.Item name="input_mode" label="提交方式" rules={[{ required: true }]}><Select options={[{ value: 'file', label: '上传文件' }, { value: 'path', label: '填写路径' }, { value: 'both', label: '都可以' }]} /></Form.Item></Col>
             <Col span={6} xs={12}><Form.Item name="sort" label="排序"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
             <Col span={6} xs={12}><Form.Item name="visible" label="是否显示" valuePropName="checked"><Checkbox>显示</Checkbox></Form.Item></Col>

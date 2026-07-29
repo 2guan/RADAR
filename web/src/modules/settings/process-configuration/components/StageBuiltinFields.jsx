@@ -1,14 +1,12 @@
 /**
  * 文件：web/src/modules/settings/process-configuration/components/StageBuiltinFields.jsx
  * 说明：内置输入项与扩展输入项共用阶段配置中的分区、排序和宽度，不再由业务页面写死。
- * 用途：以 Portal 将业务页面保留的专业字段控件投放到配置指定的分区卡片。
+ * 用途：将业务页面保留的专业字段控件直接渲染到配置指定的分区卡片。
  * 作者：hengguan
  */
 
-import { Children, createContext, createPortal, useContext, useEffect, useMemo, useState } from 'react';
+import { Children, useEffect, useMemo, useState } from 'react';
 import { invalidateStageContentData, loadStageContentSchema } from '../api/stageContentDataCache.js';
-
-const BuiltinFieldContext = createContext(null);
 
 function normalizeScope(scopeKey) {
   return String(scopeKey || '').replace(/[^a-zA-Z0-9_-]/g, '-');
@@ -26,7 +24,6 @@ function directFieldDescriptors(children) {
  */
 export default function StageBuiltinFields({ scopeKey, defaults = {}, children }) {
   const [schema, setSchema] = useState(null);
-  const [targets, setTargets] = useState({});
   const descriptors = useMemo(() => directFieldDescriptors(children), [children]);
 
   useEffect(() => {
@@ -56,13 +53,16 @@ export default function StageBuiltinFields({ scopeKey, defaults = {}, children }
       sort: definition.sort ?? index * 10,
       show_title: definition.show_title !== false,
     }));
-    const sections = schema?.sections || fallbackSections;
+    // 空配置与请求尚未返回时都必须保留业务页面声明的默认分区，避免把所有
+    // 内置字段误判为无挂载位置。
+    const sections = schema?.sections?.length ? schema.sections : fallbackSections;
     const sectionById = new Map(sections.map((section) => [section.id, section]));
-    const descriptorByKey = new Map(descriptors.map((field) => [field.fieldKey, field]));
     const placementByKey = new Map();
     for (const descriptor of descriptors) {
       const field = configured.get(descriptor.fieldKey);
-      const section = field ? sectionById.get(field.section_id) : sections.find((item) => item.section_key === descriptor.defaultSection);
+      // 配置可能引用已删除分区；此时按业务声明的默认分区展示，而不是让字段消失。
+      const section = sectionById.get(field?.section_id)
+        || sections.find((item) => item.section_key === descriptor.defaultSection);
       if (!section || field?.visible === false || field?.visible === 0) continue;
       placementByKey.set(descriptor.fieldKey, {
         field,
@@ -74,45 +74,53 @@ export default function StageBuiltinFields({ scopeKey, defaults = {}, children }
     const activeSections = sections
       .filter((section) => [...placementByKey.values()].some((placement) => placement.section.section_key === section.section_key))
       .sort((a, b) => Number(a.sort || 0) - Number(b.sort || 0) || Number(a.id || 0) - Number(b.id || 0));
-    return { descriptorByKey, placementByKey, activeSections };
+    return { placementByKey, activeSections };
   }, [defaults, descriptors, schema]);
 
-  useEffect(() => setTargets({}), [scopeKey, schema]);
-
-  const value = useMemo(() => ({
-    placements: model.placementByKey,
-    targets,
-  }), [model.placementByKey, targets]);
+  const fieldsBySection = useMemo(() => {
+    const result = new Map(model.activeSections.map((section) => [section.section_key, []]));
+    for (const descriptor of descriptors) {
+      const placement = model.placementByKey.get(descriptor.fieldKey);
+      const fields = placement && result.get(placement.section.section_key);
+      if (!fields) continue;
+      fields.push(<BuiltinFieldSlot key={descriptor.fieldKey} placement={placement}>{descriptor.children}</BuiltinFieldSlot>);
+    }
+    return result;
+  }, [descriptors, model.activeSections, model.placementByKey]);
   const scopeClass = normalizeScope(scopeKey);
 
-  return <BuiltinFieldContext.Provider value={value}>
+  return <>
     {model.activeSections.map((section) => {
       const sectionKey = section.section_key;
-      return <div key={section.id || sectionKey} className={`form-section-card stage-detail-section-${sectionKey}`}>
+      return <div
+        key={section.id || sectionKey}
+        className={`form-section-card stage-detail-section-${sectionKey}`}
+        data-stage-layout-section={sectionKey}
+        data-stage-layout-slot="builtin"
+        data-stage-layout-instance="builtin"
+      >
         {section.show_title !== false && section.show_title !== 0 && <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>{section.title}</div>}
         {!section.collapsed && <div
           className="stage-builtin-section-fields"
           data-stage-builtin-section={`${scopeClass}:${sectionKey}`}
-          ref={(node) => setTargets((old) => old[sectionKey] === node ? old : { ...old, [sectionKey]: node })}
-        />}
+        >{fieldsBySection.get(sectionKey)}</div>}
       </div>;
     })}
-    {children}
     <style>{`
       .stage-builtin-section-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 8px;}
       .stage-builtin-field{min-width:0;}
       .stage-builtin-field-full{grid-column:1 / -1;}
       @media (max-width:767px){.stage-builtin-section-fields{grid-template-columns:minmax(0,1fr);}.stage-builtin-field-full{grid-column:auto;}}
     `}</style>
-  </BuiltinFieldContext.Provider>;
+  </>;
 }
 
-/** 供业务页面包裹一个内置字段；字段可在运行中随“输入项配置”即时换分区。 */
-export function StageBuiltinField({ fieldKey, defaultSection, defaultColumnSpan = 12, sort = 0, children }) {
-  const context = useContext(BuiltinFieldContext);
-  const placement = context?.placements?.get(fieldKey);
-  const target = placement && context?.targets?.[placement.section.section_key];
-  if (!placement || !target) return null;
+function BuiltinFieldSlot({ placement, children }) {
   const className = `stage-builtin-field${placement.columnSpan === 24 ? ' stage-builtin-field-full' : ''}`;
-  return createPortal(<div className={className} style={{ order: placement.sort }}>{children}</div>, target);
+  return <div className={className} style={{ order: placement.sort }}>{children}</div>;
+}
+
+/** 供业务页面声明内置字段；由 StageBuiltinFields 按配置统一渲染。 */
+export function StageBuiltinField() {
+  return null;
 }

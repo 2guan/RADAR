@@ -32,6 +32,7 @@ import {
   calcDeviation, decodeChangeItem, formatImpactItemsText, generateDevTaskCode,
   getWorkItem, workItemCodesInReleasePoints, releaseDateMapForCodes,
 } from '../index.js';
+import { codePrefix, formatCode } from '../../../shared/utils/code-template.js';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
 
@@ -364,8 +365,8 @@ export default async function devTaskRoutes(fastify) {
     }
 
     const tplRow = await get("SELECT value FROM app_config WHERE key = 'code.dev'");
-    const tpl = tplRow?.value || 'RW_{需求编号}_{序号}';
-    const prefix = tpl.replace('{需求编号}', reqCode).replace('{序号}', '');
+    const tpl = tplRow?.value || 'RW_{需求/工单编号}_{序号}';
+    const prefix = codePrefix(tpl, { '需求/工单编号': reqCode });
 
     const existingCodes = await all(`SELECT task_code FROM dev_task WHERE task_code LIKE ?`, `${prefix}%`);
     let max = 0;
@@ -394,7 +395,7 @@ export default async function devTaskRoutes(fastify) {
       } else {
         currentMax++;
         const seq = String(currentMax).padStart(3, '0');
-        const taskCode = tpl.replace('{需求编号}', reqCode).replace('{序号}', seq);
+        const taskCode = formatCode(tpl, { '需求/工单编号': reqCode }, seq);
         const taskName = `RW-${req.title}-${sysName}`;
         list.push({
           sysCode: item.sysCode,

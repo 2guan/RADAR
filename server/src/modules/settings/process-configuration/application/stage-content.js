@@ -177,6 +177,11 @@ function nextExtensionFieldKey() {
   return `extension_${randomUUID().replaceAll('-', '')}`;
 }
 
+/** 交付件编码仅作内部稳定关联，新增时由服务端生成，管理员无需感知或维护。 */
+function nextDeliverableKey() {
+  return `deliverable_${randomUUID().replaceAll('-', '')}`;
+}
+
 async function assertSourceKey(sourceKey) {
   if (FIXED_SOURCE_KEYS.has(sourceKey)) return;
   if (!sourceKey.startsWith('dict:')) throw badRequest('字段数据源非法');
@@ -412,7 +417,7 @@ export async function saveDeliverableDefinition(scopeKey, body, operator) {
   const id = Number(body.id || 0);
   const exists = id ? await get('SELECT * FROM deliverable_definition WHERE id = ? AND scope_key = ?', id, scopeKey) : null;
   if (id && !exists) throw notFound('交付件不存在');
-  const key = exists?.deliverable_key || safeKey(body.deliverable_key, '交付件编码');
+  const key = exists?.deliverable_key || nextDeliverableKey();
   const label = String(body.label || '').trim();
   const inputMode = String(body.input_mode || 'both');
   if (!label) throw badRequest('交付件名称不能为空');

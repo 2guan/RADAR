@@ -18,28 +18,28 @@ async function initialSequence(ruleKey, prefix, table) {
 
 /** 生成开发任务编号。 */
 export async function generateDevTaskCode(reqCode) {
-  const 需求编号 = String(reqCode || '').trim();
-  const template = await getCodeRuleTemplate('code.dev', 'RW_{需求编号}_{序号}');
-  const prefix = codePrefix(template, { 需求编号 });
+  const 需求工单编号 = String(reqCode || '').trim();
+  const template = await getCodeRuleTemplate('code.dev', 'RW_{需求/工单编号}_{序号}');
+  const prefix = codePrefix(template, { '需求/工单编号': 需求工单编号 });
   const sequence = await reserveCodeSequence({
     ruleKey: 'code.dev',
     prefix,
     initialValue: await initialSequence('code.dev', prefix, 'dev_task'),
   });
-  return formatCode(template, { 需求编号 }, sequence);
+  return formatCode(template, { '需求/工单编号': 需求工单编号 }, sequence);
 }
 
 /** 生成指定测试类型的任务编号。 */
 export async function generateTestTaskCode(testType, reqCode) {
   const 类型 = String(testType || '').trim();
-  const 需求编号 = String(reqCode || '').trim();
+  const 需求工单编号 = String(reqCode || '').trim();
   const ruleKey = `code.test.${类型}`;
-  const template = await getCodeRuleTemplate(ruleKey, `${类型}_{需求编号}_{序号}`);
-  const prefix = codePrefix(template, { 类型, 需求编号 });
+  const template = await getCodeRuleTemplate(ruleKey, `${类型}_{需求/工单编号}_{序号}`);
+  const prefix = codePrefix(template, { 类型, '需求/工单编号': 需求工单编号 });
   const sequence = await reserveCodeSequence({
     ruleKey,
     prefix,
     initialValue: await initialSequence(ruleKey, prefix, 'test_task'),
   });
-  return formatCode(template, { 类型, 需求编号 }, sequence);
+  return formatCode(template, { 类型, '需求/工单编号': 需求工单编号 }, sequence);
 }

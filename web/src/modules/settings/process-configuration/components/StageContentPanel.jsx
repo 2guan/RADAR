@@ -6,7 +6,8 @@
  * 作者：hengguan
  */
 
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { App, Button, DatePicker, Form, Input, Row, Col, Select, Space, Spin, Tag, Tooltip } from 'antd';
 import { DownloadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
@@ -35,6 +36,14 @@ function DynamicInput({ field, value, onChange, disabled }) {
   return <Input value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)} />;
 }
 
+const scopeClass = (scopeKey) => String(scopeKey || '').replace(/[^a-zA-Z0-9_-]/g, '-');
+
+function sameTargets(left, right) {
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  return leftKeys.length === rightKeys.length && leftKeys.every((key) => left[key] === right[key]);
+}
+
 /**
  * 扩展输入项独立保存，避免侵入各业务主表保存逻辑；交付件复用统一附件组件。
  * 内置字段和业务组件仍由原业务编辑器渲染，以保持既有专业交互与布局。
@@ -44,6 +53,7 @@ const StageContentPanel = forwardRef(function StageContentPanel({ scopeKey, enti
   const [schema, setSchema] = useState(null);
   const [values, setValues] = useState({});
   const [saving, setSaving] = useState(false);
+  const [builtinTargets, setBuiltinTargets] = useState({});
   const changedKeysRef = useRef(new Set());
   const load = async () => {
     if (!scopeKey) return;
@@ -65,6 +75,20 @@ const StageContentPanel = forwardRef(function StageContentPanel({ scopeKey, enti
     return () => window.removeEventListener('stage-content-config-updated', refresh);
   }, [scopeKey, entityId]);
   const fields = useMemo(() => (schema?.fields || []).filter((field) => field.field_kind === 'extension' && field.visible), [schema]);
+  useLayoutEffect(() => {
+    const updateTargets = () => {
+      const next = {};
+      for (const section of schema?.sections || []) {
+        const selector = `[data-stage-builtin-section="${scopeClass(scopeKey)}:${section.section_key}"]`;
+        const target = document.querySelector(selector);
+        if (target) next[section.section_key] = target;
+      }
+      setBuiltinTargets((old) => sameTargets(old, next) ? old : next);
+    };
+    updateTargets();
+    const frame = window.requestAnimationFrame(updateTargets);
+    return () => window.cancelAnimationFrame(frame);
+  }, [scopeKey, schema]);
   const deliverableSection = useMemo(() => (
     (schema?.sections || []).find((section) => section.section_key === 'deliverables') || null
   ), [schema]);
@@ -103,20 +127,50 @@ const StageContentPanel = forwardRef(function StageContentPanel({ scopeKey, enti
   useImperativeHandle(ref, () => ({ save: () => saveValues(), hasEntity: !!entityId }), [entityId, scopeKey, values]);
   if (!schema || (!fields.length && (!showDeliverables || !deliverables.length))) return null;
   const sections = schema.sections || [];
+  const defaultExtensionSection = sections.find((section) => section.section_key === 'extension');
   const fieldsBySection = new Map();
+  const builtinExtensionFields = [];
   for (const field of fields) {
-    const section = sections.find((item) => item.id === field.section_id);
+    // 兼容早期保存时未指定分区的输入项：它们应进入默认“扩展信息”分区，
+    // 而非再生成一张同名卡片，避免高度计算与视觉内容脱节。
+    const section = sections.find((item) => item.id === field.section_id) || defaultExtensionSection;
     if ((section?.layout_mode || 'left') !== position) continue;
-    const key = field.section_id || 'extension';
+    const builtinTarget = section && builtinTargets[section.section_key];
+    if (builtinTarget) {
+      builtinExtensionFields.push({ field, target: builtinTarget });
+      continue;
+    }
+    // 分组键必须使用解析后的分区 ID。不能继续使用 field.section_id：
+    // 对历史空分区字段而言它仍是空值，会再次拆出一张同名卡片。
+    const key = section?.id || 'extension';
     if (!fieldsBySection.has(key)) fieldsBySection.set(key, []);
     fieldsBySection.get(key).push(field);
   }
   return <Form component={false} layout="vertical" requiredMark={false} className={`editor-form stage-content-panel stage-content-panel-${position} stage-content-panel-scope-${String(scopeKey || '').replace(/[^a-zA-Z0-9_-]/g, '-')}`}>
+    {builtinExtensionFields.map(({ field, target }) => createPortal(
+      <div className={`stage-builtin-field${field.column_span === 24 ? ' stage-builtin-field-full' : ''}`} style={{ order: Number(field.sort || 0) }}>
+        <Form.Item label={field.label} style={{ marginBottom: 8 }}>
+          <DynamicInput field={field} value={values[field.field_key]} disabled={readOnly || !entityId} onChange={(value) => {
+            setValues((old) => ({ ...old, [field.field_key]: value }));
+            changedKeysRef.current.add(field.field_key);
+            onDirtyChange?.();
+          }} />
+        </Form.Item>
+      </div>,
+      target,
+      `extension-${field.id}`,
+    ))}
     {[...fieldsBySection.entries()].map(([sectionId, sectionFields]) => {
       const section = sections.find((item) => item.id === sectionId);
       // 每个公共分区均作为详情布局 Row 的直接子项，以便完全遵循分区配置的
       // 左/右/整行和排序；不能再将多个分区包在同一个无语义容器中。
-      return <div key={sectionId} className={`form-section-card stage-content-panel stage-content-panel-card stage-detail-section-${section?.section_key || 'extension'}`}>
+      return <div
+        key={sectionId}
+        className={`form-section-card stage-content-panel stage-content-panel-card stage-detail-section-${section?.section_key || 'extension'}`}
+        data-stage-layout-section={section?.section_key || 'extension'}
+        data-stage-layout-slot="extension"
+        data-stage-layout-instance={String(sectionId)}
+      >
         {section?.show_title !== 0 && <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>{section?.title || '扩展信息'}</div>}
         {!section?.collapsed && <><Row gutter={[12, 8]}>
           {sectionFields.map((field) => <Col key={field.id} span={field.column_span === 24 ? 24 : 12} xs={24}>
@@ -132,7 +186,12 @@ const StageContentPanel = forwardRef(function StageContentPanel({ scopeKey, enti
         {!readOnly && !entityId && <Tag>保存主记录后可填写扩展信息</Tag>}</>}
       </div>;
     })}
-    {showDeliverables && deliverables.length > 0 && <div className="form-section-card stage-content-panel stage-content-panel-card stage-detail-section-deliverables">
+    {showDeliverables && deliverables.length > 0 && <div
+      className="form-section-card stage-content-panel stage-content-panel-card stage-detail-section-deliverables"
+      data-stage-layout-section="deliverables"
+      data-stage-layout-slot="deliverables"
+      data-stage-layout-instance="deliverables"
+    >
       {deliverableSection?.show_title !== 0 && <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>{deliverableSection?.title || '交付件'}</div>}
       {!deliverableSection?.collapsed && deliverables.map((item) => <div key={item.id} style={{ padding: '8px 0', borderBottom: '1px solid var(--radar-border-light)' }}>
         <div className="form-section-title" style={{ margin: '0 0 6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>

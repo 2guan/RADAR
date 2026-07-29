@@ -12,6 +12,22 @@ import { invalidateStageContentData, loadStageContentSchema } from '../api/stage
 const safeScope = (scopeKey) => String(scopeKey || '').replace(/[^a-zA-Z0-9_-]/g, '-');
 const cssContent = (value) => String(value || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/[\r\n]/g, ' ');
 
+function layoutItemSelector(layoutSelector, key, element) {
+  const instance = element.dataset.stageLayoutInstance;
+  if (instance) return `${layoutSelector} [data-stage-layout-section="${key}"][data-stage-layout-instance="${instance}"]`;
+  return `${layoutSelector} .stage-detail-section-${key}:not([data-stage-layout-section])`;
+}
+
+function identifyLayoutItems(key, elements) {
+  return elements.map((element, index) => {
+    // 业务页面原有的卡片不需要逐一改造；布局器为缺少标识的卡片补上稳定实例号，
+    // 使同名分区可以分别定位、测量和折叠，避免后写入的 CSS 规则覆盖前一个卡片。
+    if (!element.dataset.stageLayoutSection) element.dataset.stageLayoutSection = key;
+    if (!element.dataset.stageLayoutInstance) element.dataset.stageLayoutInstance = `auto-${index}`;
+    return element;
+  });
+}
+
 export default function StageSectionLayout({ scopeKey, leftSpan = 14, rightSpan = 10, defaults = {} }) {
   const [sections, setSections] = useState([]);
   const [flowCss, setFlowCss] = useState('');
@@ -68,35 +84,36 @@ export default function StageSectionLayout({ scopeKey, leftSpan = 14, rightSpan 
     const cleanups = [];
     const container = document.querySelector(layoutSelector);
     if (container) for (const item of css.configuredSections.filter(({ section }) => !!section.collapsed && section.show_title !== 0 && section.show_title !== false)) {
-      const card = container.querySelector(`.stage-detail-section-${item.key}`);
-      const title = card?.querySelector(':scope > .form-section-title');
-      if (!card || !title) continue;
-      card.classList.add('is-stage-section-collapsed', 'is-stage-section-collapsible');
-      title.tabIndex = 0;
-      title.setAttribute('role', 'button');
-      title.setAttribute('aria-expanded', 'false');
-      const toggle = () => {
-        const collapsed = card.classList.toggle('is-stage-section-collapsed');
-        title.setAttribute('aria-expanded', String(!collapsed));
-        // 绝对定位布局需重新测量折叠后的卡片高度与后续模块位置。
-        window.dispatchEvent(new Event('stage-section-collapse-toggled'));
-      };
-      const onKeyDown = (event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault();
-          toggle();
-        }
-      };
-      title.addEventListener('click', toggle);
-      title.addEventListener('keydown', onKeyDown);
-      cleanups.push(() => {
-        title.removeEventListener('click', toggle);
-        title.removeEventListener('keydown', onKeyDown);
-        title.removeAttribute('role');
-        title.removeAttribute('aria-expanded');
-        title.removeAttribute('tabindex');
-        card.classList.remove('is-stage-section-collapsed', 'is-stage-section-collapsible');
-      });
+      for (const card of container.querySelectorAll(`.stage-detail-section-${item.key}`)) {
+        const title = card.querySelector(':scope > .form-section-title');
+        if (!title) continue;
+        card.classList.add('is-stage-section-collapsed', 'is-stage-section-collapsible');
+        title.tabIndex = 0;
+        title.setAttribute('role', 'button');
+        title.setAttribute('aria-expanded', 'false');
+        const toggle = () => {
+          const collapsed = card.classList.toggle('is-stage-section-collapsed');
+          title.setAttribute('aria-expanded', String(!collapsed));
+          // 绝对定位布局需重新测量折叠后的卡片高度与后续模块位置。
+          window.dispatchEvent(new Event('stage-section-collapse-toggled'));
+        };
+        const onKeyDown = (event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            toggle();
+          }
+        };
+        title.addEventListener('click', toggle);
+        title.addEventListener('keydown', onKeyDown);
+        cleanups.push(() => {
+          title.removeEventListener('click', toggle);
+          title.removeEventListener('keydown', onKeyDown);
+          title.removeAttribute('role');
+          title.removeAttribute('aria-expanded');
+          title.removeAttribute('tabindex');
+          card.classList.remove('is-stage-section-collapsed', 'is-stage-section-collapsible');
+        });
+      }
     }
     return () => {
       cleanups.forEach((cleanup) => cleanup());
@@ -132,25 +149,31 @@ export default function StageSectionLayout({ scopeKey, leftSpan = 14, rightSpan 
       for (const segment of css.layoutPlan.segments) {
           const positioned = segment.items.map((item) => ({
             item,
-            element: container.querySelector(`.stage-detail-section-${item.key}`),
+            // 同一分区可同时存在内置字段卡片和扩展字段卡片；两者必须在同一栏
+            // 依次堆叠，不能用 querySelector 只测量首个卡片后又让两个绝对定位重叠。
+            elements: identifyLayoutItems(item.key, [...container.querySelectorAll(`.stage-detail-section-${item.key}`)]),
             placement: css.layoutPlan.placements.get(item.key),
-          })).filter(({ element }) => !!element);
+          })).filter(({ elements }) => elements.length > 0);
           if (!positioned.length) continue;
           if (segment.type === 'full') {
-            const [{ item, element }] = positioned;
-            const selector = `${layoutSelector} .stage-detail-section-${item.key}`;
-            rules.push(`${selector}{position:absolute!important;top:${top}px;left:0;width:${containerWidth}px!important;}`);
-            top += element.getBoundingClientRect().height + gap;
+            const [{ item, elements }] = positioned;
+            for (const element of elements) {
+              const selector = layoutItemSelector(layoutSelector, item.key, element);
+              rules.push(`${selector}{position:absolute!important;top:${top}px;left:0;width:${containerWidth}px!important;}`);
+              top += element.getBoundingClientRect().height + gap;
+            }
             continue;
           }
           const laneTop = { left: top, right: top };
-          for (const { item, element, placement } of positioned) {
+          for (const { item, elements, placement } of positioned) {
             const layout = placement.layout === 'right' ? 'right' : 'left';
-            const selector = `${layoutSelector} .stage-detail-section-${item.key}`;
             const width = layout === 'right' ? rightWidth : leftWidth;
             const left = layout === 'right' ? rightOffset : 0;
-            rules.push(`${selector}{position:absolute!important;top:${laneTop[layout]}px;left:${left}px;width:${width}px!important;}`);
-            laneTop[layout] += element.getBoundingClientRect().height + gap;
+            for (const element of elements) {
+              const selector = layoutItemSelector(layoutSelector, item.key, element);
+              rules.push(`${selector}{position:absolute!important;top:${laneTop[layout]}px;left:${left}px;width:${width}px!important;}`);
+              laneTop[layout] += element.getBoundingClientRect().height + gap;
+            }
           }
           top = Math.max(laneTop.left, laneTop.right);
       }
