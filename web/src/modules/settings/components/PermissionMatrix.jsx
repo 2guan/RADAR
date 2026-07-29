@@ -46,7 +46,7 @@ export default function PermissionMatrix() {
   // 所有可能的操作列（取目录中操作并集，按常见顺序）
   const allActions = [
     { key: 'view', label: '查看' },
-    { key: 'create', label: <span style={{ lineHeight: 1.25 }}>新增<br />开发承接<br />测试承接</span> },
+    { key: 'create', label: <span style={{ lineHeight: 1.25 }}>新增<br /><span style={{ fontSize: 11 }}>开发承接<br />测试承接</span></span> },
     { key: 'edit', label: '编辑' },
     { key: 'status.edit', label: '调整状态' },
     { key: 'delete', label: '删除' }, { key: 'import', label: '导入' }, { key: 'export', label: '导出' },
