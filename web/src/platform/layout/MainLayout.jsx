@@ -227,7 +227,14 @@ export default function MainLayout() {
     },
   };
 
-  useEffect(() => { apiGet('/release-points/all').then(setPoints).catch(() => {}); }, []);
+  const refreshReleasePoints = useCallback(() => {
+    apiGet('/release-points/all').then(setPoints).catch(() => {});
+  }, []);
+  useEffect(() => {
+    refreshReleasePoints();
+    window.addEventListener('release-points-updated', refreshReleasePoints);
+    return () => window.removeEventListener('release-points-updated', refreshReleasePoints);
+  }, [refreshReleasePoints]);
 
   useEffect(() => {
     if (!points.length || !releasePointIds.length) return;

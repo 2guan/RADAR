@@ -7,7 +7,7 @@
  * 作者：hengguan
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, Tabs, Button, Tag, message, Form, Input, InputNumber, Switch, DatePicker, Select } from 'antd';
 import { StarOutlined, StarFilled } from '@ant-design/icons';
 import dayjs from 'dayjs';
@@ -159,9 +159,15 @@ function ProcessStatusManager() {
 /** 投产点管理器（新增时日期选择，另有系统内置“投产点待定”；含设为/取消默认） */
 function ReleasePointManager() {
   const [points, setPoints] = useState([]);
-  useEffect(() => {
+  const refreshPoints = useCallback(() => {
     apiGet('/release-points/all').then(res => setPoints(res || [])).catch(() => {});
   }, []);
+  useEffect(() => { refreshPoints(); }, [refreshPoints]);
+  const notifyReleasePointsUpdated = useCallback(() => {
+    refreshPoints();
+    // 顶栏选择器在主框架中常驻；配置变更后通知它重新拉取选项，无需刷新页面。
+    window.dispatchEvent(new Event('release-points-updated'));
+  }, [refreshPoints]);
 
   const pointOptions = makeReleasePointOptions(points, { valueKey: 'release_date' });
 
@@ -174,6 +180,7 @@ function ReleasePointManager() {
     <CrudManager
       apiBase="/release-points" title="投产点"
       io={{ enabled: true }}
+      onMutate={notifyReleasePointsUpdated}
       filterConfigs={filterConfigs}
       columns={[
         { title: '投产日期', dataIndex: 'release_date', width: 140, sorter: true, render: (v) => <ReleasePointText value={v} /> },
@@ -213,9 +220,9 @@ function ReleasePointManager() {
       rowActions={(row, reload) => (
         row.is_default
           ? <Button type="link" size="small" icon={<StarFilled style={{ color: '#faad14' }} />}
-              onClick={async () => { await apiPost(`/release-points/${row.id}/cancel-default`); message.success('已取消默认'); reload(); }}>取消默认</Button>
+              onClick={async () => { await apiPost(`/release-points/${row.id}/cancel-default`); message.success('已取消默认'); reload(); notifyReleasePointsUpdated(); }}>取消默认</Button>
           : <Button type="link" size="small" icon={<StarOutlined />}
-              onClick={async () => { await apiPost(`/release-points/${row.id}/set-default`); message.success('已设为默认'); reload(); }}>设默认</Button>
+              onClick={async () => { await apiPost(`/release-points/${row.id}/set-default`); message.success('已设为默认'); reload(); notifyReleasePointsUpdated(); }}>设默认</Button>
       )}
     />
   );
