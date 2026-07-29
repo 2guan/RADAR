@@ -26,7 +26,6 @@ import { useAppStore } from '../../../platform/state/app.js';
 
 const PENDING_RELEASE_DATE = '投产点待定';
 const RELEASE_DATE_RE = /^\d{8}$/;
-const COMMON_CODE_PLACEHOLDERS = '公共占位符：{投产窗口} {序号} {当前年月} {当前年月日} {需求/工单编号}';
 dayjs.extend(customParseFormat);
 
 /** 安全解析 extra（可能是字符串或对象） */
@@ -417,14 +416,14 @@ export default function Settings() {
       {
         key: 'code', label: '编号规则',
         children: <AppConfigForm mode="code" items={[
-          { key: 'code.requirement', label: '需求编号规则', extra: `${COMMON_CODE_PLACEHOLDERS}；不可使用 {需求/工单编号}` },
-          { key: 'code.ticket', label: '工单编号规则', extra: `${COMMON_CODE_PLACEHOLDERS}；不可使用 {需求/工单编号}` },
-          { key: 'code.dev', label: '开发任务编号规则', extra: COMMON_CODE_PLACEHOLDERS },
-          { key: 'code.test.SIT', label: '应用组装测试编号规则', extra: COMMON_CODE_PLACEHOLDERS },
-          { key: 'code.test.UAT', label: '用户测试编号规则', extra: COMMON_CODE_PLACEHOLDERS },
-          { key: 'code.test.NFT', label: '非功能测试编号规则', extra: COMMON_CODE_PLACEHOLDERS },
-          { key: 'code.test.SEC', label: '安全测试编号规则', extra: COMMON_CODE_PLACEHOLDERS },
-          { key: 'code.release_apply', label: '投产申请变更编号规则', extra: `${COMMON_CODE_PLACEHOLDERS}；兼容 {版本年月}` },
+          { key: 'code.requirement', label: '需求编号规则' },
+          { key: 'code.ticket', label: '工单编号规则' },
+          { key: 'code.dev', label: '开发任务编号规则' },
+          { key: 'code.test.SIT', label: '应用组装测试编号规则' },
+          { key: 'code.test.UAT', label: '用户测试编号规则' },
+          { key: 'code.test.NFT', label: '非功能测试编号规则' },
+          { key: 'code.test.SEC', label: '安全测试编号规则' },
+          { key: 'code.release_apply', label: '投产申请变更编号规则' },
         ]} />,
       },
       {
