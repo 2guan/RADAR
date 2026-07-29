@@ -6,7 +6,7 @@
  */
 
 /** Public boundary: reference-data capabilities are added here before cross-module use. */
-export { getCodeRuleTemplate } from './application/code-rules.js';
+export { getCodeRuleTemplate, validateCodeRuleTemplate } from './application/code-rules.js';
 export { inClause, windowIds } from './application/window.js';
 export {
   resolveDictAttr, resolveSystemCode, resolveSystemCodes, resolveReleasePoint, formatAttachments,

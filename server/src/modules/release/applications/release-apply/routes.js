@@ -139,14 +139,18 @@ async function deriveReviewStatus(refCodes, releasePointId) {
   return weakest;
 }
 
-/** 解析投产窗口对应的版本年月（YYYYMM）；缺省回退到当前月 */
-async function yearMonthOf(releasePointId) {
+/** 解析投产点对应的窗口日期；当前日期占位符由编号服务统一提供。 */
+async function releaseWindowOf(releasePointId) {
   if (releasePointId) {
     const rp = await get('SELECT release_date FROM release_point WHERE id = ?', releasePointId);
     const releaseDate = String(rp?.release_date || '').trim();
-    if (/^\d{8}$/.test(releaseDate)) return releaseDate.slice(0, 6);
+    if (/^\d{8}$/.test(releaseDate)) return releaseDate;
   }
-  return new Date().toISOString().slice(0, 7).replace('-', '');
+  return undefined;
+}
+
+async function workItemCodeFor(refCodes) {
+  return normalizeRefCodes(refCodes)[0] || '';
 }
 
 export default async function releaseApplyRoutes(fastify) {
@@ -257,9 +261,11 @@ export default async function releaseApplyRoutes(fastify) {
       // 预览编号仅在 INSERT 前确认占用；并发抢占时改取下一个可用编号，
       // 关闭未保存的申请不会留下跳号。
       const used = code && await get('SELECT id FROM release_apply WHERE change_code = ?', code);
+      const releaseWindow = await releaseWindowOf(body.release_point_id);
+      const workItemCode = await workItemCodeFor(refCodes);
       code = used
-        ? await claimReleaseApplyCode(await yearMonthOf(body.release_point_id))
-        : await claimReleaseApplyCode(await yearMonthOf(body.release_point_id), code);
+        ? await claimReleaseApplyCode(releaseWindow, '', workItemCode)
+        : await claimReleaseApplyCode(releaseWindow, code, workItemCode);
 
       const fields = ['change_code', 'review_status', 'registrar', 'register_time', ...Object.keys(data).filter((k) => k !== 'change_code')];
       const values = [
@@ -330,7 +336,12 @@ export default async function releaseApplyRoutes(fastify) {
   // 预览变更编号（不占用序列）
   fastify.get('/release-apply/gen-code', { preHandler: fastify.requirePerm('release_apply', 'view') }, async (request) => {
     const releasePointId = request.query.releasePointId;
-    return ok({ change_code: await previewReleaseApplyCode(await yearMonthOf(releasePointId)) });
+    return ok({
+      change_code: await previewReleaseApplyCode(
+        await releaseWindowOf(releasePointId),
+        String(request.query.workItemCode || '').trim(),
+      ),
+    });
   });
 
   // 校验编号唯一性
@@ -492,7 +503,9 @@ export default async function releaseApplyRoutes(fastify) {
             details.push({ key: code, title: r.change_content, action: 'update', status: 'success', __rowNum__: rowNum });
           } else {
             // 导入空编号按真实已用记录确认，避免旧预览操作造成无意义跳号。
-            if (!code) code = await claimReleaseApplyCode(await yearMonthOf(null));
+            if (!code) code = await claimReleaseApplyCode(
+              await releaseWindowOf(null), '', await workItemCodeFor(refs),
+            );
             const res = await run(
               `INSERT INTO release_apply
                  (change_code, change_content, impact_scope, change_system, impl_org, delivery_units,

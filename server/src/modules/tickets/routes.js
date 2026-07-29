@@ -8,7 +8,7 @@
 
 import { get, run, tx, all, dialect } from '../../platform/persistence/index.js';
 import { listQuery } from '../../platform/persistence/index.js';
-import { generateTicketCode } from './index.js';
+import { generateTicketCode, ticketCodeRequiresReleasePoint } from './index.js';
 import {
   buildExtensionListFilter, defaultProcessStatus, isTerminalStatus,
   statusTypeForProcessStatus, validateRequiredFields,
@@ -298,6 +298,9 @@ export default async function ticketRoutes(fastify) {
     const manualCode = String(body.ticket_code || '').trim();
     const rp = body.release_point_id ? await get('SELECT * FROM release_point WHERE id = ?', body.release_point_id) : null;
     if (body.release_point_id && !rp) throw badRequest('投产点不存在');
+    if (!manualCode && await ticketCodeRequiresReleasePoint() && !rp) {
+      throw badRequest('当前工单编号规则使用投产点（投产窗口），请先选择计划投产点');
+    }
     const initialStatus = await defaultProcessStatus('工单', 'initial', '工单登记');
 
     await validateRequiredFields('ticket', await statusTypeForProcessStatus(body.status || initialStatus), {

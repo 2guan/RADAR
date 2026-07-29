@@ -14,6 +14,7 @@ import {
   normalizeRequiredFieldConfig,
   requiredFieldCatalogPayload,
 } from '../process-configuration/index.js';
+import { validateCodeRuleTemplate } from '../reference-data/index.js';
 
 // 允许写入的配置键白名单
 const WRITABLE_KEYS = new Set([
@@ -124,6 +125,10 @@ export default async function settingsRoutes(fastify) {
   fastify.put('/settings/app-config', { preHandler: fastify.requirePerm('settings', 'edit') }, async (request) => {
     const items = request.body?.items || {};
     validateIssueSyncSettings(items);
+    for (const [key, value] of Object.entries(items)) {
+      const error = validateCodeRuleTemplate(key, value);
+      if (error) throw badRequest(error);
+    }
     await tx(async () => {
       for (const [key, value] of Object.entries(items)) {
         if (!WRITABLE_KEYS.has(key)) continue;

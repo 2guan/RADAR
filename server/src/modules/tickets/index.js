@@ -9,7 +9,7 @@ import { get, all } from '../../platform/persistence/index.js';
 import { inClause } from '../settings/reference-data/index.js';
 import { TICKET_WORK_ITEM_TYPE } from './contracts/work-item.js';
 
-export { generateTicketCode } from './application/numbering.js';
+export { generateTicketCode, ticketCodeRequiresReleasePoint } from './application/numbering.js';
 
 /** Public read contract. Other modules must not query the ticket table directly. */
 export async function findTicketWorkItem(workItemCode) {

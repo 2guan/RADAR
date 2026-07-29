@@ -329,6 +329,7 @@ export default async function testTaskRoutes(fastify) {
     if (!TYPE_NAME[testType]) throw badRequest('测试类型非法');
     const req = await getWorkItem(reqCode);
     if (!req) throw notFound('需求/工单不存在');
+    const releaseWindow = (await releaseDateMapForCodes([reqCode]))[reqCode];
 
     const main = req.main_systems || [];
     const firstMainSysCode = main[0] || null;
@@ -357,7 +358,7 @@ export default async function testTaskRoutes(fastify) {
       const initialStatus = await defaultProcessStatus('测试', 'initial', '测试承接');
       for (const t of targets) {
         const sys = t.sysCode ? await get('SELECT * FROM system WHERE sys_code = ?', t.sysCode) : null;
-        const taskCode = await generateTestTaskCode(testType, reqCode);
+        const taskCode = await generateTestTaskCode(testType, reqCode, releaseWindow);
         const res = await run(
           `INSERT INTO test_task (req_code, task_code, task_name, test_type, status, impl_system, impl_org, registrar, register_time)
            VALUES (?,?,?,?,?,?,?,?,?)`,
@@ -545,6 +546,7 @@ export default async function testTaskRoutes(fastify) {
           // 校验关联需求/工单编号是否存在
           const req = await getWorkItem(r.req_code);
           if (!req) throw new Error(`关联需求/工单编号 [${r.req_code}] 不存在`);
+          const releaseWindow = (await releaseDateMapForCodes([r.req_code]))[r.req_code];
 
           // 翻译中文测试类型为 Code
           const testTypeCode = TYPE_CODE[String(r.test_type).trim()];
@@ -628,7 +630,7 @@ export default async function testTaskRoutes(fastify) {
 
           } else {
             // insert 新建
-            if (!code) code = await generateTestTaskCode(testTypeCode, r.req_code);
+            if (!code) code = await generateTestTaskCode(testTypeCode, r.req_code, releaseWindow);
             const devRate = calcDeviation(r.plan_start, r.plan_end, r.actual_end);
             const res = await run(
               `INSERT INTO test_task 

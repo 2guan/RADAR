@@ -9,7 +9,9 @@ import { get, all } from '../../platform/persistence/index.js';
 import { inClause } from '../settings/reference-data/index.js';
 import { REQUIREMENT_WORK_ITEM_TYPE } from './contracts/work-item.js';
 
-export { claimRequirementCode, generateRequirementCode, previewRequirementCode } from './application/numbering.js';
+export {
+  claimRequirementCode, generateRequirementCode, previewRequirementCode, requirementCodeRequiresReleasePoint,
+} from './application/numbering.js';
 
 /** Public read contract. Other modules must not query the requirement table directly. */
 export async function findRequirementWorkItem(workItemCode) {

@@ -418,6 +418,7 @@ export default async function devTaskRoutes(fastify) {
     if (!reqCode) throw badRequest('请选择需求/工单');
     const req = await getWorkItem(reqCode);
     if (!req) throw notFound('需求/工单不存在');
+    const releaseWindow = (await releaseDateMapForCodes([reqCode]))[reqCode];
 
     // 目标系统：默认主责系统 ∪ 协同改造系统；可由 systems 指定子集
     const main = req.main_systems || [];
@@ -435,7 +436,7 @@ export default async function devTaskRoutes(fastify) {
       const initialStatus = await defaultProcessStatus('开发', 'initial', '开发承接');
       for (const sysCode of targets) {
         const sys = await get('SELECT * FROM system WHERE sys_code = ?', sysCode);
-        const taskCode = await generateDevTaskCode(reqCode);
+        const taskCode = await generateDevTaskCode(reqCode, releaseWindow);
         const taskName = `RW-${req.title}-${sys?.sys_name || sysCode}`;
         const res = await run(
           `INSERT INTO dev_task (req_code, task_code, task_name, status, impl_system, impl_org, registrar, register_time)
@@ -606,6 +607,7 @@ export default async function devTaskRoutes(fastify) {
           // 校验关联需求/工单编号是否存在
           const req = await getWorkItem(r.req_code);
           if (!req) throw new Error(`关联需求/工单编号 [${r.req_code}] 不存在`);
+          const releaseWindow = (await releaseDateMapForCodes([r.req_code]))[r.req_code];
 
           // 兼容性字典/系统转换
           const status = await resolveDictAttr('process_status', r.status) || await defaultProcessStatus('开发', 'initial', '开发承接');
@@ -682,7 +684,7 @@ export default async function devTaskRoutes(fastify) {
 
           } else {
             // insert 新建
-            if (!code) code = await generateDevTaskCode(r.req_code);
+            if (!code) code = await generateDevTaskCode(r.req_code, releaseWindow);
             const devRate = calcDeviation(r.plan_start, r.plan_end, r.actual_end);
             const res = await run(
               `INSERT INTO dev_task 

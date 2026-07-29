@@ -8,7 +8,7 @@
 import { all, getCodeSequenceNext, reserveCodeSequence } from '../../../platform/persistence/index.js';
 import { getCodeRuleTemplate } from '../../settings/reference-data/index.js';
 import {
-  codePrefix, formatCode, nextSequenceFromCodes, normalizeReleaseWindow,
+  codePrefix, codeTemplateValues, formatCode, nextSequenceFromCodes, templateUsesReleaseWindow,
 } from '../../../shared/utils/code-template.js';
 
 /** 为普通原子领号计算起始值；已有序列表时不再扫描历史业务表。 */
@@ -25,37 +25,42 @@ async function nextUsedSequence(prefix) {
 }
 
 async function requirementRule(releaseWindow) {
-  const 投产窗口 = normalizeReleaseWindow(releaseWindow);
   const template = await getCodeRuleTemplate('code.requirement', 'RC_{投产窗口}_{序号}');
-  const prefix = codePrefix(template, { 投产窗口 });
-  return { 投产窗口, template, prefix };
+  const values = codeTemplateValues({ releaseWindow });
+  const prefix = codePrefix(template, values);
+  return { values, template, prefix };
+}
+
+/** 前端和接口据此决定生成需求编号前是否必须选择计划投产点。 */
+export async function requirementCodeRequiresReleasePoint() {
+  return templateUsesReleaseWindow(await getCodeRuleTemplate('code.requirement', 'RC_{投产窗口}_{序号}'));
 }
 
 /** 生成需求编号。 */
 export async function generateRequirementCode(releaseWindow) {
-  const { 投产窗口, template, prefix } = await requirementRule(releaseWindow);
+  const { values, template, prefix } = await requirementRule(releaseWindow);
   const sequence = await reserveCodeSequence({
     ruleKey: 'code.requirement',
     prefix,
     initialValue: await initialReservationSequence('code.requirement', prefix),
   });
-  return formatCode(template, { 投产窗口 }, sequence);
+  return formatCode(template, values, sequence);
 }
 
 /** 返回下一个可用需求编号，仅用于展示，不写入 code_sequence。 */
 export async function previewRequirementCode(releaseWindow) {
-  const { 投产窗口, template, prefix } = await requirementRule(releaseWindow);
-  return formatCode(template, { 投产窗口 }, await nextUsedSequence(prefix));
+  const { values, template, prefix } = await requirementRule(releaseWindow);
+  return formatCode(template, values, await nextUsedSequence(prefix));
 }
 
 /** 保存新需求时确认自动编号；手工编号保持原样，自动预览编号才会在此刻正式占号。 */
 export async function claimRequirementCode(releaseWindow, requestedCode = '') {
-  const { 投产窗口, template, prefix } = await requirementRule(releaseWindow);
+  const { values, template, prefix } = await requirementRule(releaseWindow);
   const nextSequence = await nextUsedSequence(prefix);
-  const previewCode = formatCode(template, { 投产窗口 }, nextSequence);
+  const previewCode = formatCode(template, values, nextSequence);
   if (String(requestedCode || '').trim() && String(requestedCode).trim() !== previewCode) return String(requestedCode).trim();
   const sequence = await reserveCodeSequence({
     ruleKey: 'code.requirement', prefix, initialValue: nextSequence, reconcile: true,
   });
-  return formatCode(template, { 投产窗口 }, sequence);
+  return formatCode(template, values, sequence);
 }

@@ -292,6 +292,40 @@ if (!process.env.RADAR_RUN_API_TESTS) {
     assert.ok(overview.json().data.total >= overview.json().data.list.length);
   });
 
+  test('需求编号预览仅在规则使用投产窗口时要求先选择投产点', async () => {
+    const administrator = await get('SELECT id, phone FROM user WHERE is_super = 1 LIMIT 1');
+    const token = await app.jwt.sign({ id: administrator.id, phone: administrator.phone });
+    const headers = { authorization: `Bearer ${token}`, 'x-requested-by': 'RADAR' };
+
+    let response = await app.inject({
+      method: 'PUT', url: '/api/settings/app-config', headers,
+      payload: { items: { 'code.requirement': 'RQ_{当前年月}_{序号}' } },
+    });
+    assert.equal(response.statusCode, 200);
+    response = await app.inject({ method: 'GET', url: '/api/requirements/gen-code', headers });
+    assert.equal(response.statusCode, 200);
+    assert.match(response.json().data.req_code, /^RQ_\d{6}_001$/);
+
+    response = await app.inject({
+      method: 'PUT', url: '/api/settings/app-config', headers,
+      payload: { items: { 'code.requirement': 'RQ_{需求/工单编号}_{序号}' } },
+    });
+    assert.equal(response.statusCode, 400);
+
+    response = await app.inject({
+      method: 'PUT', url: '/api/settings/app-config', headers,
+      payload: { items: { 'code.requirement': 'RQ_{投产窗口}_{序号}' } },
+    });
+    assert.equal(response.statusCode, 200);
+    response = await app.inject({ method: 'GET', url: '/api/requirements/gen-code', headers });
+    assert.equal(response.statusCode, 400);
+
+    await app.inject({
+      method: 'PUT', url: '/api/settings/app-config', headers,
+      payload: { items: { 'code.requirement': 'RC_{投产窗口}_{序号}' } },
+    });
+  });
+
   test('业务编号序列：首次从历史最大值接续，后续调用原子递增', async () => {
     const releasePoint = await get('SELECT id FROM release_point ORDER BY id LIMIT 1');
     const releaseWindow = '20990101';

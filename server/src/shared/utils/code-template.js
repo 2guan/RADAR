@@ -6,8 +6,7 @@
  */
 
 /** 生成 YYYYMMDD 格式的当前日期，供缺失投产窗口时兼容旧行为。 */
-function currentDateStr() {
-  const date = new Date();
+function currentDateStr(date = new Date()) {
   const pad = (value) => String(value).padStart(2, '0');
   return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}`;
 }
@@ -16,6 +15,28 @@ function currentDateStr() {
 export function normalizeReleaseWindow(releaseWindow) {
   const value = String(releaseWindow || '').trim();
   return /^\d{8}$/.test(value) ? value : currentDateStr();
+}
+
+/** 判断模板是否依赖计划投产点。保留旧 {投产窗口}，并支持设置页展示的完整别名。 */
+export function templateUsesReleaseWindow(template) {
+  const value = String(template || '');
+  return value.includes('{投产窗口}') || value.includes('{投产点（投产窗口）}');
+}
+
+/**
+ * 生成各业务编号规则共用的变量。投产窗口无效时仍按历史规则回退当天，
+ * 但调用方可先用 templateUsesReleaseWindow 决定是否应要求用户选择投产点。
+ */
+export function codeTemplateValues({ releaseWindow, workItemCode, now = new Date() } = {}) {
+  const 当前年月日 = currentDateStr(now);
+  const 投产窗口 = normalizeReleaseWindow(releaseWindow);
+  return {
+    投产窗口,
+    '投产点（投产窗口）': 投产窗口,
+    当前年月: 当前年月日.slice(0, 6),
+    当前年月日,
+    '需求/工单编号': String(workItemCode || '').trim(),
+  };
 }
 
 /** 将业务变量替换进模板；序号由调用方单独传入，便于先计算固定前缀。 */

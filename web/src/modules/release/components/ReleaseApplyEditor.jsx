@@ -41,9 +41,12 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
   const hasDeliveryUnitVisible = visible('delivery_units');
 
   // 自动生成变更编号并填充
-  const autoGenCode = (pointId) => {
+  const autoGenCode = (pointId, workItemCode) => {
     if (isEdit) return;
-    apiGet('/release-apply/gen-code', pointId ? { releasePointId: pointId } : {})
+    const params = {};
+    if (pointId) params.releasePointId = pointId;
+    if (workItemCode) params.workItemCode = workItemCode;
+    apiGet('/release-apply/gen-code', params)
       .then((res) => {
         form.setFieldValue('change_code', res.change_code);
         form.validateFields(['change_code']);
@@ -160,7 +163,7 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
     const first = reqs.find((r) => r.req_code === vals[0]);
     if (first && first.release_point_id != null) {
       form.setFieldValue('release_point_id', first.release_point_id);
-      autoGenCode(first.release_point_id);
+      autoGenCode(first.release_point_id, first.req_code);
     }
   };
 
@@ -171,7 +174,7 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
     const first = tickets.find((t) => t.ticket_code === vals[0]);
     if (first && first.release_point_id != null) {
       form.setFieldValue('release_point_id', first.release_point_id);
-      autoGenCode(first.release_point_id);
+      autoGenCode(first.release_point_id, first.ticket_code);
     }
   };
 
@@ -195,7 +198,7 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
     }
     if (Object.prototype.hasOwnProperty.call(changed, 'release_point_id')) {
       if (changed.release_point_id) {
-        autoGenCode(changed.release_point_id);
+        autoGenCode(changed.release_point_id, selReqs[0] || selTickets[0]);
       }
     }
   };
@@ -224,7 +227,11 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
     setGenLoading(true);
     try {
       const releasePointId = form.getFieldValue('release_point_id');
-      const res = await apiGet('/release-apply/gen-code', releasePointId ? { releasePointId } : {});
+      const workItemCode = selReqs[0] || selTickets[0];
+      const params = {};
+      if (releasePointId) params.releasePointId = releasePointId;
+      if (workItemCode) params.workItemCode = workItemCode;
+      const res = await apiGet('/release-apply/gen-code', params);
       form.setFieldValue('change_code', res.change_code);
       form.validateFields(['change_code']);
       message.success(`已预览编号：${res.change_code}（保存后正式占用）`);

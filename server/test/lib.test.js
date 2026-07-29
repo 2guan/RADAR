@@ -24,7 +24,10 @@ import { WORK_ITEM_TYPES, isWorkItemType } from '../src/shared/contracts/work-it
 import { REQUIREMENT_WORK_ITEM_TYPE } from '../src/modules/requirements/contracts/work-item.js';
 import { TICKET_WORK_ITEM_TYPE } from '../src/modules/tickets/contracts/work-item.js';
 import { workItemCodesInReleasePoints } from '../src/modules/development/index.js';
-import { codePrefix, formatCode } from '../src/shared/utils/code-template.js';
+import {
+  codePrefix, codeTemplateValues, formatCode, templateUsesReleaseWindow,
+} from '../src/shared/utils/code-template.js';
+import { validateCodeRuleTemplate } from '../src/modules/settings/reference-data/index.js';
 import { MOCK_ISSUE_SNAPSHOT } from '../scripts/mock-data.js';
 
 test('运行时路径：平台配置从仓库根目录解析静态资源与持久化默认目录', () => {
@@ -57,6 +60,19 @@ test('编号模板：需求/工单编号为标准占位符，并兼容历史需�
   assert.equal(codePrefix('RW_{需求/工单编号}_{序号}', values), 'RW_TK_20260630_003_');
   assert.equal(formatCode('RW_{需求/工单编号}_{序号}', values, 1), 'RW_TK_20260630_003_001');
   assert.equal(formatCode('RW_{需求编号}_{序号}', values, 2), 'RW_TK_20260630_003_002');
+});
+
+test('编号模板：公共占位符提供投产窗口、当前日期与关联工作项编号', () => {
+  const values = codeTemplateValues({
+    releaseWindow: '20261231', workItemCode: 'REQ_001', now: new Date(2026, 6, 29),
+  });
+  assert.equal(formatCode(
+    '{投产点（投产窗口）}_{当前年月}_{当前年月日}_{需求/工单编号}_{序号}', values, 7,
+  ), '20261231_202607_20260729_REQ_001_007');
+  assert.equal(templateUsesReleaseWindow('{投产窗口}_{序号}'), true);
+  assert.equal(templateUsesReleaseWindow('{当前年月}_{序号}'), false);
+  assert.match(validateCodeRuleTemplate('code.requirement', '{需求/工单编号}_{序号}'), /不能使用/);
+  assert.equal(validateCodeRuleTemplate('code.dev', '{需求/工单编号}_{序号}'), null);
 });
 
 test('密码哈希：正确密码校验通过、错误密码失败', () => {

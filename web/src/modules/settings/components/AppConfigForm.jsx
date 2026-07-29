@@ -128,9 +128,12 @@ export default function AppConfigForm({ mode, items }) {
     if (!activePattern) return '—';
     return activePattern
       .replace('{投产窗口}', '20260630')
+      .replace('{投产点（投产窗口）}', '20260630')
       .replace('{版本年月}', '202606')
       .replace('{需求/工单编号}', 'REQ-20260630-003')
       .replace('{需求编号}', 'REQ-20260630-003')
+      .replace('{当前年月}', '202607')
+      .replace('{当前年月日}', '20260729')
       .replace('{序号}', '001');
   };
 
@@ -353,10 +356,12 @@ export default function AppConfigForm({ mode, items }) {
                 <div style={{ fontSize: 11, lineHeight: '1.6' }}>
                   规则输入框中可使用以下花括号占位符：
                   <ul style={{ paddingLeft: 16, margin: '4px 0 0' }}>
-                    <li><strong>{"{投产窗口}"}</strong>：如 `20260630`</li>
-                    <li><strong>{"{版本年月}"}</strong>：如 `202606`</li>
-                    <li><strong>{"{需求/工单编号}"}</strong>：如 `REQ-20260630-003`</li>
+                    <li><strong>{"{投产窗口}"}</strong>：投产点（投产窗口），如 `20260630`；也兼容 {"{投产点（投产窗口）}"}</li>
                     <li><strong>{"{序号}"}</strong>：流水序号，如 `001`</li>
+                    <li><strong>{"{当前年月}"}</strong>：系统当前年月，如 `202607`</li>
+                    <li><strong>{"{当前年月日}"}</strong>：系统当前年月日，如 `20260729`</li>
+                    <li><strong>{"{需求/工单编号}"}</strong>：关联工作项编号，如 `REQ-20260630-003`；需求、工单自身编号规则不可使用</li>
+                    <li><strong>{"{版本年月}"}</strong>：投产申请编号规则的历史兼容占位符，如 `202606`</li>
                   </ul>
                 </div>
               }

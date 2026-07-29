@@ -8,7 +8,7 @@
 
 import { get, run, tx, all, dialect } from '../../platform/persistence/index.js';
 import { listQuery } from '../../platform/persistence/index.js';
-import { claimRequirementCode, previewRequirementCode } from './index.js';
+import { claimRequirementCode, previewRequirementCode, requirementCodeRequiresReleasePoint } from './index.js';
 import {
   buildExtensionListFilter, defaultProcessStatus, isTerminalStatus,
   statusTypeForProcessStatus, validateRequiredFields,
@@ -275,6 +275,9 @@ export default async function requirementRoutes(fastify) {
     const body = request.body || {};
     const rp = body.release_point_id ? await get('SELECT * FROM release_point WHERE id = ?', body.release_point_id) : null;
     if (body.release_point_id && !rp) throw badRequest('投产点不存在');
+    if (!String(body.req_code || '').trim() && await requirementCodeRequiresReleasePoint() && !rp) {
+      throw badRequest('当前需求编号规则使用投产点（投产窗口），请先选择计划投产点');
+    }
     const initialStatus = await defaultProcessStatus('需求', 'initial', '需求登记');
 
     await validateRequiredFields('requirement', await statusTypeForProcessStatus(body.status || initialStatus), {
@@ -354,10 +357,16 @@ export default async function requirementRoutes(fastify) {
   // 预览编号（前端点击「生成」按钮调用；不占用序列）
   fastify.get('/requirements/gen-code', { preHandler: fastify.requirePerm('requirement', 'view') }, async (request) => {
     const releasePointId = request.query.releasePointId;
-    if (!releasePointId) throw badRequest('缺少 releasePointId');
-    const rp = await get('SELECT release_date FROM release_point WHERE id = ?', releasePointId);
-    if (!rp) throw badRequest('投产点不存在');
-    return ok({ req_code: await previewRequirementCode(rp.release_date) });
+    const requiresReleasePoint = await requirementCodeRequiresReleasePoint();
+    if (requiresReleasePoint && !releasePointId) {
+      throw badRequest('当前需求编号规则使用投产点（投产窗口），请先选择计划投产点');
+    }
+    const rp = releasePointId ? await get('SELECT release_date FROM release_point WHERE id = ?', releasePointId) : null;
+    if (releasePointId && !rp) throw badRequest('投产点不存在');
+    return ok({
+      req_code: await previewRequirementCode(rp?.release_date),
+      requires_release_point: requiresReleasePoint,
+    });
   });
 
   // 校验编号唯一性（前端实时校验调用）

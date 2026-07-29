@@ -268,19 +268,15 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
   /** 点击「生成编号」按钮 */
   const generateCode = async () => {
     const releasePointId = form.getFieldValue('release_point_id');
-    if (!releasePointId) {
-      message.warning('请先选择「计划投产点」');
-      return;
-    }
     setGenLoading(true);
     try {
-      const res = await apiGet('/requirements/gen-code', { releasePointId });
+      const res = await apiGet('/requirements/gen-code', releasePointId ? { releasePointId } : {});
       form.setFieldValue('req_code', res.req_code);
       // 触发校验以更新状态
       form.validateFields(['req_code']);
       message.success(`已预览编号：${res.req_code}（保存后正式占用）`);
     } catch (e) {
-      message.error('生成失败，请稍后重试');
+      message.error(e.message || '生成失败，请稍后重试');
     } finally {
       setGenLoading(false);
     }
@@ -405,7 +401,7 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
                         readOnly={readonly || codeLocked}
                         style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', letterSpacing: '0.3px' }}
                         suffix={(codeLocked || readonly) ? null : (
-                          <Tooltip title="根据所选投产点预览编号；保存成功后才正式占用">
+                          <Tooltip title="根据当前编号规则预览编号；规则包含投产点（投产窗口）时需先选择计划投产点，保存成功后才正式占用">
                             <Button
                               type="link"
                               size="small"

@@ -7,7 +7,7 @@
 
 import { all, getCodeSequenceNext, reserveCodeSequence } from '../../../platform/persistence/index.js';
 import { getCodeRuleTemplate } from '../../settings/reference-data/index.js';
-import { codePrefix, formatCode, nextSequenceFromCodes } from '../../../shared/utils/code-template.js';
+import { codePrefix, codeTemplateValues, formatCode, nextSequenceFromCodes } from '../../../shared/utils/code-template.js';
 
 /** 在序列表首次建立时，从历史任务编号中恢复下一序号。 */
 async function initialSequence(ruleKey, prefix, table) {
@@ -17,29 +17,31 @@ async function initialSequence(ruleKey, prefix, table) {
 }
 
 /** 生成开发任务编号。 */
-export async function generateDevTaskCode(reqCode) {
+export async function generateDevTaskCode(reqCode, releaseWindow) {
   const 需求工单编号 = String(reqCode || '').trim();
   const template = await getCodeRuleTemplate('code.dev', 'RW_{需求/工单编号}_{序号}');
-  const prefix = codePrefix(template, { '需求/工单编号': 需求工单编号 });
+  const values = codeTemplateValues({ releaseWindow, workItemCode: 需求工单编号 });
+  const prefix = codePrefix(template, values);
   const sequence = await reserveCodeSequence({
     ruleKey: 'code.dev',
     prefix,
     initialValue: await initialSequence('code.dev', prefix, 'dev_task'),
   });
-  return formatCode(template, { '需求/工单编号': 需求工单编号 }, sequence);
+  return formatCode(template, values, sequence);
 }
 
 /** 生成指定测试类型的任务编号。 */
-export async function generateTestTaskCode(testType, reqCode) {
+export async function generateTestTaskCode(testType, reqCode, releaseWindow) {
   const 类型 = String(testType || '').trim();
   const 需求工单编号 = String(reqCode || '').trim();
   const ruleKey = `code.test.${类型}`;
   const template = await getCodeRuleTemplate(ruleKey, `${类型}_{需求/工单编号}_{序号}`);
-  const prefix = codePrefix(template, { 类型, '需求/工单编号': 需求工单编号 });
+  const values = { 类型, ...codeTemplateValues({ releaseWindow, workItemCode: 需求工单编号 }) };
+  const prefix = codePrefix(template, values);
   const sequence = await reserveCodeSequence({
     ruleKey,
     prefix,
     initialValue: await initialSequence(ruleKey, prefix, 'test_task'),
   });
-  return formatCode(template, { 类型, '需求/工单编号': 需求工单编号 }, sequence);
+  return formatCode(template, values, sequence);
 }
