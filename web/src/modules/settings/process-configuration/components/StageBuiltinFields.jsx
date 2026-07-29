@@ -6,7 +6,7 @@
  */
 
 import { Children, useEffect, useMemo, useState } from 'react';
-import { invalidateStageContentData, loadStageContentSchema } from '../api/stageContentDataCache.js';
+import { invalidateStageContentData, loadStageContentSchema, subscribeStageContentConfigUpdated } from '../api/stageContentDataCache.js';
 
 function normalizeScope(scopeKey) {
   return String(scopeKey || '').replace(/[^a-zA-Z0-9_-]/g, '-');
@@ -37,10 +37,10 @@ export default function StageBuiltinFields({ scopeKey, defaults = {}, children }
       invalidateStageContentData(scopeKey);
       load().catch(() => {});
     };
-    window.addEventListener('stage-content-config-updated', refresh);
+    const unsubscribe = subscribeStageContentConfigUpdated(scopeKey, refresh);
     return () => {
       alive = false;
-      window.removeEventListener('stage-content-config-updated', refresh);
+      unsubscribe();
     };
   }, [scopeKey]);
 

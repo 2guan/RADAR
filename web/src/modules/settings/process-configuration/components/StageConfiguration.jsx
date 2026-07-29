@@ -15,6 +15,7 @@ import { MENU } from '../../../../platform/routing/menu.js';
 import { buildStageSectionLayout } from '../../../../shared/workflow/index.js';
 import { useResponsive } from '../../../../platform/ui/useResponsive.js';
 import { ResizableTitle } from '../../../../shared/ui/index.js';
+import { notifyStageContentConfigUpdated } from '../api/stageContentDataCache.js';
 
 const FIELD_TYPES = [
   { value: 'text', label: '单行文本' },
@@ -206,8 +207,6 @@ function SectionEditor({ open, config, messageApi, onClose, onSaved, isMobile })
       for (const section of sections) {
         await apiPost(`/settings/stage-content/${config.scope.scope_key}/sections`, section);
       }
-      // 已打开的详情页也立即重新读取分区，避免必须关闭并重新进入才能看到配置效果。
-      window.dispatchEvent(new Event('stage-content-config-updated'));
       messageApi.success('分区配置已保存');
       onSaved();
     } finally { setSaving(false); }
@@ -452,6 +451,12 @@ export default function StageConfiguration({ mode }) {
   useEffect(() => { load(); }, [activeScope]);
   const config = configs[activeScope];
   const isContent = mode === 'content';
+  const refreshActiveScope = () => {
+    if (!activeScope) return;
+    notifyStageContentConfigUpdated(activeScope);
+    setEditing(null);
+    load(activeScope);
+  };
 
   const fieldColumns = useMemo(() => [
     { title: '输入项名称', dataIndex: 'label' },
@@ -467,7 +472,7 @@ export default function StageConfiguration({ mode }) {
       onEdit={() => setEditing(row)}
       disabledDelete={row.field_kind !== 'extension'}
       deleteTitle="删除后保留历史填写值和审计记录，确认删除？"
-      onDelete={async () => { await apiDelete(`/settings/stage-content/${activeScope}/fields/${row.id}`); load(); }}
+      onDelete={async () => { await apiDelete(`/settings/stage-content/${activeScope}/fields/${row.id}`); refreshActiveScope(); }}
     /> },
   ], [activeScope, config]);
 
@@ -481,7 +486,7 @@ export default function StageConfiguration({ mode }) {
     { title: '操作', render: (_, row) => <ConfigurationActions
       onEdit={() => setEditing(row)}
       deleteTitle="删除后保留已有凭证、模板和审计记录，确认删除？"
-      onDelete={async () => { await apiDelete(`/settings/stage-deliverables/${activeScope}/${row.id}`); load(); }}
+      onDelete={async () => { await apiDelete(`/settings/stage-deliverables/${activeScope}/${row.id}`); refreshActiveScope(); }}
     /> },
   ], [activeScope, config]);
 
@@ -522,8 +527,8 @@ export default function StageConfiguration({ mode }) {
           components={{ header: { cell: ResizableTitle } }} columns={tableColumns} dataSource={currentRows} />}
       </div>,
     }))} />
-    {isContent ? <FieldEditor open={!!editing} field={editing?.__new ? null : editing} config={config || {}} sourceOptions={sourceOptions} messageApi={messageApi} isMobile={isMobile} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />
-      : <DeliverableEditor open={!!editing} deliverable={editing?.__new ? null : editing} config={config || {}} messageApi={messageApi} isMobile={isMobile} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />}
-    {isContent && <SectionEditor open={sectionOpen} config={config || {}} messageApi={messageApi} isMobile={isMobile} onClose={() => setSectionOpen(false)} onSaved={() => { setSectionOpen(false); load(); }} />}
+    {isContent ? <FieldEditor open={!!editing} field={editing?.__new ? null : editing} config={config || {}} sourceOptions={sourceOptions} messageApi={messageApi} isMobile={isMobile} onClose={() => setEditing(null)} onSaved={refreshActiveScope} />
+      : <DeliverableEditor open={!!editing} deliverable={editing?.__new ? null : editing} config={config || {}} messageApi={messageApi} isMobile={isMobile} onClose={() => setEditing(null)} onSaved={refreshActiveScope} />}
+    {isContent && <SectionEditor open={sectionOpen} config={config || {}} messageApi={messageApi} isMobile={isMobile} onClose={() => setSectionOpen(false)} onSaved={() => { setSectionOpen(false); refreshActiveScope(); }} />}
   </>);
 }

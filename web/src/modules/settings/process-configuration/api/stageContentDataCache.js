@@ -11,6 +11,9 @@ const schemaCache = new Map();
 const schemaRequests = new Map();
 const valuesCache = new Map();
 const valuesRequests = new Map();
+const CONFIG_UPDATE_EVENT = 'stage-content-config-updated';
+const CONFIG_UPDATE_CHANNEL = 'radar-stage-content-config';
+let configUpdateChannel = null;
 
 const valueCacheKey = (scopeKey, entityId) => `${scopeKey || ''}:${entityId || ''}`;
 
@@ -45,6 +48,36 @@ export function invalidateStageContentData(scopeKey, entityId) {
   if (!scopeKey) return;
   schemaCache.delete(scopeKey);
   if (entityId) valuesCache.delete(valueCacheKey(scopeKey, entityId));
+}
+
+function dispatchConfigUpdate(scopeKey) {
+  window.dispatchEvent(new CustomEvent(CONFIG_UPDATE_EVENT, { detail: { scopeKey } }));
+}
+
+function getConfigUpdateChannel() {
+  if (configUpdateChannel || typeof BroadcastChannel === 'undefined') return configUpdateChannel;
+  configUpdateChannel = new BroadcastChannel(CONFIG_UPDATE_CHANNEL);
+  configUpdateChannel.addEventListener('message', (event) => dispatchConfigUpdate(event.data?.scopeKey));
+  return configUpdateChannel;
+}
+
+/** 保存配置后失效当前范围缓存，并通知已打开的详情页与其他浏览器标签立即重载。 */
+export function notifyStageContentConfigUpdated(scopeKey) {
+  if (!scopeKey) return;
+  invalidateStageContentData(scopeKey);
+  dispatchConfigUpdate(scopeKey);
+  getConfigUpdateChannel()?.postMessage({ scopeKey });
+}
+
+/** 仅响应自身范围的配置变更，避免其他阶段更新时无谓地重载详情。 */
+export function subscribeStageContentConfigUpdated(scopeKey, onUpdate) {
+  getConfigUpdateChannel();
+  const handler = (event) => {
+    const updatedScopeKey = event.detail?.scopeKey;
+    if (!updatedScopeKey || updatedScopeKey === scopeKey) onUpdate();
+  };
+  window.addEventListener(CONFIG_UPDATE_EVENT, handler);
+  return () => window.removeEventListener(CONFIG_UPDATE_EVENT, handler);
 }
 
 /** 保存扩展字段后合并已知增量，避免同一详情页再次打开时读取旧值。 */

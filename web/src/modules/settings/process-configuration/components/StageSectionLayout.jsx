@@ -7,7 +7,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { buildStageSectionLayout } from '../../../../shared/workflow/index.js';
-import { invalidateStageContentData, loadStageContentSchema } from '../api/stageContentDataCache.js';
+import { invalidateStageContentData, loadStageContentSchema, subscribeStageContentConfigUpdated } from '../api/stageContentDataCache.js';
 
 const safeScope = (scopeKey) => String(scopeKey || '').replace(/[^a-zA-Z0-9_-]/g, '-');
 const cssContent = (value) => String(value || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/[\r\n]/g, ' ');
@@ -42,8 +42,7 @@ export default function StageSectionLayout({ scopeKey, leftSpan = 14, rightSpan 
       invalidateStageContentData(scopeKey);
       load().catch(() => {});
     };
-    window.addEventListener('stage-content-config-updated', refresh);
-    return () => window.removeEventListener('stage-content-config-updated', refresh);
+    return subscribeStageContentConfigUpdated(scopeKey, refresh);
   }, [scopeKey]);
   const css = useMemo(() => {
     // 内置模块与管理员新增的分区均使用同一套样式生成逻辑，避免扩展信息、

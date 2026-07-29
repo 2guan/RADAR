@@ -13,7 +13,7 @@ import { DownloadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import AttachmentField from '../../../../platform/attachments/AttachmentField.jsx';
 import { apiGet, apiPut, rawClient } from '../../../../platform/api.js';
-import { invalidateStageContentData, loadStageContentSchema, loadStageContentValues, patchStageContentValues } from '../api/stageContentDataCache.js';
+import { invalidateStageContentData, loadStageContentSchema, loadStageContentValues, patchStageContentValues, subscribeStageContentConfigUpdated } from '../api/stageContentDataCache.js';
 
 function SourceSelect({ sourceKey, multiple, value, onChange, disabled }) {
   const [options, setOptions] = useState([]);
@@ -71,8 +71,7 @@ const StageContentPanel = forwardRef(function StageContentPanel({ scopeKey, enti
       invalidateStageContentData(scopeKey, entityId);
       load().catch(() => {});
     };
-    window.addEventListener('stage-content-config-updated', refresh);
-    return () => window.removeEventListener('stage-content-config-updated', refresh);
+    return subscribeStageContentConfigUpdated(scopeKey, refresh);
   }, [scopeKey, entityId]);
   const fields = useMemo(() => (schema?.fields || []).filter((field) => field.field_kind === 'extension' && field.visible), [schema]);
   useLayoutEffect(() => {
