@@ -1,0 +1,46 @@
+{
+  "schema_version": "1.0",
+  "requirement": { "id": "REQ-20260730-002", "ref": "hengguan/REQ-20260730-002", "title": "统一输入项与交付件配置目录及旧库升级", "status": "ready", "document": "docs/requirements/hengguan/REQ-20260730-002/requirement.md" },
+  "assignment": { "module": "governance", "developer": "hengguan", "module_owner": "hengguan", "branch": "hengguan/REQ-20260730-002-unify-configuration", "worktree": "codex-desktop-current-worktree" },
+  "ai": { "enabled": true, "approved_service": "Codex desktop", "model": "approved-by-user", "contains_confidential_information": false, "context_sanitized": true, "production_access": false },
+  "scope": {
+    "writable_paths": [
+      "docs/**", "governance/**", "AGENTS.md",
+      "server/src/modules/settings/**", "server/src/modules/requirements/**", "server/src/modules/tickets/**", "server/src/modules/development/**", "server/src/modules/testing/**", "server/src/modules/release/**",
+      "server/src/platform/persistence/**", "server/src/bootstrap/**", "server/test/**",
+      "web/src/modules/settings/**", "web/src/modules/requirements/**", "web/src/modules/tickets/**", "web/src/modules/development/**", "web/src/modules/testing/**", "web/src/modules/release/**"
+    ],
+    "read_only_paths": ["PRODUCT.md", "server/templates/**", "governance/modules.yaml"],
+    "forbidden_paths": [".env", "**/.env", "**/*secret*", "**/*credential*", "attachments/**"]
+  },
+  "public_capability_change": {
+    "required": true,
+    "shared_change_issue": "hengguan/REQ-20260730-002",
+    "target_modules": ["governance", "settings", "requirements", "tickets", "development", "testing", "release", "platform/persistence"],
+    "new_methods": ["resolveBuiltinConfiguration", "applyBuiltinConfigurationUpgrades", "normalizeConfiguredFieldValue"],
+    "existing_method_changed": true,
+    "semantic_name_confirmed": true,
+    "old_behavior_preserved": true,
+    "owner_approved": true,
+    "owner_review_required_before_merge": true
+  },
+  "database": {
+    "changed": true,
+    "migration_paths": ["server/src/platform/persistence/migrations/0040_configuration_unification.sql", "server/src/platform/persistence/migrations/tdsql/0020_configuration_unification.sql"],
+    "mysql8_compatible": true,
+    "historical_data_impact": "只新增配置升级记录与补齐缺失的配置定义；不改写历史业务记录，不覆盖管理员已有配置。",
+    "rollback_or_compensation": "代码回退后保留已补齐配置和升级记录；按升级 ID 仅补偿无管理员或业务数据依赖的新增项。"
+  },
+  "external_access": { "changed": false, "api_paths": [], "readable_field_whitelist": [], "writable_field_whitelist": [], "action_whitelist": [], "audit_required": true },
+  "required_tests": [
+    { "name": "configuration-upgrades", "command": "RADAR_RUN_API_TESTS=1 node --test --test-name-pattern=配置升级 server/test/api-rbac.test.js" },
+    { "name": "priority-api", "command": "RADAR_RUN_API_TESTS=1 node --test --test-name-pattern=优先级 server/test/api-rbac.test.js" },
+    { "name": "build", "command": "npm run build --prefix web" },
+    { "name": "unit", "command": "npm test --prefix server" },
+    { "name": "api", "command": "npm run test:api --prefix server" },
+    { "name": "permission", "command": "npm run test:rbac --prefix server" },
+    { "name": "mysql8", "command": "node scripts/check-mysql8-migrations.mjs" }
+  ],
+  "risk": { "level": "high", "reasons": ["跨模块配置契约", "SQLite/TDSQL/MySQL 8 迁移", "旧库配置升级", "表单与导入服务端校验"], "required_approvals": ["hengguan"] },
+  "completion": { "changed_files_report_required": true, "test_result_report_required": true, "known_risks_report_required": true, "rollback_report_required": true, "requirement_acceptance_required": true }
+}
