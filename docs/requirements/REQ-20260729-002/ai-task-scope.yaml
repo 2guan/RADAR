@@ -1,11 +1,11 @@
 {
   "schema_version": "1.0",
   "requirement": { "id": "REQ-20260729-002", "title": "四类任务列表展示全链路任务状态", "status": "ready", "document": "docs/requirements/REQ-20260729-002/requirement.md" },
-  "assignment": { "module": "overview", "developer": "hengguan", "module_owner": "hengguan", "branch": "feat/REQ-20260729-002-task-status-columns", "worktree": "codex-desktop-current-worktree" },
+  "assignment": { "module": "overview", "developer": "hengguan", "module_owner": "hengguan", "branch": "hengguan/REQ-20260729-002-task-status-columns", "worktree": "codex-desktop-current-worktree" },
   "ai": { "enabled": true, "approved_service": "Codex desktop", "model": "approved-by-user", "contains_confidential_information": false, "context_sanitized": true, "production_access": false },
   "scope": {
     "writable_paths": [
-      "docs/requirements/REQ-20260729-002/**", "governance/modules.yaml",
+      "docs/requirements/REQ-20260729-002/**", "docs/governance/GITHUB-RULES.md", "governance/modules.yaml",
       "server/src/modules/overview/**", "server/src/modules/dashboard/**",
       "server/src/modules/requirements/**", "server/src/modules/tickets/**",
       "server/src/modules/development/**", "server/src/modules/testing/**",
@@ -15,7 +15,7 @@
       "web/src/shared/workflow/**",
       "server/test/**"
     ],
-    "read_only_paths": ["docs/governance/**", "PRODUCT.md", "server/templates/**"],
+    "read_only_paths": ["docs/governance/PROJECT-RULES.md", "docs/governance/AI-CODING-RULES.md", "PRODUCT.md", "server/templates/**"],
     "forbidden_paths": [".env", "**/.env", "**/*secret*", "**/*credential*", "attachments/**"]
   },
   "public_capability_change": {
