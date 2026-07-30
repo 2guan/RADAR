@@ -6,7 +6,7 @@
 
 1. 从 `docs/requirements/TEMPLATE.md` 创建一个可独立实现、测试和验收的需求目录。
 2. 研发受理后填写 `ai-task-scope.yaml`，明确模块、分支、工作区、可写/只读/禁止路径、风险和测试。
-3. 从最新 `main` 创建独立工作区和短生命周期分支：`feat|fix|hotfix|docs|chore/REQ-YYYYMMDD-001-short-name`。
+3. 从最新 `main` 创建独立工作区和短生命周期分支：`<开发者账号>/REQ-YYYYMMDD-001-short-name`，例如 `hengguan/REQ-20260729-002-task-status-columns`。分支名必须包含需求编号；需求类型、模块和变更说明通过提交信息与 PR 标题表达。
 4. 阅读根目录、目标模块 `AGENTS.md` 和 `governance/modules.yaml` 后再修改。
 
 ## 提交前
