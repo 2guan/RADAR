@@ -18,6 +18,12 @@
 | UI、组件、响应式与可访问性 | [DESIGN.md](DESIGN.md) |
 | 数据库搬迁、备份与恢复 | [MIGRATION.md](MIGRATION.md) |
 
+## 仓库级交付 Skill
+
+实现、修复、重构或代码评审 RADAR 功能时，读取并执行 `.agents/skills/radar-delivery-engineer/SKILL.md`。它补充用户任务分析、平台数据源复用、输入项/交付件配置、逐级验证和真实浏览器验收的工作流；不扩大任务范围，也不替代需求、`ai-task-scope.yaml` 或本文件所指的正式规约。
+
+工具未自动发现仓库内 Skill 时，必须显式读取该路径。与需求或更严格规约冲突时，始终以任务范围和更严格规约为准。
+
 ## 定位约定
 
 - 以 `modules.yaml` 判断模块边界和公开契约；不要从目录结构或相似实现推断权限。

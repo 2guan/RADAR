@@ -20,6 +20,8 @@ jobs:
       - run: npm ci --prefix server
       - run: npm ci --prefix web
       - run: node scripts/check-code-comments.mjs
+      - run: node scripts/check-repo-skill.mjs
+      - run: node scripts/check-ui-data-sources.mjs
       - run: node scripts/check-module-boundaries.mjs
       - run: node scripts/check-governance.mjs
       - run: node scripts/check-readme-tree.mjs
@@ -29,6 +31,7 @@ jobs:
       - run: npm run test:api --prefix server
       - run: npm run test:rbac --prefix server
       - run: npm run build --prefix web
+      - run: node scripts/verify-app-runtime.mjs
       - run: node scripts/check-dependency-audit.mjs
       - run: node scripts/check-licenses.mjs
 
