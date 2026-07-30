@@ -8,8 +8,8 @@
  */
 
 import { all } from '../../../platform/persistence/index.js';
-import { isTerminalStatus } from '../../settings/process-configuration/index.js';
 import { parseJsonArray } from '../../../platform/runtime/index.js';
+import { buildTaskStatusChain } from '../../overview/index.js';
 
 // ---------------------------------------------------------------------------
 // 维度元数据（label 与选项来源；optionSource 供前端决定下拉/预设取数方式）
@@ -124,43 +124,6 @@ function compareDimensionName(dim, a, b) {
   return 0;
 }
 
-/** 计算一组任务的节点状态（含单一代表状态 status，供阶段标签展示） */
-function nodeState(tasks) {
-  if (!tasks.length) return { state: 'pending', text: null, status: null };
-  const allTerminal = tasks.every((t) => isTerminalStatus(t.status));
-  const nonTerminal = tasks.find((t) => !isTerminalStatus(t.status));
-  const status = nonTerminal ? nonTerminal.status : tasks[tasks.length - 1].status;
-  const text = tasks.map((t) => t.status).join('、');
-  return { state: allTerminal ? 'done' : 'doing', text, status };
-}
-
-/** 构建单需求/工单链路概要 */
-function buildChain(req, devMap = {}, testMap = {}, rtMap = {}, unifiedLabels = false) {
-  const code = req.req_code || req.ticket_code;
-  const firstLabel = unifiedLabels ? '需求/工单' : (req.ticket_code ? '工单' : '需求');
-  const dev = devMap[code] || [];
-  const t = testMap[code] || {};
-  const sit = t.SIT || [];
-  const nft = t.NFT || [];
-  const sec = t.SEC || [];
-  const uat = t.UAT || [];
-  const rtStatus = rtMap[code];
-  const rt = rtStatus ? { status: rtStatus } : null;
-
-  // 阶段顺序：需求/工单分析 / 开发 / 应用组装 / 用户测试 / 非功能测试(按需) / 安全测试(按需) / 投产
-  const nodes = [
-    { key: firstLabel, label: unifiedLabels ? '需求/工单分析' : firstLabel, ...nodeState([{ status: req.status }]) },
-    { key: '开发', label: '开发', ...nodeState(dev) },
-    { key: 'SIT', label: unifiedLabels ? '应用组装测试' : '应用组装', ...nodeState(sit) },
-  ];
-  nodes.push({ key: 'UAT', label: '用户测试', ...nodeState(uat) });
-  if (nft.length) nodes.push({ key: 'NFT', label: '非功能测试', ...nodeState(nft) });
-  if (sec.length) nodes.push({ key: 'SEC', label: '安全测试', ...nodeState(sec) });
-  nodes.push({ key: '投产', label: unifiedLabels ? '投产审批' : '投产', ...nodeState(rt ? [{ status: rt.status }] : []) });
-
-  return { nodes };
-}
-
 // ---------------------------------------------------------------------------
 // 上下文：系统映射（编号→名称/机构/板块），构造一次复用
 // ---------------------------------------------------------------------------
@@ -266,7 +229,7 @@ export function extract(source, dim, row, ctx, filters) {
   // 统一效能统计记录保留其所属需求/工单；阶段记录本身只用于“阶段状态”。
   if (source === 'analytics') {
     const item = row._workItem || row;
-    const chain = buildChain(item, ctx.devMap, ctx.testMap, ctx.rtMap, true);
+    const chain = buildTaskStatusChain(item, ctx.devMap, ctx.testMap, ctx.rtMap);
     let current = chain.nodes.find((n) => n.state === 'doing');
     if (!current) current = chain.nodes.filter((n) => n.state === 'done').at(-1) || chain.nodes[0];
     switch (dim) {
@@ -327,7 +290,7 @@ export function extract(source, dim, row, ctx, filters) {
     }
     case 'stage': {
       if (realSource !== 'requirement' && realSource !== 'ticket') return ['未知'];
-      const chain = buildChain(row, ctx.devMap, ctx.testMap, ctx.rtMap);
+      const chain = buildTaskStatusChain(row, ctx.devMap, ctx.testMap, ctx.rtMap);
       let current = chain.nodes.find((n) => n.state === 'doing');
       if (!current) {
         const dones = chain.nodes.filter((n) => n.state === 'done');
@@ -337,7 +300,7 @@ export function extract(source, dim, row, ctx, filters) {
     }
     case 'task_status': {
       if (realSource !== 'requirement' && realSource !== 'ticket') return ['未知'];
-      const chain = buildChain(row, ctx.devMap, ctx.testMap, ctx.rtMap);
+      const chain = buildTaskStatusChain(row, ctx.devMap, ctx.testMap, ctx.rtMap);
       let current = chain.nodes.find((n) => n.state === 'doing');
       if (!current) {
         const dones = chain.nodes.filter((n) => n.state === 'done');

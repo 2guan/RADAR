@@ -18,6 +18,7 @@ import { useAppStore } from '../../../platform/state/app.js';
 import { getPreset } from '../../../platform/theme/presets.js';
 import { useDimensionMeta } from '../components/useDimensionMeta.js';
 import { useResponsive } from '../../../platform/ui/useResponsive.js';
+import { TaskStatusBadge } from '../../../shared/workflow/index.js';
 
 // 图表、编辑器和概览详情仅在用户打开相应交互时下载，避免仪表盘首屏加载 ECharts 与多个表单模块。
 const ChartEditor = lazy(() => import('../components/ChartEditor.jsx'));
@@ -268,7 +269,7 @@ export default function Dashboard() {
               <Card size="small" hoverable style={{ marginBottom: 10, cursor: 'pointer' }} onClick={() => openOverviewDetail(r)}>
                 <div className="crud-card-row"><span className="crud-card-label">需求/工单编号</span><span className="crud-card-value" style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', fontWeight: 600 }}>{r.req_code || r.code || '—'}</span></div>
                 <div className="crud-card-row"><span className="crud-card-label">名称</span><span className="crud-card-value dash-drill-name">{r.name || '—'}</span></div>
-                <div className="crud-card-row"><span className="crud-card-label">任务状态</span><span className="crud-card-value">{r.status || '—'}</span></div>
+                <div className="crud-card-row"><span className="crud-card-label">任务状态</span><span className="crud-card-value"><TaskStatusBadge shortStatus={r.task_status} status={r.status} fullStatus={r.task_status_full} /></span></div>
                 <div className="crud-card-row"><span className="crud-card-label">主责系统</span><span className="crud-card-value">{r.system || '—'}</span></div>
               </Card>
             )}
@@ -280,7 +281,7 @@ export default function Dashboard() {
             columns={[
               { title: '需求/工单编号', dataIndex: 'req_code', width: 160, render: (value, row) => value || row.code || '—' },
               { title: '名称', dataIndex: 'name', render: (value) => <span className="dash-drill-name">{value || '—'}</span> },
-              { title: '任务状态', dataIndex: 'status', width: 112 },
+              { title: '任务状态', dataIndex: 'task_status', width: 120, render: (_, row) => <TaskStatusBadge shortStatus={row.task_status} status={row.status} fullStatus={row.task_status_full} /> },
               { title: '主责系统', dataIndex: 'system', ellipsis: true },
             ]} />
         )}

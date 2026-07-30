@@ -26,6 +26,7 @@ import { exportXlsx, parseXlsx } from '../../platform/import-export/index.js';
 import { windowIds, inClause, resolveDictAttr, resolveSystemCodes, resolveReleasePoint } from '../settings/reference-data/index.js';
 import { ok, notFound, badRequest, parseJsonArray, parseJsonObject } from '../../platform/runtime/index.js';
 import { assertStatusChangePermission } from '../settings/process-configuration/index.js';
+import { resolveCurrentTaskStatuses } from '../overview/index.js';
 
 // 导入/导出列定义
 const IO_COLUMNS = [
@@ -238,6 +239,7 @@ export default async function ticketRoutes(fastify) {
       } catch {}
     }
 
+    const taskStatuses = await resolveCurrentTaskStatuses(result.list.map((row) => ({ ...row, req_code: row.ticket_code, entity_type: 'ticket' })));
     result.list = result.list.map((row) => {
       const decoded = decode(row);
       decoded.release_date = rpMap[decoded.release_point_id] || null;
@@ -247,6 +249,9 @@ export default async function ticketRoutes(fastify) {
 
       const rtStatus = rtMap[decoded.ticket_code] || null;
       decoded.release_stage_type = rtStatus ? (processStatusMap[rtStatus] || null) : null;
+      decoded.task_status = taskStatuses[decoded.ticket_code]?.display || '需求/工单分析-未开始';
+      decoded.task_status_short = taskStatuses[decoded.ticket_code]?.shortDisplay || '工单 · 未开始';
+      decoded.task_status_value = taskStatuses[decoded.ticket_code]?.status || '未开始';
 
       return decoded;
     });

@@ -10,7 +10,7 @@ import { useRef, useState, useEffect } from 'react';
 import { Card, Button, Space, Tag } from 'antd';
 import { ExportOutlined } from '@ant-design/icons';
 import { DataTable, FilterPanel } from '../../../shared/ui/index.js';
-import { StatusBadge } from '../../../shared/workflow/index.js';
+import { StatusBadge, TaskStatusBadge } from '../../../shared/workflow/index.js';
 import ReleaseDetail from '../components/ReleaseDetail.jsx';
 import Can from '../../../platform/auth/Can.jsx';
 import { apiPost, apiGet } from '../api/index.js';
@@ -69,6 +69,10 @@ export default function Release() {
 
   // 会签进度由服务端聚合，列表仅负责保持审批状态和业务对象的可读呈现。
   const columns = [
+    {
+      title: '任务状态', dataIndex: 'task_status_short', key: 'task_status', align: 'center', width: 120,
+      render: (_, row) => <TaskStatusBadge shortStatus={row.task_status_short} status={row.task_status_value} fullStatus={row.task_status} />,
+    },
     { title: '投产状态', dataIndex: 'release_status', key: 'release_status', align: 'center', width: 96, render: (s) => <StatusBadge status={s} /> },
     {
       title: '评审状态', dataIndex: 'review_status', key: 'review_status', align: 'center', width: 96,
@@ -159,7 +163,7 @@ export default function Release() {
           <Space direction="vertical" size={4} style={{ width: '100%' }}>
             <Space style={{ justifyContent: 'space-between', width: '100%' }}>
               <strong>{r.code}</strong>
-              <Space size={4}><StatusBadge status={r.release_status} />{r.review_status && <StatusBadge status={r.review_status} />}</Space>
+              <Space size={4}><TaskStatusBadge shortStatus={r.task_status_short} status={r.task_status_value} fullStatus={r.task_status} /><StatusBadge status={r.release_status} />{r.review_status && <StatusBadge status={r.review_status} />}</Space>
             </Space>
             <div>{r.title}</div>
             {Array.isArray(r.change_codes) && r.change_codes.length > 0 && (

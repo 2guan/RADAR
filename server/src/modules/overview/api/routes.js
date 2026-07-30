@@ -13,6 +13,7 @@ import { windowIds, inClause, formatAttachments } from '../../settings/reference
 import { ok, notFound, parseJsonArray } from '../../../platform/runtime/index.js';
 import { exportXlsx } from '../../../platform/import-export/index.js';
 import { getWorkItem, formatImpactItemsText, formatCoverageText } from '../../development/index.js';
+import { buildTaskStatusChain } from '../index.js';
 
 /** 计算一组任务的节点状态（含单一代表状态 status，供阶段标签展示） */
 function nodeState(tasks) {
@@ -97,35 +98,15 @@ async function entityArtifacts(code) {
   });
 }
 
-/** 构建单需求/工单链路概要（dev/test/rt 状态均由预载 Map 提供，免逐条查询） */
-function buildChain(req, devMap, testMap, rtMap, firstLabel = '需求') {
-  const dev = devMap[req.req_code] || [];
-  const t = testMap[req.req_code] || {};
-  const sit = t.SIT || [];
-  const nft = t.NFT || [];
-  const sec = t.SEC || [];
-  const uat = t.UAT || [];
-  const rtStatus = rtMap[req.req_code];
-  const rt = rtStatus ? { status: rtStatus } : null;
-
-  // 阶段顺序：需求/工单 / 开发 / 应用组装 / 非功能测试(按需) / 安全测试(按需) / 用户测试 / 投产
-  const nodes = [
-    { key: firstLabel, label: firstLabel, ...nodeState([{ status: req.status }]) },
-    { key: '开发', label: '开发', ...nodeState(dev) },
-    { key: 'SIT', label: '应用组装', ...nodeState(sit) },
-  ];
-  if (nft.length) nodes.push({ key: 'NFT', label: '非功能测试', ...nodeState(nft) });
-  if (sec.length) nodes.push({ key: 'SEC', label: '安全测试', ...nodeState(sec) });
-  nodes.push({ key: 'UAT', label: '用户测试', ...nodeState(uat) });
-  nodes.push({ key: '投产', label: '投产', ...nodeState(rt ? [{ status: rt.status }] : []) });
-
-  // 当前阶段：最后一个 doing；若无 doing 取最后一个 done
-  let current = nodes.find((n) => n.state === 'doing');
-  if (!current) {
-    const dones = nodes.filter((n) => n.state === 'done');
-    current = dones[dones.length - 1] || nodes[0];
-  }
-  return { nodes, currentStage: `${current.label}-${current.status || '未开始'}` };
+/** 构建单需求/工单链路概要，复用公开任务状态契约保持所有入口口径一致。 */
+function buildChain(req, devMap, testMap, rtMap) {
+  const chain = buildTaskStatusChain(req, devMap, testMap, rtMap);
+  return {
+    nodes: chain.nodes,
+    currentStage: chain.shortDisplay,
+    currentStageFull: chain.display,
+    currentStageStatus: chain.status,
+  };
 }
 
 /** 问题状态节点：终态由 issue_status 字典标记，其余有状态为 doing，无状态为 pending */
@@ -361,6 +342,8 @@ export default async function overviewRoutes(fastify) {
         systemName: names[0] || '—',     // 主责系统名称（标签展示）
         systemOrg: org,                    // 系统所属机构（标签展示）
         currentStage: chain.currentStage,
+        currentStageFull: chain.currentStageFull,
+        currentStageStatus: chain.currentStageStatus,
         nodes: chain.nodes,
       };
       (groups[org] ||= []).push(card);
