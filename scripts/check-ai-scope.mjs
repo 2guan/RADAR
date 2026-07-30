@@ -58,8 +58,12 @@ if (usesMainBranch) {
   if (new Date(branchException.review_by + 'T23:59:59Z') < new Date()) {
     throw new Error('branch_policy_exception expired on ' + branchException.review_by);
   }
-} else if (!/^(feat|fix|hotfix|docs|chore)\/REQ-\d{8}-\d{3}-[a-z0-9-]+$/.test(assignment.branch || '')) {
-  throw new Error('AI task branch must follow <type>/REQ-YYYYMMDD-NNN-short-name');
+} else {
+  const escapedDeveloper = assignment.developer.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const branchPattern = new RegExp(`^${escapedDeveloper}/REQ-\\d{8}-\\d{3}-[a-z0-9-]+$`);
+  if (!branchPattern.test(assignment.branch || '')) {
+    throw new Error('AI task branch must follow <developer>/REQ-YYYYMMDD-NNN-short-name and match assignment.developer');
+  }
 }
 // 高风险任务至少声明 API 与权限测试，不能仅依赖构建成功。
 if (!Array.isArray(scope.required_tests) || !scope.required_tests.some((item) => item.name === 'api') || !scope.required_tests.some((item) => item.name === 'permission')) {
