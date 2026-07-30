@@ -11,7 +11,7 @@
   "modules": {
     "governance": {
       "type": "platform", "description": "研发规约、模块清单、自动化治理脚本与协作工作流", "owners": {"primary": "hengguan", "backup": "hengguan", "approvers": ["hengguan"]},
-      "paths": {"backend": ["governance/**", "scripts/**"], "frontend": [".github/**", "AGENTS.md", "CONTRIBUTING.md", "AI-GUIDE.md", "COLLABORATION.md", "README.md", "docs/**"], "tests": ["server/test/governance/**"]},
+      "paths": {"backend": ["governance/**", "scripts/**"], "frontend": [".agents/**", ".github/**", "AGENTS.md", "CONTRIBUTING.md", "AI-GUIDE.md", "COLLABORATION.md", "README.md", "docs/**"], "tests": ["server/test/governance/**"]},
       "public_contracts": ["governance/modules.yaml", "docs/governance/**"], "allowed_dependencies": ["shared/contracts"], "ai_default_access": "read_write", "risk": "high", "shared_change_required": true
     },
     "platform/auth": {

@@ -5,7 +5,7 @@
   "branch_policy_exception": { "allowed": true, "reason": "项目负责人已授权当前单维护人过渡期继续在 main 分支维护；后续多人协作需求恢复独立分支和 PR。", "authorized_by": "hengguan", "review_by": "2026-08-30" },
   "ai": { "enabled": true, "approved_service": "Codex desktop", "model": "approved-by-user", "contains_confidential_information": false, "context_sanitized": true, "production_access": false },
   "scope": {
-    "writable_paths": ["AGENTS.md", "CONTRIBUTING.md", "AI-GUIDE.md", "COLLABORATION.md", "README.md", "DESIGN.md", "MIGRATION.md", "docs/**", "governance/**", ".github/**", "scripts/**", "server/scripts/**", "server/src/**", "server/test/**", "web/src/**", "web/vite.config.js", "server/package.json", "server/package-lock.json", "web/package.json", "web/package-lock.json", "Dockerfile", "docker-compose.yml", "docker-entrypoint.sh", ".env.example", ".trivyignore"],
+    "writable_paths": ["AGENTS.md", "CONTRIBUTING.md", "AI-GUIDE.md", "COLLABORATION.md", "README.md", "DESIGN.md", "MIGRATION.md", ".agents/**", "docs/**", "governance/**", ".github/**", "scripts/**", "server/scripts/**", "server/src/**", "server/test/**", "web/src/**", "web/vite.config.js", "server/package.json", "server/package-lock.json", "web/package.json", "web/package-lock.json", "Dockerfile", "docker-compose.yml", "docker-entrypoint.sh", ".env.example", ".trivyignore"],
     "read_only_paths": ["PRODUCT.md", "server/templates/**"],
     "forbidden_paths": [".env", "**/.env", "**/*secret*", "**/*credential*", "attachments/**"]
   },
@@ -21,7 +21,7 @@
   "public_capability_change": { "required": true, "shared_change_issue": "REQ-20260724-001", "target_module": "platform/shared", "existing_method_changed": false, "new_method": "module-public-contracts", "semantic_name_confirmed": true, "old_behavior_preserved": true, "owner_approved": true },
   "database": { "changed": true, "migration_paths": ["server/src/platform/persistence/migrations/0039_code_sequence.sql", "server/src/platform/persistence/migrations/tdsql/0019_code_sequence.sql"], "mysql8_compatible": true, "historical_data_impact": "新增编号序列表；首次领号会按现有业务编号最大序号自动接续，不改写历史编号。", "rollback_or_compensation": "代码回退后保留 code_sequence 表不影响既有业务；如需重置序列，仅在停止写入并完成备份后按规则和前缀删除对应行。" },
   "external_access": { "changed": false, "api_paths": [], "readable_field_whitelist": [], "writable_field_whitelist": [], "action_whitelist": [], "audit_required": true },
-  "required_tests": [{"name": "build", "command": "npm run build --prefix web"}, {"name": "unit", "command": "npm test --prefix server"}, {"name": "api", "command": "npm run test:api --prefix server"}, {"name": "permission", "command": "npm run test:rbac --prefix server"}, {"name": "external_whitelist", "command": "not_applicable"}],
+  "required_tests": [{"name": "skill", "command": "node scripts/check-repo-skill.mjs"}, {"name": "ui_data_sources", "command": "node scripts/check-ui-data-sources.mjs"}, {"name": "runtime", "command": "node scripts/verify-app-runtime.mjs"}, {"name": "build", "command": "npm run build --prefix web"}, {"name": "unit", "command": "npm test --prefix server"}, {"name": "api", "command": "npm run test:api --prefix server"}, {"name": "permission", "command": "npm run test:rbac --prefix server"}, {"name": "external_whitelist", "command": "not_applicable"}],
   "risk": { "level": "high", "reasons": ["公共架构与 CI 变更"], "required_approvals": ["hengguan"] },
   "completion": { "changed_files_report_required": true, "test_result_report_required": true, "known_risks_report_required": true, "rollback_report_required": true, "requirement_acceptance_required": true }
 }

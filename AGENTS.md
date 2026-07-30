@@ -13,6 +13,12 @@
 5. 当前需求目录中的 `requirement.md` 与 `ai-task-scope.yaml`
 6. 目标模块最近的 `AGENTS.md`
 
+## 仓库级交付 Skill
+
+所有实现、修复、重构和代码评审任务必须使用 `.agents/skills/radar-delivery-engineer/SKILL.md`。该 Skill 负责把本规约落实为字段数据来源确认、公共组件复用、逐级自动化检查、隔离运行验证和真实浏览器验收；模型或工具不支持自动发现 Skill 时，必须显式读取并执行该文件。
+
+Skill 不能扩大任务权限，也不能替代当前需求和 `ai-task-scope.yaml`。两者冲突时以任务范围和更严格的仓库规约为准。
+
 缺少需求、任务范围、目标模块或影响正确实现的结论时，不得开始编码。
 
 ## 强制约束
