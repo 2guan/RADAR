@@ -1,0 +1,4 @@
+interface:
+  display_name: "RADAR 产品与交付工程师"
+  short_description: "从用户任务、平台配置到真实页面验收完成 RADAR 开发"
+  default_prompt: "使用 $radar-delivery-engineer 分析、设计、实现并完整验收这个 RADAR 需求。"
