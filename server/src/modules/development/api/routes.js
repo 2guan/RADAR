@@ -33,6 +33,7 @@ import {
   getWorkItem, workItemCodesInReleasePoints, releaseDateMapForCodes,
 } from '../index.js';
 import { codePrefix, codeTemplateValues, formatCode } from '../../../shared/utils/code-template.js';
+import { resolveCurrentTaskStatuses } from '../../overview/index.js';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
 
@@ -269,6 +270,7 @@ export default async function devTaskRoutes(fastify) {
       const item = await getWorkItem(code);
       if (item) itemMap[code] = item;
     }
+    const taskStatuses = await resolveCurrentTaskStatuses(pageCodes.map((code) => itemMap[code] || { req_code: code }));
 
     result.list = result.list.map((row) => ({
       ...row,
@@ -276,6 +278,9 @@ export default async function devTaskRoutes(fastify) {
       entity_type: itemMap[row.req_code]?.entity_type || null,
       entity_label: itemMap[row.req_code]?.entity_label || null,
       impl_system_name: sysMap[row.impl_system] || row.impl_system,
+      task_status: taskStatuses[row.req_code]?.display || '需求/工单分析-未开始',
+      task_status_short: taskStatuses[row.req_code]?.shortDisplay || '需求 · 未开始',
+      task_status_value: taskStatuses[row.req_code]?.status || '未开始',
     }));
     result.list = await appendStageListValues('dev', result.list);
 

@@ -6,3 +6,6 @@
  */
 
 export const overviewContract = Object.freeze({ name: 'overview', mode: 'read-only' });
+export {
+  TASK_STATUS_STAGE_ORDER, taskStatusNode, shortTaskStatusStage, buildTaskStatusChain, resolveCurrentTaskStatuses,
+} from './application/task-status.js';

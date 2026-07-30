@@ -15,6 +15,7 @@ import {
   SOURCES, DIMENSIONS, CHART_TYPES, ANALYTICS_DIMENSIONS, ANALYTICS_STAGES,
   buildContext, aggregate, extract, matchFilters, isValidDim, testTypeOf,
 } from '../index.js';
+import { buildTaskStatusChain } from '../../overview/index.js';
 import { parseJsonArray } from '../../../platform/runtime/index.js';
 
 const DYNAMIC_STAGE_SCOPE = {
@@ -164,21 +165,30 @@ function projectRecord(source, row, ctx) {
     const item = row._workItem || row;
     const code = item.req_code || item.ticket_code;
     const primarySystems = extract(realSource, 'system', { ...row, impl_system: null }, ctx).map(sysName).join('、');
-    const latestTaskStatus = extract(realSource, 'current_task_status', row, ctx)[0];
+    const taskStatus = buildTaskStatusChain({ ...item, entity_type: row._entityType || item.entity_type }, ctx.devMap, ctx.testMap, ctx.rtMap);
     return {
       req_code: code, code, name: item.title || code,
-      status: latestTaskStatus || row.status || item.status, system: primarySystems,
+      status: taskStatus.status || row.status || item.status,
+      task_status: taskStatus.shortDisplay,
+      task_status_full: taskStatus.display,
+      system: primarySystems,
     };
   }
   if (realSource === 'requirement' || realSource === 'ticket') {
     const proposerNames = parseJsonArray(row.proposer).join('、');
     const code = realSource === 'ticket' ? row.ticket_code : row.req_code;
-    return { req_code: code, code, name: row.title, status: row.status, system: systems, org: extract(realSource, 'org', row, ctx).join('、'), owner: proposerNames };
+    const taskStatus = buildTaskStatusChain({ ...row, entity_type: realSource }, ctx.devMap, ctx.testMap, ctx.rtMap);
+    return {
+      req_code: code, code, name: row.title, status: row.status,
+      task_status: taskStatus.shortDisplay, task_status_full: taskStatus.display,
+      system: systems, org: extract(realSource, 'org', row, ctx).join('、'), owner: proposerNames,
+    };
   }
   if (realSource === 'releaseSystem') {
-    return { req_code: row.req_code, code: row.system_code, name: sysName(row.system_code), status: row.status, system: systems, org: row.impl_org || '', owner: '' };
+    return { req_code: row.req_code, code: row.system_code, name: sysName(row.system_code), status: row.status, task_status: `投产 · ${row.status || '未开始'}`, task_status_full: `投产审批-${row.status || '未开始'}`, system: systems, org: row.impl_org || '', owner: '' };
   }
-  return { req_code: row.req_code, code: row.task_code, name: row.task_name || row.task_code, status: row.status, system: systems, org: row.impl_org || '', owner: row.owner || '' };
+  const stage = { dev: '开发', sit: 'SIT', uat: 'UAT', nft: 'NFT', sec: 'SEC' }[realSource] || '任务';
+  return { req_code: row.req_code, code: row.task_code, name: row.task_name || row.task_code, status: row.status, task_status: `${stage} · ${row.status || '未开始'}`, task_status_full: `${stage}-${row.status || '未开始'}`, system: systems, org: row.impl_org || '', owner: row.owner || '' };
 }
 
 /** 当前用户是否可管理系统图表 */

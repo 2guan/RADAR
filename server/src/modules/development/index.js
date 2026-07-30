@@ -15,4 +15,5 @@ export {
 } from './application/impact-schema.js';
 export { calcDeviation } from './application/deviation.js';
 export { generateDevTaskCode, generateTestTaskCode } from './application/numbering.js';
+export { listDevTaskStatuses } from './application/task-statuses.js';
 export { MODULE_CONTRACT as deliveryContract } from './contracts/index.js';

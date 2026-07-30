@@ -6,5 +6,6 @@
  */
 
 export { default as StatusBadge, getStatusType, statusSelectWidth } from './StatusBadge.jsx';
+export { default as TaskStatusBadge } from './TaskStatusBadge.jsx';
 export { default as TaskEditor } from './TaskEditor.jsx';
 export { buildStageSectionLayout } from './stageSectionLayout.js';

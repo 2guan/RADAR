@@ -12,7 +12,7 @@ import {
   PlusOutlined, EditOutlined, DeleteOutlined, ImportOutlined, ExportOutlined,
 } from '@ant-design/icons';
 import { DataTable, FilterPanel } from '../../../shared/ui/index.js';
-import { StatusBadge } from '../../../shared/workflow/index.js';
+import { StatusBadge, TaskStatusBadge } from '../../../shared/workflow/index.js';
 import { HistoryDrawer } from '../../../platform/audit/index.js';
 import RequirementEditor from '../components/RequirementEditor.jsx';
 import Can from '../../../platform/auth/Can.jsx';
@@ -105,7 +105,8 @@ export default function Requirements() {
 
   // 关联开发或测试任务的需求禁止删除，避免破坏交付链路的可追溯性。
   const columns = [
-    { title: '状态', dataIndex: 'status', key: 'status', align: 'center', render: (s) => <StatusBadge status={s} /> },
+    { title: '任务状态', dataIndex: 'task_status_short', key: 'task_status', align: 'center', width: 120, render: (_, row) => <TaskStatusBadge shortStatus={row.task_status_short} status={row.task_status_value} fullStatus={row.task_status} /> },
+    { title: '需求状态', dataIndex: 'status', key: 'status', align: 'center', render: (s) => <StatusBadge status={s} /> },
     {
       title: '计划投产点',
       dataIndex: 'release_date',

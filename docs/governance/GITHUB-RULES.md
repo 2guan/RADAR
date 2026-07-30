@@ -2,7 +2,7 @@
 
 ## 分支、工作区与 PR
 
-- 每个需求使用独立工作区与短生命周期分支：`feat|fix|hotfix|docs|chore/REQ-YYYYMMDD-001-short-name`。
+- 每个需求使用独立工作区与短生命周期分支：`<开发者账号>/REQ-YYYYMMDD-001-short-name`，例如 `hengguan/REQ-20260729-002-task-status-columns`。分支名必须包含需求编号；需求类型、模块和变更说明通过提交信息与 PR 标题表达。
 - 一个 PR 只交付一个细粒度需求，必须引用需求编号并说明模块、契约、数据库、权限、审计、验证、发布和回退。
 - 不直接向 `main` 推送；不自行批准自己的 PR；不绕过 required checks、CODEOWNERS 或分支保护。
 

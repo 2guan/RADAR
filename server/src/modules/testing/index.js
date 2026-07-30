@@ -9,3 +9,4 @@ export {
   calcDeviation, formatCoverageText, generateTestTaskCode,
   getWorkItem, workItemCodesInReleasePoints, releaseDateMapForCodes,
 } from '../development/index.js';
+export { listTestTaskStatuses } from './application/task-statuses.js';
