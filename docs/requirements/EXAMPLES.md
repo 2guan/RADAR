@@ -2,7 +2,7 @@
 
 本文提供可直接模仿的需求、任务范围和完成报告写法，帮助 AI 和开发人员在实现前补全高频遗漏项。它不是平行规则来源：架构、配置、数据和安全规则以 [项目研发规约](../governance/PROJECT-RULES.md) 为准；AI 执行要求以 [AI Coding 规约](../governance/AI-CODING-RULES.md) 为准；分支和 PR 以 [GitHub 协作规约](../governance/GITHUB-RULES.md) 为准。
 
-所有编号、字段、人员和数据均为虚构示例。
+所有编号、字段、人员和数据均为虚构示例。全局需求引用使用 `<开发者账号>/REQ-YYYYMMDD-NNN`；例如 `hengguan/REQ-20260730-001` 的目录为 `docs/requirements/hengguan/REQ-20260730-001/`。
 
 ## 使用方式
 
@@ -19,7 +19,7 @@
 
 ```text
 1. requirement.md：目标、使用者、状态规则、权限、验收和明确不做项完整。
-2. ai-task-scope.yaml：目标模块、正确分支、可写路径、风险和测试完整。
+2. ai-task-scope.yaml：`requirement_ref`、目标模块、正确分支、可写路径、风险和测试完整。
 3. 影响分析：确认输入项、交付件、公开契约、数据库、权限/审计/附件/外网的适用结论。
 4. 相关文档：适用时先完成配置范围与字段标识、接口兼容说明、迁移方案、测试与回退说明。
 5. 准入：无影响实现的未决项，需求状态为 ready，才开始修改代码。
@@ -218,10 +218,11 @@
 ### 正确示例
 
 ```text
-需求编号：REQ-20260730-003
+需求引用：hengguan/REQ-20260730-003
+需求目录：docs/requirements/hengguan/REQ-20260730-003/
 分支：hengguan/REQ-20260730-003-add-dev-change-reason
 任务范围 assignment.branch：hengguan/REQ-20260730-003-add-dev-change-reason
-PR 标题：feat(REQ-20260730-003): add development change reason
+PR 标题：feat(hengguan/REQ-20260730-003): add development change reason
 ```
 
 ### 常见错误
@@ -229,7 +230,7 @@ PR 标题：feat(REQ-20260730-003): add development change reason
 | 错误写法 | 问题 | 正确处理 |
 | --- | --- | --- |
 | `feature/add-field` | 缺少开发者和需求编号 | 使用完整规范分支名 |
-| `hengguan/REQ-20260730-002-add-field` | 与需求目录编号不一致 | 统一需求、分支、任务范围和 PR 编号 |
+| `hengguan/REQ-20260730-002-add-field` | 与完整需求引用或需求目录编号不一致 | 统一开发者、需求、分支、任务范围和 PR 编号 |
 | 在另一需求的分支继续修改 | 会混入不相关提交和范围 | 切换或新建当前需求分支后再修改 |
 | 直接推送 `main` | 绕过常规 PR 流程 | 仅在需求和任务范围均明确批准例外时执行 |
 

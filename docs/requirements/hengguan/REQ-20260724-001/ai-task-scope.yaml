@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "requirement": { "id": "REQ-20260724-001", "title": "多人共创架构治理", "status": "ready", "document": "docs/requirements/REQ-20260724-001/requirement.md" },
+  "requirement": { "id": "REQ-20260724-001", "ref": "hengguan/REQ-20260724-001", "title": "多人共创架构治理", "status": "ready", "document": "docs/requirements/hengguan/REQ-20260724-001/requirement.md" },
   "assignment": { "module": "governance", "developer": "hengguan", "module_owner": "hengguan", "branch": "main", "worktree": "repository-root" },
   "branch_policy_exception": { "allowed": true, "reason": "项目负责人已授权当前单维护人过渡期继续在 main 分支维护；后续多人协作需求恢复独立分支和 PR。", "authorized_by": "hengguan", "review_by": "2026-08-30" },
   "ai": { "enabled": true, "approved_service": "Codex desktop", "model": "approved-by-user", "contains_confidential_information": false, "context_sanitized": true, "production_access": false },

@@ -1,13 +1,13 @@
 name: 功能、重构或规约变更
 description: 创建可追踪、可验收的 RADAR 需求
-title: "[REQ-YYYYMMDD-001] "
+title: "[开发者账号/REQ-YYYYMMDD-001] "
 labels: ["requirement"]
 body:
   - type: input
-    id: requirement
+    id: requirement_ref
     attributes:
-      label: 需求编号
-      placeholder: REQ-YYYYMMDD-001
+      label: 完整需求引用
+      placeholder: hengguan/REQ-YYYYMMDD-001
     validations:
       required: true
   - type: textarea
@@ -32,4 +32,3 @@ body:
         - label: 涉及数据库或历史数据
         - label: 涉及认证、权限、审计或附件
         - label: 涉及外网访问
-

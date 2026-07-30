@@ -52,7 +52,7 @@ RADAR/
 │   ├── governance/                  # 项目、AI、GitHub 三类正式规约
 │   ├── manuals/                     # 用户、部署与业务操作手册
 │   ├── planning/                    # 建设方案
-│   └── requirements/                # 需求、任务范围模板与已受理需求
+│   └── requirements/                # 模板、示例与 <开发者账号>/REQ-... 需求目录
 ├── governance/
 │   └── modules.yaml                 # 模块、Owner、依赖与公开契约机器事实源
 ├── scripts/                         # CI 可复用的治理、边界、迁移与文档检查

@@ -2,14 +2,14 @@
 
 ## 研发工作流
 
-1. 从 `docs/requirements/TEMPLATE.md` 创建可独立实现、测试和验收的需求目录，并在受理后完成 `requirement.md`、`ai-task-scope.yaml` 及影响分析识别出的相关文档。
+1. 以 `<开发者账号>/REQ-YYYYMMDD-NNN` 创建全局需求引用和 `docs/requirements/<开发者账号>/<REQ-YYYYMMDD-NNN>/` 目录，再从 `docs/requirements/TEMPLATE.md` 完成 `requirement.md`、`ai-task-scope.yaml` 及影响分析识别出的相关文档。
 2. 文档完成并确认需求为 `ready` 后，才可根据任务范围确认模块、风险、测试、数据库和外网影响，并按根目录 `AGENTS.md` 定位所需的架构和目录级指令。
 3. 从最新 `main` 创建本规约要求的独立工作区与分支，完成一个细粒度需求后提交 PR。
 
 ## 分支、工作区与 PR
 
-- 每个需求使用独立工作区与短生命周期分支：`<开发者账号>/REQ-YYYYMMDD-001-short-name`，例如 `hengguan/REQ-20260729-002-task-status-columns`。分支名必须包含需求编号；需求类型、模块和变更说明通过提交信息与 PR 标题表达。
-- 一个 PR 只交付一个细粒度需求，必须引用需求编号并说明模块、契约、数据库、权限、审计、验证、发布和回退。
+- 每个需求使用独立工作区与短生命周期分支：`<开发者账号>/REQ-YYYYMMDD-NNN-short-name`，例如 `hengguan/REQ-20260729-002-task-status-columns`。分支名必须包含完整需求引用中的开发者和本地编号；需求类型、模块和变更说明通过提交信息与 PR 标题表达。
+- 一个 PR 只交付一个细粒度需求，必须引用完整需求引用 `<开发者账号>/REQ-YYYYMMDD-NNN`，并说明模块、契约、数据库、权限、审计、验证、发布和回退。
 - 不直接向 `main` 推送；不自行批准自己的 PR；不绕过 required checks、CODEOWNERS 或分支保护。
 
 当前仅 `REQ-20260724-001` 获项目负责人书面授权，可在单维护人过渡期直接维护 `main`。该例外必须同时记录在需求与 AI 任务范围中，并在 `review_by` 前复核；它不适用于后续多人协作需求，也不免除测试、审计与范围检查。

@@ -2,6 +2,7 @@
 document_type: ai_coding_requirement
 template_version: "1.0"
 requirement_id: "REQ-YYYYMMDD-001"
+requirement_ref: "[开发者账号]/REQ-YYYYMMDD-001"
 title: "[需求标题]"
 status: "draft"
 priority: "P2"
@@ -15,9 +16,9 @@ internet_ai_coding_allowed: true
 last_updated: "YYYY-MM-DD"
 ---
 
-# [REQ-YYYYMMDD-001] [需求标题]
+# [[开发者账号]/REQ-YYYYMMDD-001] [需求标题]
 
-> 一份文档只描述一个可独立实现、测试和验收的细粒度需求。未涉及项填写“不涉及”。涉密需求不得提交给互联网 AI。
+> 一份文档只描述一个可独立实现、测试和验收的细粒度需求。目录固定为 `docs/requirements/<开发者账号>/<REQ-YYYYMMDD-NNN>/`，全局引用固定为 `<开发者账号>/REQ-YYYYMMDD-NNN`。未涉及项填写“不涉及”。涉密需求不得提交给互联网 AI。
 
 ## 0. AI 执行约束
 
@@ -116,7 +117,7 @@ last_updated: "YYYY-MM-DD"
 
 ## 8. 研发上下文
 
-- 目标模块 / Owner / 基准分支：分支必须为 `<开发者账号>/REQ-YYYYMMDD-001-short-name`；获批准的例外须同时写入需求与任务范围。
+- 目标模块 / Owner / 基准分支：`requirement_ref`、目录开发者、任务范围 `assignment.developer` 和分支前缀必须一致；分支必须为 `<开发者账号>/REQ-YYYYMMDD-NNN-short-name`；获批准的例外须同时写入需求与任务范围。
 - 允许与禁止修改路径：见 `ai-task-scope.yaml`。
 - 必须复用的能力与公开契约：
 - 接口契约（路径、方法、请求、响应、权限）：

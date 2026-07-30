@@ -2,6 +2,7 @@
 document_type: ai_coding_requirement
 template_version: "1.0"
 requirement_id: "REQ-20260729-002"
+requirement_ref: "hengguan/REQ-20260729-002"
 title: "四类任务列表展示全链路任务状态"
 status: "ready"
 priority: "P2"
@@ -15,7 +16,7 @@ internet_ai_coding_allowed: true
 last_updated: "2026-07-29"
 ---
 
-# [REQ-20260729-002] 四类任务列表展示全链路任务状态
+# [hengguan/REQ-20260729-002] 四类任务列表展示全链路任务状态
 
 ## 0. AI 执行约束
 

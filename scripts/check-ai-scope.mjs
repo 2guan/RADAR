@@ -20,9 +20,10 @@ const scopeFile = option('--scope');
 const base = option('--base') || 'HEAD~1';
 const head = option('--head') || 'HEAD';
 const includeWorkingTree = args.includes('--working-tree');
+const scopeRelative = scopeFile ? normalize(path.relative(root, path.resolve(root, scopeFile))) : null;
 
 // 先校验任务描述完整性，避免对未准入需求执行后续文件范围判断。
-if (!scopeFile) throw new Error('Usage: node scripts/check-ai-scope.mjs --scope docs/requirements/REQ-.../ai-task-scope.yaml [--base ref] [--head ref]');
+if (!scopeFile) throw new Error('Usage: node scripts/check-ai-scope.mjs --scope docs/requirements/<developer>/REQ-.../ai-task-scope.yaml [--base ref] [--head ref]');
 const scope = readJsonYaml(scopeFile);
 for (const key of ['requirement', 'assignment', 'ai', 'scope', 'database', 'external_access', 'required_tests', 'risk', 'completion']) {
   if (!(key in scope)) throw new Error(scopeFile + ' is missing ' + key);
@@ -44,10 +45,32 @@ if (!assignment.module_owner || assignment.module_owner === 'UNASSIGNED') throw 
 if (assignment.module_owner !== moduleDefinition.owners?.primary) {
   throw new Error('AI task scope module_owner must match the module primary owner');
 }
+const requirementId = scope.requirement?.id;
+const requirementRef = assignment.developer + '/' + requirementId;
+const requirementRoot = 'docs/requirements/' + requirementRef;
+if (!/^REQ-\d{8}-\d{3}$/.test(requirementId || '')) {
+  throw new Error('AI task scope requirement.id must follow REQ-YYYYMMDD-NNN');
+}
+if (scope.requirement?.ref !== requirementRef) {
+  throw new Error('AI task scope requirement.ref must equal assignment.developer + "/" + requirement.id');
+}
+if (normalize(scope.requirement?.document || '') !== requirementRoot + '/requirement.md') {
+  throw new Error('AI task scope requirement.document must be ' + requirementRoot + '/requirement.md');
+}
+if (scopeRelative !== requirementRoot + '/ai-task-scope.yaml') {
+  throw new Error('AI task scope must be stored at ' + requirementRoot + '/ai-task-scope.yaml');
+}
 const requirementDocument = path.join(root, scope.requirement.document || '');
 if (!fs.existsSync(requirementDocument)) throw new Error('AI task scope requirement document is missing');
-const documentStatus = fs.readFileSync(requirementDocument, 'utf8').match(/^status:\s*["']?([^"'\n]+)["']?\s*$/m)?.[1];
+const requirementSource = fs.readFileSync(requirementDocument, 'utf8');
+const documentStatus = requirementSource.match(/^status:\s*["']?([^"'\n]+)["']?\s*$/m)?.[1];
 if (documentStatus !== 'ready') throw new Error('Requirement document must have status: ready');
+const documentId = requirementSource.match(/^requirement_id:\s*["']?([^"'\n]+)["']?\s*$/m)?.[1];
+const documentRef = requirementSource.match(/^requirement_ref:\s*["']?([^"'\n]+)["']?\s*$/m)?.[1];
+const documentDeveloper = requirementSource.match(/^developer:\s*["']?([^"'\n]+)["']?\s*$/m)?.[1];
+if (documentId !== requirementId || documentRef !== requirementRef || documentDeveloper !== assignment.developer) {
+  throw new Error('Requirement document id, ref and developer must match the task scope assignment');
+}
 
 const branchException = scope.branch_policy_exception || {};
 const usesMainBranch = assignment.branch === 'main' || assignment.worktree === 'repository-root';

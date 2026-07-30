@@ -12,7 +12,7 @@ import { globToRegExp, matches } from '../../scripts/governance-utils.mjs';
 test('治理路径匹配：双星号匹配任意深度目录', () => {
   assert.equal(globToRegExp('server/src/**').test('server/src/modules/requirements/routes.js'), true);
   assert.equal(matches('.github/workflows/ci.yml', ['.github/**']), true);
-  assert.equal(matches('docs/requirements/REQ-1/requirement.md', ['docs/**']), true);
+  assert.equal(matches('docs/requirements/hengguan/REQ-1/requirement.md', ['docs/**']), true);
 });
 
 test('治理路径匹配：单星号不跨目录', () => {

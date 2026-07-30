@@ -2,6 +2,7 @@
 document_type: ai_coding_requirement
 template_version: "1.0"
 requirement_id: "REQ-20260724-001"
+requirement_ref: "hengguan/REQ-20260724-001"
 title: "多人共创架构治理"
 status: "ready"
 priority: "P1"
@@ -15,7 +16,7 @@ internet_ai_coding_allowed: true
 last_updated: "2026-07-27"
 ---
 
-# [REQ-20260724-001] 多人共创架构治理
+# [hengguan/REQ-20260724-001] 多人共创架构治理
 
 ## 目标
 
