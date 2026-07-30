@@ -98,7 +98,7 @@ last_updated: "2026-07-30"
 
 ## 8. 研发上下文
 
-- 目标模块 / Owner / 基准分支：`governance` / `hengguan` / `origin/main`；工作分支为 `vvvvx/REQ-20260730-004-Skill增强`。
+- 目标模块 / Owner / 基准分支：`governance` / `hengguan` / `origin/main`；工作分支为 `vvvvx/REQ-20260730-004-skill-enhancement`。
 - 受影响模块：仅 `governance`；Skill 引用 settings 的已登记公开能力和规约，不修改 settings 内部实现。
 - 必须复用的能力与公开契约：`settings/process-configuration` 的公开 `index.js`，其中包括 `StageBuiltinFields`、`StageBuiltinField`、`StageBuiltinCatalogField`、`StageContentPanel` 和配置升级机制；不得直接依赖 settings 私有持久化实现。
 - 数据库迁移、历史数据、SQLite/TDSQL/MySQL 8：不适用。运行检查以随机端口、临时 SQLite 与临时附件目录运行，结束后删除临时目录。
