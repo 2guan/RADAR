@@ -1,7 +1,7 @@
 -- ============================================================================
--- 文件：tdsql/0020_configuration_unification.sql
--- 用途：TDSQL/MySQL 8 对等新增优先级列和内置配置升级台账。
+-- 文件：server/src/platform/persistence/migrations/tdsql/0020_configuration_unification.sql
 -- 说明：仅追加列和表；不改写已有业务记录或管理员配置。
+-- 用途：TDSQL/MySQL 8 对等新增优先级列和内置配置升级台账。
 -- 作者：hengguan
 -- ============================================================================
 
