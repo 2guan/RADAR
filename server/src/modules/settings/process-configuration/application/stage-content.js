@@ -39,7 +39,7 @@ const NATIVE_FIELD_DEFAULTS = {
   requirement: [
     ['req_code', '需求编号', 'text'], ['status', '需求状态', 'select'], ['req_type', '需求类型', 'select', 'dict:req_type'],
     ['release_point_id', '计划投产点', 'release_point', 'release_point'], ['propose_time', '提出时间', 'datetime'],
-    ['issue_no', '关联问题/工单编号', 'text'], ['is_accounting', '是否涉账', 'select'], ['title', '需求标题', 'text'],
+    ['issue_no', '关联问题/工单编号', 'text'], ['is_accounting', '是否涉账', 'select'], ['priority', '优先级', 'select'], ['title', '需求标题', 'text'],
     ['summary', '需求概述', 'textarea'], ['main_systems', '主责系统', 'select', 'system', 1],
     ['collab_dev_systems', '协同改造系统', 'select', 'system', 1], ['collab_test_systems', '协同测试系统', 'select', 'system', 1],
     ['propose_dept', '提出部门', 'select', 'dict:req_dept'], ['proposer', '提出人', 'person', 'person', 1],
@@ -48,7 +48,7 @@ const NATIVE_FIELD_DEFAULTS = {
   ticket: [
     ['ticket_code', '工单编号', 'text'], ['status', '工单状态', 'select'], ['ticket_type', '工单类型', 'select', 'dict:ticket_type'],
     ['release_point_id', '计划投产点', 'release_point', 'release_point'], ['propose_time', '提出时间', 'datetime'],
-    ['issue_no', '关联问题/工单编号', 'text'], ['is_accounting', '是否涉账', 'select'], ['title', '工单概述', 'text'],
+    ['issue_no', '关联问题/工单编号', 'text'], ['is_accounting', '是否涉账', 'select'], ['priority', '优先级', 'select'], ['title', '工单概述', 'text'],
     ['summary', '工单详情', 'textarea'], ['main_systems', '主责系统', 'select', 'system', 1],
     ['collab_dev_systems', '协同改造系统', 'select', 'system', 1], ['collab_test_systems', '协同测试系统', 'select', 'system', 1],
     ['propose_dept', '提出部门', 'select', 'dict:req_dept'], ['proposer', '提出人', 'person', 'person', 1],
@@ -84,6 +84,50 @@ const NATIVE_FIELD_DEFAULTS = {
     ['related_artifacts', '关联制品情况', 'component', '', 0, 'release_artifacts'],
   ],
 };
+
+/**
+ * 内置配置目录是字段语义的唯一代码基线：数据库只保存管理员可调整的布局、可见性和状态规则。
+ * `renderer` 明确区分可由公共控件呈现的普通字段和必须由业务 JSX 声明的复杂控件。
+ */
+export const BUILTIN_CONFIGURATION_UPGRADE_ID = 'settings.builtin-configuration.v1';
+export const PRIORITY_OPTIONS = [
+  { value: '高', label: '高' },
+  { value: '中', label: '中' },
+  { value: '低', label: '低' },
+];
+
+export function resolveBuiltinConfiguration(scopeKey, fieldKey) {
+  const root = baseScope(scopeKey);
+  const definition = (NATIVE_FIELD_DEFAULTS[root] || []).find(([key]) => key === fieldKey);
+  if (!definition) return null;
+  const [key, label, inputType, sourceKey = '', multiple = 0, componentKey = null] = definition;
+  const priority = key === 'priority';
+  return {
+    scope_key: scopeKey,
+    field_key: key,
+    label,
+    input_type: inputType,
+    source_key: sourceKey || null,
+    multiple: !!multiple,
+    component_key: componentKey,
+    renderer: priority ? 'standard' : (inputType === 'component' ? 'adapter' : 'declaration'),
+    default_value: priority ? '中' : null,
+    options: priority ? PRIORITY_OPTIONS : [],
+    capabilities: priority ? { list: true, filter: true, import: true, export: true } : {},
+  };
+}
+
+/** 所有写入入口共用字段语义；调用方决定缺失字段是否应写入默认值。 */
+export function normalizeConfiguredFieldValue(scopeKey, fieldKey, value, { defaultOnEmpty = true } = {}) {
+  const definition = resolveBuiltinConfiguration(scopeKey, fieldKey);
+  if (!definition || fieldKey !== 'priority') return value;
+  const normalized = value === undefined || value === null ? '' : String(value).trim();
+  if (!normalized) return defaultOnEmpty ? definition.default_value : value;
+  if (!definition.options.some((option) => option.value === normalized)) {
+    throw badRequest(`优先级仅支持${definition.options.map((option) => option.label).join('、')}`);
+  }
+  return normalized;
+}
 
 const DELIVERABLE_DEFAULTS = {
   requirement: ['需求说明书'],
@@ -285,7 +329,7 @@ export async function getStageContentConfig(scopeKey, { includeDeleted = false }
     scope,
     statuses,
     sections,
-    fields: fields.map((row) => ({ ...row, rules: fieldRules.get(row.id) || {} })),
+    fields: fields.map((row) => ({ ...row, rules: fieldRules.get(row.id) || {}, catalog: resolveBuiltinConfiguration(scopeKey, row.field_key) })),
     deliverables: deliverables.map((row) => ({ ...row, rules: deliverableRules.get(row.id) || {}, template: templateMap.get(row.id) || null })),
   };
 }
@@ -791,6 +835,62 @@ export async function seedStageContentDefaults({ builtinMetadata = {}, sectionDe
   await synchronizeBuiltinLayout(sectionDefaults, builtinMetadata);
   await synchronizeDeliverableSectionPresentation();
   await reconcileLegacyReleaseApplyDeliverable();
+}
+
+/**
+ * 为已运行环境补齐目录中新出现的默认定义。该入口不调用全量种子校准：
+ * 已存在（包括软删除）的分区、字段、交付件、规则和模板均视为管理员意图，绝不覆盖。
+ */
+export async function applyBuiltinConfigurationUpgrades({ builtinMetadata = {}, sectionDefaults = {} } = {}) {
+  return await tx(async () => {
+    const applied = await get('SELECT upgrade_id FROM configuration_upgrade_ledger WHERE upgrade_id = ?', BUILTIN_CONFIGURATION_UPGRADE_ID);
+    if (applied) return { applied: false, upgrade_id: BUILTIN_CONFIGURATION_UPGRADE_ID, added: [] };
+
+    const added = [];
+    for (const [scopeKey, label, entityType, tableName, statusCategory, statusStage, statusField, permissionModule] of STAGE_SCOPE_DEFAULTS) {
+      if (!await get('SELECT scope_key FROM stage_scope WHERE scope_key = ?', scopeKey)) {
+        await run('INSERT INTO stage_scope (scope_key, label, entity_type, table_name, status_category, status_stage, status_field, permission_module) VALUES (?,?,?,?,?,?,?,?)', scopeKey, label, entityType, tableName, statusCategory, statusStage, statusField, permissionModule);
+        added.push(`scope:${scopeKey}`);
+      }
+      const sectionIds = new Map();
+      for (const [index, definition] of builtinSections(sectionDefaults, scopeKey).entries()) {
+        let section = await get('SELECT id, deleted_at FROM stage_section WHERE scope_key = ? AND section_key = ?', scopeKey, definition.key);
+        if (!section) {
+          const res = await run('INSERT INTO stage_section (scope_key, section_key, title, sort, collapsed, is_builtin, layout_mode, show_title) VALUES (?,?,?,?,?,1,?,?)', scopeKey, definition.key, definition.title, index * 10, definition.collapsed ? 1 : 0, definition.layout || 'left', definition.show_title === false ? 0 : 1);
+          section = { id: res.lastInsertRowid };
+          added.push(`section:${scopeKey}.${definition.key}`);
+        }
+        // 已软删除分区不可被升级重新启用，也不应成为新增字段的挂载位置。
+        if (!section.deleted_at) sectionIds.set(definition.key, section.id);
+      }
+      const statuses = await listStageStatuses(scopeKey);
+      const root = baseScope(scopeKey);
+      for (const [index, [fieldKey, fieldLabel, inputType, sourceKey = '', multiple = 0, componentKey = null]] of (NATIVE_FIELD_DEFAULTS[root] || []).entries()) {
+        if ((root !== 'test' && fieldKey === 'coverage_analysis') || (root === 'test' && fieldKey === 'coverage_analysis' && scopeKey !== 'test.SIT')) continue;
+        // 不过滤 deleted_at：管理员删除某项后，升级必须保留该意图。
+        if (await get('SELECT id FROM stage_field_definition WHERE scope_key = ? AND field_key = ?', scopeKey, fieldKey)) continue;
+        const metadata = nativeFieldMetadata(builtinMetadata, scopeKey, fieldKey);
+        const sectionKey = metadata.section || builtinSections(sectionDefaults, scopeKey)[0]?.key || null;
+        const isComponent = inputType === 'component';
+        const res = await run(`INSERT INTO stage_field_definition (scope_key, field_key, label, field_kind, input_type, source_key, multiple, native_column, component_key, section_id, column_span, visible, list_visible, filterable, dashboard_dimension, sort, is_builtin) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)`, scopeKey, fieldKey, fieldLabel, isComponent ? 'component' : 'native', inputType, sourceKey || null, multiple ? 1 : 0, isComponent ? null : fieldKey, componentKey, sectionIds.get(sectionKey) || null, isComponent || inputType === 'textarea' || multiple ? 24 : 12, 1, metadata.list || 0, metadata.filter || 0, metadata.dashboard || 0, index * 10);
+        await replaceRules('stage_field_status_rule', 'field_definition_id', res.lastInsertRowid, nativeRequiredRules(statuses, metadata.required_from), statuses);
+        added.push(`field:${scopeKey}.${fieldKey}`);
+      }
+      for (const [index, labelText] of (DELIVERABLE_DEFAULTS[root] || []).entries()) {
+        const deliverableKey = `builtin_${index + 1}`;
+        // 同样不按 deleted_at 查询，避免复活已被管理员移除的交付件。
+        if (await get('SELECT id FROM deliverable_definition WHERE scope_key = ? AND deliverable_key = ?', scopeKey, deliverableKey)) continue;
+        const metadata = { ...(DELIVERABLE_DEFAULT_METADATA[root]?.[labelText] || {}), ...(DELIVERABLE_DEFAULT_METADATA[scopeKey]?.[labelText] || {}) };
+        const res = await run('INSERT INTO deliverable_definition (scope_key, deliverable_key, label, input_mode, visible, sort, layout_mode) VALUES (?,?,?,?,?,?,?)', scopeKey, deliverableKey, labelText, 'both', 1, index * 10, metadata.layout || 'left');
+        await replaceRules('deliverable_status_rule', 'deliverable_definition_id', res.lastInsertRowid, nativeRequiredRules(statuses, metadata.required_from), statuses);
+        const handlerKey = CUSTOM_DELIVERABLE_TEMPLATE_HANDLERS[root]?.[labelText];
+        if (handlerKey) await run('INSERT INTO deliverable_template_version (deliverable_definition_id, template_mode, handler_key, version_no, enabled) VALUES (?,?,?,?,1)', res.lastInsertRowid, 'custom', handlerKey, 0);
+        added.push(`deliverable:${scopeKey}.${deliverableKey}`);
+      }
+    }
+    await run('INSERT INTO configuration_upgrade_ledger (upgrade_id, details) VALUES (?,?)', BUILTIN_CONFIGURATION_UPGRADE_ID, JSON.stringify({ added }));
+    return { applied: true, upgrade_id: BUILTIN_CONFIGURATION_UPGRADE_ID, added };
+  });
 }
 
 /**

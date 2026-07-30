@@ -6,6 +6,7 @@
  */
 
 import { Children, useEffect, useMemo, useState } from 'react';
+import { Form, Select } from 'antd';
 import { invalidateStageContentData, loadStageContentSchema, subscribeStageContentConfigUpdated } from '../api/stageContentDataCache.js';
 
 function normalizeScope(scopeKey) {
@@ -14,7 +15,7 @@ function normalizeScope(scopeKey) {
 
 function directFieldDescriptors(children) {
   return Children.toArray(children)
-    .filter((child) => child?.type === StageBuiltinField && child.props?.fieldKey)
+    .filter((child) => (child?.type === StageBuiltinField || child?.type === StageBuiltinCatalogField) && child.props?.fieldKey)
     .map((child) => child.props);
 }
 
@@ -83,7 +84,7 @@ export default function StageBuiltinFields({ scopeKey, defaults = {}, children }
       const placement = model.placementByKey.get(descriptor.fieldKey);
       const fields = placement && result.get(placement.section.section_key);
       if (!fields) continue;
-      fields.push(<BuiltinFieldSlot key={descriptor.fieldKey} placement={placement}>{descriptor.children}</BuiltinFieldSlot>);
+      fields.push(<BuiltinFieldSlot key={descriptor.fieldKey} placement={placement} descriptor={descriptor} />);
     }
     return result;
   }, [descriptors, model.activeSections, model.placementByKey]);
@@ -115,12 +116,43 @@ export default function StageBuiltinFields({ scopeKey, defaults = {}, children }
   </>;
 }
 
-function BuiltinFieldSlot({ placement, children }) {
+function BuiltinFieldSlot({ placement, descriptor }) {
   const className = `stage-builtin-field${placement.columnSpan === 24 ? ' stage-builtin-field-full' : ''}`;
-  return <div className={className} style={{ order: placement.sort }}>{children}</div>;
+  const content = descriptor.renderer === 'catalog'
+    ? <StageCatalogControl catalog={placement.field?.catalog} descriptor={descriptor} />
+    : descriptor.children;
+  return <div className={className} style={{ order: placement.sort }}>{content}</div>;
+}
+
+/**
+ * 目录型控件只消费服务端下发的普通字段定义；未在目录中声明或标记为业务适配器的字段不会渲染，
+ * 以免配置已注册却被误认为页面已实现。
+ */
+function StageCatalogControl({ catalog, descriptor }) {
+  if (!catalog || catalog.renderer !== 'standard' || catalog.input_type !== 'select') return null;
+  return <Form.Item
+    name={descriptor.fieldKey}
+    label={catalog.label}
+    initialValue={catalog.default_value ?? undefined}
+    rules={descriptor.rules || []}
+    style={{ marginBottom: 8 }}
+  >
+    <Select
+      size="small"
+      options={catalog.options || []}
+      disabled={descriptor.readonly}
+      placeholder={`请选择${catalog.label}`}
+      style={{ width: '100%' }}
+    />
+  </Form.Item>;
 }
 
 /** 供业务页面声明内置字段；由 StageBuiltinFields 按配置统一渲染。 */
 export function StageBuiltinField() {
+  return null;
+}
+
+/** 供普通目录字段声明；复杂字段仍使用 StageBuiltinField 包裹业务 JSX 适配器。 */
+export function StageBuiltinCatalogField() {
   return null;
 }

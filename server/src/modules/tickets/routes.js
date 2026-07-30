@@ -18,6 +18,7 @@ import {
   appendStageListValues,
   extensionValuesFromExcelRow,
   getStageExcelColumns,
+  normalizeConfiguredFieldValue,
   saveExtensionValues,
   validateStageContent,
 } from '../settings/process-configuration/index.js';
@@ -36,6 +37,7 @@ const IO_COLUMNS = [
   { key: 'status', title: '工单状态' },
   { key: 'ticket_type', title: '工单类型' },
   { key: 'is_accounting', title: '是否涉账' },
+  { key: 'priority', title: '优先级' },
   { key: 'propose_dept', title: '提出部门' },
   { key: 'proposer', title: '提出人' },
   { key: 'yn_owner', title: '云南农信工单负责人' },
@@ -51,18 +53,18 @@ const IO_COLUMNS = [
 const COLUMNS = [
   'id', 'ticket_code', 'title', 'summary', 'status', 'ticket_type', 'propose_dept', 'proposer',
   'yn_owner', 'jk_owner', 'propose_time', 'release_point_id', 'registrar', 'register_time', 'created_at',
-  'issue_no', 'is_accounting',
+  'issue_no', 'is_accounting', 'priority',
 ];
 const SEARCH = ['ticket_code', 'title', 'summary', 'proposer', 'issue_no'];
 const JSON_FIELDS = ['main_systems', 'collab_dev_systems', 'collab_test_systems', 'proposer'];
 const WRITABLE = [
   'ticket_code', 'title', 'summary', 'status', 'ticket_type', 'propose_dept', 'proposer', 'yn_owner', 'jk_owner',
   'propose_time', 'main_systems', 'collab_dev_systems', 'collab_test_systems', 'release_point_id',
-  'issue_no', 'is_accounting',
+  'issue_no', 'is_accounting', 'priority',
 ];
 const LABELS = {
   ticket_code: '工单编号', title: '工单概述', summary: '工单详情', status: '工单状态', ticket_type: '工单类型',
-  is_accounting: '是否涉账',
+  is_accounting: '是否涉账', priority: '优先级',
   propose_dept: '提出部门', proposer: '提出人', yn_owner: '云南农信工单负责人',
   jk_owner: '建信金科工单负责人', propose_time: '提出时间', main_systems: '主责系统',
   collab_dev_systems: '协同改造系统', collab_test_systems: '协同测试系统', release_point_id: '计划投产点',
@@ -308,14 +310,16 @@ export default async function ticketRoutes(fastify) {
     }
     const initialStatus = await defaultProcessStatus('工单', 'initial', '工单登记');
 
+    const picked = pick(body);
+    picked.priority = normalizeConfiguredFieldValue('ticket', 'priority', body.priority);
     await validateRequiredFields('ticket', await statusTypeForProcessStatus(body.status || initialStatus), {
-      ...body,
+      ...body, ...picked,
       ticket_code: manualCode || '__AUTO__',
       status: body.status || initialStatus,
     });
-    await validateStageContent('ticket', { ...body, status: body.status || initialStatus });
+    await validateStageContent('ticket', { ...body, ...picked, status: body.status || initialStatus });
 
-    const data = encodeField(pick(body));
+    const data = encodeField(picked);
     if (data.title === undefined) data.title = '';
     delete data.ticket_code;
     delete data.status;
@@ -349,6 +353,7 @@ export default async function ticketRoutes(fastify) {
     if (!old) throw notFound();
     const body = request.body || {};
     const picked = pick(body);
+    if (Object.hasOwn(picked, 'priority')) picked.priority = normalizeConfiguredFieldValue('ticket', 'priority', picked.priority);
     await assertStatusChangePermission(fastify, request, 'ticket', old.status, picked);
 
     // 如果提交了新编号，校验唯一性（排除自身）
@@ -427,6 +432,7 @@ export default async function ticketRoutes(fastify) {
       { key: 'status', title: '工单状态' },
       { key: 'ticket_type', title: '工单类型' },
       { key: 'is_accounting', title: '是否涉账' },
+      { key: 'priority', title: '优先级' },
       { key: 'propose_dept', title: '提出部门' },
       { key: 'proposer', title: '提出人' },
       { key: 'yn_owner', title: '云南农信工单负责人' },
@@ -512,6 +518,7 @@ export default async function ticketRoutes(fastify) {
           const isAccounting = ['是', '否'].includes(String(r.is_accounting || '').trim())
             ? String(r.is_accounting).trim()
             : '否';
+          const priority = normalizeConfiguredFieldValue('ticket', 'priority', r.priority);
           const proposeDept = await resolveDictAttr('org', r.propose_dept);
 
           // 兼容性系统转换
@@ -562,6 +569,7 @@ export default async function ticketRoutes(fastify) {
             compareAndPush('status', '工单状态', exists.status || '', status || '');
             compareAndPush('ticket_type', '工单类型', exists.ticket_type || '', reqType || '');
             compareAndPush('is_accounting', '是否涉账', exists.is_accounting || '否', isAccounting);
+            compareAndPush('priority', '优先级', exists.priority || '中', priority);
             compareAndPush('propose_dept', '提出部门', exists.propose_dept || '', proposeDept || '');
             compareAndPush('proposer', '提出人', oldProposers, newProposers);
             compareAndPush('yn_owner', '云南农信工单负责人', exists.yn_owner || '', r.yn_owner || '');
@@ -583,17 +591,17 @@ export default async function ticketRoutes(fastify) {
             if (changes.length > 0) {
               await run(
                 `UPDATE ticket SET 
-                   title=?, summary=?, status=?, ticket_type=?, is_accounting=?, propose_dept=?, proposer=?, yn_owner=?, jk_owner=?, 
+                   title=?, summary=?, status=?, ticket_type=?, is_accounting=?, priority=?, propose_dept=?, proposer=?, yn_owner=?, jk_owner=?,
                    propose_time=?, release_point_id=?, main_systems=?, collab_dev_systems=?, collab_test_systems=?, 
                    issue_no=?,
                    updated_at=datetime('now','localtime') 
                  WHERE id=?`,
-                r.title, r.summary || null, status, reqType || null, isAccounting, proposeDept || null, proposerJson,
+                r.title, r.summary || null, status, reqType || null, isAccounting, priority, proposeDept || null, proposerJson,
                 r.yn_owner || null, r.jk_owner || null, r.propose_time || null, rpId,
                 mainSystems, collabDevSystems, collabTestSystems, r.issue_no || null, exists.id
               );
               await auditUpdate('ticket', exists.id, code, request.currentUser?.name, exists, {
-                title: r.title, summary: r.summary || null, status, ticket_type: reqType || null, is_accounting: isAccounting,
+                title: r.title, summary: r.summary || null, status, ticket_type: reqType || null, is_accounting: isAccounting, priority,
                 propose_dept: proposeDept || null, proposer: proposerJson, yn_owner: r.yn_owner || null,
                 jk_owner: r.jk_owner || null, propose_time: r.propose_time || null, release_point_id: rpId,
                 main_systems: mainSystems, collab_dev_systems: collabDevSystems, collab_test_systems: collabTestSystems,
@@ -616,10 +624,10 @@ export default async function ticketRoutes(fastify) {
             // insert 新建
             const res = await run(
               `INSERT INTO ticket 
-                 (ticket_code, title, summary, status, ticket_type, is_accounting, propose_dept, proposer, yn_owner, jk_owner, 
+                 (ticket_code, title, summary, status, ticket_type, is_accounting, priority, propose_dept, proposer, yn_owner, jk_owner,
                   propose_time, release_point_id, main_systems, collab_dev_systems, collab_test_systems, registrar, register_time, issue_no)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-              code, r.title, r.summary || null, status, reqType || null, isAccounting, proposeDept || null, proposerJson,
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+              code, r.title, r.summary || null, status, reqType || null, isAccounting, priority, proposeDept || null, proposerJson,
               r.yn_owner || null, r.jk_owner || null, r.propose_time || null, rpId,
               mainSystems, collabDevSystems, collabTestSystems, request.currentUser?.name, new Date().toISOString().slice(0, 10),
               r.issue_no || null

@@ -30,6 +30,8 @@ if (!process.env.RADAR_RUN_API_TESTS) {
   const { buildApp } = await import('../src/app.js');
   const { get, all, run, closeDb } = await import('../src/platform/persistence/engine/index.js');
   const { claimRequirementCode, generateRequirementCode, previewRequirementCode } = await import('../src/modules/requirements/index.js');
+  const { applyBuiltinConfigurationUpgrades, BUILTIN_CONFIGURATION_UPGRADE_ID } = await import('../src/modules/settings/process-configuration/index.js');
+  const { STAGE_BUILTIN_FIELD_METADATA, STAGE_BUILTIN_SECTION_DEFAULTS } = await import('../src/bootstrap/seed.js');
   await runMigrations();
   await runSeed();
   const app = await buildApp();
@@ -211,6 +213,54 @@ if (!process.env.RADAR_RUN_API_TESTS) {
     const releaseFinalStatuses = release.json().data.statuses.filter((status) => status.state_type === 'final');
     assert.equal(releasePlan.rules[releaseFinalStatuses[0].id], true);
     assert.equal(releasePlan.rules[releaseFinalStatuses[1].id], true);
+  });
+
+  test('配置升级仅补齐缺失目录项且保留管理员配置', async () => {
+    const original = await get("SELECT id, sort FROM stage_field_definition WHERE scope_key = 'requirement' AND field_key = 'is_accounting'");
+    assert.ok(original);
+    await run('UPDATE stage_field_definition SET sort = ? WHERE id = ?', 987, original.id);
+    const priority = await get("SELECT id FROM stage_field_definition WHERE scope_key = 'requirement' AND field_key = 'priority'");
+    await run('DELETE FROM stage_field_status_rule WHERE field_definition_id = ?', priority.id);
+    await run('DELETE FROM stage_field_definition WHERE id = ?', priority.id);
+    const deliverable = await get("SELECT id FROM deliverable_definition WHERE scope_key = 'requirement' AND deliverable_key = 'builtin_1'");
+    await run('DELETE FROM deliverable_status_rule WHERE deliverable_definition_id = ?', deliverable.id);
+    await run('DELETE FROM deliverable_definition WHERE id = ?', deliverable.id);
+    await run('DELETE FROM configuration_upgrade_ledger WHERE upgrade_id = ?', BUILTIN_CONFIGURATION_UPGRADE_ID);
+
+    const first = await applyBuiltinConfigurationUpgrades({
+      builtinMetadata: STAGE_BUILTIN_FIELD_METADATA,
+      sectionDefaults: STAGE_BUILTIN_SECTION_DEFAULTS,
+    });
+    assert.equal(first.applied, true);
+    assert.ok(first.added.includes('field:requirement.priority'));
+    assert.ok(first.added.includes('deliverable:requirement.builtin_1'));
+    const restored = await get("SELECT sort, list_visible, filterable FROM stage_field_definition WHERE scope_key = 'requirement' AND field_key = 'priority'");
+    assert.equal(restored.sort, 70);
+    assert.equal(restored.list_visible, 1);
+    assert.equal(restored.filterable, 1);
+    assert.equal((await get("SELECT label FROM deliverable_definition WHERE scope_key = 'requirement' AND deliverable_key = 'builtin_1'")).label, '需求说明书');
+    assert.equal((await get('SELECT sort FROM stage_field_definition WHERE id = ?', original.id)).sort, 987);
+    const second = await applyBuiltinConfigurationUpgrades({
+      builtinMetadata: STAGE_BUILTIN_FIELD_METADATA,
+      sectionDefaults: STAGE_BUILTIN_SECTION_DEFAULTS,
+    });
+    assert.equal(second.applied, false);
+  });
+
+  test('优先级在 API 更新中校验枚举并对空值使用默认值', async () => {
+    const administrator = await get('SELECT id, phone FROM user WHERE is_super = 1 LIMIT 1');
+    const releasePoint = await get('SELECT id FROM release_point ORDER BY id LIMIT 1');
+    const inserted = await run(`INSERT INTO requirement
+      (req_code, title, summary, status, req_type, is_accounting, propose_dept, proposer, propose_time, main_systems, release_point_id)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+    'PRIORITY-API-001', '优先级接口回归', '用于通过既有必填规则的最小夹具', '需求登记', '业务需求', '否', '计划财务板块', '["测试用户"]', '2026-07-30', '["YN0320"]', releasePoint.id);
+    const headers = { authorization: `Bearer ${await app.jwt.sign({ id: administrator.id, phone: administrator.phone })}`, 'x-requested-by': 'RADAR' };
+    const invalid = await app.inject({ method: 'PUT', url: `/api/requirements/${inserted.lastInsertRowid}`, headers, payload: { priority: '紧急' } });
+    assert.equal(invalid.statusCode, 400);
+    assert.match(invalid.json().message, /优先级仅支持高、中、低/);
+    const defaulted = await app.inject({ method: 'PUT', url: `/api/requirements/${inserted.lastInsertRowid}`, headers, payload: { priority: '' } });
+    assert.equal(defaulted.statusCode, 200);
+    assert.equal((await get('SELECT priority FROM requirement WHERE id = ?', inserted.lastInsertRowid)).priority, '中');
   });
 
   test('系统设置可新增扩展字段并保存配置修订', async () => {
