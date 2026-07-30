@@ -1,14 +1,14 @@
 {
   "schema_version": "1.0",
   "requirement": { "id": "REQ-20260729-002", "title": "四类任务列表展示全链路任务状态", "status": "ready", "document": "docs/requirements/REQ-20260729-002/requirement.md" },
-  "assignment": { "module": "overview", "developer": "hengguan", "module_owner": "hengguan", "branch": "hengguan/REQ-20260729-002-task-status-columns", "worktree": "codex-desktop-current-worktree" },
+  "assignment": { "module": "governance", "developer": "hengguan", "module_owner": "hengguan", "branch": "hengguan/REQ-20260729-002-task-status-columns", "worktree": "codex-desktop-current-worktree" },
   "ai": { "enabled": true, "approved_service": "Codex desktop", "model": "approved-by-user", "contains_confidential_information": false, "context_sanitized": true, "production_access": false },
   "scope": {
     "writable_paths": [
-      "docs/requirements/REQ-20260729-002/**", "docs/governance/GITHUB-RULES.md", "governance/modules.yaml",
+      "docs/requirements/REQ-20260729-002/**", "docs/governance/GITHUB-RULES.md", "governance/modules.yaml", "scripts/check-ai-scope.mjs",
       "server/src/modules/overview/**", "server/src/modules/dashboard/**",
       "server/src/modules/requirements/**", "server/src/modules/tickets/**",
-      "server/src/modules/development/**", "server/src/modules/testing/**",
+      "server/src/modules/development/**", "server/src/modules/testing/**", "server/src/modules/release/**",
       "web/src/modules/requirements/**", "web/src/modules/tickets/**",
       "web/src/modules/development/**", "web/src/modules/testing/**",
       "web/src/modules/release/**", "web/src/modules/overview/**", "web/src/modules/dashboard/**",
@@ -21,7 +21,7 @@
   "public_capability_change": {
     "required": true,
     "shared_change_issue": "REQ-20260729-002",
-    "target_modules": ["overview", "development", "testing", "release", "shared/contracts"],
+    "target_modules": ["governance", "overview", "development", "testing", "release", "shared/contracts"],
     "new_methods": ["resolveCurrentTaskStatuses", "listDevTaskStatuses", "listTestTaskStatuses", "listReleaseTaskStatuses", "TaskStatusBadge"],
     "existing_method_changed": false,
     "semantic_name_confirmed": true,

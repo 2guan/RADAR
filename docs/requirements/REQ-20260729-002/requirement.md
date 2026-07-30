@@ -115,7 +115,7 @@ last_updated: "2026-07-29"
 
 ## 8. 研发上下文
 
-- 目标模块 / Owner / 基准分支：overview（hengguan）及 requirements、tickets、development、testing、dashboard；分支 `hengguan/REQ-20260729-002-task-status-columns`。
+- 目标模块 / Owner / 基准分支：governance（hengguan）负责跨模块公开契约与治理变更，业务实现涉及 overview、requirements、tickets、development、testing、release、dashboard；分支 `hengguan/REQ-20260729-002-task-status-columns`。
 - 允许与禁止修改路径：见 `ai-task-scope.yaml`。
 - 必须复用的能力与公开契约：各模块 `index.js`、`contracts/**`，`settings/process-configuration` 的 `isTerminalStatus`，共享前端 `StatusBadge`。
 - 接口契约：在既有四个 `POST .../list` 成功响应行追加只读 `task_status`；不删除或改变既有字段。内部新增批量只读生命周期状态契约。
