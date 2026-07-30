@@ -472,6 +472,11 @@ export default function TicketEditor({ open, mode = 'modal', code, reqId, defaul
                       <DictSelect category="ticket_type" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} size="small" />
                     </Form.Item>
                 </StageBuiltinField>
+                <StageBuiltinField fieldKey="priority" defaultSection="basic">
+                  <Form.Item name="priority" label="优先级" initialValue="中" rules={required.rules('priority', '优先级', { action: '请选择' })} style={{ marginBottom: 8 }}>
+                    <Select size="small" options={[{ value: '高', label: '高' }, { value: '中', label: '中' }, { value: '低', label: '低' }]} style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} />
+                  </Form.Item>
+                </StageBuiltinField>
                 {/* 计划投产点 + 提出时间 */}
                 <StageBuiltinField fieldKey="release_point_id" defaultSection="basic">
                     <Form.Item name="release_point_id" label="计划投产点" rules={required.rules('release_point_id', '计划投产点', { action: '请选择' })} style={{ marginBottom: 8 }}>

@@ -1,0 +1,127 @@
+{
+  "schema_version": "1.0",
+  "requirement": {
+    "id": "REQ-20260730-003",
+    "ref": "hengguan/REQ-20260730-003",
+    "title": "需求与工单分析新增优先级字段",
+    "status": "ready",
+    "document": "docs/requirements/hengguan/REQ-20260730-003/requirement.md"
+  },
+  "assignment": {
+    "module": "governance",
+    "developer": "hengguan",
+    "module_owner": "hengguan",
+    "branch": "hengguan/REQ-20260730-003-priority-field",
+    "worktree": "codex-desktop-current-worktree"
+  },
+  "ai": {
+    "enabled": true,
+    "approved_service": "Codex desktop",
+    "model": "approved-by-user",
+    "contains_confidential_information": false,
+    "context_sanitized": true,
+    "production_access": false
+  },
+  "scope": {
+    "writable_paths": [
+      "docs/requirements/hengguan/REQ-20260730-003/**",
+      "server/src/bootstrap/seed.js",
+      "server/src/platform/persistence/migrations/0040_priority.sql",
+      "server/src/platform/persistence/migrations/tdsql/0020_priority.sql",
+      "server/src/modules/requirements/routes.js",
+      "server/src/modules/tickets/routes.js",
+      "server/src/modules/settings/process-configuration/**",
+      "server/src/modules/dashboard/**",
+      "web/src/modules/requirements/components/RequirementEditor.jsx",
+      "web/src/modules/requirements/pages/RequirementsPage.jsx",
+      "web/src/modules/tickets/components/TicketEditor.jsx",
+      "web/src/modules/tickets/pages/TicketsPage.jsx",
+      "web/src/modules/settings/process-configuration/**",
+      "web/src/modules/dashboard/**",
+      "server/test/requirements/**",
+      "server/test/tickets/**",
+      "server/test/settings/**",
+      "server/test/dashboard/**",
+      "server/test/platform/persistence/**",
+      "server/test/api-rbac.test.js"
+    ],
+    "read_only_paths": [
+      "docs/governance/PROJECT-RULES.md",
+      "docs/governance/AI-CODING-RULES.md",
+      "docs/governance/GITHUB-RULES.md",
+      "governance/modules.yaml",
+      "PRODUCT.md",
+      "server/templates/**"
+    ],
+    "forbidden_paths": [
+      ".env",
+      "**/.env",
+      "**/*secret*",
+      "**/*credential*",
+      "attachments/**"
+    ]
+  },
+  "public_capability_change": {
+    "required": true,
+    "shared_change_issue": "REQ-20260730-003",
+    "target_modules": [
+      "governance",
+      "requirements",
+      "tickets",
+      "settings",
+      "dashboard",
+      "platform/persistence"
+    ],
+    "new_methods": [
+      "priority builtin-field runtime metadata",
+      "priority dashboard dimension"
+    ],
+    "existing_method_changed": true,
+    "semantic_name_confirmed": true,
+    "old_behavior_preserved": true,
+    "owner_approved": true,
+    "owner_review_required_before_merge": true
+  },
+  "database": {
+    "changed": true,
+    "migration_paths": [
+      "server/src/platform/persistence/migrations/0040_priority.sql",
+      "server/src/platform/persistence/migrations/tdsql/0020_priority.sql"
+    ],
+    "mysql8_compatible": true,
+    "historical_data_impact": "requirement 与 ticket 新增非空 priority 列；历史 NULL、空字符串或空白值补齐为“中”。",
+    "rollback_or_compensation": "代码回退可停止新入口；保留新增列与“中”数据不影响旧版本。若确需删除列，须停止写入、完成备份并按发布手册执行受控人工逆向迁移。"
+  },
+  "external_access": {
+    "changed": false,
+    "api_paths": [],
+    "readable_field_whitelist": [],
+    "writable_field_whitelist": [],
+    "action_whitelist": [],
+    "audit_required": true
+  },
+  "required_tests": [
+    { "name": "build", "command": "npm run build --prefix web" },
+    { "name": "unit", "command": "npm test --prefix server" },
+    { "name": "api", "command": "npm run test:api --prefix server" },
+    { "name": "permission", "command": "npm run test:rbac --prefix server" },
+    { "name": "priority_requirement_ticket", "command": "npm run test:api --prefix server" },
+    { "name": "sqlite_tdsql_mysql8", "command": "node scripts/check-migration-parity.mjs && node scripts/check-mysql8-migrations.mjs" }
+  ],
+  "risk": {
+    "level": "important",
+    "reasons": [
+      "需求与工单双模块字段及兼容 API 变更",
+      "内置字段首次完整受配置驱动的列表、筛选与仪表盘维度行为",
+      "SQLite 与 TDSQL/MySQL 8 配对迁移及历史数据补齐"
+    ],
+    "required_approvals": ["hengguan"]
+  },
+  "completion": {
+    "changed_files_report_required": true,
+    "test_result_report_required": true,
+    "known_risks_report_required": true,
+    "rollback_report_required": true,
+    "requirement_acceptance_required": true
+  }
+}

@@ -115,6 +115,7 @@ export function useDimensionMeta() {
     if (os === 'task_status') return meta.taskStatusList;
     if (os === 'implementation_type') return meta.statDimensions;
     if (os === 'work_item_type') return [...(meta.dictOptions.req_type || []), { value: '生产工单', label: '生产工单' }];
+    if (os === 'priority') return ['高', '中', '低'].map((value) => ({ value, label: value }));
     return [];
   };
 

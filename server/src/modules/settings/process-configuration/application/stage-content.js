@@ -13,7 +13,7 @@ import { getBusinessComponent } from './business-components.js';
 
 const FIELD_KINDS = new Set(['native', 'extension', 'component']);
 const INPUT_TYPES = new Set(['text', 'textarea', 'date', 'datetime', 'select', 'person', 'release_point', 'component']);
-const FIXED_SOURCE_KEYS = new Set(['', 'system', 'person', 'release_point']);
+const FIXED_SOURCE_KEYS = new Set(['', 'system', 'person', 'release_point', 'priority']);
 const INPUT_MODES = new Set(['file', 'path', 'both']);
 const SECTION_LAYOUT_MODES = new Set(['left', 'right', 'full']);
 const STATE_TYPE_LABELS = { initial: '初始态', inProgress: '进行中', final: '终态' };
@@ -39,7 +39,7 @@ const NATIVE_FIELD_DEFAULTS = {
   requirement: [
     ['req_code', '需求编号', 'text'], ['status', '需求状态', 'select'], ['req_type', '需求类型', 'select', 'dict:req_type'],
     ['release_point_id', '计划投产点', 'release_point', 'release_point'], ['propose_time', '提出时间', 'datetime'],
-    ['issue_no', '关联问题/工单编号', 'text'], ['is_accounting', '是否涉账', 'select'], ['priority', '优先级', 'select'], ['title', '需求标题', 'text'],
+    ['issue_no', '关联问题/工单编号', 'text'], ['is_accounting', '是否涉账', 'select'], ['priority', '优先级', 'select', 'priority'], ['title', '需求标题', 'text'],
     ['summary', '需求概述', 'textarea'], ['main_systems', '主责系统', 'select', 'system', 1],
     ['collab_dev_systems', '协同改造系统', 'select', 'system', 1], ['collab_test_systems', '协同测试系统', 'select', 'system', 1],
     ['propose_dept', '提出部门', 'select', 'dict:req_dept'], ['proposer', '提出人', 'person', 'person', 1],
@@ -48,7 +48,7 @@ const NATIVE_FIELD_DEFAULTS = {
   ticket: [
     ['ticket_code', '工单编号', 'text'], ['status', '工单状态', 'select'], ['ticket_type', '工单类型', 'select', 'dict:ticket_type'],
     ['release_point_id', '计划投产点', 'release_point', 'release_point'], ['propose_time', '提出时间', 'datetime'],
-    ['issue_no', '关联问题/工单编号', 'text'], ['is_accounting', '是否涉账', 'select'], ['priority', '优先级', 'select'], ['title', '工单概述', 'text'],
+    ['issue_no', '关联问题/工单编号', 'text'], ['is_accounting', '是否涉账', 'select'], ['priority', '优先级', 'select', 'priority'], ['title', '工单概述', 'text'],
     ['summary', '工单详情', 'textarea'], ['main_systems', '主责系统', 'select', 'system', 1],
     ['collab_dev_systems', '协同改造系统', 'select', 'system', 1], ['collab_test_systems', '协同测试系统', 'select', 'system', 1],
     ['propose_dept', '提出部门', 'select', 'dict:req_dept'], ['proposer', '提出人', 'person', 'person', 1],
@@ -113,7 +113,7 @@ export function resolveBuiltinConfiguration(scopeKey, fieldKey) {
     renderer: priority ? 'standard' : (inputType === 'component' ? 'adapter' : 'declaration'),
     default_value: priority ? '中' : null,
     options: priority ? PRIORITY_OPTIONS : [],
-    capabilities: priority ? { list: true, filter: true, import: true, export: true } : {},
+    capabilities: priority ? { list: true, filter: true, dashboard: true, import: true, export: true } : {},
   };
 }
 
@@ -255,6 +255,7 @@ export async function listFieldSourceOptions() {
     { value: 'system', label: '机构系统 · 所属系统', group: 'system' },
     { value: 'person', label: '人员管理', group: 'person' },
     { value: 'release_point', label: '投产点管理', group: 'release_point' },
+    { value: 'priority', label: '固定枚举 · 优先级（高/中/低）', group: 'fixed' },
   ];
 }
 

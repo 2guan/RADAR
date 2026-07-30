@@ -20,7 +20,8 @@ export function useStageListFields(scopeKey) {
     let alive = true;
     if (!scopeKey) return undefined;
     loadStageContentSchema(scopeKey).then(async (schema) => {
-      const next = (schema?.fields || []).filter((field) => field.field_kind === 'extension' && field.visible && (field.list_visible || field.filterable));
+      const next = (schema?.fields || []).filter((field) => (field.field_kind === 'extension' || field.field_key === 'priority')
+        && (field.field_key === 'priority' || field.visible) && (field.list_visible || field.filterable));
       if (!alive) return;
       setFields(next);
       const sources = [...new Set(next.map((field) => field.source_key).filter(Boolean))];
@@ -32,12 +33,12 @@ export function useStageListFields(scopeKey) {
 
   return useMemo(() => ({
     filterConfigs: fields.filter((field) => field.filterable).map((field) => ({
-      field: `extension:${field.field_key}`, label: field.label, type: optionType(field), op: field.input_type === 'text' || field.input_type === 'textarea' ? 'like' : 'in',
+      field: field.field_kind === 'extension' ? `extension:${field.field_key}` : field.field_key, label: field.label, type: optionType(field), op: field.input_type === 'text' || field.input_type === 'textarea' ? 'like' : 'in',
       options: (options[field.source_key] || []).map((item) => ({ value: String(item.value), label: item.label })),
     })),
     columns: fields.filter((field) => field.list_visible).map((field) => ({
-      title: field.label, key: `extension:${field.field_key}`,
-      render: (_, row) => (row._stage_fields?.[field.field_key] || []).join('、') || '—',
+      title: field.label, key: field.field_kind === 'extension' ? `extension:${field.field_key}` : field.field_key,
+      render: (_, row) => field.field_kind === 'extension' ? ((row._stage_fields?.[field.field_key] || []).join('、') || '—') : (row[field.field_key] || '—'),
     })),
   }), [fields, options]);
 }

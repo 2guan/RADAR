@@ -255,12 +255,64 @@ if (!process.env.RADAR_RUN_API_TESTS) {
       VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
     'PRIORITY-API-001', '优先级接口回归', '用于通过既有必填规则的最小夹具', '需求登记', '业务需求', '否', '计划财务板块', '["测试用户"]', '2026-07-30', '["YN0320"]', releasePoint.id);
     const headers = { authorization: `Bearer ${await app.jwt.sign({ id: administrator.id, phone: administrator.phone })}`, 'x-requested-by': 'RADAR' };
+    const ticket = await run('INSERT INTO ticket (ticket_code, title, status, release_point_id) VALUES (?,?,?,?)',
+      'PRIORITY-API-TICKET-001', '优先级默认值回归', '工单登记', releasePoint.id);
+    assert.equal((await get('SELECT priority FROM ticket WHERE id = ?', ticket.lastInsertRowid)).priority, '中');
+
+    const [requirementConfig, ticketConfig] = await Promise.all([
+      app.inject({ method: 'GET', url: '/api/settings/stage-content/requirement', headers }),
+      app.inject({ method: 'GET', url: '/api/settings/stage-content/ticket', headers }),
+    ]);
+    for (const response of [requirementConfig, ticketConfig]) {
+      assert.equal(response.statusCode, 200);
+      const config = response.json().data;
+      const priority = config.fields.find((field) => field.field_key === 'priority');
+      assert.equal(priority.field_kind, 'native');
+      assert.equal(priority.source_key, 'priority');
+      assert.equal(priority.section_id, config.sections.find((section) => section.section_key === 'basic').id);
+      assert.equal(priority.visible, 1);
+      assert.equal(priority.list_visible, 1);
+      assert.equal(priority.filterable, 1);
+      assert.equal(priority.dashboard_dimension, 1);
+      assert.deepEqual(priority.catalog.options.map((option) => option.value), ['高', '中', '低']);
+      assert.equal(priority.catalog.default_value, '中');
+    }
     const invalid = await app.inject({ method: 'PUT', url: `/api/requirements/${inserted.lastInsertRowid}`, headers, payload: { priority: '紧急' } });
     assert.equal(invalid.statusCode, 400);
     assert.match(invalid.json().message, /优先级仅支持高、中、低/);
     const defaulted = await app.inject({ method: 'PUT', url: `/api/requirements/${inserted.lastInsertRowid}`, headers, payload: { priority: '' } });
     assert.equal(defaulted.statusCode, 200);
     assert.equal((await get('SELECT priority FROM requirement WHERE id = ?', inserted.lastInsertRowid)).priority, '中');
+    const elevated = await app.inject({ method: 'PUT', url: `/api/requirements/${inserted.lastInsertRowid}`, headers, payload: { priority: '高' } });
+    assert.equal(elevated.statusCode, 200);
+    const filtered = await app.inject({
+      method: 'POST', url: '/api/requirements/list', headers,
+      payload: { releasePointIds: [releasePoint.id], pageSize: 100, filters: [{ field: 'priority', op: 'in', value: ['高'] }] },
+    });
+    assert.equal(filtered.statusCode, 200);
+    assert.equal(filtered.json().data.list.find((row) => row.id === inserted.lastInsertRowid).priority, '高');
+
+    const dimensions = await app.inject({ method: 'GET', url: '/api/dashboard/dimensions', headers });
+    assert.equal(dimensions.statusCode, 200);
+    assert.ok(dimensions.json().data.dimsBySource.analytics.some((dimension) => dimension.key === 'native:requirement:priority'));
+    assert.ok(dimensions.json().data.dimsBySource.analytics.some((dimension) => dimension.key === 'native:ticket:priority'));
+    const chart = await app.inject({
+      method: 'POST', url: '/api/dashboard/chart-data', headers,
+      payload: { source: 'analytics', statDimension: 'requirement', statStage: 'analysis', dimension: 'native:requirement:priority', releasePointIds: [releasePoint.id] },
+    });
+    assert.equal(chart.statusCode, 200);
+    assert.ok(chart.json().data.data.some((row) => row.name === '高'));
+
+    const requirementPriority = requirementConfig.json().data.fields.find((field) => field.field_key === 'priority');
+    const disabled = await app.inject({
+      method: 'PUT', url: `/api/settings/stage-content/requirement/fields/${requirementPriority.id}`, headers,
+      payload: { ...requirementPriority, visible: false, list_visible: false, filterable: false, dashboard_dimension: false },
+    });
+    assert.equal(disabled.statusCode, 200);
+    const refreshedDimensions = await app.inject({ method: 'GET', url: '/api/dashboard/dimensions', headers });
+    assert.equal(refreshedDimensions.statusCode, 200);
+    assert.equal(refreshedDimensions.json().data.dimsBySource.analytics.some((dimension) => dimension.key === 'native:requirement:priority'), false);
+    assert.ok(refreshedDimensions.json().data.dimsBySource.analytics.some((dimension) => dimension.key === 'native:ticket:priority'));
   });
 
   test('系统设置可新增扩展字段并保存配置修订', async () => {
