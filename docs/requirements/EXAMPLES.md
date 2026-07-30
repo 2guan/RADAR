@@ -19,7 +19,7 @@
 
 ```text
 1. requirement.md：目标、使用者、状态规则、权限、验收和明确不做项完整。
-2. ai-task-scope.yaml：`requirement_ref`、目标模块、正确分支、可写路径、风险和测试完整。
+2. ai-task-scope.yaml：`requirement_ref`、一个登记主模块、正确分支、可写路径、风险和测试完整；多模块改动已列出受影响模块和 Owner 审批。
 3. 影响分析：确认输入项、交付件、公开契约、数据库、权限/审计/附件/外网的适用结论。
 4. 相关文档：适用时先完成配置范围与字段标识、接口兼容说明、迁移方案、测试与回退说明。
 5. 准入：无影响实现的未决项，需求状态为 ready，才开始修改代码。
@@ -46,9 +46,11 @@
 | 场景 | 重点检查 |
 | --- | --- |
 | 新增或调整输入项 | 系统设置注册、布局、状态规则、种子、mock、正常保存测试 |
+| 枚举、默认值或可导入字段 | 合法值、空值、服务端 create/update/import 校验、非法行反馈和验收测试 |
 | 新增交付件或模板 | 交付件定义、状态规则、模板版本、附件权限 |
 | 只读派生展示 | 明确为什么不注册输入项，不改变既有写入语义 |
 | 跨模块读取或聚合 | 公开契约、批量读取、数据来源类型、兼容性 |
+| 多模块或配置/平台改动 | 一个登记主模块、受影响模块、直接写入原因、Owner 审批、范围和回归 |
 | 新 API 或写操作 | DTO 白名单、RBAC、实体级授权、审计、异常路径 |
 | 数据库结构变更 | SQLite 与 TDSQL/MySQL 8 迁移、兼容、补偿或回退 |
 | 导入导出 | 字段白名单、校验、错误反馈、权限和脱敏 |
@@ -92,6 +94,43 @@
 - 配置与交付影响落实：已在 `development.task` 注册 `change_reason`，配置基本信息布局和“待测试”必填规则；种子、mock 与正常提交测试均使用脱敏合法值。未新增交付件。
 - 发布验证：以存量开发任务编辑、提交至待测试、系统设置配置页回显三个场景验证。
 ```
+
+## 示例一A：新增枚举优先级字段
+
+**目标**：需求和工单增加可填写、可导入导出的 `priority`，仅允许 `高/中/低`，未填写默认 `中`。
+
+### 研发上下文与任务范围写法
+
+```text
+requirement_ref：hengguan/REQ-20260730-001
+requirement.md module：requirements
+assignment.module：requirements             # 必须是 modules.yaml 的一个键，不能写 requirements,tickets
+public_capability_change.target_modules：requirements、tickets、settings、platform/persistence
+```
+
+需求中应说明：主模块是 `requirements`；工单、输入项配置和双端迁移均为受影响模块。若必须直接修改 `settings` 或 `platform/persistence`，在实施前记录无法仅通过既有公开契约完成的原因、对应 Owner 审批和回归范围。
+
+### 规则与验收写法
+
+| 规则 | 正确记录 |
+| --- | --- |
+| 合法值 | `priority` 仅为 `高`、`中`、`低`；请求中缺失或空字符串时默认 `中`；`null` 的处理也须明确 |
+| 服务端写入 | create、update 与导入均复用同一枚举校验；直接构造 HTTP 请求也不能写入“紧急”等非法值 |
+| 导入 | 空值按需求明确的默认策略处理；非空非法值拒绝该行，并返回行号、字段 `priority`、原值和原因；不得静默改为 `中` |
+| 配置 | 在 `requirement`、`ticket` 输入项配置注册字段、布局和默认非必填规则；前端下拉只改善体验 |
+| 迁移 | SQLite 与 TDSQL/MySQL 8 配对迁移；存量行补齐默认值，并说明回退后列/数据的处理方式 |
+
+### 验收到测试映射
+
+| 验收 | 必须实际命中的测试 |
+| --- | --- |
+| 缺省创建为 `中` | 两个模块的 create API 与迁移后存量记录测试 |
+| `高/中/低` 可保存和读取 | create/update、列表、详情和导出测试 |
+| 非法值被拒绝 | 两个模块的 create/update API 测试，断言 4xx 且数据库值未改变 |
+| 导入非法值被拒绝 | 导入测试断言该行 `failed`，错误包含字段与原值；合法行不受影响 |
+| 配置可见 | 系统设置 API 或页面测试断言两个配置范围均登记 `priority` |
+
+不要只写 `--test-name-pattern=priority`：必须先有名称或断言覆盖优先级的测试，再确认筛选命令实际命中该用例。
 
 ## 示例二：新增交付件模板
 
@@ -179,7 +218,7 @@
 - 追加 SQLite 与 TDSQL/MySQL 8 的等价迁移，不改写已发布迁移。
 - 说明现有记录的默认值、空值语义、查询排序兼容性和回退/补偿方式。
 - 在 API DTO、服务端字段白名单、页面格式化和测试数据中同步处理。
-- 验证两种数据库下的迁移、创建、查询、排序和回退路径。
+- 验证两种数据库下的迁移、创建、查询、排序和回退路径；迁移文件保留项目规定的中文文件头，并在提交前通过 `git diff --check`。
 
 ### 常见遗漏
 
@@ -194,6 +233,7 @@
 ### 需明确的内容
 
 - 导入模板列名、可接受字典值、错误行反馈和空值策略。
+- 非空非法值必须拒绝该行并回显字段、原值和原因；只有需求明确记录的兼容映射才可转换，且须在结果中说明。
 - 导出字段是否受数据范围、脱敏和权限影响。
 - 使用既有导入导出平台能力，不在业务页自行解析 Excel 或生成下载文件。
 - 如果该字段可填写或校验，按示例一完成输入项配置分析；如果只是已有字段的导入映射，说明配置不适用原因。
@@ -222,6 +262,8 @@
 需求目录：docs/requirements/hengguan/REQ-20260730-003/
 分支：hengguan/REQ-20260730-003-add-dev-change-reason
 任务范围 assignment.branch：hengguan/REQ-20260730-003-add-dev-change-reason
+任务范围 assignment.module：development
+多模块时 public_capability_change.target_modules：development、settings
 PR 标题：feat(hengguan/REQ-20260730-003): add development change reason
 ```
 
@@ -231,6 +273,8 @@ PR 标题：feat(hengguan/REQ-20260730-003): add development change reason
 | --- | --- | --- |
 | `feature/add-field` | 缺少开发者和需求编号 | 使用完整规范分支名 |
 | `hengguan/REQ-20260730-002-add-field` | 与完整需求引用或需求目录编号不一致 | 统一开发者、需求、分支、任务范围和 PR 编号 |
+| `assignment.module: requirements,tickets` | 逗号拼接不是登记模块，任务范围检查和 Owner 责任均不明确 | 选择一个登记主模块，在受影响模块清单中列出其余模块与审批 |
+| 只因 `writable_paths` 包含 `settings/**` 或 `platform/**` 就直接修改 | 路径许可不替代模块访问和 Owner 审批 | 记录直接写入理由、公开契约、影响模块与 Owner 审批后再实施 |
 | 在另一需求的分支继续修改 | 会混入不相关提交和范围 | 切换或新建当前需求分支后再修改 |
 | 直接推送 `main` | 绕过常规 PR 流程 | 仅在需求和任务范围均明确批准例外时执行 |
 
@@ -241,7 +285,7 @@ PR 标题：feat(hengguan/REQ-20260730-003): add development change reason
 
 - 修改文件与范围一致性：仅修改 `development`、`settings/process-configuration` 及对应测试，均在任务范围允许路径内。
 - 配置与交付影响落实：输入项配置适用，已注册 `development.task/change_reason` 并配置状态必填；交付件不适用；公共能力不适用；数据库迁移适用，已提供双端迁移和存量空值兼容说明；权限和审计沿用既有规则。
-- 测试证据：执行前端构建、后端单元/API/RBAC、SQLite 与 TDSQL/MySQL 8 迁移验证，结果均通过。
+- 测试证据：`npm run build --prefix web` 通过；`npm test --prefix server` 通过（覆盖 AC-001、AC-002）；`npm run test:api --prefix server` 通过（覆盖 AC-003）；SQLite 与 TDSQL/MySQL 8 迁移验证通过。筛选测试实际命中 `change_reason` 用例。
 - 已知风险：存量任务进入“待测试”前需要补填变更原因。
 - 发布验证与回退：验证系统设置配置页、存量任务编辑和状态提交；如有回归，回退本需求提交，数据库列保留且允许为空。
 ```
