@@ -12,7 +12,7 @@ import { AutoComplete, Form, Input, DatePicker, Row, Col, Button, Select, Tag, m
 import { HistoryOutlined, CloseOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { DictSelect, PersonPicker, makeReleasePointOptions } from '../../settings/reference-data/index.js';
-import { StageBuiltinField, StageBuiltinFields, StageContentPanel, StageSectionLayout, useDefaultProcessStatus, useRequiredFields } from '../../settings/process-configuration/index.js';
+import { StageBuiltinCatalogField, StageBuiltinField, StageBuiltinFields, StageContentPanel, StageSectionLayout, useDefaultProcessStatus, useRequiredFields } from '../../settings/process-configuration/index.js';
 import { HistoryDrawer } from '../../../platform/audit/index.js';
 import { CodeLink } from '../../../platform/routing/index.js';
 import { EditorShell } from '../../../shared/ui/index.js';
@@ -125,7 +125,8 @@ function SystemPickerField({ title, hint, value = [], onChange, single, placehol
 // ─────────────────────────────────────────────────────────────────────────────
 
 function PersonPickerField({ value = [], onChange, readonly, placeholder }) {
-  const handlePickerChange = (vals) => {
+  const handlePickerChange = (selected) => {
+    const vals = selected ? [selected] : [];
     const combined = [...new Set([...(value || []), ...vals])];
     onChange?.(combined);
   };
@@ -135,7 +136,7 @@ function PersonPickerField({ value = [], onChange, readonly, placeholder }) {
   };
 
   return (
-    <div style={{ marginBottom: 12 }}>
+    <div style={{ marginTop: 4, marginBottom: 8 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <PersonPicker
           mode="multiple"
@@ -298,7 +299,7 @@ export default function TicketEditor({ open, mode = 'modal', code, reqId, defaul
     } else {
       setCurrent(null);
       form.resetFields();
-      form.setFieldsValue({ status: initialStatus, ticket_type: '工单急迫需求', priority: '中', is_accounting: '否', release_point_id: defaultReleasePointId });
+      form.setFieldsValue({ status: initialStatus, ticket_type: '工单急迫需求', is_accounting: '否', priority: '中', release_point_id: defaultReleasePointId });
     }
   }, [open, reqId, code, mode, initialStatus]);
 
@@ -511,6 +512,7 @@ export default function TicketEditor({ open, mode = 'modal', code, reqId, defaul
                       />
                     </Form.Item>
                 </StageBuiltinField>
+                <StageBuiltinCatalogField fieldKey="priority" defaultSection="basic" readonly={readonly} rules={required.rules('priority', '优先级', { action: '请选择' })} />
 
               {/* 工单概述 */}
               <StageBuiltinField fieldKey="title" defaultSection="basic" defaultColumnSpan={24}>

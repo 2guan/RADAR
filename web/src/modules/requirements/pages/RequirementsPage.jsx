@@ -75,6 +75,7 @@ export default function Requirements() {
     { field: 'status', label: '需求状态', type: 'select', op: 'in', options: statusOptions },
     { field: 'req_type', label: '需求类型', type: 'select', op: 'in', options: typeOptions },
     { field: 'is_accounting', label: '是否涉账', type: 'select', op: 'in', options: [{ value: '否', label: '否' }, { value: '是', label: '是' }] },
+    { field: 'priority', label: '优先级', type: 'select', op: 'in', options: [{ value: '高', label: '高' }, { value: '中', label: '中' }, { value: '低', label: '低' }] },
     { field: 'propose_dept', label: '提出部门', type: 'select', op: 'in', options: reqDeptOptions },
     { field: 'proposer', label: '提出人', type: 'select', op: 'in', options: userOptions },
     { field: 'owners', label: '负责人', type: 'select', op: 'in', options: userOptions },
@@ -147,6 +148,7 @@ export default function Requirements() {
       ),
     },
     { title: '需求类型', dataIndex: 'req_type', key: 'req_type' },
+    { title: '优先级', dataIndex: 'priority', key: 'priority', width: 76 },
     {
       title: '提出人',
       dataIndex: 'proposer',
