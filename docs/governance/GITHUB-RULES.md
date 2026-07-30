@@ -2,8 +2,8 @@
 
 ## 研发工作流
 
-1. 从 `docs/requirements/TEMPLATE.md` 创建可独立实现、测试和验收的需求目录，并在受理后填写 `ai-task-scope.yaml`。
-2. 根据任务范围确认模块、风险、测试、数据库和外网影响；实现前按根目录 `AGENTS.md` 定位所需的架构和目录级指令。
+1. 从 `docs/requirements/TEMPLATE.md` 创建可独立实现、测试和验收的需求目录，并在受理后完成 `requirement.md`、`ai-task-scope.yaml` 及影响分析识别出的相关文档。
+2. 文档完成并确认需求为 `ready` 后，才可根据任务范围确认模块、风险、测试、数据库和外网影响，并按根目录 `AGENTS.md` 定位所需的架构和目录级指令。
 3. 从最新 `main` 创建本规约要求的独立工作区与分支，完成一个细粒度需求后提交 PR。
 
 ## 分支、工作区与 PR
