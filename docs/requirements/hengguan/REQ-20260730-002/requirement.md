@@ -99,7 +99,7 @@ last_updated: "2026-07-30"
 
 - 修改文件与范围一致性：已修改 `settings/process-configuration` 公开入口、配置目录/升级服务、requirements/tickets API 和页面、SQLite/TDSQL 配对迁移、种子、API 测试及规约示例；界面回归补充校准了两个编辑器人员选择器与同一行普通下拉框的间距基线；范围检查已通过，未修改 `docs/reports/` 中用户已有的未跟踪文件。
 - 配置与交付影响落实：`priority` 已在 `requirement`、`ticket` 输入项配置登记，目录定义合法值、默认值、能力和标准渲染；两个模块的列表、筛选、编辑器声明和系统设置均适用并实现。默认交付件、模板处理器和状态规则纳入同一独立升级路径；升级 ID 为 `settings.builtin-configuration.v1`，仅补齐缺失定义，保留已有配置与软删除意图。
-- 测试证据：`npm test --prefix server`（31 通过、1 个非 CI 的 API 套件跳过）、`npm run test:api --prefix server`（16 通过）、`npm run test:rbac --prefix server`（16 通过）、两项筛选测试各命中 1 条、`npm run build --prefix web`（含人员选择器间距回归后复跑）、`node scripts/check-mysql8-migrations.mjs`、`git diff --check` 和 AI 范围检查均通过。
+- 测试证据：`npm test --prefix server`（31 通过、1 个非 CI 的 API 套件跳过）、`npm run test:api --prefix server`（16 通过）、`npm run test:rbac --prefix server`（16 通过）、两项筛选测试各命中 1 条、`npm run build --prefix web`（含人员选择器间距回归后复跑）、`node scripts/check-code-comments.mjs`、`node scripts/check-mysql8-migrations.mjs`、`git diff --check` 和 AI 范围检查均通过。
 - 已知风险：普通字段可由目录标准渲染；复杂业务控件仍须在所属编辑器通过 `StageBuiltinField` 显式接入，这是避免配置注册被误认为已实现 UI 的设计约束。后续新增目录字段仍须按四位置检查。
 - 发布验证与回退：启动后验证系统设置中的两个输入项范围、需求/工单新增编辑、列表筛选、导入模板与已有配置回显。若需回退代码可回退本需求提交；数据库列、升级台账和已补齐定义保留，只有在确认无管理员或业务依赖时才按升级记录做补偿删除。
 
