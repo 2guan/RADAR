@@ -117,7 +117,7 @@ public_capability_change.target_modules：requirements、tickets、settings、pl
 | 合法值 | `priority` 仅为 `高`、`中`、`低`；请求中缺失或空字符串时默认 `中`；`null` 的处理也须明确 |
 | 服务端写入 | create、update 与导入均复用同一枚举校验；直接构造 HTTP 请求也不能写入“紧急”等非法值 |
 | 导入 | 空值按需求明确的默认策略处理；非空非法值拒绝该行，并返回行号、字段 `priority`、原值和原因；不得静默改为 `中` |
-| 配置 | 在 `requirement`、`ticket` 输入项配置注册字段、布局和默认非必填规则；前端下拉只改善体验 |
+| 配置 | 在 `requirement`、`ticket` 输入项配置注册字段、布局和默认非必填规则；新库默认种子创建，已有环境按 `scope_key + field_key` 幂等补齐缺失定义，不覆盖管理员布局、可见性、排序和必填调整；前端下拉只改善体验 |
 | 迁移 | SQLite 与 TDSQL/MySQL 8 配对迁移；存量行补齐默认值，并说明回退后列/数据的处理方式 |
 
 ### 验收到测试映射
@@ -129,6 +129,7 @@ public_capability_change.target_modules：requirements、tickets、settings、pl
 | 非法值被拒绝 | 两个模块的 create/update API 测试，断言 4xx 且数据库值未改变 |
 | 导入非法值被拒绝 | 导入测试断言该行 `failed`，错误包含字段与原值；合法行不受影响 |
 | 配置可见 | 系统设置 API 或页面测试断言两个配置范围均登记 `priority` |
+| 旧库升级 | 预置不含 `priority` 的配置后运行升级，断言缺失定义被补齐且既有管理员配置不变 |
 
 不要只写 `--test-name-pattern=priority`：必须先有名称或断言覆盖优先级的测试，再确认筛选命令实际命中该用例。
 
