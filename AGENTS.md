@@ -1,32 +1,26 @@
-# RADAR 项目 AI 协作指令
+# RADAR AI 开发入口
 
-本文件适用于仓库内所有开发人员和 AI Coding 工具。更近目录存在 `AGENTS.md` 时，须同时遵循；冲突时以限制更严格者为准，无法判断时停止修改并报告。
+本文件供 AI 和自动化开发工具在仓库根目录自动发现。它只定义资料定位和读取顺序；架构、数据、安全、协作等规则以其对应的正式文档为唯一来源。
 
-## 编码前必读
+## 开始改动前
 
-开始改动前必须读取：
+1. 确认需求编号，读取 `docs/requirements/<REQ>/requirement.md` 与 `ai-task-scope.yaml`。需求、任务范围或目标模块缺失时停止改动。
+2. 在 [`governance/modules.yaml`](governance/modules.yaml) 确认目标模块、Owner、可修改路径、依赖和公开契约。
+3. 读取本文件所在目录至目标文件路径上最近的 `AGENTS.md`；较深目录仅补充该目录特有的实现约定。
+4. 按下表读取适用的唯一事实源，再开始设计或修改。
 
-1. `docs/governance/PROJECT-RULES.md`
-2. `docs/governance/AI-CODING-RULES.md`
-3. `docs/governance/GITHUB-RULES.md`
-4. `governance/modules.yaml`
-5. 当前需求目录中的 `requirement.md` 与 `ai-task-scope.yaml`
-6. 目标模块最近的 `AGENTS.md`
+| 问题或变更类型 | 必读来源 |
+| --- | --- |
+| 架构、跨模块访问、数据、接口、迁移、权限、审计、外网、质量 | [docs/governance/PROJECT-RULES.md](docs/governance/PROJECT-RULES.md) |
+| AI 准入、敏感信息、任务范围和完成报告 | [docs/governance/AI-CODING-RULES.md](docs/governance/AI-CODING-RULES.md) |
+| 分支、PR、审批、CI | [docs/governance/GITHUB-RULES.md](docs/governance/GITHUB-RULES.md) |
+| 模块职责与物理目录 | [docs/architecture/MODULES.md](docs/architecture/MODULES.md) |
+| UI、组件、响应式与可访问性 | [DESIGN.md](DESIGN.md) |
+| 数据库搬迁、备份与恢复 | [MIGRATION.md](MIGRATION.md) |
 
-缺少需求、任务范围、目标模块或影响正确实现的结论时，不得开始编码。
+## 定位约定
 
-## 强制约束
-
-- 只能修改任务范围 `writable_paths` 中的文件；`read_only_paths` 仅可读取；不得读取或修改 `forbidden_paths`。
-- 不得连接或修改生产系统。
-- 可以读取本地库中的信息。默认本地库中的所有数据均为测试数据，不涉及生产数据、真实用户数据、账号口令、密钥、内网地址。
-- 模块只能通过 `governance/modules.yaml` 声明的公开契约访问其他模块；不得直接访问其内部实现或写入其负责的数据表。
-- `platform` 是面向其他模块的只读技术能力：除所属平台模块或治理任务外，不得直接修改。`shared` 是经登记的可复用协作能力，可被模块读写，但变更必须保持无领域数据所有权、经公共能力审批并完成回归。
-- 不得绕过 RBAC、审计、附件访问控制、外网白名单、自动化测试、CODEOWNERS 或分支保护；AI 不得自行审批、合并或发布。
-- 数据库变更必须追加迁移，并同时兼容 SQLite 与 TDSQL/MySQL 8；不得改写已发布迁移。
-
-##
-
-## 实施与完成
-
-编码前说明目标模块、拟改文件、公共能力、数据/权限/审计影响、测试和未决问题。完成后报告实际变更文件、范围一致性、测试结果、已知风险、上线验证及回退方式。
+- 以 `modules.yaml` 判断模块边界和公开契约；不要从目录结构或相似实现推断权限。
+- 以 `ai-task-scope.yaml` 判断可写、只读和禁止路径；不要扩大任务范围。
+- 需求目录说明业务结果和验收条件；架构决策在 `docs/architecture/decisions/` 中查找。
+- 完成时按 AI Coding 规约如实报告实际文件、验证、风险和回退方式。

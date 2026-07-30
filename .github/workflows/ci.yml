@@ -22,6 +22,7 @@ jobs:
       - run: node scripts/check-code-comments.mjs
       - run: node scripts/check-module-boundaries.mjs
       - run: node scripts/check-governance.mjs
+      - run: node scripts/check-readme-tree.mjs
       - run: node scripts/check-migration-parity.mjs
       - run: node scripts/check-mysql8-migrations.mjs
       - run: npm test --prefix server

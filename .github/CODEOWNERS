@@ -10,7 +10,7 @@
 /scripts/ @hengguan
 /.github/ @hengguan
 /AGENTS.md @hengguan
-/CONTRIBUTING.md @hengguan
+/README.md @hengguan
 
 /server/src/platform/ @hengguan
 /server/src/shared/ @hengguan
