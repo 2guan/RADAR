@@ -20,6 +20,7 @@ import { exportXlsx } from '../../platform/import-export/index.js';
 import { signatureDataUrl, resolveAttachmentPath } from '../../platform/attachments/index.js';
 import { buildReleaseWordDoc } from './index.js';
 import { getWorkItem } from '../development/index.js';
+import { resolveCurrentTaskStatuses } from '../overview/index.js';
 import { appendStageExcelValues, getStageExcelColumns, validateStageContent } from '../settings/process-configuration/index.js';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
@@ -758,12 +759,13 @@ async function computeEntities(windowIdList) {
   if (!codes.length) return [];
   const placeholders = codes.map(() => '?').join(',');
   const [requirements, tickets, issues, tasks] = await Promise.all([
-    all(`SELECT req_code AS code, title, 'requirement' AS entity_type FROM requirement WHERE req_code IN (${placeholders})`, ...codes),
-    all(`SELECT ticket_code AS code, title, 'ticket' AS entity_type FROM ticket WHERE ticket_code IN (${placeholders})`, ...codes),
+    all(`SELECT req_code AS code, title, status, 'requirement' AS entity_type FROM requirement WHERE req_code IN (${placeholders})`, ...codes),
+    all(`SELECT ticket_code AS code, title, status, 'ticket' AS entity_type FROM ticket WHERE ticket_code IN (${placeholders})`, ...codes),
     all(`SELECT issue_code AS code, summary AS title, 'issue' AS entity_type FROM issue WHERE issue_code IN (${placeholders})`, ...codes),
     all(`SELECT id, req_code, release_point_id, status, review_status FROM release_task WHERE req_code IN (${placeholders})`, ...codes),
   ]);
   const itemMap = new Map([...requirements, ...tickets, ...issues].map((item) => [item.code, item]));
+  const taskStatuses = await resolveCurrentTaskStatuses([...requirements, ...tickets]);
   const taskMap = new Map(tasks.map((task) => [`${task.req_code}::${task.release_point_id ?? ''}`, task]));
   const taskIds = tasks.map((task) => task.id);
   const attachmentsByTask = new Map();
@@ -802,6 +804,8 @@ async function computeEntities(windowIdList) {
     const releaseAttaches = rt ? attachmentsByTask.get(rt.id) || [] : [];
     // 未发起时按默认基线展示：投产/评审状态取字典默认值，会签进度=签0/角色数
     const summary = rt ? signoffByTask.get(rt.id) || { total: 0, signed: 0, rejected: 0 } : { total: signoffRoleCount, signed: 0, rejected: 0 };
+    const taskStatus = taskStatuses[code];
+    const releaseStatus = rt?.status || defaultReleaseStatus;
 
     list.push({
       release_task_id: rt?.id || null,
@@ -812,7 +816,10 @@ async function computeEntities(windowIdList) {
       impl_org: info.implOrg || null,
       release_point_id: pointId || null,
       release_date: releaseDate,
-      release_status: rt?.status || defaultReleaseStatus,
+      release_status: releaseStatus,
+      task_status: taskStatus?.display || `投产审批-${releaseStatus}`,
+      task_status_short: taskStatus?.shortDisplay || `投产 · ${releaseStatus}`,
+      task_status_value: taskStatus?.status || releaseStatus,
       review_status: rt?.review_status || defaultReviewStatus,
       signoff: summary,
       initiated: !!rt,

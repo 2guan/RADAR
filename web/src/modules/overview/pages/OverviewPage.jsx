@@ -13,7 +13,7 @@ import {
 import { SafetyCertificateOutlined, DeploymentUnitOutlined, DownloadOutlined, DownOutlined, UpOutlined, HistoryOutlined, ExportOutlined } from '@ant-design/icons';
 import { useResponsive } from '../../../platform/ui/useResponsive.js';
 import { ChainBar, FilterPanel, ResizableTitle } from '../../../shared/ui/index.js';
-import { StatusBadge, TaskEditor, getStatusType } from '../../../shared/workflow/index.js';
+import { StatusBadge, TaskEditor, TaskStatusBadge, getStatusType } from '../../../shared/workflow/index.js';
 import { RequirementEditor } from '../../requirements/index.js';
 import { TicketEditor } from '../../tickets/index.js';
 import { ReleaseDetail, ReleaseApplyEditor } from '../../release/index.js';
@@ -1383,7 +1383,9 @@ export default function Overview() {
                       {/* 顶部：左=编号，右=当前状态标签 */}
                       <div className="ov-req-head">
                         <span className="code-pill">{c.code}</span>
-                        <StatusBadge status={c.currentStage} />
+                        {c.entityType === 'issue'
+                          ? <StatusBadge status={c.currentStage} />
+                          : <TaskStatusBadge shortStatus={c.currentStage} status={c.currentStageStatus} fullStatus={c.currentStageFull} />}
                       </div>
 
                       {/* 标题/概述（编号下方，纯文本不加框） */}

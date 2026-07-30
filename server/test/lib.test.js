@@ -403,6 +403,7 @@ test('密码复杂度校验：满足各项复杂度要求时通过，不满足�
 });
 
 import { extract, matchFilters } from '../src/modules/dashboard/index.js';
+import { buildTaskStatusChain } from '../src/modules/overview/index.js';
 
 test('chart-dims 维度提取与过滤：阶段与任务状态，以及全部（all）数据源', () => {
   const req = {
@@ -433,13 +434,13 @@ test('chart-dims 维度提取与过滤：阶段与任务状态，以及全部（
   // 1. 验证 stage 提取：链条中需求登记(doing), 开发承接(doing), SIT测试实施(doing), RT待评审(doing)
   // nodeState中，开发承接是非终态 -> state='doing'
   // buildChain中：需求(doing), 开发(doing), SIT(doing), UAT(pending), 投产(doing)
-  // current = nodes.find(state === 'doing')，应该找到第一个 'doing'，即“需求”
+  // current = nodes.find(state === 'doing')，应该找到第一个 'doing'，即“需求/工单分析”
   const stages = extract('requirement', 'stage', req, ctx);
-  assert.deepEqual(stages, ['需求']);
+  assert.deepEqual(stages, ['需求/工单分析']);
 
   // 2. 验证 task_status 提取
   const taskStatus = extract('requirement', 'task_status', req, ctx);
-  assert.deepEqual(taskStatus, ['需求-需求登记']);
+  assert.deepEqual(taskStatus, ['需求/工单分析-需求登记']);
 
   // 3. 验证 all 数据源支持
   const rowWithSource = {
@@ -452,7 +453,33 @@ test('chart-dims 维度提取与过滤：阶段与任务状态，以及全部（
   // 4. 验证 matchFilters 与 all 数据源结合
   const filters = {
     org: ['机构1'],
-    stage: ['需求']
+    stage: ['需求/工单分析']
   };
   assert.equal(matchFilters('all', rowWithSource, filters, ctx), true);
+});
+
+test('task-status：统一阶段顺序优先用户测试，且保留阶段-状态展示', () => {
+  const chain = buildTaskStatusChain(
+    { req_code: 'REQ-DEMO-001', status: '需求分析完成' },
+    { 'REQ-DEMO-001': [{ id: 1, status: '开发完成' }] },
+    {
+      'REQ-DEMO-001': {
+        SIT: [{ id: 2, status: '测试完成' }],
+        UAT: [{ id: 3, status: '用户测试中' }],
+        NFT: [{ id: 4, status: '非功能测试中' }],
+      },
+    },
+    {},
+  );
+
+  assert.equal(chain.stage, '用户测试');
+  assert.equal(chain.status, '用户测试中');
+  assert.equal(chain.display, '用户测试-用户测试中');
+  assert.equal(chain.shortDisplay, 'UAT · 用户测试中');
+});
+
+test('task-status：无下游任务时回退到已完成的需求/工单分析阶段', () => {
+  const chain = buildTaskStatusChain({ req_code: 'REQ-DEMO-002', status: '需求分析完成' });
+  assert.equal(chain.display, '需求/工单分析-需求分析完成');
+  assert.equal(chain.shortDisplay, '需求 · 需求分析完成');
 });

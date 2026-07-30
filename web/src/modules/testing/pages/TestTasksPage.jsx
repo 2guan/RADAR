@@ -10,7 +10,7 @@ import { useRef, useState, useMemo, useEffect, forwardRef, useImperativeHandle }
 import { Card, Button, Space, Modal, Tag, Popconfirm, message, Table, Input, Spin, List, Radio, Checkbox } from 'antd';
 import { ExperimentOutlined, EditOutlined, DeleteOutlined, ImportOutlined, ExportOutlined } from '@ant-design/icons';
 import { DataTable, FilterPanel, ResizableTitle } from '../../../shared/ui/index.js';
-import { StatusBadge, TaskEditor } from '../../../shared/workflow/index.js';
+import { StatusBadge, TaskEditor, TaskStatusBadge } from '../../../shared/workflow/index.js';
 import { SystemSelect, makeReleasePointOptions, ReleasePointText } from '../../settings/reference-data/index.js';
 import { HistoryDrawer } from '../../../platform/audit/index.js';
 import Can from '../../../platform/auth/Can.jsx';
@@ -183,7 +183,8 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
   };
 
   const columns = [
-    { title: '状态', dataIndex: 'status', key: 'status', align: 'center', render: (s) => <StatusBadge status={s} /> },
+    { title: '任务状态', dataIndex: 'task_status_short', key: 'task_status', align: 'center', width: 120, render: (_, row) => <TaskStatusBadge shortStatus={row.task_status_short} status={row.task_status_value} fullStatus={row.task_status} /> },
+    { title: `${TYPE_LABEL[testType]}状态`, dataIndex: 'status', key: 'status', align: 'center', render: (s) => <StatusBadge status={s} /> },
     {
       title: '计划投产点',
       dataIndex: 'release_date',

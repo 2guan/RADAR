@@ -83,6 +83,78 @@ if (!process.env.RADAR_RUN_API_TESTS) {
     assert.equal(response.json().code, 403);
   });
 
+  test('task-status：四类任务列表返回统一的全链路任务状态，且保留各自状态字段', async () => {
+    const administrator = await get('SELECT id, phone FROM user WHERE is_super = 1 LIMIT 1');
+    const releasePoint = await get('SELECT id FROM release_point ORDER BY id LIMIT 1');
+    const headers = { authorization: `Bearer ${await app.jwt.sign({ id: administrator.id, phone: administrator.phone })}`, 'x-requested-by': 'RADAR' };
+    const requirementCode = 'TASK-STATUS-REQ-001';
+    const ticketCode = 'TASK-STATUS-TICKET-001';
+
+    await run('INSERT INTO requirement (req_code, title, status, release_point_id) VALUES (?,?,?,?)',
+      requirementCode, '任务状态需求', '需求分析完成', releasePoint.id);
+    await run('INSERT INTO ticket (ticket_code, title, status, release_point_id) VALUES (?,?,?,?)',
+      ticketCode, '任务状态工单', '需求分析完成', releasePoint.id);
+    for (const code of [requirementCode, ticketCode]) {
+      await run('INSERT INTO dev_task (req_code, task_code, task_name, status) VALUES (?,?,?,?)',
+        code, `DEV-${code}`, '开发任务', '开发完成');
+      await run('INSERT INTO test_task (req_code, task_code, task_name, test_type, status) VALUES (?,?,?,?,?)',
+        code, `UAT-${code}`, '用户测试任务', 'UAT', '测试执行');
+    }
+
+    const requirementList = await app.inject({
+      method: 'POST', url: '/api/requirements/list', headers, payload: { releasePointIds: [releasePoint.id], pageSize: 100 },
+    });
+    const ticketList = await app.inject({
+      method: 'POST', url: '/api/tickets/list', headers, payload: { releasePointIds: [releasePoint.id], pageSize: 100 },
+    });
+    const devList = await app.inject({
+      method: 'POST', url: '/api/dev-tasks/list', headers, payload: { releasePointIds: [releasePoint.id], pageSize: 100 },
+    });
+    const testList = await app.inject({
+      method: 'POST', url: '/api/test-tasks/list', headers, payload: { releasePointIds: [releasePoint.id], testType: 'UAT', pageSize: 100 },
+    });
+
+    for (const response of [requirementList, ticketList, devList, testList]) assert.equal(response.statusCode, 200);
+    assert.equal(requirementList.json().data.list.find((row) => row.req_code === requirementCode).task_status, '用户测试-测试执行');
+    assert.equal(ticketList.json().data.list.find((row) => row.ticket_code === ticketCode).task_status, '用户测试-测试执行');
+    assert.equal(devList.json().data.list.find((row) => row.req_code === requirementCode).task_status, '用户测试-测试执行');
+    assert.equal(testList.json().data.list.find((row) => row.req_code === requirementCode).task_status, '用户测试-测试执行');
+    assert.equal(requirementList.json().data.list.find((row) => row.req_code === requirementCode).task_status_short, 'UAT · 测试执行');
+    assert.equal(ticketList.json().data.list.find((row) => row.ticket_code === ticketCode).task_status_short, 'UAT · 测试执行');
+    assert.equal(devList.json().data.list.find((row) => row.req_code === requirementCode).status, '开发完成');
+    assert.equal(testList.json().data.list.find((row) => row.req_code === requirementCode).status, '测试执行');
+
+    const releaseApply = await app.inject({
+      method: 'POST', url: '/api/release-apply', headers,
+      payload: {
+        change_content: '任务状态投产审批回归', change_system: 'TASK-STATUS-SYSTEM', release_point_id: releasePoint.id,
+        ref_codes: [requirementCode], delivery_units: [{ artifact_type: '程序包', delivery_unit: 'task-status.tar.gz', new_version: '1.0.0' }],
+      },
+    });
+    assert.equal(releaseApply.statusCode, 200);
+    const releaseList = await app.inject({
+      method: 'POST', url: '/api/release/list', headers, payload: { releasePointIds: [releasePoint.id], pageSize: 100 },
+    });
+    const releaseRow = releaseList.json().data.list.find((row) => row.code === requirementCode);
+    assert.equal(releaseRow.task_status_short, 'UAT · 测试执行');
+    assert.equal(releaseRow.task_status, '用户测试-测试执行');
+
+    const overview = await app.inject({
+      method: 'POST', url: '/api/overview/list', headers, payload: { releasePointIds: [releasePoint.id], pageSize: 100 },
+    });
+    const overviewCard = overview.json().data.list.flatMap((group) => group.cards).find((card) => card.code === requirementCode);
+    assert.equal(overviewCard.currentStage, 'UAT · 测试执行');
+    assert.equal(overviewCard.currentStageFull, '用户测试-测试执行');
+
+    const dashboard = await app.inject({
+      method: 'POST', url: '/api/dashboard/chart-drilldown', headers,
+      payload: { source: 'analytics', statDimension: 'requirement', statStage: 'all', filters: {}, releasePointIds: [releasePoint.id] },
+    });
+    const dashboardRow = dashboard.json().data.data.find((row) => row.code === requirementCode);
+    assert.equal(dashboardRow.task_status, 'UAT · 测试执行');
+    assert.equal(dashboardRow.task_status_full, '用户测试-测试执行');
+  });
+
   test('交付件模板配置回显当前生效模板，并登记既有的动态模板', async () => {
     const administrator = await get('SELECT id, phone FROM user WHERE is_super = 1 LIMIT 1');
     const token = await app.jwt.sign({ id: administrator.id, phone: administrator.phone });

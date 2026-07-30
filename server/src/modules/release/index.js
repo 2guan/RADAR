@@ -10,4 +10,5 @@ export { buildReleaseWordDoc, formatWordDateTime } from './application/release-w
 export {
   claimReleaseApplyCode, generateReleaseApplyCode, previewReleaseApplyCode,
 } from './applications/release-apply/index.js';
+export { listReleaseTaskStatuses } from './application/task-statuses.js';
 export { MODULE_CONTRACT as releaseContract } from './contracts/index.js';
