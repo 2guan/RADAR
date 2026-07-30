@@ -5,7 +5,7 @@
   "ai": { "enabled": true, "approved_service": "Codex desktop", "model": "approved-by-user", "contains_confidential_information": false, "context_sanitized": true, "production_access": false },
   "scope": {
     "writable_paths": [
-      "docs/requirements/REQ-20260729-002/**", "docs/governance/GITHUB-RULES.md", "governance/modules.yaml", "scripts/check-ai-scope.mjs",
+      "docs/requirements/REQ-20260729-002/**", "docs/governance/GITHUB-RULES.md", "CONTRIBUTING.md", "governance/modules.yaml", "scripts/check-ai-scope.mjs",
       "server/src/modules/overview/**", "server/src/modules/dashboard/**",
       "server/src/modules/requirements/**", "server/src/modules/tickets/**",
       "server/src/modules/development/**", "server/src/modules/testing/**", "server/src/modules/release/**",
