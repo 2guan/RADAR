@@ -223,7 +223,7 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
     } else {
       setCurrent(null);
       form.resetFields();
-      form.setFieldsValue({ status: initialStatus, is_accounting: '否', release_point_id: defaultReleasePointId });
+      form.setFieldsValue({ status: initialStatus, priority: '中', is_accounting: '否', release_point_id: defaultReleasePointId });
     }
   }, [open, reqId, code, mode, initialStatus]);
 
@@ -421,6 +421,11 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
                     <Form.Item name="req_type" label="需求类型" rules={required.rules('req_type', '需求类型', { action: '请选择' })} style={{ marginBottom: 8 }}>
                       <DictSelect category="req_type" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} size="small" />
                     </Form.Item>
+                </StageBuiltinField>
+                <StageBuiltinField fieldKey="priority" defaultSection="basic">
+                  <Form.Item name="priority" label="优先级" initialValue="中" rules={required.rules('priority', '优先级', { action: '请选择' })} style={{ marginBottom: 8 }}>
+                    <Select size="small" options={[{ value: '高', label: '高' }, { value: '中', label: '中' }, { value: '低', label: '低' }]} style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} />
+                  </Form.Item>
                 </StageBuiltinField>
                 {/* 计划投产点 + 提出时间 */}
                 <StageBuiltinField fieldKey="release_point_id" defaultSection="basic">

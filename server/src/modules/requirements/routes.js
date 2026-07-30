@@ -11,7 +11,7 @@ import { listQuery } from '../../platform/persistence/index.js';
 import { claimRequirementCode, previewRequirementCode, requirementCodeRequiresReleasePoint } from './index.js';
 import {
   buildExtensionListFilter, defaultProcessStatus, isTerminalStatus,
-  statusTypeForProcessStatus, validateRequiredFields,
+  normalizePriority, statusTypeForProcessStatus, validateRequiredFields,
 } from '../settings/process-configuration/index.js';
 import {
   appendStageExcelValues,
@@ -35,6 +35,7 @@ const IO_COLUMNS = [
   { key: 'title', title: '需求标题' },
   { key: 'summary', title: '需求概述' },
   { key: 'status', title: '需求状态' },
+  { key: 'priority', title: '优先级' },
   { key: 'req_type', title: '需求类型' },
   { key: 'is_accounting', title: '是否涉账' },
   { key: 'propose_dept', title: '提出部门' },
@@ -50,19 +51,19 @@ const IO_COLUMNS = [
 ];
 
 const COLUMNS = [
-  'id', 'req_code', 'title', 'summary', 'status', 'req_type', 'propose_dept', 'proposer',
+  'id', 'req_code', 'title', 'summary', 'status', 'priority', 'req_type', 'propose_dept', 'proposer',
   'yn_owner', 'jk_owner', 'propose_time', 'release_point_id', 'registrar', 'register_time', 'created_at',
   'issue_no', 'is_accounting',
 ];
 const SEARCH = ['req_code', 'title', 'summary', 'proposer', 'issue_no'];
 const JSON_FIELDS = ['main_systems', 'collab_dev_systems', 'collab_test_systems', 'proposer'];
 const WRITABLE = [
-  'req_code', 'title', 'summary', 'status', 'req_type', 'propose_dept', 'proposer', 'yn_owner', 'jk_owner',
+  'req_code', 'title', 'summary', 'status', 'priority', 'req_type', 'propose_dept', 'proposer', 'yn_owner', 'jk_owner',
   'propose_time', 'main_systems', 'collab_dev_systems', 'collab_test_systems', 'release_point_id',
   'issue_no', 'is_accounting',
 ];
 const LABELS = {
-  req_code: '需求编号', title: '需求标题', summary: '需求概述', status: '需求状态', req_type: '需求类型',
+  req_code: '需求编号', title: '需求标题', summary: '需求概述', status: '需求状态', priority: '优先级', req_type: '需求类型',
   is_accounting: '是否涉账',
   propose_dept: '提出部门', proposer: '提出人', yn_owner: '云南农信业务负责人',
   jk_owner: '建信金科业务负责人', propose_time: '提出时间', main_systems: '主责系统',
@@ -293,6 +294,7 @@ export default async function requirementRoutes(fastify) {
     await validateStageContent('requirement', { ...body, status: body.status || initialStatus });
 
     const data = encodeField(pick(body));
+    data.priority = normalizePriority(body.priority);
     if (data.title === undefined) data.title = '';
     delete data.req_code;
     delete data.status;
@@ -327,6 +329,7 @@ export default async function requirementRoutes(fastify) {
     if (!old) throw notFound();
     const body = request.body || {};
     const picked = pick(body);
+    if (Object.hasOwn(body, 'priority')) picked.priority = normalizePriority(body.priority);
     await assertStatusChangePermission(fastify, request, 'requirement', old.status, picked);
 
     // 如果提交了新编号，校验唯一性（排除自身）
@@ -418,6 +421,7 @@ export default async function requirementRoutes(fastify) {
       { key: 'title', title: '需求标题' },
       { key: 'summary', title: '需求概述' },
       { key: 'status', title: '需求状态' },
+      { key: 'priority', title: '优先级' },
       { key: 'req_type', title: '需求类型' },
       { key: 'is_accounting', title: '是否涉账' },
       { key: 'propose_dept', title: '提出部门' },
@@ -508,6 +512,7 @@ export default async function requirementRoutes(fastify) {
           const isAccounting = ['是', '否'].includes(String(r.is_accounting || '').trim())
             ? String(r.is_accounting).trim()
             : '否';
+          const priority = normalizePriority(r.priority);
           const proposeDept = await resolveDictAttr('org', r.propose_dept);
 
           // 兼容性系统转换
@@ -556,6 +561,7 @@ export default async function requirementRoutes(fastify) {
             compareAndPush('title', '需求标题', exists.title || '', r.title || '');
             compareAndPush('summary', '需求概述', exists.summary || '', r.summary || '');
             compareAndPush('status', '需求状态', exists.status || '', status || '');
+            compareAndPush('priority', '优先级', exists.priority || '中', priority);
             compareAndPush('req_type', '需求类型', exists.req_type || '', reqType || '');
             compareAndPush('is_accounting', '是否涉账', exists.is_accounting || '否', isAccounting);
             compareAndPush('propose_dept', '提出部门', exists.propose_dept || '', proposeDept || '');
@@ -579,17 +585,17 @@ export default async function requirementRoutes(fastify) {
             if (changes.length > 0) {
               await run(
                 `UPDATE requirement SET 
-                   title=?, summary=?, status=?, req_type=?, is_accounting=?, propose_dept=?, proposer=?, yn_owner=?, jk_owner=?, 
+                   title=?, summary=?, status=?, priority=?, req_type=?, is_accounting=?, propose_dept=?, proposer=?, yn_owner=?, jk_owner=?,
                    propose_time=?, release_point_id=?, main_systems=?, collab_dev_systems=?, collab_test_systems=?, 
                    issue_no=?,
                    updated_at=datetime('now','localtime') 
                  WHERE id=?`,
-                r.title, r.summary || null, status, reqType || null, isAccounting, proposeDept || null, proposerJson,
+                r.title, r.summary || null, status, priority, reqType || null, isAccounting, proposeDept || null, proposerJson,
                 r.yn_owner || null, r.jk_owner || null, r.propose_time || null, rpId,
                 mainSystems, collabDevSystems, collabTestSystems, r.issue_no || null, exists.id
               );
               await auditUpdate('requirement', exists.id, code, request.currentUser?.name, exists, {
-                title: r.title, summary: r.summary || null, status, req_type: reqType || null, is_accounting: isAccounting,
+                title: r.title, summary: r.summary || null, status, priority, req_type: reqType || null, is_accounting: isAccounting,
                 propose_dept: proposeDept || null, proposer: proposerJson, yn_owner: r.yn_owner || null,
                 jk_owner: r.jk_owner || null, propose_time: r.propose_time || null, release_point_id: rpId,
                 main_systems: mainSystems, collab_dev_systems: collabDevSystems, collab_test_systems: collabTestSystems,
@@ -614,10 +620,10 @@ export default async function requirementRoutes(fastify) {
             if (!code) code = await claimRequirementCode(rpMap[rpId]);
             const res = await run(
               `INSERT INTO requirement 
-                 (req_code, title, summary, status, req_type, is_accounting, propose_dept, proposer, yn_owner, jk_owner, 
+                 (req_code, title, summary, status, priority, req_type, is_accounting, propose_dept, proposer, yn_owner, jk_owner,
                   propose_time, release_point_id, main_systems, collab_dev_systems, collab_test_systems, registrar, register_time, issue_no)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-              code, r.title, r.summary || null, status, reqType || null, isAccounting, proposeDept || null, proposerJson,
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+              code, r.title, r.summary || null, status, priority, reqType || null, isAccounting, proposeDept || null, proposerJson,
               r.yn_owner || null, r.jk_owner || null, r.propose_time || null, rpId,
               mainSystems, collabDevSystems, collabTestSystems, request.currentUser?.name, new Date().toISOString().slice(0, 10),
               r.issue_no || null

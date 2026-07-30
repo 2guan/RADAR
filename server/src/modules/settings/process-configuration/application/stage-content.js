@@ -13,7 +13,17 @@ import { getBusinessComponent } from './business-components.js';
 
 const FIELD_KINDS = new Set(['native', 'extension', 'component']);
 const INPUT_TYPES = new Set(['text', 'textarea', 'date', 'datetime', 'select', 'person', 'release_point', 'component']);
-const FIXED_SOURCE_KEYS = new Set(['', 'system', 'person', 'release_point']);
+const FIXED_SOURCE_KEYS = new Set(['', 'system', 'person', 'release_point', 'priority']);
+export const PRIORITY_OPTIONS = ['高', '中', '低'];
+
+/** 业务优先级为固定枚举；服务端入口统一使用，不能由前端或字典配置绕过。 */
+export function normalizePriority(value, { preserveUndefined = false } = {}) {
+  if (value === undefined && preserveUndefined) return undefined;
+  const normalized = value == null ? '' : String(value).trim();
+  if (!normalized) return '中';
+  if (!PRIORITY_OPTIONS.includes(normalized)) throw badRequest('优先级仅支持高、中、低');
+  return normalized;
+}
 const INPUT_MODES = new Set(['file', 'path', 'both']);
 const SECTION_LAYOUT_MODES = new Set(['left', 'right', 'full']);
 const STATE_TYPE_LABELS = { initial: '初始态', inProgress: '进行中', final: '终态' };
@@ -37,7 +47,7 @@ export const STAGE_SCOPE_DEFAULTS = [
 /** 内置字段仅用于初始化定义；表单读取与保存仍由既有业务模块负责。 */
 const NATIVE_FIELD_DEFAULTS = {
   requirement: [
-    ['req_code', '需求编号', 'text'], ['status', '需求状态', 'select'], ['req_type', '需求类型', 'select', 'dict:req_type'],
+    ['req_code', '需求编号', 'text'], ['status', '需求状态', 'select'], ['req_type', '需求类型', 'select', 'dict:req_type'], ['priority', '优先级', 'select', 'priority'],
     ['release_point_id', '计划投产点', 'release_point', 'release_point'], ['propose_time', '提出时间', 'datetime'],
     ['issue_no', '关联问题/工单编号', 'text'], ['is_accounting', '是否涉账', 'select'], ['title', '需求标题', 'text'],
     ['summary', '需求概述', 'textarea'], ['main_systems', '主责系统', 'select', 'system', 1],
@@ -46,7 +56,7 @@ const NATIVE_FIELD_DEFAULTS = {
     ['yn_owner', '云南农信业务负责人', 'person', 'person'], ['jk_owner', '建信金科业务负责人', 'person', 'person'],
   ],
   ticket: [
-    ['ticket_code', '工单编号', 'text'], ['status', '工单状态', 'select'], ['ticket_type', '工单类型', 'select', 'dict:ticket_type'],
+    ['ticket_code', '工单编号', 'text'], ['status', '工单状态', 'select'], ['ticket_type', '工单类型', 'select', 'dict:ticket_type'], ['priority', '优先级', 'select', 'priority'],
     ['release_point_id', '计划投产点', 'release_point', 'release_point'], ['propose_time', '提出时间', 'datetime'],
     ['issue_no', '关联问题/工单编号', 'text'], ['is_accounting', '是否涉账', 'select'], ['title', '工单概述', 'text'],
     ['summary', '工单详情', 'textarea'], ['main_systems', '主责系统', 'select', 'system', 1],
@@ -211,6 +221,7 @@ export async function listFieldSourceOptions() {
     { value: 'system', label: '机构系统 · 所属系统', group: 'system' },
     { value: 'person', label: '人员管理', group: 'person' },
     { value: 'release_point', label: '投产点管理', group: 'release_point' },
+    { value: 'priority', label: '固定枚举 · 优先级（高/中/低）', group: 'fixed' },
   ];
 }
 

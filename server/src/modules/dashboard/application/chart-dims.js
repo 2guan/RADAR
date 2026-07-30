@@ -226,6 +226,12 @@ export function extract(source, dim, row, ctx, filters) {
     const values = ctx.extensionValueMap?.get(`${scopeKey}:${row.id}:${fieldId}`) || [];
     return values.length ? values : ['未填写'];
   }
+  if (dim.startsWith('native:')) {
+    const [, scopeKey, fieldKey] = dim.split(':');
+    if (fieldKey !== 'priority' || row._stageScope !== scopeKey) return ['未填写'];
+    const item = row._workItem || row;
+    return [item.priority || '中'];
+  }
   // 统一效能统计记录保留其所属需求/工单；阶段记录本身只用于“阶段状态”。
   if (source === 'analytics') {
     const item = row._workItem || row;
@@ -493,7 +499,7 @@ export function aggregate({ source, dimension, xAxisDimension, filters = {}, gro
 /** 校验维度是否属于该源（防注入/越权维度） */
 export function isValidDim(source, dim) {
   // 动态字段仅可在统一效能统计源中使用；其是否真实存在由仪表盘元数据接口控制。
-  return !!dim && (SOURCES[source]?.dims.includes(dim) || (source === 'analytics' && /^extension:[A-Za-z0-9._-]+:\d+$/.test(dim)));
+  return !!dim && (SOURCES[source]?.dims.includes(dim) || (source === 'analytics' && /^(extension:[A-Za-z0-9._-]+:\d+|native:(requirement|ticket):priority)$/.test(dim)));
 }
 
 /** 取测试源对应的 test_type（非测试源返回 null） */

@@ -23,14 +23,15 @@ const DYNAMIC_STAGE_SCOPE = {
   uat: 'test.UAT', nft: 'test.NFT', sec: 'test.SEC', release: 'release',
 };
 
-/** 仅公开管理员勾选为仪表盘维度的扩展字段；键使用稳定 ID，页面只展示字段名称。 */
+/** 公开管理员启用的扩展字段，以及受固定业务枚举约束的内置优先级维度。 */
 async function dynamicDashboardDimensions() {
-  const rows = await all(`SELECT id, scope_key, label, input_type, source_key, multiple
+  const rows = await all(`SELECT id, scope_key, field_key, field_kind, label, input_type, source_key, multiple
     FROM stage_field_definition
-    WHERE field_kind = 'extension' AND dashboard_dimension = 1 AND visible = 1 AND deleted_at IS NULL
+    WHERE dashboard_dimension = 1 AND deleted_at IS NULL
+      AND ((field_kind = 'extension' AND visible = 1) OR (field_kind = 'native' AND field_key = 'priority'))
     ORDER BY scope_key, sort, id`);
   return rows.map((row) => ({
-    key: `extension:${row.scope_key}:${row.id}`,
+    key: row.field_kind === 'native' ? `native:${row.scope_key}:priority` : `extension:${row.scope_key}:${row.id}`,
     label: row.label,
     optionSource: row.source_key || 'free',
     isDate: ['date', 'datetime'].includes(row.input_type),
@@ -48,7 +49,7 @@ function allowedDynamicScopes(analytics) {
 }
 
 function isChartDimensionAllowed(source, dimension, analytics, dynamicDimensions) {
-  if (isValidDim(source, dimension) && !String(dimension).startsWith('extension:')) return true;
+  if (isValidDim(source, dimension) && !/^(extension|native):/.test(String(dimension))) return true;
   if (source !== 'analytics') return false;
   const definition = dynamicDimensions.find((item) => item.key === dimension);
   return !!definition && allowedDynamicScopes(analytics).includes(definition.scopeKey);

@@ -21,6 +21,7 @@ export {
   assertDeliverableRemovable, deleteDeliverableDefinition, deleteFieldDefinition, deleteSection,
   extensionValuesFromExcelRow, getExtensionValues, getStageContentConfig, getStageExcelColumns,
   getStageScope, listFieldSourceOptions, listStageScopes, listStageStatuses, recordConfigRevision,
+  normalizePriority, PRIORITY_OPTIONS,
   saveDeliverableDefinition, saveExtensionValues, saveFieldDefinition, saveSection,
   seedStageContentDefaults, validateStageContent,
 } from './application/stage-content.js';

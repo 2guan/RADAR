@@ -204,7 +204,7 @@ export const STAGE_BUILTIN_SECTION_DEFAULTS = {
 export const STAGE_BUILTIN_FIELD_METADATA = {
   requirement: {
     req_code: { section: 'basic', required_from: 'initial', list: 1, filter: 1 }, status: { section: 'basic', list: 1, filter: 1, dashboard: 1 },
-    req_type: { section: 'basic', required_from: 'initial', list: 1, filter: 1, dashboard: 1 }, release_point_id: { section: 'basic', required_from: 'initial', list: 1, filter: 1, dashboard: 1 },
+    req_type: { section: 'basic', required_from: 'initial', list: 1, filter: 1, dashboard: 1 }, priority: { section: 'basic', list: 1, filter: 1, dashboard: 1 }, release_point_id: { section: 'basic', required_from: 'initial', list: 1, filter: 1, dashboard: 1 },
     propose_time: { section: 'basic', required_from: 'initial', list: 1, dashboard: 1 }, issue_no: { section: 'basic', filter: 1 }, is_accounting: { section: 'basic', required_from: 'initial', filter: 1 },
     title: { section: 'basic', required_from: 'initial', list: 1 }, summary: { section: 'basic', required_from: 'initial' }, main_systems: { section: 'systems', required_from: 'initial', list: 1, filter: 1, dashboard: 1 },
     collab_dev_systems: { section: 'systems', list: 1, filter: 1 }, collab_test_systems: { section: 'systems', filter: 1 }, propose_dept: { section: 'owners', required_from: 'initial', filter: 1, dashboard: 1 },
@@ -212,7 +212,7 @@ export const STAGE_BUILTIN_FIELD_METADATA = {
   },
   ticket: {
     ticket_code: { section: 'basic', required_from: 'initial', list: 1, filter: 1 }, status: { section: 'basic', list: 1, filter: 1, dashboard: 1 },
-    ticket_type: { section: 'basic', required_from: 'initial', list: 1, filter: 1, dashboard: 1 }, release_point_id: { section: 'basic', required_from: 'initial', list: 1, filter: 1, dashboard: 1 },
+    ticket_type: { section: 'basic', required_from: 'initial', list: 1, filter: 1, dashboard: 1 }, priority: { section: 'basic', list: 1, filter: 1, dashboard: 1 }, release_point_id: { section: 'basic', required_from: 'initial', list: 1, filter: 1, dashboard: 1 },
     propose_time: { section: 'basic', required_from: 'initial', list: 1, dashboard: 1 }, issue_no: { section: 'basic', filter: 1 }, is_accounting: { section: 'basic', required_from: 'initial', filter: 1 },
     title: { section: 'basic', required_from: 'initial', list: 1 }, summary: { section: 'basic', required_from: 'initial' }, main_systems: { section: 'systems', required_from: 'initial', list: 1, filter: 1, dashboard: 1 },
     collab_dev_systems: { section: 'systems', list: 1, filter: 1 }, collab_test_systems: { section: 'systems', filter: 1 }, propose_dept: { section: 'owners', required_from: 'initial', filter: 1, dashboard: 1 },

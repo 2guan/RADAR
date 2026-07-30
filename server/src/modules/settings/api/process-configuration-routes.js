@@ -27,6 +27,7 @@ import {
   saveExtensionValues,
   saveFieldDefinition,
   saveSection,
+  PRIORITY_OPTIONS,
 } from '../process-configuration/index.js';
 
 /** 仅暴露经过注册的下拉数据源，禁止配置端传入任意 SQL 或表名。 */
@@ -43,6 +44,10 @@ async function listSource(sourceKey, keyword = '') {
   if (sourceKey === 'system') {
     const rows = await all('SELECT sys_code, sys_name, org, sector FROM system WHERE sys_code LIKE ? OR sys_name LIKE ? ORDER BY sort, sys_code LIMIT 50', like, like);
     return rows.map((row) => ({ value: row.sys_code, label: `${row.sys_code} ${row.sys_name}`, ...row }));
+  }
+  if (sourceKey === 'priority') {
+    const query = String(keyword).trim();
+    return PRIORITY_OPTIONS.filter((value) => !query || value.includes(query)).map((value) => ({ value, label: value }));
   }
   if (sourceKey.startsWith('dict:')) {
     const category = sourceKey.slice(5);
