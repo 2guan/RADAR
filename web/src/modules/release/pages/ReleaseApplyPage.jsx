@@ -47,20 +47,12 @@ export default function ReleaseApply() {
   const artifactOptions = artifactTypes.map((d) => ({ value: d.attr_value, label: d.display_value }));
   const ferryOptions = ferryStatuses.map((d) => ({ value: d.attr_value, label: d.display_value }));
 
-  const nativeFilterConfig = (field) => {
-    if (field.field === 'impl_org') return { ...field, type: 'select', op: 'in', options: orgOptions };
-    if (field.field === 'change_system') return { ...field, type: 'select', op: 'in', options: systemOptions };
-    return field;
-  };
-  const fallbackNativeFilters = [
-    { field: 'change_code', label: '变更编号', type: 'input', isPrimary: true, op: 'like', placeholder: '变更编号检索' },
-    { field: 'change_content', label: '变更内容', type: 'input', op: 'like', placeholder: '变更内容检索' },
-    { field: 'change_system', label: '变更系统', type: 'select', op: 'in', options: systemOptions },
-    { field: 'impl_org', label: '实施机构', type: 'select', op: 'in', options: orgOptions },
-  ];
-  // 交付制品属性为结构化组件的固定检索，不属于普通输入字段能力开关。
+  // 动态阶段字段由公共 Hook 注入，使列表配置与投产申请表单保持同步。
   const filterConfigs = [
-    ...(stageList.loaded ? stageList.nativeFilterConfigs.map(nativeFilterConfig) : fallbackNativeFilters),
+    { field: 'impl_org', label: '实施机构', type: 'select', op: 'in', options: orgOptions, isPrimary: true },
+    { field: 'change_code', label: '变更编号', type: 'input', isPrimary: true, op: 'like', placeholder: '变更编号检索' },
+    { field: 'content', label: '变更内容', type: 'input', isPrimary: true, op: 'like', placeholder: '变更内容或影响范围检索' },
+    { field: 'change_system', label: '变更系统', type: 'select', op: 'in', options: systemOptions },
     { field: 'artifact_type', label: '制品类型', type: 'select', op: 'in', options: artifactOptions },
     { field: 'ferry_status', label: '摆渡状态', type: 'select', op: 'in', options: ferryOptions },
     ...stageList.filterConfigs,
@@ -153,15 +145,6 @@ export default function ReleaseApply() {
       ),
     },
   ];
-  const nativeColumnAliases = { release_point_id: 'release_date', change_system: 'change_system_name' };
-  const columnByKey = new Map(columns.map((column) => [column.key, column]));
-  const configuredNativeColumns = stageList.loaded
-    ? stageList.nativeListFields.map((field) => {
-      const column = columnByKey.get(nativeColumnAliases[field.field_key] || field.field_key);
-      return column ? { ...column, key: field.field_key, title: field.label }
-        : { title: field.label, dataIndex: field.field_key, key: field.field_key, render: (value) => value || '—' };
-    })
-    : [columns[1], columns[3], columns[4], columns[6]];
 
   return (
     <Card
@@ -188,7 +171,7 @@ export default function ReleaseApply() {
         ]}
       />
       <DataTable
-        ref={tableRef} columns={[columns[0], ...configuredNativeColumns, columns[5], ...stageList.columns, columns.at(-1)]} fetcher={fetcher}
+        ref={tableRef} columns={[...columns.slice(0, -1), ...stageList.columns, columns.at(-1)]} fetcher={fetcher}
         baseQuery={{ releasePointIds, filters: filterQuery }}
         showSearch={false}
         tableLayout="fixed"

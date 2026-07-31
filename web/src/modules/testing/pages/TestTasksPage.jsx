@@ -73,27 +73,15 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
   const userOptions = users.map(u => ({ value: u.name, label: `${u.name} (${u.phone})` }));
   const systemOptions = systems.map(s => ({ value: s.sys_code, label: `${s.sys_code} - ${s.sys_name}` }));
 
-  const nativeFilterConfig = (field) => {
-    const base = { ...field };
-    if (field.field === 'status') return { ...base, type: 'select', op: 'in', options: statusOptions };
-    if (field.field === 'owner') return { ...base, type: 'select', op: 'in', options: userOptions };
-    if (field.field === 'impl_org') return { ...base, type: 'select', op: 'in', options: orgOptions };
-    if (field.field === 'impl_system') return { ...base, type: 'select', op: 'in', options: systemOptions };
-    return base;
-  };
-  const fallbackNativeFilters = [
-    { field: 'status', label: '测试状态', type: 'select', op: 'in', options: statusOptions },
-    { field: 'task_name', label: '测试任务名称', type: 'input', op: 'like' },
-    { field: 'owner', label: '测试负责人', type: 'select', op: 'in', options: userOptions },
-    { field: 'impl_system', label: '测试实施系统', type: 'select', op: 'in', options: systemOptions },
-    { field: 'impl_org', label: '测试实施方', type: 'select', op: 'in', options: orgOptions },
-  ];
   const filterConfigs = [
-    ...(stageList.loaded ? stageList.nativeFilterConfigs.map(nativeFilterConfig) : fallbackNativeFilters),
     { field: 'task_code', label: '测试任务编号', type: 'input', isPrimary: true, op: 'like', placeholder: '测试任务编号检索' },
+    { field: 'content', label: '测试内容', type: 'input', isPrimary: true, op: 'like', placeholder: '测试任务名称检索' },
     { field: 'release_point_id', label: '计划投产点', type: 'select', op: 'in', options: pointOptions },
-    { field: 'org', label: '实施机构（派生）', type: 'select', op: 'in', options: orgOptions },
-    { field: 'owners', label: '关联负责人', type: 'select', op: 'in', options: userOptions },
+    { field: 'status', label: '测试状态', type: 'select', op: 'in', options: statusOptions },
+    { field: 'owner', label: '测试负责人', type: 'select', op: 'in', options: userOptions },
+    { field: 'impl_org', label: '测试实施方', type: 'select', op: 'in', options: orgOptions },
+    { field: 'owners', label: '负责人', type: 'select', op: 'in', options: userOptions },
+    { field: 'impl_system', label: '实施系统', type: 'select', op: 'in', options: systemOptions },
     ...stageList.filterConfigs,
   ];
 
@@ -245,16 +233,6 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
       ),
     },
   ];
-  const nativeColumnAliases = { impl_system: 'impl_system_name' };
-  const columnByKey = new Map(columns.map((column) => [column.key, column]));
-  const configuredNativeColumns = stageList.loaded
-    ? stageList.nativeListFields.map((field) => {
-      const column = columnByKey.get(nativeColumnAliases[field.field_key] || field.field_key);
-      return column ? { ...column, key: field.field_key, title: field.label }
-        : { title: field.label, dataIndex: field.field_key, key: field.field_key, render: (value) => value || '—' };
-    })
-    : [columns[1], columns[4], columns[6], columns[7]];
-  const fixedListColumns = [columns[0], columns[2], columns[3], columns[5], columns[8]];
 
   const reqColumns = [
     {
@@ -416,7 +394,7 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
         ]}
       />
       <DataTable
-        ref={tableRef} columns={[fixedListColumns[0], ...configuredNativeColumns, ...fixedListColumns.slice(1), ...stageList.columns, columns.at(-1)]} fetcher={fetcher}
+        ref={tableRef} columns={[...columns.slice(0, -1), ...stageList.columns, columns.at(-1)]} fetcher={fetcher}
         baseQuery={{ releasePointIds, testType, filters: filterQuery }} 
         showSearch={false}
         onRowClick={(r) => setEditId(r.id)}
