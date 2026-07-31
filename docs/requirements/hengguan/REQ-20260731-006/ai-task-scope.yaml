@@ -6,7 +6,7 @@
   "scope": {
     "writable_paths": [
       "docs/requirements/hengguan/REQ-20260731-006/**",
-      "server/src/modules/settings/process-configuration/**", "server/src/bootstrap/seed.js", "web/src/modules/settings/process-configuration/**",
+      "server/src/modules/settings/process-configuration/**", "server/src/modules/settings/api/process-configuration-routes.js", "server/src/bootstrap/seed.js", "web/src/modules/settings/process-configuration/**",
       "server/src/modules/requirements/**", "web/src/modules/requirements/**",
       "server/src/modules/tickets/**", "web/src/modules/tickets/**",
       "server/src/modules/development/**", "web/src/modules/development/**",
