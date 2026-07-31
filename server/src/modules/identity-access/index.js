@@ -8,3 +8,12 @@
 /** Public boundary: this module currently exposes no cross-module mutable operations. */
 export { PERM_CATALOG } from './application/perm-catalog.js';
 export { MODULE_CONTRACT as identityAccessContract } from './contracts/index.js';
+
+import { get } from '../../platform/persistence/index.js';
+
+/** Public read contract: validates a single selectable, enabled person name. */
+export async function isActivePersonName(name) {
+  const normalized = String(name || '').trim();
+  if (!normalized) return true;
+  return !!await get('SELECT id FROM user WHERE name = ? AND status = ?', normalized, '启用');
+}

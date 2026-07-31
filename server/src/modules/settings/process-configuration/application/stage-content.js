@@ -39,20 +39,20 @@ const NATIVE_FIELD_DEFAULTS = {
   requirement: [
     ['req_code', '需求编号', 'text'], ['status', '需求状态', 'select'], ['req_type', '需求类型', 'select', 'dict:req_type'],
     ['release_point_id', '计划投产点', 'release_point', 'release_point'], ['propose_time', '提出时间', 'datetime'],
-    ['issue_no', '关联问题/工单编号', 'text'], ['is_accounting', '是否涉账', 'select'], ['priority', '优先级', 'select', 'priority'], ['title', '需求标题', 'text'],
-    ['summary', '需求概述', 'textarea'], ['main_systems', '主责系统', 'select', 'system', 1],
+    ['issue_no', 'OA编号/工单编号', 'text'], ['is_accounting', '是否涉账', 'select'], ['priority', '优先级', 'select', 'priority'], ['title', '需求标题', 'text'], ['workload', '工作量', 'text'],
+    ['summary', '需求概述', 'textarea'], ['implementation_org', '实施机构', 'select', 'dict:org'], ['main_systems', '主责系统', 'select', 'system', 1],
     ['collab_dev_systems', '协同改造系统', 'select', 'system', 1], ['collab_test_systems', '协同测试系统', 'select', 'system', 1],
     ['propose_dept', '提出部门', 'select', 'dict:req_dept'], ['proposer', '提出人', 'person', 'person', 1],
-    ['yn_owner', '云南农信业务负责人', 'person', 'person'], ['jk_owner', '建信金科业务负责人', 'person', 'person'],
+    ['yn_owner', '云南农信业务负责人', 'person', 'person'], ['jk_owner', '建信金科业务负责人', 'person', 'person'], ['receiver', '需求接收人', 'person', 'person'], ['registrar', '录入人', 'text'], ['register_time', '录入时间', 'date'],
   ],
   ticket: [
     ['ticket_code', '工单编号', 'text'], ['status', '工单状态', 'select'], ['ticket_type', '工单类型', 'select', 'dict:ticket_type'],
     ['release_point_id', '计划投产点', 'release_point', 'release_point'], ['propose_time', '提出时间', 'datetime'],
-    ['issue_no', '关联问题/工单编号', 'text'], ['is_accounting', '是否涉账', 'select'], ['priority', '优先级', 'select', 'priority'], ['title', '工单概述', 'text'],
-    ['summary', '工单详情', 'textarea'], ['main_systems', '主责系统', 'select', 'system', 1],
+    ['issue_no', 'OA编号/工单编号', 'text'], ['is_accounting', '是否涉账', 'select'], ['priority', '优先级', 'select', 'priority'], ['title', '工单概述', 'text'], ['workload', '工作量', 'text'],
+    ['summary', '工单详情', 'textarea'], ['implementation_org', '实施机构', 'select', 'dict:org'], ['main_systems', '主责系统', 'select', 'system', 1],
     ['collab_dev_systems', '协同改造系统', 'select', 'system', 1], ['collab_test_systems', '协同测试系统', 'select', 'system', 1],
     ['propose_dept', '提出部门', 'select', 'dict:req_dept'], ['proposer', '提出人', 'person', 'person', 1],
-    ['yn_owner', '云南农信工单负责人', 'person', 'person'], ['jk_owner', '建信金科工单负责人', 'person', 'person'],
+    ['yn_owner', '云南农信工单负责人', 'person', 'person'], ['jk_owner', '建信金科工单负责人', 'person', 'person'], ['receiver', '需求接收人', 'person', 'person'], ['registrar', '录入人', 'text'], ['register_time', '录入时间', 'date'],
   ],
   dev: [
     ['task_name', '开发任务名称', 'text'], ['content', '开发内容概述', 'textarea'], ['status', '开发状态', 'select'],
@@ -89,7 +89,7 @@ const NATIVE_FIELD_DEFAULTS = {
  * 内置配置目录是字段语义的唯一代码基线：数据库只保存管理员可调整的布局、可见性和状态规则。
  * `renderer` 明确区分可由公共控件呈现的普通字段和必须由业务 JSX 声明的复杂控件。
  */
-export const BUILTIN_CONFIGURATION_UPGRADE_ID = 'settings.builtin-configuration.v1';
+export const BUILTIN_CONFIGURATION_UPGRADE_ID = 'settings.builtin-configuration.v2';
 export const PRIORITY_OPTIONS = [
   { value: '高', label: '高' },
   { value: '中', label: '中' },
@@ -171,9 +171,9 @@ const CUSTOM_DELIVERABLE_TEMPLATE_HANDLERS = {
   },
 };
 
-const BUILTIN_METADATA_VERSION_KEY = 'stage.content.builtin-metadata.v1';
+const BUILTIN_METADATA_VERSION_KEY = 'stage.content.builtin-metadata.v2';
 // v6：按本地详情页已确认的两列纵向顺序校准内置分区，供新库与 mock 重建共用。
-const BUILTIN_LAYOUT_VERSION_KEY = 'stage.content.builtin-layout.v6';
+const BUILTIN_LAYOUT_VERSION_KEY = 'stage.content.builtin-layout.v7';
 const DELIVERABLE_SECTION_PRESENTATION_VERSION_KEY = 'stage.content.deliverable-section-presentation.v1';
 
 function baseScope(scopeKey) {
@@ -511,7 +511,7 @@ export async function listStageListFields(scopeKey) {
   await getStageScope(scopeKey);
   return await all(`SELECT id, field_key, label, input_type, source_key, multiple, list_visible, filterable, sort
     FROM stage_field_definition
-    WHERE scope_key = ? AND field_kind = 'extension' AND visible = 1
+    WHERE scope_key = ? AND field_kind = 'extension'
       AND (list_visible = 1 OR filterable = 1) AND deleted_at IS NULL
     ORDER BY sort, id`, scopeKey);
 }
@@ -928,17 +928,25 @@ async function reconcileLegacyReleaseApplyDeliverable() {
  */
 async function synchronizeBuiltinFieldMetadata(builtinMetadata) {
   if (await get('SELECT value FROM app_config WHERE key = ?', BUILTIN_METADATA_VERSION_KEY)) return;
-  for (const [scopeKey] of STAGE_SCOPE_DEFAULTS) {
+  for (const scopeKey of ['requirement', 'ticket']) {
     const statuses = await listStageStatuses(scopeKey);
     const fields = await all(`SELECT id, field_key FROM stage_field_definition
       WHERE scope_key = ? AND field_kind = 'native' AND is_builtin = 1 AND deleted_at IS NULL`, scopeKey);
     for (const field of fields) {
+      if (!['implementation_org', 'receiver', 'workload', 'registrar', 'register_time'].includes(field.field_key)) continue;
       const metadata = nativeFieldMetadata(builtinMetadata, scopeKey, field.field_key);
       await run(`UPDATE stage_field_definition SET list_visible=?, filterable=?, dashboard_dimension=?, updated_at=${dialect.now} WHERE id=?`, metadata.list || 0, metadata.filter || 0, metadata.dashboard || 0, field.id);
       await replaceRules('stage_field_status_rule', 'field_definition_id', field.id, nativeRequiredRules(statuses, metadata.required_from), statuses);
     }
+    // 仅将仍使用旧系统默认文案的字段更名，管理员自定义名称保持不变。
+    await run(`UPDATE stage_field_definition SET label=?, updated_at=${dialect.now}
+      WHERE scope_key=? AND field_key='issue_no' AND label='关联问题/工单编号'`, 'OA编号/工单编号', scopeKey);
+    await run(`UPDATE stage_field_definition SET label=?, updated_at=${dialect.now}
+      WHERE scope_key=? AND field_key='registrar' AND label='登记人'`, '录入人', scopeKey);
+    await run(`UPDATE stage_field_definition SET label=?, updated_at=${dialect.now}
+      WHERE scope_key=? AND field_key='register_time' AND label='登记时间'`, '录入时间', scopeKey);
   }
-  await run('INSERT INTO app_config (key, value, remark) VALUES (?,?,?)', BUILTIN_METADATA_VERSION_KEY, '1', '内置字段列表、筛选、仪表盘与必填元数据校准版本');
+  await run('INSERT INTO app_config (key, value, remark) VALUES (?,?,?)', BUILTIN_METADATA_VERSION_KEY, '1', '分析字段默认展示、筛选与兼容文案校准版本');
 }
 
 /**
@@ -947,48 +955,11 @@ async function synchronizeBuiltinFieldMetadata(builtinMetadata) {
  */
 async function synchronizeBuiltinLayout(sectionDefaults, builtinMetadata) {
   if (await get('SELECT value FROM app_config WHERE key = ?', BUILTIN_LAYOUT_VERSION_KEY)) return;
-  for (const [scopeKey] of STAGE_SCOPE_DEFAULTS) {
-    const definitions = builtinSections(sectionDefaults, scopeKey);
-    const currentRows = await all('SELECT id, section_key FROM stage_section WHERE scope_key = ? AND deleted_at IS NULL', scopeKey);
-    const rowsByKey = new Map(currentRows.map((row) => [row.section_key, row]));
-    const sectionIds = new Map();
-    for (const [index, definition] of definitions.entries()) {
-      let row = rowsByKey.get(definition.key);
-      if (!row) row = (definition.legacy_keys || []).map((key) => rowsByKey.get(key)).find(Boolean);
-      if (row) {
-        // 旧分区编码只在这里由种子定义迁移，后台保存接口仍禁止修改内置编码。
-        await run(`UPDATE stage_section SET section_key=?, title=?, sort=?, collapsed=?, layout_mode=?, show_title=?, updated_at=${dialect.now} WHERE id=?`, definition.key, definition.title, index * 10, definition.collapsed ? 1 : 0, definition.layout || 'left', definition.show_title === false ? 0 : 1, row.id);
-      } else {
-        const res = await run('INSERT INTO stage_section (scope_key, section_key, title, sort, collapsed, is_builtin, layout_mode, show_title) VALUES (?,?,?,?,?,1,?,?)', scopeKey, definition.key, definition.title, index * 10, definition.collapsed ? 1 : 0, definition.layout || 'left', definition.show_title === false ? 0 : 1);
-        row = { id: res.lastInsertRowid };
-      }
-      sectionIds.set(definition.key, row.id);
-    }
-    // 新版分区可能已在首次插入时创建；此时若开发期旧分区没有任何字段引用，
-    // 将其逻辑归档，避免“分析与协同/审批信息”这类已不在详情页的空分区继续展示。
-    for (const definition of definitions) {
-      for (const legacyKey of definition.legacy_keys || []) {
-        const legacy = rowsByKey.get(legacyKey);
-        if (!legacy || legacy.id === sectionIds.get(definition.key)) continue;
-        const used = await get('SELECT COUNT(*) AS c FROM stage_field_definition WHERE section_id = ? AND deleted_at IS NULL', legacy.id);
-        if (!used?.c) await run(`UPDATE stage_section SET deleted_at=${dialect.now}, updated_at=${dialect.now} WHERE id=?`, legacy.id);
-      }
-    }
-    const fields = await all(`SELECT id, field_key FROM stage_field_definition
-      WHERE scope_key = ? AND is_builtin = 1 AND deleted_at IS NULL`, scopeKey);
-    for (const field of fields) {
-      const metadata = nativeFieldMetadata(builtinMetadata, scopeKey, field.field_key);
-      const sectionId = sectionIds.get(metadata.section);
-      if (sectionId) await run(`UPDATE stage_field_definition SET section_id=?, updated_at=${dialect.now} WHERE id=?`, sectionId, field.id);
-    }
-    for (const definition of excludedBuiltinSections(sectionDefaults, scopeKey)) {
-      const row = rowsByKey.get(definition.key);
-      if (!row) continue;
-      const used = await get('SELECT COUNT(*) AS c FROM stage_field_definition WHERE section_id = ? AND deleted_at IS NULL', row.id);
-      if (!used?.c) await run(`UPDATE stage_section SET deleted_at=${dialect.now}, updated_at=${dialect.now} WHERE id=?`, row.id);
-    }
+  for (const scopeKey of ['requirement', 'ticket']) {
+    await run(`UPDATE stage_section SET title=?, updated_at=${dialect.now}
+      WHERE scope_key=? AND section_key='systems' AND title='涉及系统'`, '实施机构及系统', scopeKey);
   }
-  await run('INSERT INTO app_config (key, value, remark) VALUES (?,?,?)', BUILTIN_LAYOUT_VERSION_KEY, '1', '内置分区标题、布局位置与字段归属校准版本');
+  await run('INSERT INTO app_config (key, value, remark) VALUES (?,?,?)', BUILTIN_LAYOUT_VERSION_KEY, '1', '分析分区默认标题兼容校准版本');
 }
 
 /**

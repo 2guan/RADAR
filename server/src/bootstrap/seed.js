@@ -150,14 +150,14 @@ const REVIEW_STATUS = [
 export const STAGE_BUILTIN_SECTION_DEFAULTS = {
   requirement: [
     { key: 'basic', title: '基本信息', layout: 'left' },
-    { key: 'systems', title: '涉及系统', layout: 'right', legacy_keys: ['analysis'] },
+    { key: 'systems', title: '实施机构及系统', layout: 'right', legacy_keys: ['analysis'] },
     { key: 'owners', title: '相关负责人', layout: 'right' },
     { key: 'extension', title: '扩展信息', layout: 'right' },
     { key: 'deliverables', title: '交付件', layout: 'right', show_title: false },
   ],
   ticket: [
     { key: 'basic', title: '基本信息', layout: 'left' },
-    { key: 'systems', title: '涉及系统', layout: 'right', legacy_keys: ['analysis'] },
+    { key: 'systems', title: '实施机构及系统', layout: 'right', legacy_keys: ['analysis'] },
     { key: 'owners', title: '相关负责人', layout: 'right' },
     { key: 'extension', title: '扩展信息', layout: 'right' },
     { key: 'deliverables', title: '交付件', layout: 'right', show_title: false },
@@ -205,18 +205,18 @@ export const STAGE_BUILTIN_FIELD_METADATA = {
   requirement: {
     req_code: { section: 'basic', required_from: 'initial', list: 1, filter: 1 }, status: { section: 'basic', list: 1, filter: 1, dashboard: 1 },
     req_type: { section: 'basic', required_from: 'initial', list: 1, filter: 1, dashboard: 1 }, release_point_id: { section: 'basic', required_from: 'initial', list: 1, filter: 1, dashboard: 1 },
-    propose_time: { section: 'basic', required_from: 'initial', list: 1, dashboard: 1 }, issue_no: { section: 'basic', filter: 1 }, is_accounting: { section: 'basic', required_from: 'initial', filter: 1 }, priority: { section: 'basic', list: 1, filter: 1, dashboard: 1 },
-    title: { section: 'basic', required_from: 'initial', list: 1 }, summary: { section: 'basic', required_from: 'initial' }, main_systems: { section: 'systems', required_from: 'initial', list: 1, filter: 1, dashboard: 1 },
+    propose_time: { section: 'basic', required_from: 'initial', list: 1, dashboard: 1 }, issue_no: { section: 'basic', filter: 1 }, is_accounting: { section: 'basic', required_from: 'initial', filter: 1 }, priority: { section: 'basic', list: 1, filter: 1, dashboard: 1 }, workload: { section: 'basic', list: 1, filter: 1 },
+    title: { section: 'basic', required_from: 'initial', list: 1 }, summary: { section: 'basic', required_from: 'initial' }, implementation_org: { section: 'systems', list: 1, filter: 1 }, main_systems: { section: 'systems', required_from: 'initial', list: 1, filter: 1, dashboard: 1 },
     collab_dev_systems: { section: 'systems', list: 1, filter: 1 }, collab_test_systems: { section: 'systems', filter: 1 }, propose_dept: { section: 'owners', required_from: 'initial', filter: 1, dashboard: 1 },
-    proposer: { section: 'owners', required_from: 'initial', list: 1, filter: 1 }, yn_owner: { section: 'owners' }, jk_owner: { section: 'owners' },
+    proposer: { section: 'owners', required_from: 'initial', list: 1, filter: 1 }, yn_owner: { section: 'owners' }, jk_owner: { section: 'owners' }, receiver: { section: 'owners', list: 1, filter: 1 }, registrar: { section: 'owners', list: 1, filter: 1 }, register_time: { section: 'owners', list: 1, filter: 1 },
   },
   ticket: {
     ticket_code: { section: 'basic', required_from: 'initial', list: 1, filter: 1 }, status: { section: 'basic', list: 1, filter: 1, dashboard: 1 },
     ticket_type: { section: 'basic', required_from: 'initial', list: 1, filter: 1, dashboard: 1 }, release_point_id: { section: 'basic', required_from: 'initial', list: 1, filter: 1, dashboard: 1 },
-    propose_time: { section: 'basic', required_from: 'initial', list: 1, dashboard: 1 }, issue_no: { section: 'basic', filter: 1 }, is_accounting: { section: 'basic', required_from: 'initial', filter: 1 }, priority: { section: 'basic', list: 1, filter: 1, dashboard: 1 },
-    title: { section: 'basic', required_from: 'initial', list: 1 }, summary: { section: 'basic', required_from: 'initial' }, main_systems: { section: 'systems', required_from: 'initial', list: 1, filter: 1, dashboard: 1 },
+    propose_time: { section: 'basic', required_from: 'initial', list: 1, dashboard: 1 }, issue_no: { section: 'basic', filter: 1 }, is_accounting: { section: 'basic', required_from: 'initial', filter: 1 }, priority: { section: 'basic', list: 1, filter: 1, dashboard: 1 }, workload: { section: 'basic', list: 1, filter: 1 },
+    title: { section: 'basic', required_from: 'initial', list: 1 }, summary: { section: 'basic', required_from: 'initial' }, implementation_org: { section: 'systems', list: 1, filter: 1 }, main_systems: { section: 'systems', required_from: 'initial', list: 1, filter: 1, dashboard: 1 },
     collab_dev_systems: { section: 'systems', list: 1, filter: 1 }, collab_test_systems: { section: 'systems', filter: 1 }, propose_dept: { section: 'owners', required_from: 'initial', filter: 1, dashboard: 1 },
-    proposer: { section: 'owners', required_from: 'initial', list: 1, filter: 1 }, yn_owner: { section: 'owners' }, jk_owner: { section: 'owners' },
+    proposer: { section: 'owners', required_from: 'initial', list: 1, filter: 1 }, yn_owner: { section: 'owners' }, jk_owner: { section: 'owners' }, receiver: { section: 'owners', list: 1, filter: 1 }, registrar: { section: 'owners', list: 1, filter: 1 }, register_time: { section: 'owners', list: 1, filter: 1 },
   },
   dev: {
     task_name: { section: 'task', list: 1 }, content: { section: 'task' }, status: { section: 'task', list: 1, filter: 1, dashboard: 1 }, owner: { section: 'task', list: 1, filter: 1, dashboard: 1 },

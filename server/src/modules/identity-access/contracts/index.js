@@ -6,4 +6,4 @@
  */
 
 /** Stable, dependency-free metadata for the identity and access boundary. */
-export const MODULE_CONTRACT = Object.freeze({ module: 'identity-access', version: '1.0' });
+export const MODULE_CONTRACT = Object.freeze({ module: 'identity-access', version: '1.1' });

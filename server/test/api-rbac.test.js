@@ -564,4 +564,92 @@ if (!process.env.RADAR_RUN_API_TESTS) {
     );
     assert.equal(await previewRequirementCode(releaseWindow), `RC_${releaseWindow}_006`);
   });
+
+  test('分析字段：需求和工单完整保存、筛选、配置及非法值校验', async () => {
+    const administrator = await get('SELECT id, phone, name FROM user WHERE is_super = 1 LIMIT 1');
+    const releasePoint = await get('SELECT id FROM release_point ORDER BY id LIMIT 1');
+    const headers = { authorization: `Bearer ${await app.jwt.sign({ id: administrator.id, phone: administrator.phone })}`, 'x-requested-by': 'RADAR' };
+    const payload = {
+      req_code: 'FIELD-REQ-005', title: '分析字段回归', summary: '覆盖实施机构、接收人、工作量与录入信息。', release_point_id: releasePoint.id, propose_time: '2026-07-30',
+      req_type: '新增监管需求', is_accounting: '否', propose_dept: '风险管理板块', proposer: [administrator.name],
+      main_systems: ['YN0320'], collab_dev_systems: ['YN0320'], implementation_org: '云南农信', receiver: administrator.name,
+      workload: '3 人日', issue_no: 'OA-202607-005',
+    };
+    const requirementCreate = await app.inject({ method: 'POST', url: '/api/requirements', headers, payload });
+    assert.equal(requirementCreate.statusCode, 200, requirementCreate.body);
+    const ticketCreate = await app.inject({ method: 'POST', url: '/api/tickets', headers, payload: { ...payload, ticket_code: 'FIELD-TICKET-005', ticket_type: '工单急迫需求' } });
+    assert.equal(ticketCreate.statusCode, 200);
+
+    for (const [url, codeKey, code] of [
+      ['/api/requirements/list', 'req_code', requirementCreate.json().data.req_code],
+      ['/api/tickets/list', 'ticket_code', 'FIELD-TICKET-005'],
+    ]) {
+      const list = await app.inject({ method: 'POST', url, headers, payload: { releasePointIds: [releasePoint.id], pageSize: 100, filters: [{ field: 'implementation_org', op: 'in', value: ['云南农信'] }] } });
+      assert.equal(list.statusCode, 200);
+      const row = list.json().data.list.find((item) => item[codeKey] === code);
+      assert.equal(row.implementation_org, '云南农信');
+      assert.equal(row.receiver, administrator.name);
+      assert.equal(row.workload, '3 人日');
+      assert.equal(row.issue_no, 'OA-202607-005');
+      assert.equal(row.registrar, administrator.name);
+      assert.match(row.register_time, /^\d{4}-\d{2}-\d{2}$/);
+    }
+
+    for (const [url, codeKey, code] of [
+      ['/api/requirements/list', 'req_code', requirementCreate.json().data.req_code],
+      ['/api/tickets/list', 'ticket_code', 'FIELD-TICKET-005'],
+    ]) {
+      for (const field of ['proposer', 'collab_dev_systems']) {
+        const list = await app.inject({ method: 'POST', url, headers, payload: { releasePointIds: [releasePoint.id], pageSize: 100, filters: [{ field, op: 'in', value: field === 'proposer' ? [administrator.name] : ['YN0320'] }] } });
+        assert.equal(list.statusCode, 200);
+        assert.ok(list.json().data.list.some((item) => item[codeKey] === code), `${field} 应筛选到目标记录`);
+      }
+    }
+
+    const invalid = await app.inject({ method: 'POST', url: '/api/requirements', headers, payload: { ...payload, title: '非法接收人', receiver: '不存在的人员' } });
+    assert.equal(invalid.statusCode, 400);
+    assert.match(invalid.json().message, /需求接收人/);
+
+    for (const scopeKey of ['requirement', 'ticket']) {
+      const config = await app.inject({ method: 'GET', url: `/api/settings/stage-content/${scopeKey}`, headers });
+      assert.equal(config.statusCode, 200);
+      const fields = new Map(config.json().data.fields.map((field) => [field.field_key, field]));
+      assert.equal(fields.get('issue_no').label, 'OA编号/工单编号');
+      assert.equal(fields.get('implementation_org').source_key, 'dict:org');
+      assert.equal(fields.get('receiver').input_type, 'person');
+      assert.equal(fields.get('workload').input_type, 'text');
+      assert.equal(fields.get('registrar').label, '录入人');
+      assert.equal(fields.get('register_time').label, '录入时间');
+      assert.equal(config.json().data.sections.find((section) => section.section_key === 'systems').title, '实施机构及系统');
+    }
+
+    const requirementConfig = await app.inject({ method: 'GET', url: '/api/settings/stage-content/requirement', headers });
+    const implementationOrg = requirementConfig.json().data.fields.find((field) => field.field_key === 'implementation_org');
+    const disabled = await app.inject({
+      method: 'PUT', url: `/api/settings/stage-content/requirement/fields/${implementationOrg.id}`, headers,
+      payload: { ...implementationOrg, visible: false, list_visible: false, filterable: false, dashboard_dimension: false },
+    });
+    assert.equal(disabled.statusCode, 200);
+    const disabledSchema = await app.inject({ method: 'GET', url: '/api/settings/stage-content/requirement', headers });
+    const disabledField = disabledSchema.json().data.fields.find((field) => field.field_key === 'implementation_org');
+    assert.equal(disabledField.list_visible, 0);
+    assert.equal(disabledField.filterable, 0);
+    assert.equal(disabledField.dashboard_dimension, 0);
+    const disabledDims = await app.inject({ method: 'GET', url: '/api/dashboard/dimensions', headers });
+    assert.equal(disabledDims.json().data.dimsBySource.analytics.some((dimension) => dimension.key === 'native:requirement:implementation_org'), false);
+
+    const enabled = await app.inject({
+      method: 'PUT', url: `/api/settings/stage-content/requirement/fields/${implementationOrg.id}`, headers,
+      payload: { ...implementationOrg, visible: true, list_visible: true, filterable: true, dashboard_dimension: true },
+    });
+    assert.equal(enabled.statusCode, 200);
+    const enabledDims = await app.inject({ method: 'GET', url: '/api/dashboard/dimensions', headers });
+    assert.ok(enabledDims.json().data.dimsBySource.analytics.some((dimension) => dimension.key === 'native:requirement:implementation_org'));
+    const implementationChart = await app.inject({
+      method: 'POST', url: '/api/dashboard/chart-data', headers,
+      payload: { source: 'analytics', statDimension: 'requirement', statStage: 'analysis', dimension: 'native:requirement:implementation_org', releasePointIds: [releasePoint.id] },
+    });
+    assert.equal(implementationChart.statusCode, 200);
+    assert.ok(implementationChart.json().data.data.some((row) => row.name === '云南农信'));
+  });
 }

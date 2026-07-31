@@ -371,7 +371,7 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
           <Form.Item name="status" hidden><Input /></Form.Item>
           <StageBuiltinFields scopeKey="requirement" defaults={{
             basic: { title: '基本信息', layout_mode: 'left', sort: 0 },
-            systems: { title: '涉及系统', layout_mode: 'right', sort: 10 },
+            systems: { title: '实施机构及系统', layout_mode: 'right', sort: 10 },
             owners: { title: '相关负责人', layout_mode: 'right', sort: 20 },
           }}>
                 {/* 需求编号 + 需求类型 */}
@@ -447,10 +447,10 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
                       <DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" />
                     </Form.Item>
                 </StageBuiltinField>
-                {/* 关联问题/工单编号 + 是否涉账 */}
+                {/* OA编号/工单编号 + 是否涉账 */}
                 <StageBuiltinField fieldKey="issue_no" defaultSection="basic">
-                    <Form.Item name="issue_no" label="关联问题/工单编号" rules={required.rules('issue_no', '关联问题/工单编号')} style={{ marginBottom: 8 }}>
-                      <Input placeholder="手动输入关联问题/工单编号（选填）" size="small" readOnly={readonly} />
+                    <Form.Item name="issue_no" label="OA编号/工单编号" rules={required.rules('issue_no', 'OA编号/工单编号')} style={{ marginBottom: 8 }}>
+                      <Input placeholder="手动输入 OA 编号或工单编号（选填）" size="small" readOnly={readonly} />
                     </Form.Item>
                 </StageBuiltinField>
                 <StageBuiltinField fieldKey="is_accounting" defaultSection="basic">
@@ -476,7 +476,13 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
                   <Input.TextArea rows={7} placeholder="描述该需求的核心背景与业务诉求（2000字以内）" showCount={!readonly} maxLength={2000} style={{ fontSize: 12 }} readOnly={readonly} />
                 </Form.Item>
               </StageBuiltinField>
+              <StageBuiltinField fieldKey="workload" defaultSection="basic">
+                <Form.Item name="workload" label="工作量" rules={required.rules('workload', '工作量', { extraRules: [{ max: 255, message: '不超过 255 字' }] })} style={{ marginBottom: 8 }}><Input placeholder="请输入工作量，如 3 人日" size="small" readOnly={readonly} /></Form.Item>
+              </StageBuiltinField>
 
+              <StageBuiltinField fieldKey="implementation_org" defaultSection="systems" defaultColumnSpan={24}>
+                <Form.Item name="implementation_org" label="实施机构" rules={required.rules('implementation_org', '实施机构', { action: '请选择' })} style={{ marginBottom: 8 }}><DictSelect category="org" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} size="small" /></Form.Item>
+              </StageBuiltinField>
               {/* 主责系统：标题右侧选择框，单选（再选自动替换），已选展示在下方 */}
               <StageBuiltinField fieldKey="main_systems" defaultSection="systems" defaultColumnSpan={24}>
                 <Form.Item name="main_systems" rules={required.rules('main_systems', '主责系统', { action: '请选择', type: 'array', min: 1 })}>
@@ -519,6 +525,9 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
                   <PersonPicker style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择建信金科业务负责人" size="small" />
                 </Form.Item>
               </StageBuiltinField>
+              <StageBuiltinField fieldKey="receiver" defaultSection="owners"><Form.Item name="receiver" label="需求接收人" rules={required.rules('receiver', '需求接收人', { action: '请选择' })} style={{ marginBottom: 8 }}><PersonPicker style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择需求接收人" size="small" /></Form.Item></StageBuiltinField>
+              <StageBuiltinField fieldKey="registrar" defaultSection="owners"><Form.Item name="registrar" label="录入人" style={{ marginBottom: 8 }}><Input size="small" readOnly /></Form.Item></StageBuiltinField>
+              <StageBuiltinField fieldKey="register_time" defaultSection="owners"><Form.Item name="register_time" label="录入时间" style={{ marginBottom: 0 }}><Input size="small" readOnly /></Form.Item></StageBuiltinField>
           </StageBuiltinFields>
           {/* 交付件与扩展信息均由公共配置渲染，移动交付件布局后立即跟随生效。 */}
           <StageContentPanel ref={extensionPanelRef} scopeKey="requirement" entityType="requirement" entityId={current?.id} readOnly={readonly} onDirtyChange={() => setIsDirty(true)} />
