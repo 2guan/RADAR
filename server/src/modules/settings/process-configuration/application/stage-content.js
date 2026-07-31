@@ -434,8 +434,12 @@ export async function saveFieldDefinition(scopeKey, body, operator) {
   }
   // 新增扩展字段的默认值与配置界面保持一致：只进入详情页，避免未确认口径的数据直接进入列表、筛选和仪表盘。
   const visible = !exists && body.visible === undefined ? 1 : (asBool(body.visible) ? 1 : 0);
+  // 业务组件是结构化交互或聚合区域，没有可安全映射的一行值；仅详情显示能力适用。
+  const supportsListCapabilities = inputType !== 'component';
   const presentationData = [sectionId, Number(body.column_span) === 24 ? 24 : 12, visible,
-    asBool(body.list_visible) ? 1 : 0, asBool(body.filterable) ? 1 : 0, asBool(body.dashboard_dimension) ? 1 : 0, Number(body.sort || 0)];
+    supportsListCapabilities && asBool(body.list_visible) ? 1 : 0,
+    supportsListCapabilities && asBool(body.filterable) ? 1 : 0,
+    supportsListCapabilities && asBool(body.dashboard_dimension) ? 1 : 0, Number(body.sort || 0)];
   let fieldId = id;
   if (exists) {
     await run(`UPDATE stage_field_definition SET label=?, section_id=?, column_span=?, visible=?, list_visible=?, filterable=?, dashboard_dimension=?, sort=?, updated_at=${dialect.now} WHERE id=?`, label, ...presentationData, id);

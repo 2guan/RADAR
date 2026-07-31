@@ -17,8 +17,10 @@ import { apiPost, apiGet } from '../api/index.js';
 import { useAppStore } from '../../../platform/state/app.js';
 import { exportXlsx } from '../../../platform/import-export/io.js';
 import { ReleasePointText } from '../../settings/reference-data/index.js';
+import { useStageListFields } from '../../settings/process-configuration/index.js';
 
 export default function Release() {
+  const stageList = useStageListFields('release');
   const tableRef = useRef();
   const releasePointIds = useAppStore((s) => s.releasePointIds);
   const [detailTarget, setDetailTarget] = useState(null);
@@ -42,12 +44,16 @@ export default function Release() {
   const reviewOptions = reviews.map((s) => ({ value: s.attr_value, label: s.display_value }));
   const orgOptions = orgs.map((o) => ({ value: o.attr_value, label: o.display_value }));
 
+  const nativeFilterConfigs = stageList.loaded ? stageList.nativeFilterConfigs.map((field) => {
+    if (field.field === 'status') return { ...field, type: 'select', op: 'in', options: statusOptions };
+    return field;
+  }) : [{ field: 'status', label: '投产状态', type: 'select', op: 'in', options: statusOptions }];
   const filterConfigs = [
     { field: 'impl_org', label: '实施机构', type: 'select', isPrimary: true, op: 'in', options: orgOptions },
     { field: 'change_code', label: '变更编号', type: 'input', isPrimary: true, op: 'like', placeholder: '变更编号检索' },
     { field: 'code', label: '需求/问题/工单编号', type: 'input', isPrimary: true, op: 'like', placeholder: '需求/问题/工单编号检索' },
     { field: 'content', label: '标题/概述', type: 'input', isPrimary: true, op: 'like', placeholder: '需求标题、工单概述或问题概述检索' },
-    { field: 'status', label: '投产状态', type: 'select', op: 'in', options: statusOptions },
+    ...nativeFilterConfigs,
     { field: 'review_status', label: '评审状态', type: 'select', op: 'in', options: reviewOptions },
   ];
 
@@ -142,6 +148,15 @@ export default function Release() {
       ),
     },
   ];
+  const nativeColumnAliases = { status: 'release_status' };
+  const columnByKey = new Map(columns.map((column) => [column.key, column]));
+  const configuredNativeColumns = stageList.loaded
+    ? stageList.nativeListFields.map((field) => {
+      const column = columnByKey.get(nativeColumnAliases[field.field_key] || field.field_key);
+      return column ? { ...column, key: field.field_key, title: field.label }
+        : { title: field.label, dataIndex: field.field_key, key: field.field_key, render: (value) => value || '—' };
+    })
+    : [columns[1]];
 
   return (
     <Card title="投产审批" variant="borderless">
@@ -155,7 +170,7 @@ export default function Release() {
         ]}
       />
       <DataTable
-        ref={tableRef} columns={columns} fetcher={fetcher} baseQuery={{ releasePointIds, filters: filterQuery }} rowKey={(r) => `${r.code}_${r.release_point_id ?? 'none'}`}
+        ref={tableRef} columns={[columns[0], ...configuredNativeColumns, ...columns.slice(2)]} fetcher={fetcher} baseQuery={{ releasePointIds, filters: filterQuery }} rowKey={(r) => `${r.code}_${r.release_point_id ?? 'none'}`}
         showSearch={false}
         tableScroll={{ x: 1300 }}
         onRowClick={(r) => setDetailTarget({ code: r.code, releasePointId: r.release_point_id })}

@@ -7,6 +7,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { apiGet } from '../../../../platform/api.js';
+import { subscribeStageContentConfigUpdated } from '../api/stageContentDataCache.js';
 
 let cache = null;
 let pending = null;
@@ -62,9 +63,16 @@ export function useRequiredFields(moduleKey, statusType, readonly, scopeKey) {
 
   useEffect(() => {
     let alive = true;
-    loadRequiredFields().then((res) => { if (alive) setPayload(res); }).catch(() => {});
-    return () => { alive = false; };
-  }, []);
+    const load = () => loadRequiredFields().then((res) => { if (alive) setPayload(res); }).catch(() => {});
+    load();
+    // 投产申请、投产审批等业务适配器以该 Hook 决定展示；配置保存后必须失效旧快照。
+    const scope = moduleConfigKey(moduleKey, scopeKey);
+    const unsubscribe = subscribeStageContentConfigUpdated(scope, () => {
+      cache = null;
+      load();
+    });
+    return () => { alive = false; unsubscribe(); };
+  }, [moduleKey, scopeKey]);
 
   const stateKey = stateKeyFromType(statusType);
 

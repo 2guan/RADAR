@@ -651,5 +651,23 @@ if (!process.env.RADAR_RUN_API_TESTS) {
     });
     assert.equal(implementationChart.statusCode, 200);
     assert.ok(implementationChart.json().data.data.some((row) => row.name === '云南农信'));
+
+    // 开发阶段动态原生维度必须从 dev_task 读取，不能错误读取关联需求/工单字段。
+    const devTask = await get('SELECT id FROM dev_task ORDER BY id LIMIT 1');
+    assert.ok(devTask?.id);
+    await run('UPDATE dev_task SET impl_org = ? WHERE id = ?', '云南农信', devTask.id);
+    const devConfig = await app.inject({ method: 'GET', url: '/api/settings/stage-content/dev', headers });
+    const devImplOrg = devConfig.json().data.fields.find((field) => field.field_key === 'impl_org');
+    const enabledDevDim = await app.inject({
+      method: 'PUT', url: `/api/settings/stage-content/dev/fields/${devImplOrg.id}`, headers,
+      payload: { ...devImplOrg, visible: true, list_visible: true, filterable: true, dashboard_dimension: true },
+    });
+    assert.equal(enabledDevDim.statusCode, 200);
+    const devChart = await app.inject({
+      method: 'POST', url: '/api/dashboard/chart-data', headers,
+      payload: { source: 'analytics', statDimension: 'all', statStage: 'dev', dimension: 'native:dev:impl_org' },
+    });
+    assert.equal(devChart.statusCode, 200);
+    assert.ok(devChart.json().data.data.some((row) => row.name === '云南农信'));
   });
 }

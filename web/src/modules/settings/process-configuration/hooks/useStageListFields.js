@@ -13,6 +13,18 @@ function optionType(field) {
   return ['select', 'person', 'release_point'].includes(field.input_type) ? 'select' : 'input';
 }
 
+function filterConfig(field, options) {
+  const type = optionType(field);
+  return {
+    field: field.field_key,
+    label: field.label,
+    type,
+    op: type === 'select' ? 'in' : 'like',
+    options: (options[field.source_key] || []).map((item) => ({ value: String(item.value), label: item.label })),
+    placeholder: type === 'input' ? `${field.label}检索` : undefined,
+  };
+}
+
 export function useStageListFields(scopeKey) {
   const [schema, setSchema] = useState(null);
   const [options, setOptions] = useState({});
@@ -45,9 +57,12 @@ export function useStageListFields(scopeKey) {
     loaded: !!schema,
     nativeListFields: (schema?.fields || []).filter((field) => field.field_kind === 'native' && field.list_visible),
     nativeFilterFields: (schema?.fields || []).filter((field) => field.field_kind === 'native' && field.filterable),
+    // 原生字段与扩展字段都以同一配置决定是否出现在筛选面板；业务页可为状态、系统等
+    // 专用字段替换 options，但不能绕过该能力开关。
+    nativeFilterConfigs: (schema?.fields || []).filter((field) => field.field_kind === 'native' && field.filterable)
+      .map((field) => filterConfig(field, options)),
     filterConfigs: (schema?.fields || []).filter((field) => field.field_kind === 'extension' && field.filterable).map((field) => ({
-      field: field.field_kind === 'extension' ? `extension:${field.field_key}` : field.field_key, label: field.label, type: optionType(field), op: field.input_type === 'text' || field.input_type === 'textarea' ? 'like' : 'in',
-      options: (options[field.source_key] || []).map((item) => ({ value: String(item.value), label: item.label })),
+      ...filterConfig(field, options), field: `extension:${field.field_key}`,
     })),
     columns: (schema?.fields || []).filter((field) => field.field_kind === 'extension' && field.list_visible).map((field) => ({
       title: field.label, key: field.field_kind === 'extension' ? `extension:${field.field_key}` : field.field_key,

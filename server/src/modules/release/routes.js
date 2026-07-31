@@ -817,6 +817,7 @@ async function computeEntities(windowIdList) {
       release_point_id: pointId || null,
       release_date: releaseDate,
       release_status: releaseStatus,
+      owner: rt?.owner || null,
       task_status: taskStatus?.display || `投产审批-${releaseStatus}`,
       task_status_short: taskStatus?.shortDisplay || `投产 · ${releaseStatus}`,
       task_status_value: taskStatus?.status || releaseStatus,
@@ -864,6 +865,9 @@ function applyFilters(rows, filters) {
     } else if (f.field === 'impl_org') {
       const vals = Array.isArray(f.value) ? f.value : [f.value];
       out = out.filter((r) => vals.includes(r.impl_org));
+    } else if (f.field === 'owner') {
+      const vals = Array.isArray(f.value) ? f.value : [f.value];
+      out = out.filter((r) => vals.includes(r.owner));
     }
   }
   return out;

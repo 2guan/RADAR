@@ -270,6 +270,7 @@ function FieldEditor({ open, field, config, sourceOptions, messageApi, onClose, 
   const [saving, setSaving] = useState(false);
   const isNew = !field || field.__new === true;
   const isExtension = isNew || field?.field_kind === 'extension';
+  const isComponent = field?.input_type === 'component';
   useEffect(() => {
     if (!open) return;
     form.resetFields();
@@ -334,7 +335,7 @@ function FieldEditor({ open, field, config, sourceOptions, messageApi, onClose, 
             <Col span={6} xs={12}><Form.Item name="column_span" label="布局宽度"><Select options={[{ value: 12, label: '半行' }, { value: 24, label: '整行' }]} /></Form.Item></Col>
             <Col span={6} xs={12}><Form.Item name="sort" label="排序"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
             {isExtension && <Col span={24}><Form.Item name="multiple" valuePropName="checked" style={{ marginBottom: 8 }}><Checkbox>允许多选（Excel 导入、导出以英文逗号分隔）</Checkbox></Form.Item></Col>}
-            <Col span={24}><Space size={[18, 8]} wrap><Form.Item name="visible" valuePropName="checked" noStyle><Checkbox>详情页显示</Checkbox></Form.Item><Form.Item name="list_visible" valuePropName="checked" noStyle><Checkbox>列表展示</Checkbox></Form.Item><Form.Item name="filterable" valuePropName="checked" noStyle><Checkbox>作为筛选条件</Checkbox></Form.Item><Form.Item name="dashboard_dimension" valuePropName="checked" noStyle><Checkbox>作为仪表盘维度</Checkbox></Form.Item></Space></Col>
+            <Col span={24}><Space size={[18, 8]} wrap><Form.Item name="visible" valuePropName="checked" noStyle><Checkbox>详情页显示</Checkbox></Form.Item><Form.Item name="list_visible" valuePropName="checked" noStyle><Checkbox disabled={isComponent}>列表展示</Checkbox></Form.Item><Form.Item name="filterable" valuePropName="checked" noStyle><Checkbox disabled={isComponent}>作为筛选条件</Checkbox></Form.Item><Form.Item name="dashboard_dimension" valuePropName="checked" noStyle><Checkbox disabled={isComponent}>作为仪表盘维度</Checkbox></Form.Item>{isComponent && <span style={{ color: 'var(--radar-text-secondary)' }}>业务组件仅支持详情页显示</span>}</Space></Col>
           </Row>
         </div>
         <div className="form-section-card">
