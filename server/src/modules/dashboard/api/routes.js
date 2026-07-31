@@ -9,7 +9,7 @@
 
 import { get, all, run, dialect } from '../../../platform/persistence/index.js';
 import { isTerminalStatus } from '../../settings/process-configuration/index.js';
-import { windowIds, inClause } from '../../settings/reference-data/index.js';
+import { windowIds, inClause, resolveOrganizationValues } from '../../settings/reference-data/index.js';
 import { ok, badRequest, notFound, forbidden } from '../../../platform/runtime/index.js';
 import {
   SOURCES, DIMENSIONS, CHART_TYPES, ANALYTICS_DIMENSIONS, ANALYTICS_STAGES,
@@ -17,6 +17,7 @@ import {
 } from '../index.js';
 import { buildTaskStatusChain } from '../../overview/index.js';
 import { parseJsonArray } from '../../../platform/runtime/index.js';
+import { isOrganizationRestricted, workItemMatchesOrganization } from '../../../shared/utils/organization-scope.js';
 
 const DYNAMIC_STAGE_SCOPE = {
   analysis: { requirement: 'requirement', ticket: 'ticket' }, dev: 'dev', sit: 'test.SIT',
@@ -63,6 +64,26 @@ async function workItemCodesInWindow(ids) {
     ...(await all(`SELECT req_code AS code FROM requirement WHERE ${sub.where}`, ...sub.params)).map((r) => r.code),
     ...(await all(`SELECT ticket_code AS code FROM ticket WHERE ${sub.where}`, ...sub.params)).map((r) => r.code),
   ];
+}
+
+async function workItemCodesInOrganization(user) {
+  if (!isOrganizationRestricted(user)) return null;
+  if (!user?.org) return [];
+  const [items, systems] = await Promise.all([
+    all(`SELECT req_code AS code, implementation_org, main_systems, collab_dev_systems FROM requirement
+         UNION ALL SELECT ticket_code AS code, implementation_org, main_systems, collab_dev_systems FROM ticket`),
+    all('SELECT sys_code, org FROM system'),
+  ]);
+  const orgByCode = Object.fromEntries(systems.map((system) => [system.sys_code, system.org]));
+  const organizations = await resolveOrganizationValues(user.org);
+  return items.filter((item) => workItemMatchesOrganization(item, organizations, orgByCode)).map((item) => item.code);
+}
+
+function intersectWorkItemCodes(windowCodes, organizationCodes) {
+  if (windowCodes === null) return organizationCodes;
+  if (organizationCodes === null) return windowCodes;
+  const organizationSet = new Set(organizationCodes);
+  return windowCodes.filter((code) => organizationSet.has(code));
 }
 
 /** 将 SQL 的状态分组结果转换为总量与终态量，避免为指标卡传输全量状态行。 */
@@ -226,20 +247,31 @@ export default async function dashboardRoutes(fastify) {
       return { where: pieces.join(' AND '), params };
     };
 
-    const reqFilter = pointFilter('release_point_id');
-    const ticketFilter = pointFilter('release_point_id');
-    const devFilter = taskWindowFilter('dev_task');
-    const sitFilter = taskWindowFilter('test_task', 'SIT');
-    const uatFilter = taskWindowFilter('test_task', 'UAT');
+    const scopedCodes = await workItemCodesInOrganization(request.currentUser);
+    const codeFilter = (column) => scopedCodes === null ? { where: '', params: [] } : (scopedCodes.length ? { where: `${column} IN (${scopedCodes.map(() => '?').join(',')})`, params: scopedCodes } : { where: '1=0', params: [] });
+    const combine = (...filters) => ({ where: filters.filter((filter) => filter.where).map((filter) => filter.where).join(' AND '), params: filters.flatMap((filter) => filter.params) });
+    const reqFilter = combine(pointFilter('release_point_id'), codeFilter('req_code'));
+    const ticketFilter = combine(pointFilter('release_point_id'), codeFilter('ticket_code'));
+    const devFilter = combine(taskWindowFilter('dev_task'), codeFilter('dev_task.req_code'));
+    const sitFilter = combine(taskWindowFilter('test_task', 'SIT'), codeFilter('test_task.req_code'));
+    const uatFilter = combine(taskWindowFilter('test_task', 'UAT'), codeFilter('test_task.req_code'));
 
     // 投产申请（变更单）：按所选投产点过滤（窗口为空=全部）
-    let applyRows;
-    if (!winIds?.length) {
-      applyRows = await all('SELECT delivery_units FROM release_apply');
-    } else {
+    const applyFilters = [];
+    const applyParams = [];
+    if (winIds?.length) {
       const sub = inClause('release_point_id', winIds);
-      applyRows = await all(`SELECT delivery_units FROM release_apply WHERE ${sub.where}`, ...sub.params);
+      applyFilters.push(sub.where);
+      applyParams.push(...sub.params);
     }
+    // 投产申请不一定只有一个关联工作项，因此按变更系统的所属机构收窄。
+    if (isOrganizationRestricted(request.currentUser)) {
+      const organizations = await resolveOrganizationValues(request.currentUser.org);
+      applyFilters.push(`EXISTS (SELECT 1 FROM system s WHERE s.sys_code = release_apply.change_system AND s.org IN (${organizations.map(() => '?').join(',') || "'__no_matching_organization__'"}))`);
+      applyParams.push(...organizations);
+    }
+    const applyWhere = applyFilters.length ? ` WHERE ${applyFilters.join(' AND ')}` : '';
+    const applyRows = await all(`SELECT delivery_units FROM release_apply${applyWhere}`, ...applyParams);
 
     // 投产系统：对应投产点提交了投产申请的变更单数；完成=全部交付单元已摆渡
     const releaseSystem = {
@@ -296,7 +328,7 @@ export default async function dashboardRoutes(fastify) {
     if (!isChartDimensionAllowed(source, dimension, analytics, dynamicDims)) throw badRequest('非法的统计维度');
     const xDim = xAxisDimension && isChartDimensionAllowed(source, xAxisDimension, analytics, dynamicDims) ? xAxisDimension : undefined;
 
-    const codes = await workItemCodesInWindow(windowIds(request.body));
+    const codes = intersectWorkItemCodes(await workItemCodesInWindow(windowIds(request.body)), await workItemCodesInOrganization(request.currentUser));
     const ctx = await buildContext();
     const rows = source === 'analytics'
       ? await loadAnalyticsRows(analytics.statDimension, analytics.statStage, codes, ctx)
@@ -309,7 +341,7 @@ export default async function dashboardRoutes(fastify) {
   // 取代「每张图表各发一次请求 + 各自整表扫描」的放大开销（仪表盘打开瞬时返回）。
   fastify.post('/dashboard/chart-data-batch', { preHandler: fastify.requirePerm('dashboard', 'view') }, async (request) => {
     const { charts = [] } = request.body || {};
-    const codes = await workItemCodesInWindow(windowIds(request.body));
+    const codes = intersectWorkItemCodes(await workItemCodesInWindow(windowIds(request.body)), await workItemCodesInOrganization(request.currentUser));
     const ctx = await buildContext();
     const rowsCache = new Map(); // source → 该窗口下的记录集（同源复用）
     const loadOnce = async (source) => {
@@ -354,7 +386,7 @@ export default async function dashboardRoutes(fastify) {
     const { filters } = cfg;
     const source = analytics?.source || cfg.source || 'analytics';
     if (!SOURCES[source]) throw badRequest('未知数据源');
-    const codes = await workItemCodesInWindow(windowIds(request.body));
+    const codes = intersectWorkItemCodes(await workItemCodesInWindow(windowIds(request.body)), await workItemCodesInOrganization(request.currentUser));
     const ctx = await buildContext();
     const rows = source === 'analytics'
       ? await loadAnalyticsRows(analytics.statDimension, analytics.statStage, codes, ctx)

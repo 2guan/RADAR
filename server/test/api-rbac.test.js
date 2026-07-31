@@ -86,6 +86,129 @@ if (!process.env.RADAR_RUN_API_TESTS) {
     assert.equal(response.json().code, 403);
   });
 
+  test('角色全机构权限默认值可由人员单独覆盖，且认证上下文返回最终值', async () => {
+    const administrator = await get('SELECT id, phone FROM user WHERE is_super = 1 LIMIT 1');
+    const adminHeaders = { authorization: `Bearer ${await app.jwt.sign({ id: administrator.id, phone: administrator.phone })}`, 'x-requested-by': 'RADAR' };
+    const role = await get("SELECT id FROM role WHERE code = '金科开发'");
+    assert.ok(role);
+    assert.equal(Number((await get('SELECT all_org_access FROM role WHERE id = ?', role.id)).all_org_access), 0);
+    const user = await run(
+      "INSERT INTO user (phone, name, org, password_hash, status, password_changed_at) VALUES (?,?,?,?,?,datetime('now','localtime'))",
+      'org-scope-role-test', '角色默认测试', '测试机构', 'not-used', '启用',
+    );
+    await run('INSERT INTO user_role (user_id, role_id) VALUES (?,?)', user.lastInsertRowid, role.id);
+    const token = await app.jwt.sign({ id: user.lastInsertRowid, phone: 'org-scope-role-test' });
+    const inherited = await app.inject({ method: 'GET', url: '/api/auth/me', headers: { authorization: `Bearer ${token}`, 'x-requested-by': 'RADAR' } });
+    assert.equal(inherited.statusCode, 200);
+    assert.equal(inherited.json().data.allOrgAccess, false);
+    assert.equal(inherited.json().data.allOrgAccessSource, 'role');
+
+    const override = await app.inject({
+      method: 'PUT', url: `/api/users/${user.lastInsertRowid}`, headers: adminHeaders,
+      payload: { all_org_access_override: '是' },
+    });
+    assert.equal(override.statusCode, 200);
+    const overridden = await app.inject({ method: 'GET', url: '/api/auth/me', headers: { authorization: `Bearer ${token}`, 'x-requested-by': 'RADAR' } });
+    assert.equal(overridden.json().data.allOrgAccess, true);
+    assert.equal(overridden.json().data.allOrgAccessSource, 'person');
+  });
+
+  test('受限角色按主责/协同改造系统或手填实施机构收窄需求，且详情不可绕过', async () => {
+    const role = await get("SELECT id FROM role WHERE code = '金科开发'");
+    await run('INSERT INTO system (sys_code, sys_name, org) VALUES (?,?,?)', 'ORG-SCOPE-A', '机构A系统', '机构A');
+    await run('INSERT INTO system (sys_code, sys_name, org) VALUES (?,?,?)', 'ORG-SCOPE-B', '机构B系统', '机构B');
+    const visibleBySystem = await run(
+      'INSERT INTO requirement (req_code, title, status, main_systems, collab_dev_systems) VALUES (?,?,?,?,?)',
+      'ORG-SCOPE-REQ-A', '主责系统命中', '需求登记', JSON.stringify(['ORG-SCOPE-A']), JSON.stringify([]),
+    );
+    await run(
+      'INSERT INTO requirement (req_code, title, status, main_systems, collab_dev_systems, implementation_org) VALUES (?,?,?,?,?,?)',
+      'ORG-SCOPE-REQ-MANUAL', '手填机构命中', '需求登记', JSON.stringify(['ORG-SCOPE-B']), JSON.stringify([]), '机构A',
+    );
+    const hidden = await run(
+      'INSERT INTO requirement (req_code, title, status, main_systems, collab_dev_systems) VALUES (?,?,?,?,?)',
+      'ORG-SCOPE-REQ-B', '外机构系统', '需求登记', JSON.stringify(['ORG-SCOPE-B']), JSON.stringify([]),
+    );
+    const user = await run(
+      "INSERT INTO user (phone, name, org, password_hash, status, password_changed_at) VALUES (?,?,?,?,?,datetime('now','localtime'))",
+      'org-scope-data-test', '机构范围测试', '机构A', 'not-used', '启用',
+    );
+    await run('INSERT INTO user_role (user_id, role_id) VALUES (?,?)', user.lastInsertRowid, role.id);
+    const headers = { authorization: `Bearer ${await app.jwt.sign({ id: user.lastInsertRowid, phone: 'org-scope-data-test' })}`, 'x-requested-by': 'RADAR' };
+
+    const list = await app.inject({ method: 'POST', url: '/api/requirements/list', headers, payload: { pageSize: 100 } });
+    assert.equal(list.statusCode, 200);
+    const codes = list.json().data.list.map((row) => row.req_code);
+    assert.ok(codes.includes('ORG-SCOPE-REQ-A'));
+    assert.ok(codes.includes('ORG-SCOPE-REQ-MANUAL'));
+    assert.ok(!codes.includes('ORG-SCOPE-REQ-B'));
+
+    const matchedDetail = await app.inject({ method: 'GET', url: `/api/requirements/${visibleBySystem.lastInsertRowid}`, headers });
+    const hiddenDetail = await app.inject({ method: 'GET', url: `/api/requirements/${hidden.lastInsertRowid}`, headers });
+    assert.equal(matchedDetail.statusCode, 200);
+    assert.equal(hiddenDetail.statusCode, 403);
+
+    await run('INSERT INTO system (sys_code, sys_name, org) VALUES (?,?,?)', 'ORG-SCOPE-XM', '厦门机构系统', '厦门事业群');
+    await run(
+      'INSERT INTO requirement (req_code, title, status, main_systems, collab_dev_systems) VALUES (?,?,?,?,?)',
+      'ORG-SCOPE-REQ-XM', '属性值显示值兼容', '需求登记', JSON.stringify(['ORG-SCOPE-XM']), JSON.stringify([]),
+    );
+    const mappedUser = await run(
+      "INSERT INTO user (phone, name, org, password_hash, status, password_changed_at) VALUES (?,?,?,?,?,datetime('now','localtime'))",
+      'org-scope-xiamen-test', '厦门显示值用户', '厦门', 'not-used', '启用',
+    );
+    await run('INSERT INTO user_role (user_id, role_id) VALUES (?,?)', mappedUser.lastInsertRowid, role.id);
+    const mappedHeaders = { authorization: `Bearer ${await app.jwt.sign({ id: mappedUser.lastInsertRowid, phone: 'org-scope-xiamen-test' })}`, 'x-requested-by': 'RADAR' };
+    const mappedList = await app.inject({ method: 'POST', url: '/api/requirements/list', headers: mappedHeaders, payload: { pageSize: 100 } });
+    assert.equal(mappedList.statusCode, 200);
+    assert.ok(mappedList.json().data.list.some((row) => row.req_code === 'ORG-SCOPE-REQ-XM'));
+    const mappedMe = await app.inject({ method: 'GET', url: '/api/auth/me', headers: mappedHeaders });
+    assert.deepEqual(mappedMe.json().data.organizationValues.sort(), ['厦门', '厦门事业群'].sort());
+
+    await run('INSERT INTO system (sys_code, sys_name, org) VALUES (?,?,?)', 'ORG-SCOPE-XM-EXTERNAL', '未同步归属系统', '成都事业群');
+    await run(
+      'INSERT INTO requirement (req_code, title, status, main_systems, collab_dev_systems, implementation_org) VALUES (?,?,?,?,?,?)',
+      'ORG-SCOPE-REQ-XM-MANUAL', '手工实施机构承接', '需求登记', JSON.stringify(['ORG-SCOPE-XM-EXTERNAL']), JSON.stringify([]), '厦门事业群',
+    );
+    const preview = await app.inject({ method: 'POST', url: '/api/dev-tasks/intake-preview', headers: mappedHeaders, payload: { reqCode: 'ORG-SCOPE-REQ-XM-MANUAL' } });
+    assert.equal(preview.statusCode, 200);
+    assert.ok(preview.json().data.some((item) => item.sysCode === 'ORG-SCOPE-XM-EXTERNAL'));
+    const intake = await app.inject({ method: 'POST', url: '/api/dev-tasks/intake', headers: mappedHeaders, payload: {
+      reqCode: 'ORG-SCOPE-REQ-XM-MANUAL', assignments: [{ sysCode: 'ORG-SCOPE-XM-EXTERNAL', owner: '厦门显示值用户' }],
+    } });
+    assert.equal(intake.statusCode, 200);
+    const acceptedTask = await get('SELECT owner, intake_owner FROM dev_task WHERE req_code = ?', 'ORG-SCOPE-REQ-XM-MANUAL');
+    assert.equal(acceptedTask.owner, '厦门显示值用户');
+    assert.equal(acceptedTask.intake_owner, '厦门显示值用户');
+    const completedCandidates = await app.inject({ method: 'POST', url: '/api/dev-tasks/intake-pending-codes', headers: mappedHeaders, payload: { reqCodes: ['ORG-SCOPE-REQ-XM-MANUAL'] } });
+    assert.deepEqual(completedCandidates.json().data, []);
+    await run('DELETE FROM dev_task WHERE req_code = ?', 'ORG-SCOPE-REQ-XM-MANUAL');
+    const restoredCandidates = await app.inject({ method: 'POST', url: '/api/dev-tasks/intake-pending-codes', headers: mappedHeaders, payload: { reqCodes: ['ORG-SCOPE-REQ-XM-MANUAL'] } });
+    assert.deepEqual(restoredCandidates.json().data, ['ORG-SCOPE-REQ-XM-MANUAL']);
+
+    const administrator = await get('SELECT id, phone, name FROM user WHERE is_super = 1 LIMIT 1');
+    const adminHeaders = { authorization: `Bearer ${await app.jwt.sign({ id: administrator.id, phone: administrator.phone })}`, 'x-requested-by': 'RADAR' };
+    await run('INSERT INTO system (sys_code, sys_name, org) VALUES (?,?,?)', 'INTAKE-TEST-SYS', '承接测试系统', '厦门事业群');
+    await run(
+      'INSERT INTO requirement (req_code, title, status, main_systems, collab_test_systems) VALUES (?,?,?,?,?)',
+      'INTAKE-TEST-REQ', '测试负责人承接', '需求登记', JSON.stringify(['INTAKE-TEST-SYS']), JSON.stringify([]),
+    );
+    const pendingTest = await app.inject({ method: 'POST', url: '/api/test-tasks/intake-pending-codes', headers: adminHeaders, payload: { testType: 'SIT', reqCodes: ['INTAKE-TEST-REQ'] } });
+    assert.deepEqual(pendingTest.json().data, ['INTAKE-TEST-REQ']);
+    const acceptedTest = await app.inject({ method: 'POST', url: '/api/test-tasks/intake', headers: adminHeaders, payload: {
+      reqCode: 'INTAKE-TEST-REQ', testType: 'SIT', splitMode: 'split', assignments: [{ sysCode: 'INTAKE-TEST-SYS', owner: administrator.name }],
+    } });
+    assert.equal(acceptedTest.statusCode, 200);
+    const acceptedTestTask = await get('SELECT owner, intake_owner FROM test_task WHERE req_code = ?', 'INTAKE-TEST-REQ');
+    assert.equal(acceptedTestTask.owner, administrator.name);
+    assert.equal(acceptedTestTask.intake_owner, administrator.name);
+    const completedTestCandidates = await app.inject({ method: 'POST', url: '/api/test-tasks/intake-pending-codes', headers: adminHeaders, payload: { testType: 'SIT', reqCodes: ['INTAKE-TEST-REQ'] } });
+    assert.deepEqual(completedTestCandidates.json().data, []);
+    await run('DELETE FROM test_task WHERE req_code = ?', 'INTAKE-TEST-REQ');
+    const restoredTestCandidates = await app.inject({ method: 'POST', url: '/api/test-tasks/intake-pending-codes', headers: adminHeaders, payload: { testType: 'SIT', reqCodes: ['INTAKE-TEST-REQ'] } });
+    assert.deepEqual(restoredTestCandidates.json().data, ['INTAKE-TEST-REQ']);
+  });
+
   test('task-status：四类任务列表返回统一的全链路任务状态，且保留各自状态字段', async () => {
     const administrator = await get('SELECT id, phone FROM user WHERE is_super = 1 LIMIT 1');
     const releasePoint = await get('SELECT id FROM release_point ORDER BY id LIMIT 1');

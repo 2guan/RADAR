@@ -25,6 +25,21 @@ export async function resolveDictAttr(category, text) {
 }
 
 /**
+ * 返回同一机构字典项可兼容比较的全部值。
+ * 历史人员数据可能保存显示值（如“厦门”），而系统/业务数据保存属性值（如“厦门事业群”）。
+ */
+export async function resolveOrganizationValues(text) {
+  if (!text) return [];
+  const value = String(text).trim();
+  if (!value) return [];
+  const row = await get(
+    'SELECT attr_value, display_value FROM dict_item WHERE category = ? AND (LOWER(attr_value) = LOWER(?) OR LOWER(display_value) = LOWER(?))',
+    'org', value, value,
+  );
+  return [...new Set([value, row?.attr_value, row?.display_value].filter(Boolean))];
+}
+
+/**
  * 兼容性解析系统编号（sys_code）
  * @param {string} text 系统编号或系统名称
  * @returns {string|null} 系统编号，若无匹配则保留原文本

@@ -45,6 +45,10 @@ export default function Users() {
   const userOptions = activeUsers.map(u => ({ value: u.name, label: `${u.name} (${u.phone})` }));
   const orgOptions = orgs.map(o => ({ value: o.attr_value, label: o.display_value }));
   const roleOptions = roles.map(r => ({ value: r.code, label: r.name }));
+  const roleDefaultAccess = (roleCodes) => {
+    const selected = roles.filter((role) => (roleCodes || []).includes(role.code));
+    return !selected.length || selected.some((role) => Number(role.all_org_access) !== 0);
+  };
 
   // 过滤器配置：指定字段、标签、展示类型、操作符及数据源
   const filterConfigs = [
@@ -78,8 +82,13 @@ export default function Users() {
     setCurrent(row);
     form.resetFields();
     form.setFieldsValue(row
-      ? { ...row, roles: row.roles?.map((r) => r.code) }
-      : { status: '启用' });
+      ? {
+          ...row,
+          roles: row.roles?.map((r) => r.code),
+          all_org_access_override: row.all_org_access_override === null || row.all_org_access_override === undefined
+            ? '继承角色配置' : (Number(row.all_org_access_override) ? '是' : '否'),
+        }
+      : { status: '启用', all_org_access_override: '继承角色配置' });
     setIsDirty(false);
     setOpen(true);
   };
@@ -196,6 +205,10 @@ export default function Users() {
       ),
     },
     {
+      title: '全机构权限', dataIndex: 'all_org_access', key: 'all_org_access', width: 120,
+      render: (value) => <Tag color={Number(value) !== 0 ? 'green' : 'default'}>{Number(value) !== 0 ? '是' : '否'}</Tag>,
+    },
+    {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
@@ -260,6 +273,7 @@ export default function Users() {
                 <Tag key={r.id} className="status-tag tag-system" style={{ margin: 0 }}>{r.name}</Tag>
               ))}
             </div>
+            <span>全机构权限：{Number(item.all_org_access) !== 0 ? '是' : '否'}（{item.all_org_access_source === 'person' ? '人员单独设置' : '角色配置'}）</span>
           </Space>
         )}
       />
@@ -282,6 +296,24 @@ export default function Users() {
           <Form.Item name="org" label="所属机构"><DictSelect category="org" /></Form.Item>
           <Form.Item name="roles" label="角色（可多选）">
             <Select mode="multiple" placeholder="选择角色" options={roles.map((r) => ({ value: r.code, label: r.name }))} />
+          </Form.Item>
+          <Form.Item noStyle shouldUpdate={(prev, next) => prev.roles !== next.roles}>
+            {({ getFieldValue }) => {
+              const defaultAccess = roleDefaultAccess(getFieldValue('roles'));
+              return (
+                <Form.Item
+                  name="all_org_access_override"
+                  label="全机构权限"
+                  extra={`角色默认值：${defaultAccess ? '是' : '否'}。选择“继承角色配置”时，角色变更会自动生效；单独设置仅影响当前人员。`}
+                >
+                  <Select options={[
+                    { value: '继承角色配置', label: `继承角色配置（当前：${defaultAccess ? '是' : '否'}）` },
+                    { value: '是', label: '是' },
+                    { value: '否', label: '否' },
+                  ]} />
+                </Form.Item>
+              );
+            }}
           </Form.Item>
           {!current && (
             <Form.Item

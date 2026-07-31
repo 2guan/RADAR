@@ -10,11 +10,13 @@ import { get, run, tx, all, dialect, listQuery } from '../../../../platform/pers
 import { claimReleaseApplyCode, previewReleaseApplyCode } from './index.js';
 import { auditCreate, auditUpdate, auditDelete } from '../../../../platform/audit/index.js';
 import { exportXlsx, parseXlsx } from '../../../../platform/import-export/index.js';
-import { windowIds, inClause } from '../../../settings/reference-data/index.js';
-import { ok, notFound, badRequest, parseJsonArray, parseJsonObject } from '../../../../platform/runtime/index.js';
+import { windowIds, inClause, resolveOrganizationValues } from '../../../settings/reference-data/index.js';
+import { ok, notFound, badRequest, forbidden, parseJsonArray, parseJsonObject } from '../../../../platform/runtime/index.js';
 import {
   buildExtensionListFilter, statusTypeForReleaseApply, validateRequiredFields, defaultDictAttr,
 } from '../../../settings/process-configuration/index.js';
+import { getWorkItem } from '../../../development/index.js';
+import { isOrganizationRestricted, organizationMatches, workItemMatchesOrganization } from '../../../../shared/utils/organization-scope.js';
 import {
   appendStageExcelValues,
   appendStageListValues,
@@ -153,6 +155,24 @@ async function workItemCodeFor(refCodes) {
   return normalizeRefCodes(refCodes)[0] || '';
 }
 
+async function assertReleaseApplyOrganizationAccess(row, user) {
+  if (!isOrganizationRestricted(user)) return;
+  const organizations = await resolveOrganizationValues(user?.org);
+  if (!organizations.length) throw forbidden('无该机构数据权限');
+  const system = row?.change_system ? await get('SELECT org FROM system WHERE sys_code = ?', row.change_system) : null;
+  if (!system || !organizationMatches(system.org, organizations)) throw forbidden('无该机构数据权限');
+}
+
+async function assertWorkItemReferencesOrganizationAccess(refCodes, user) {
+  if (!isOrganizationRestricted(user)) return;
+  const systems = await all('SELECT sys_code, org FROM system');
+  const orgByCode = Object.fromEntries(systems.map((s) => [s.sys_code, s.org]));
+  for (const code of normalizeRefCodes(refCodes)) {
+    const item = await getWorkItem(code);
+    if (!item || !workItemMatchesOrganization(item, await resolveOrganizationValues(user?.org), orgByCode)) throw forbidden('关联需求/工单不属于本人机构');
+  }
+}
+
 export default async function releaseApplyRoutes(fastify) {
   // 列表（默认按当前投产窗口过滤）
   fastify.post('/release-apply/list', { preHandler: fastify.requirePerm('release_apply', 'view') }, async (request) => {
@@ -163,6 +183,11 @@ export default async function releaseApplyRoutes(fastify) {
     // 默认投产窗口过滤
     const win = inClause('release_point_id', windowIds(body));
     if (win.where) { wh.push(win.where); params.push(...win.params); }
+    if (isOrganizationRestricted(request.currentUser)) {
+      const organizations = await resolveOrganizationValues(request.currentUser?.org);
+      if (!organizations.length) wh.push('1=0');
+      else { wh.push(`change_system IN (SELECT sys_code FROM system WHERE org IN (${organizations.map(() => '?').join(',')}))`); params.push(...organizations); }
+    }
 
     const filters = Array.isArray(body.filters) ? body.filters : [];
     const normalFilters = [];
@@ -226,6 +251,7 @@ export default async function releaseApplyRoutes(fastify) {
   fastify.get('/release-apply/:id', { preHandler: fastify.requirePerm('release_apply', 'view') }, async (request) => {
     const row = await get('SELECT * FROM release_apply WHERE id = ?', request.params.id);
     if (!row) throw notFound();
+    await assertReleaseApplyOrganizationAccess(row, request.currentUser);
     const decoded = decode(row);
     decoded.review_status = await deriveReviewStatus(decoded.ref_codes, row.release_point_id);
     return ok(decoded);
@@ -235,6 +261,7 @@ export default async function releaseApplyRoutes(fastify) {
   fastify.get('/release-apply/by-code/:code', { preHandler: fastify.requirePerm('release_apply', 'view') }, async (request) => {
     const row = await get('SELECT * FROM release_apply WHERE change_code = ?', request.params.code);
     if (!row) throw notFound();
+    await assertReleaseApplyOrganizationAccess(row, request.currentUser);
     const decoded = decode(row);
     decoded.review_status = await deriveReviewStatus(decoded.ref_codes, row.release_point_id);
     return ok(decoded);
@@ -247,6 +274,8 @@ export default async function releaseApplyRoutes(fastify) {
     const picked = await pick(body);
     if (picked.change_content === undefined) picked.change_content = '';
     const refCodes = Array.isArray(body.ref_codes) ? body.ref_codes : [];
+    await assertReleaseApplyOrganizationAccess({ change_system: body.change_system }, request.currentUser);
+    await assertWorkItemReferencesOrganizationAccess(refCodes, request.currentUser);
     const reviewStatus = await deriveReviewStatus(refCodes, body.release_point_id ?? null);
     await validateRequiredFields('release_apply', statusTypeForReleaseApply(reviewStatus), {
       ...picked,
@@ -292,6 +321,7 @@ export default async function releaseApplyRoutes(fastify) {
     const id = request.params.id;
     const old = await get('SELECT * FROM release_apply WHERE id = ?', id);
     if (!old) throw notFound();
+    await assertReleaseApplyOrganizationAccess(old, request.currentUser);
     const body = request.body || {};
     const picked = await pick(body);
 
@@ -306,6 +336,8 @@ export default async function releaseApplyRoutes(fastify) {
     const newRefs = picked.ref_codes !== undefined
       ? (Array.isArray(picked.ref_codes) ? picked.ref_codes : [])
       : parseJsonArray(old.ref_codes);
+    await assertReleaseApplyOrganizationAccess({ change_system: picked.change_system ?? old.change_system }, request.currentUser);
+    await assertWorkItemReferencesOrganizationAccess(newRefs, request.currentUser);
     const nextReleasePointId = picked.release_point_id !== undefined ? picked.release_point_id : old.release_point_id;
     data.review_status = await deriveReviewStatus(newRefs, nextReleasePointId ?? null);
     await validateRequiredFields('release_apply', statusTypeForReleaseApply(data.review_status), {
@@ -359,6 +391,7 @@ export default async function releaseApplyRoutes(fastify) {
     const id = request.params.id;
     const row = await get('SELECT * FROM release_apply WHERE id = ?', id);
     if (!row) throw notFound();
+    await assertReleaseApplyOrganizationAccess(row, request.currentUser);
     await run('DELETE FROM release_apply WHERE id = ?', id);
     await auditDelete('release_apply', id, row.change_code, request.currentUser?.name);
     return ok(null, '删除成功');
@@ -367,7 +400,16 @@ export default async function releaseApplyRoutes(fastify) {
   // 导出
   fastify.post('/release-apply/export', { preHandler: fastify.requirePerm('release_apply', 'export') }, async (request, reply) => {
     const body = request.body || {};
-    const { where: baseWhere, params: baseParams } = inClause('release_point_id', windowIds(body));
+    const { where: initialWhere, params: initialParams } = inClause('release_point_id', windowIds(body));
+    const exportWh = initialWhere ? [initialWhere] : [];
+    const exportParams = [...initialParams];
+    if (isOrganizationRestricted(request.currentUser)) {
+      const organizations = await resolveOrganizationValues(request.currentUser?.org);
+      if (!organizations.length) exportWh.push('1=0');
+      else { exportWh.push(`change_system IN (SELECT sys_code FROM system WHERE org IN (${organizations.map(() => '?').join(',')}))`); exportParams.push(...organizations); }
+    }
+    const baseWhere = exportWh.join(' AND ');
+    const baseParams = exportParams;
     const result = await listQuery({
       table: 'release_apply', columns: COLUMNS, searchColumns: SEARCH,
       query: { ...body, pageSize: 0 }, baseWhere, baseParams,

@@ -11,6 +11,7 @@ import { hashPassword, validatePasswordComplexity, getSecurityConfig } from '../
 import { exportXlsx, parseXlsx } from '../../../platform/import-export/index.js';
 import { ok, notFound, badRequest, sanitizeText } from '../../../platform/runtime/index.js';
 import { resolveDictAttr } from '../../settings/reference-data/index.js';
+import { resolveEffectiveAllOrgAccess } from '../../../shared/utils/organization-scope.js';
 
 // 导出列定义（不含密码）
 const EXPORT_COLUMNS = [
@@ -18,6 +19,8 @@ const EXPORT_COLUMNS = [
   { key: 'name', title: '姓名' },
   { key: 'org', title: '所属机构' },
   { key: 'roles', title: '角色' },
+  { key: 'all_org_access', title: '全机构权限（生效）' },
+  { key: 'all_org_access_source', title: '权限来源' },
   { key: 'status', title: '状态' },
 ];
 // 导入列定义（额外含初始密码）
@@ -26,6 +29,7 @@ const IMPORT_COLUMNS = [
   { key: 'name', title: '姓名' },
   { key: 'org', title: '所属机构' },
   { key: 'roles', title: '角色' },
+  { key: 'all_org_access_override', title: '全机构权限' },
   { key: 'status', title: '状态' },
   { key: 'password', title: '初始密码' },
 ];
@@ -84,9 +88,29 @@ function buildUserListQuery(body) {
 /** 查询用户的角色名数组 */
 async function rolesOfUser(userId) {
   return await all(
-    `SELECT r.id, r.code, r.name FROM role r JOIN user_role ur ON ur.role_id = r.id WHERE ur.user_id = ?`,
+    `SELECT r.id, r.code, r.name, r.all_org_access FROM role r JOIN user_role ur ON ur.role_id = r.id WHERE ur.user_id = ?`,
     userId,
   );
+}
+
+function parseAllOrgAccessOverride(value, { allowUndefined = false } = {}) {
+  if (value === undefined && allowUndefined) return undefined;
+  if (value === undefined) return null;
+  if (value === null || value === '' || String(value).trim() === '继承角色配置') return null;
+  if (value === true || value === 1 || String(value).trim().toLowerCase() === 'true' || String(value).trim() === '是') return 1;
+  if (value === false || value === 0 || String(value).trim().toLowerCase() === 'false' || String(value).trim() === '否') return 0;
+  throw badRequest('全机构权限仅支持“继承角色配置 / 是 / 否”');
+}
+
+async function withEffectiveAccess(user) {
+  const roles = await rolesOfUser(user.id);
+  const resolved = resolveEffectiveAllOrgAccess(user, roles);
+  return {
+    ...user,
+    roles,
+    all_org_access: resolved.allOrgAccess ? 1 : 0,
+    all_org_access_source: resolved.source,
+  };
 }
 
 /** 设置用户角色（按角色标识数组） */
@@ -105,14 +129,14 @@ export default async function userRoutes(fastify) {
     
     const result = await listQuery({
       table: 'user',
-      columns: ['id', 'phone', 'name', 'org', 'status', 'created_at'],
+      columns: ['id', 'phone', 'name', 'org', 'all_org_access_override', 'status', 'created_at'],
       searchColumns: ['phone', 'name', 'org'],
       query,
       baseWhere,
       baseParams,
-      select: 'id, phone, name, org, status, is_super, created_at, login_fail_count, lockout_until',
+      select: 'id, phone, name, org, all_org_access_override, status, is_super, created_at, login_fail_count, lockout_until',
     });
-    result.list = await Promise.all(result.list.map(async (u) => ({ ...u, roles: await rolesOfUser(u.id) })));
+    result.list = await Promise.all(result.list.map(withEffectiveAccess));
     return ok(result);
   });
 
@@ -133,9 +157,9 @@ export default async function userRoutes(fastify) {
 
   // 详情
   fastify.get('/users/:id', { preHandler: fastify.requirePerm('user', 'view') }, async (request) => {
-    const u = await get('SELECT id, phone, name, org, status, is_super, login_fail_count, lockout_until FROM user WHERE id = ?', request.params.id);
+    const u = await get('SELECT id, phone, name, org, all_org_access_override, status, is_super, login_fail_count, lockout_until FROM user WHERE id = ?', request.params.id);
     if (!u) throw notFound();
-    return ok({ ...u, roles: await rolesOfUser(u.id) });
+    return ok(await withEffectiveAccess(u));
   });
 
   // 解锁用户（重置登录失败计数与锁定时间）
@@ -153,7 +177,7 @@ export default async function userRoutes(fastify) {
 
   // 新增
   fastify.post('/users', { preHandler: fastify.requirePerm('user', 'create') }, async (request) => {
-    let { phone, name, org, password, roles } = request.body || {};
+    let { phone, name, org, password, roles, all_org_access_override } = request.body || {};
     if (!phone || !name) throw badRequest('手机号与姓名必填');
     name = sanitizeText(name);
     if (!name) throw badRequest('姓名不能为空或仅含无效字符');
@@ -166,10 +190,11 @@ export default async function userRoutes(fastify) {
       throw badRequest(`密码不符合复杂度要求（长度不能小于 ${minLength} 位，且必须包含大小写字母、数字和特殊字符）`);
     }
 
+    const accessOverride = parseAllOrgAccessOverride(all_org_access_override, { allowUndefined: true });
     const id = await tx(async () => {
       const res = await run(
-        'INSERT INTO user (phone, name, org, password_hash, status, password_changed_at) VALUES (?,?,?,?,?,datetime(\'now\',\'localtime\'))',
-        phone, name, org || null, hashPassword(finalPwd), '启用',
+        'INSERT INTO user (phone, name, org, all_org_access_override, password_hash, status, password_changed_at) VALUES (?,?,?,?,?,?,datetime(\'now\',\'localtime\'))',
+        phone, name, org || null, accessOverride ?? null, hashPassword(finalPwd), '启用',
       );
       await setUserRoles(res.lastInsertRowid, roles);
       return res.lastInsertRowid;
@@ -182,12 +207,13 @@ export default async function userRoutes(fastify) {
     const id = request.params.id;
     const old = await get('SELECT * FROM user WHERE id = ?', id);
     if (!old) throw notFound();
-    const { name: rawName, org, status, roles } = request.body || {};
+    const { name: rawName, org, status, roles, all_org_access_override } = request.body || {};
     const name = rawName !== undefined ? sanitizeText(rawName) : undefined;
+    const accessOverride = parseAllOrgAccessOverride(all_org_access_override, { allowUndefined: true });
     await tx(async () => {
       await run(
-        `UPDATE user SET name=?, org=?, status=?, updated_at=datetime('now','localtime') WHERE id=?`,
-        name ?? old.name, org ?? old.org, status ?? old.status, id,
+        `UPDATE user SET name=?, org=?, all_org_access_override=?, status=?, updated_at=datetime('now','localtime') WHERE id=?`,
+        name ?? old.name, org ?? old.org, accessOverride === undefined ? old.all_org_access_override : accessOverride, status ?? old.status, id,
       );
       // 角色可自由编辑（含超级管理员）；超管权限源于 is_super 标识，与角色无关，不会因改角色而丢失
       if (roles !== undefined) await setUserRoles(id, roles);
@@ -224,23 +250,28 @@ export default async function userRoutes(fastify) {
     const { query, baseWhere, baseParams } = buildUserListQuery(request.body || {});
     const result = await listQuery({
       table: 'user',
-      columns: ['id', 'phone', 'name', 'org', 'status'],
+      columns: ['id', 'phone', 'name', 'org', 'all_org_access_override', 'status'],
       searchColumns: ['phone', 'name', 'org'],
       query: { ...query, pageSize: 0 },
       baseWhere,
       baseParams,
-      select: 'id, phone, name, org, status',
+      select: 'id, phone, name, org, all_org_access_override, status, is_super',
     });
 
     const orgsAll = await all("SELECT attr_value, display_value FROM dict_item WHERE category = 'org'");
     const orgMap = {};
     for (const o of orgsAll) orgMap[o.attr_value] = o.display_value;
 
-    const rows = await Promise.all(result.list.map(async (u) => ({
-      ...u,
-      org: orgMap[u.org] || u.org || '',
-      roles: (await rolesOfUser(u.id)).map((r) => r.name).join('、'),
-    })));
+    const rows = await Promise.all(result.list.map(async (u) => {
+      const enriched = await withEffectiveAccess(u);
+      return {
+        ...enriched,
+        org: orgMap[u.org] || u.org || '',
+        roles: enriched.roles.map((r) => r.name).join('、'),
+        all_org_access: enriched.all_org_access ? '是' : '否',
+        all_org_access_source: enriched.all_org_access_source === 'person' ? '人员单独设置' : '角色配置',
+      };
+    }));
     const buf = await exportXlsx(EXPORT_COLUMNS, rows, '人员清单');
     reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     reply.header('Content-Disposition', 'attachment; filename=users.xlsx');
@@ -330,15 +361,22 @@ export default async function userRoutes(fastify) {
             const oldRoles = (await rolesOfUser(exists.id)).map(r => r.name).join('、');
             const resolvedRoleCodes = await resolveRoleCodes(r.roles);
             const hasRolesInput = r.roles !== undefined && String(r.roles).trim() !== '';
+            const accessOverride = parseAllOrgAccessOverride(r.all_org_access_override);
             if (hasRolesInput) {
               const newRoleNames = resolvedRoleCodes.map(code => roleNameMap[code] || code).join('、');
               compareAndPush('roles', '角色', oldRoles || '无', newRoleNames || '无');
             }
+            compareAndPush(
+              'all_org_access_override',
+              '全机构权限',
+              exists.all_org_access_override === null || exists.all_org_access_override === undefined ? '继承角色配置' : (Number(exists.all_org_access_override) ? '是' : '否'),
+              accessOverride === null ? '继承角色配置' : (accessOverride ? '是' : '否'),
+            );
 
             if (changes.length > 0) {
               await run(
-                `UPDATE user SET name=?, org=?, status=?, updated_at=datetime('now','localtime') WHERE id=?`,
-                r.name, resolvedOrg || null, resolvedStatus, exists.id
+                `UPDATE user SET name=?, org=?, all_org_access_override=?, status=?, updated_at=datetime('now','localtime') WHERE id=?`,
+                r.name, resolvedOrg || null, accessOverride, resolvedStatus, exists.id
               );
               if (hasRolesInput) {
                 await setUserRoles(exists.id, resolvedRoleCodes);
@@ -363,9 +401,10 @@ export default async function userRoutes(fastify) {
               const minLength = (await getSecurityConfig())['security.password.minLength'];
               throw new Error(`密码不符合复杂度要求（长度不能小于 ${minLength} 位，且必须包含大小写字母、数字和特殊字符）`);
             }
+            const accessOverride = parseAllOrgAccessOverride(r.all_org_access_override);
             const res = await run(
-              'INSERT INTO user (phone, name, org, password_hash, status, password_changed_at) VALUES (?,?,?,?,?,datetime(\'now\',\'localtime\'))',
-              phone, r.name, resolvedOrg || null, hashPassword(initPwd), resolvedStatus
+              'INSERT INTO user (phone, name, org, all_org_access_override, password_hash, status, password_changed_at) VALUES (?,?,?,?,?,?,datetime(\'now\',\'localtime\'))',
+              phone, r.name, resolvedOrg || null, accessOverride, hashPassword(initPwd), resolvedStatus
             );
             const resolvedRoleCodes = await resolveRoleCodes(r.roles);
             if (resolvedRoleCodes.length) {

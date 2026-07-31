@@ -28,11 +28,11 @@ import { useResponsive } from '../../platform/ui/useResponsive.js';
 const CFG = {
   dev: {
     api: '/dev-tasks', entity: 'dev', stage: '开发', title: '开发任务',
-    statusLabel: '开发状态', ownerLabel: '开发负责人', orgLabel: '开发实施方',
+    statusLabel: '开发状态', ownerLabel: '开发负责人', intakeOwnerLabel: '开发承接人', orgLabel: '开发实施方',
   },
   test: {
     api: '/test-tasks', entity: 'test', stage: '测试', title: '测试任务',
-    statusLabel: '测试状态', ownerLabel: '测试负责人', orgLabel: '测试实施方',
+    statusLabel: '测试状态', ownerLabel: '测试负责人', intakeOwnerLabel: '测试承接人', orgLabel: '测试实施方',
   },
 };
 const TEMPLATE_ATTACH_FIELDS = new Set(['编码检查表', '技术方案确认单']);
@@ -279,6 +279,11 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
               <StageBuiltinField fieldKey="owner" defaultSection="task">
                     <Form.Item name="owner" label={cfg.ownerLabel} rules={required.rules('owner', cfg.ownerLabel, { action: '请选择' })} style={{ marginBottom: 8 }}>
                       <PersonPicker style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} size="small" placeholder="选择负责人" />
+                    </Form.Item>
+              </StageBuiltinField>
+              <StageBuiltinField fieldKey="intake_owner" defaultSection="task">
+                    <Form.Item name="intake_owner" label={cfg.intakeOwnerLabel} rules={required.rules('intake_owner', cfg.intakeOwnerLabel, { action: '请选择' })} style={{ marginBottom: 8 }}>
+                      <PersonPicker style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} size="small" placeholder="选择承接人" />
                     </Form.Item>
               </StageBuiltinField>
               <StageBuiltinField fieldKey="impl_system" defaultSection="task">

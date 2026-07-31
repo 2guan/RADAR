@@ -40,6 +40,7 @@ const ROLES = [
   { code: '管理员', name: '管理员' },
   { code: '超级管理员', name: '超级管理员', builtin: 1 },
 ];
+const RESTRICTED_DEFAULT_ROLE_CODES = new Set(['金科开发', '农信开发', '金科业务', '农信业务', '机构负责人']);
 
 // 旧版会签角色在已有环境中平滑改名，保留原角色 ID 与已分配人员。
 const LEGACY_SIGNOFF_ROLE_CODES = {
@@ -220,13 +221,13 @@ export const STAGE_BUILTIN_FIELD_METADATA = {
     proposer: { section: 'owners', required_from: 'initial', list: 1, filter: 1 }, yn_owner: { section: 'owners' }, jk_owner: { section: 'owners' }, receiver: { section: 'owners', list: 1, filter: 1 }, registrar: { section: 'owners', list: 1, filter: 1 },
   },
   dev: {
-    task_name: { section: 'task', list: 1 }, content: { section: 'task' }, status: { section: 'task', list: 1, filter: 1, dashboard: 1 }, owner: { section: 'task', list: 1, filter: 1, dashboard: 1 },
+    task_name: { section: 'task', list: 1 }, content: { section: 'task' }, status: { section: 'task', list: 1, filter: 1, dashboard: 1 }, owner: { section: 'task', list: 1, filter: 1, dashboard: 1 }, intake_owner: { section: 'task', list: 1, filter: 1 },
     impl_system: { section: 'task', list: 1, filter: 1, dashboard: 1 }, impl_org: { section: 'task', filter: 1, dashboard: 1 }, plan_start: { section: 'schedule', required_from: 'final' },
     plan_end: { section: 'schedule', required_from: 'final', dashboard: 1 }, actual_start: { section: 'schedule', required_from: 'final' }, actual_end: { section: 'schedule', required_from: 'final', dashboard: 1 },
     impact_analysis: { section: 'impact' },
   },
   test: {
-    task_name: { section: 'task', list: 1 }, status: { section: 'task', list: 1, filter: 1, dashboard: 1 }, owner: { section: 'task', list: 1, filter: 1, dashboard: 1 },
+    task_name: { section: 'task', list: 1 }, status: { section: 'task', list: 1, filter: 1, dashboard: 1 }, owner: { section: 'task', list: 1, filter: 1, dashboard: 1 }, intake_owner: { section: 'task', list: 1, filter: 1 },
     impl_system: { section: 'task', list: 1, filter: 1, dashboard: 1 }, impl_org: { section: 'task', filter: 1, dashboard: 1 }, plan_start: { section: 'schedule', required_from: 'final' },
     plan_end: { section: 'schedule', required_from: 'final', dashboard: 1 }, actual_start: { section: 'schedule', required_from: 'final' }, actual_end: { section: 'schedule', required_from: 'final', dashboard: 1 },
     coverage_analysis: { section: 'coverage' },
@@ -593,10 +594,10 @@ export async function runSeed() {
       let row = await get('SELECT id FROM role WHERE code = ?', r.code);
       if (!row) {
         const res = await run(
-          `INSERT INTO role (name, code, default_home, is_builtin, is_signoff_role,
+          `INSERT INTO role (name, code, default_home, all_org_access, is_builtin, is_signoff_role,
              signoff_responsibility, signoff_review_points)
-           VALUES (?,?,?,?,?,?,?)`,
-          r.name, r.code, '仪表盘', r.builtin ? 1 : 0, r.signoff ? 1 : 0,
+           VALUES (?,?,?,?,?,?,?,?)`,
+          r.name, r.code, '仪表盘', RESTRICTED_DEFAULT_ROLE_CODES.has(r.code) ? 0 : 1, r.builtin ? 1 : 0, r.signoff ? 1 : 0,
           r.signoff_responsibility || null, r.signoff_review_points || null,
         );
         row = { id: res.lastInsertRowid };

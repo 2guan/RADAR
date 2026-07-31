@@ -13,7 +13,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { get, all, run, tx, dialect } from '../../platform/persistence/index.js';
 import { auditUpdate } from '../../platform/audit/index.js';
-import { windowIds, formatAttachments } from '../settings/reference-data/index.js';
+import { windowIds, formatAttachments, resolveOrganizationValues } from '../settings/reference-data/index.js';
 import { ok, notFound, badRequest, forbidden, parseJsonArray } from '../../platform/runtime/index.js';
 import { assertStatusChangePermission, defaultDictAttr, defaultProcessStatus, statusTypeForReleaseStatus, validateRequiredFields } from '../settings/process-configuration/index.js';
 import { exportXlsx } from '../../platform/import-export/index.js';
@@ -24,8 +24,19 @@ import { resolveCurrentTaskStatuses } from '../overview/index.js';
 import { appendStageExcelValues, getStageExcelColumns, validateStageContent } from '../settings/process-configuration/index.js';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
+import { isOrganizationRestricted, workItemMatchesOrganization } from '../../shared/utils/organization-scope.js';
 
 const RELEASE_TEMPLATE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../templates/release-documents');
+
+async function assertReleaseWorkItemOrganizationAccess(code, user) {
+  if (!isOrganizationRestricted(user)) return;
+  const item = await getWorkItem(code);
+  // 问题管理不在本需求范围内，保持既有可见性。
+  if (!item) return;
+  const systems = await all('SELECT sys_code, org FROM system');
+  const orgByCode = Object.fromEntries(systems.map((system) => [system.sys_code, system.org]));
+  if (!workItemMatchesOrganization(item, await resolveOrganizationValues(user?.org), orgByCode)) throw forbidden('无该机构数据权限');
+}
 
 async function templatePath(filename) {
   const fullPath = path.join(RELEASE_TEMPLATE_DIR, filename);
@@ -878,7 +889,11 @@ export default async function releaseRoutes(fastify) {
   fastify.post('/release/list', { preHandler: fastify.requirePerm('release', 'view') }, async (request) => {
     const body = request.body || {};
     const all0 = await computeEntities(windowIds(body));
-    const filtered = applyFilters(all0, body.filters);
+    const scoped = [];
+    for (const entity of all0) {
+      try { await assertReleaseWorkItemOrganizationAccess(entity.code, request.currentUser); scoped.push(entity); } catch (error) { if (!isOrganizationRestricted(request.currentUser)) throw error; }
+    }
+    const filtered = applyFilters(scoped, body.filters);
 
     const page = Number(body.page) || 1;
     const pageSize = Number(body.pageSize) || 10;
@@ -890,6 +905,7 @@ export default async function releaseRoutes(fastify) {
   // 详情：首次打开惰性创建投产任务；返回实体信息（需求/工单或问题）+ 会签 + 关联制品
   fastify.get('/release/:code', { preHandler: fastify.requirePerm('release', 'view') }, async (request) => {
     const code = request.params.code;
+    await assertReleaseWorkItemOrganizationAccess(code, request.currentUser);
     const releasePointId = await resolveReleasePointId(code, request.query?.releasePointId);
     const entityType = await classifyEntity(code);
     const rt = await ensureReleaseTask(code, entityType, releasePointId);
