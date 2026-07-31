@@ -24,9 +24,11 @@ import { useResponsive } from '../../../platform/ui/useResponsive.js';
 // ─── 模块级系统列表缓存（与 SystemSelect 共用同一接口，但单独维护以供下方组件使用） ───
 let _sysCache = null;
 
-function formatRegisterTime(value) {
-  if (!value) return '—';
-  const match = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{1,2}))?/.exec(String(value));
+function formatRegisterTime(value, fallbackValue) {
+  const valueMatch = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{1,2}))?/.exec(String(value || ''));
+  const source = valueMatch?.[4] ? value : (fallbackValue || value);
+  if (!source) return '—';
+  const match = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{1,2}))?/.exec(String(source));
   return match ? `${Number(match[2])}-${Number(match[3])} ${Number(match[4] || 0)}:${String(match[5] || '0').padStart(2, '0')}` : value;
 }
 
@@ -533,13 +535,9 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
               </StageBuiltinField>
               <StageBuiltinField fieldKey="receiver" defaultSection="owners"><Form.Item name="receiver" label="需求接收人" rules={required.rules('receiver', '需求接收人', { action: '请选择' })} style={{ marginBottom: 8 }}><PersonPicker style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择需求接收人" size="small" /></Form.Item></StageBuiltinField>
               {current && <StageBuiltinField fieldKey="registrar" defaultSection="owners">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--radar-text-secondary)', minHeight: 24 }}>
-                  <span style={{ width: 80 }}>录入人：</span><span>{current.registrar || '—'}</span>
-                </div>
-              </StageBuiltinField>}
-              {current && <StageBuiltinField fieldKey="register_time" defaultSection="owners">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--radar-text-secondary)', minHeight: 24 }}>
-                  <span style={{ width: 80 }}>录入时间：</span><span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace' }}>{formatRegisterTime(current.register_time)}</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 11, color: 'var(--radar-text-secondary)', minHeight: 42 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ width: 80 }}>录入人信息：</span><span>{current.registrar || '—'}</span></div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ width: 80 }}>录入时间：</span><span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace' }}>{formatRegisterTime(current.register_time, current.created_at)}</span></div>
                 </div>
               </StageBuiltinField>}
           </StageBuiltinFields>

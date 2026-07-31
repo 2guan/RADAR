@@ -592,7 +592,7 @@ if (!process.env.RADAR_RUN_API_TESTS) {
       assert.equal(row.workload, '3 人日');
       assert.equal(row.issue_no, 'OA-202607-005');
       assert.equal(row.registrar, administrator.name);
-      assert.match(row.register_time, /^\d{4}-\d{2}-\d{2}$/);
+      assert.match(row.register_time, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
     }
 
     for (const [url, codeKey, code] of [
