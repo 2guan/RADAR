@@ -64,8 +64,7 @@ export const REQUIRED_FIELD_MODULES = [
       { key: 'jk_owner', label: '建信金科业务负责人' },
       { key: 'receiver', label: '需求接收人' },
       { key: 'workload', label: '工作量' },
-      { key: 'registrar', label: '录入人' },
-      { key: 'register_time', label: '录入时间' },
+      { key: 'registrar', label: '录入人信息' },
     ],
   },
   {
@@ -94,8 +93,7 @@ export const REQUIRED_FIELD_MODULES = [
       { key: 'jk_owner', label: '建信金科工单负责人' },
       { key: 'receiver', label: '需求接收人' },
       { key: 'workload', label: '工作量' },
-      { key: 'registrar', label: '录入人' },
-      { key: 'register_time', label: '录入时间' },
+      { key: 'registrar', label: '录入人信息' },
     ],
   },
   {

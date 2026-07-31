@@ -43,7 +43,7 @@ const NATIVE_FIELD_DEFAULTS = {
     ['summary', '需求概述', 'textarea'], ['implementation_org', '实施机构', 'select', 'dict:org'], ['main_systems', '主责系统', 'select', 'system', 1],
     ['collab_dev_systems', '协同改造系统', 'select', 'system', 1], ['collab_test_systems', '协同测试系统', 'select', 'system', 1],
     ['propose_dept', '提出部门', 'select', 'dict:req_dept'], ['proposer', '提出人', 'person', 'person', 1],
-    ['yn_owner', '云南农信业务负责人', 'person', 'person'], ['jk_owner', '建信金科业务负责人', 'person', 'person'], ['receiver', '需求接收人', 'person', 'person'], ['registrar', '录入人', 'text'], ['register_time', '录入时间', 'date'],
+    ['yn_owner', '云南农信业务负责人', 'person', 'person'], ['jk_owner', '建信金科业务负责人', 'person', 'person'], ['receiver', '需求接收人', 'person', 'person'], ['registrar', '录入人信息', 'text'],
   ],
   ticket: [
     ['ticket_code', '工单编号', 'text'], ['status', '工单状态', 'select'], ['ticket_type', '工单类型', 'select', 'dict:ticket_type'],
@@ -52,7 +52,7 @@ const NATIVE_FIELD_DEFAULTS = {
     ['summary', '工单详情', 'textarea'], ['implementation_org', '实施机构', 'select', 'dict:org'], ['main_systems', '主责系统', 'select', 'system', 1],
     ['collab_dev_systems', '协同改造系统', 'select', 'system', 1], ['collab_test_systems', '协同测试系统', 'select', 'system', 1],
     ['propose_dept', '提出部门', 'select', 'dict:req_dept'], ['proposer', '提出人', 'person', 'person', 1],
-    ['yn_owner', '云南农信工单负责人', 'person', 'person'], ['jk_owner', '建信金科工单负责人', 'person', 'person'], ['receiver', '需求接收人', 'person', 'person'], ['registrar', '录入人', 'text'], ['register_time', '录入时间', 'date'],
+    ['yn_owner', '云南农信工单负责人', 'person', 'person'], ['jk_owner', '建信金科工单负责人', 'person', 'person'], ['receiver', '需求接收人', 'person', 'person'], ['registrar', '录入人信息', 'text'],
   ],
   dev: [
     ['task_name', '开发任务名称', 'text'], ['content', '开发内容概述', 'textarea'], ['status', '开发状态', 'select'],
@@ -172,6 +172,7 @@ const CUSTOM_DELIVERABLE_TEMPLATE_HANDLERS = {
 };
 
 const BUILTIN_METADATA_VERSION_KEY = 'stage.content.builtin-metadata.v2';
+const REGISTRATION_INFO_VERSION_KEY = 'stage.content.registration-info.v1';
 // v6：按本地详情页已确认的两列纵向顺序校准内置分区，供新库与 mock 重建共用。
 const BUILTIN_LAYOUT_VERSION_KEY = 'stage.content.builtin-layout.v7';
 const DELIVERABLE_SECTION_PRESENTATION_VERSION_KEY = 'stage.content.deliverable-section-presentation.v1';
@@ -847,7 +848,7 @@ export async function seedStageContentDefaults({ builtinMetadata = {}, sectionDe
  * 已存在（包括软删除）的分区、字段、交付件、规则和模板均视为管理员意图，绝不覆盖。
  */
 export async function applyBuiltinConfigurationUpgrades({ builtinMetadata = {}, sectionDefaults = {} } = {}) {
-  return await tx(async () => {
+  const upgrade = await tx(async () => {
     const applied = await get('SELECT upgrade_id FROM configuration_upgrade_ledger WHERE upgrade_id = ?', BUILTIN_CONFIGURATION_UPGRADE_ID);
     if (applied) return { applied: false, upgrade_id: BUILTIN_CONFIGURATION_UPGRADE_ID, added: [] };
 
@@ -896,6 +897,8 @@ export async function applyBuiltinConfigurationUpgrades({ builtinMetadata = {}, 
     await run('INSERT INTO configuration_upgrade_ledger (upgrade_id, details) VALUES (?,?)', BUILTIN_CONFIGURATION_UPGRADE_ID, JSON.stringify({ added }));
     return { applied: true, upgrade_id: BUILTIN_CONFIGURATION_UPGRADE_ID, added };
   });
+  await synchronizeRegistrationInfoFields();
+  return upgrade;
 }
 
 /**
@@ -951,6 +954,21 @@ async function synchronizeBuiltinFieldMetadata(builtinMetadata) {
       WHERE scope_key=? AND field_key='register_time' AND label='登记时间'`, '录入时间', scopeKey);
   }
   await run('INSERT INTO app_config (key, value, remark) VALUES (?,?,?)', BUILTIN_METADATA_VERSION_KEY, '1', '分析字段默认展示、筛选与兼容文案校准版本');
+}
+
+/** 将录入人和录入时间收敛为一个只读展示项；底层两列仍保留用于审计与历史兼容。 */
+async function synchronizeRegistrationInfoFields() {
+  if (await get('SELECT value FROM app_config WHERE key = ?', REGISTRATION_INFO_VERSION_KEY)) return;
+  await tx(async () => {
+    if (await get('SELECT value FROM app_config WHERE key = ?', REGISTRATION_INFO_VERSION_KEY)) return;
+    for (const scopeKey of ['requirement', 'ticket']) {
+      await run(`UPDATE stage_field_definition SET label=?, updated_at=${dialect.now}
+        WHERE scope_key=? AND field_key='registrar' AND field_kind='native' AND is_builtin=1 AND deleted_at IS NULL`, '录入人信息', scopeKey);
+      await run(`UPDATE stage_field_definition SET deleted_at=${dialect.now}, updated_at=${dialect.now}
+        WHERE scope_key=? AND field_key='register_time' AND field_kind='native' AND is_builtin=1 AND deleted_at IS NULL`, scopeKey);
+    }
+    await run('INSERT INTO app_config (key, value, remark) VALUES (?,?,?)', REGISTRATION_INFO_VERSION_KEY, '1', '需求和工单录入信息输入项合并版本');
+  });
 }
 
 /**

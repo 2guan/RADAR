@@ -618,8 +618,8 @@ if (!process.env.RADAR_RUN_API_TESTS) {
       assert.equal(fields.get('implementation_org').source_key, 'dict:org');
       assert.equal(fields.get('receiver').input_type, 'person');
       assert.equal(fields.get('workload').input_type, 'text');
-      assert.equal(fields.get('registrar').label, '录入人');
-      assert.equal(fields.get('register_time').label, '录入时间');
+      assert.equal(fields.get('registrar').label, '录入人信息');
+      assert.equal(fields.has('register_time'), false);
       assert.equal(config.json().data.sections.find((section) => section.section_key === 'systems').title, '实施机构及系统');
     }
 
