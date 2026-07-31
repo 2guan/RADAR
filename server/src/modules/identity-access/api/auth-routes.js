@@ -12,6 +12,7 @@ import { get, all, run } from '../../../platform/persistence/index.js';
 import { verifyPassword, hashPassword, validatePasswordComplexity, isPasswordExpired, getSecurityConfig } from '../../../platform/auth/index.js';
 import { ok, badRequest } from '../../../platform/runtime/index.js';
 import { createCaptcha, verifyCaptcha } from '../../../platform/auth/index.js';
+import { resolveOrganizationValues } from '../../settings/reference-data/index.js';
 
 export default async function authRoutes(fastify) {
   // 获取验证码（无需登录）
@@ -154,7 +155,7 @@ export default async function authRoutes(fastify) {
   fastify.get('/auth/me', { preHandler: fastify.authenticate }, async (request) => {
     const u = request.currentUser;
     const roles = await all(
-      `SELECT r.code, r.name, r.default_home, r.default_theme
+      `SELECT r.code, r.name, r.default_home, r.default_theme, r.all_org_access
          FROM role r JOIN user_role ur ON ur.role_id = r.id
         WHERE ur.user_id = ?`,
       u.id,
@@ -172,7 +173,12 @@ export default async function authRoutes(fastify) {
       phone: u.phone,
       name: u.name,
       org: u.org,
+      organizationValues: await resolveOrganizationValues(u.org),
       isSuper: !!u.is_super,
+      allOrgAccess: !!u.effective_all_org_access,
+      allOrgAccessSource: u.all_org_access_source,
+      allOrgAccessOverride: u.all_org_access_override === null || u.all_org_access_override === undefined
+        ? null : Number(u.all_org_access_override) !== 0,
       roles,
       defaultHome: roles[0]?.default_home || '/dashboard',
       defaultTheme: roles[0]?.default_theme || 'sky',

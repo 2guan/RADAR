@@ -1,0 +1,147 @@
+{
+  "schema_version": "1.0",
+  "requirement": {
+    "id": "REQ-20260731-007",
+    "ref": "hengguan/REQ-20260731-007",
+    "title": "按角色默认与人员覆盖控制全流程机构数据范围",
+    "status": "ready",
+    "document": "docs/requirements/hengguan/REQ-20260731-007/requirement.md"
+  },
+  "assignment": {
+    "module": "governance",
+    "developer": "hengguan",
+    "module_owner": "hengguan",
+    "branch": "hengguan/REQ-20260731-007-organization-data-scope",
+    "worktree": "codex-desktop-current-worktree"
+  },
+  "ai": {
+    "enabled": true,
+    "approved_service": "Codex desktop",
+    "model": "approved-by-user",
+    "contains_confidential_information": false,
+    "context_sanitized": true,
+    "production_access": false
+  },
+  "scope": {
+    "writable_paths": [
+      "docs/requirements/hengguan/REQ-20260731-007/**",
+      "server/src/modules/identity-access/**",
+      "web/src/modules/identity-access/**",
+      "web/src/modules/settings/**",
+      "server/src/modules/settings/**",
+      "server/src/platform/auth/**",
+      "server/src/platform/persistence/migrations/**",
+      "server/src/platform/persistence/migrations/tdsql/**",
+      "server/src/modules/requirements/**",
+      "web/src/modules/requirements/**",
+      "server/src/modules/tickets/**",
+      "web/src/modules/tickets/**",
+      "server/src/modules/development/**",
+      "web/src/modules/development/**",
+      "server/src/modules/testing/**",
+      "web/src/modules/testing/**",
+      "server/src/modules/release/**",
+      "web/src/modules/release/**",
+      "server/src/modules/overview/**",
+      "web/src/modules/overview/**",
+      "server/src/modules/dashboard/**",
+      "web/src/modules/dashboard/**",
+      "server/src/bootstrap/seed.js",
+      "server/scripts/mock-data.js",
+      "server/test/**",
+      "server/src/shared/**",
+      "web/src/shared/**",
+      "governance/modules.yaml"
+    ],
+    "read_only_paths": [
+      "docs/governance/PROJECT-RULES.md",
+      "docs/governance/AI-CODING-RULES.md",
+      "docs/governance/GITHUB-RULES.md",
+      "PRODUCT.md",
+      "server/templates/**"
+    ],
+    "forbidden_paths": [
+      ".env",
+      "**/.env",
+      "**/*secret*",
+      "**/*credential*",
+      "attachments/**"
+    ]
+  },
+  "public_capability_change": {
+    "required": true,
+    "shared_change_issue": "REQ-20260731-007",
+    "reason": "identity-access 在角色配置维护全机构权限默认值，并允许人员管理保存单人覆盖；platform/auth 在请求时计算最终生效值作为已认证用户只读上下文提供。开发和测试承接通过 identity-access 公开的活跃人员校验写入负责人及承接人。需求、工单、开发、测试、投产、概览和效能仪表盘在各自服务端入口执行统一的机构范围。旧权限与全机构用户行为保持不变，投产审批详情仅在已授权审批对象内完整返回关联制品。",
+    "target_modules": [
+      "identity-access",
+      "platform/auth",
+      "platform/persistence",
+      "requirements",
+      "tickets",
+      "development",
+      "testing",
+      "release",
+      "overview",
+      "dashboard"
+    ],
+    "new_methods": [
+      "resolveEffectiveAllOrgAccess",
+      "isOrganizationRestricted",
+      "organizationMatches",
+      "resolveOrganizationValues",
+      "workItemMatchesOrganization",
+      "isActivePersonName"
+    ],
+    "existing_method_changed": true,
+    "semantic_name_confirmed": true,
+    "old_behavior_preserved": true,
+    "owner_approved": true,
+    "owner_review_required_before_merge": true
+  },
+  "database": {
+    "changed": true,
+    "migration_paths": [
+      "server/src/platform/persistence/migrations",
+      "server/src/platform/persistence/migrations/tdsql"
+    ],
+    "mysql8_compatible": true,
+    "historical_data_impact": "为 role 表追加 all_org_access 非空布尔字段，为 user 表追加可空 all_org_access_override，并为 dev_task 与 test_task 追加可空 intake_owner。首次升级时五个指定角色（金科开发、农信开发、金科业务、农信业务、机构负责人）回填为否，其余角色回填为是；所有已有用户覆盖值为 NULL，历史任务承接人为空。业务工作项、投产申请与审批记录不迁移、不重写。",
+    "rollback_or_compensation": "回退应用不删除角色默认、人员覆盖或任务承接人列和值，旧代码会忽略新增列；恢复新版后继续使用已保存值。若需恢复全机构可见性，角色管理员或人员管理员将相应默认/覆盖值设为是，不需要业务数据补偿。"
+  },
+  "external_access": {
+    "changed": false,
+    "api_paths": [],
+    "readable_field_whitelist": [],
+    "writable_field_whitelist": [],
+    "action_whitelist": [],
+    "audit_required": true
+  },
+  "required_tests": [
+    { "name": "role_default_personnel_override_and_import", "command": "npm run test:api --prefix server" },
+    { "name": "api", "command": "npm run test:api --prefix server" },
+    { "name": "permission", "command": "npm run test:rbac --prefix server" },
+    { "name": "unit", "command": "npm test --prefix server" },
+    { "name": "frontend_build", "command": "npm run build --prefix web" },
+    { "name": "module_boundaries", "command": "node scripts/check-module-boundaries.mjs" },
+    { "name": "governance", "command": "node scripts/check-governance.mjs" },
+    { "name": "runtime", "command": "node scripts/verify-app-runtime.mjs" },
+    { "name": "browser", "command": "local browser acceptance for personnel configuration, scoped overview/work-item/task/release/dashboard flows, and unified release-work-item search" }
+  ],
+  "risk": {
+    "level": "high",
+    "reasons": [
+      "跨模块服务端数据范围、效能聚合口径与深链接绕过风险",
+      "角色默认、人员覆盖与认证上下文变更",
+      "SQLite 与 TDSQL/MySQL 8 存量角色回填和人员继承",
+      "投产审批详情中的完整关联制品例外"
+    ],
+    "required_approvals": ["hengguan"]
+  },
+  "completion": {
+    "changed_files_report_required": true,
+    "test_result_report_required": true,
+    "known_risks_report_required": true,
+    "rollback_report_required": true,
+    "requirement_acceptance_required": true
+  }
+}

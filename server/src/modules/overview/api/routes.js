@@ -9,11 +9,19 @@
 import { get, all } from '../../../platform/persistence/index.js';
 import { isIssueTerminalStatus, isTerminalStatus } from '../../settings/process-configuration/index.js';
 import { listByEntity } from '../../../platform/attachments/index.js';
-import { windowIds, inClause, formatAttachments } from '../../settings/reference-data/index.js';
-import { ok, notFound, parseJsonArray } from '../../../platform/runtime/index.js';
+import { windowIds, inClause, formatAttachments, resolveOrganizationValues } from '../../settings/reference-data/index.js';
+import { ok, notFound, forbidden, parseJsonArray } from '../../../platform/runtime/index.js';
 import { exportXlsx } from '../../../platform/import-export/index.js';
 import { getWorkItem, formatImpactItemsText, formatCoverageText } from '../../development/index.js';
 import { buildTaskStatusChain } from '../index.js';
+import { isOrganizationRestricted, workItemMatchesOrganization } from '../../../shared/utils/organization-scope.js';
+
+async function assertOverviewOrganizationAccess(item, user) {
+  if (!isOrganizationRestricted(user)) return;
+  const systems = await all('SELECT sys_code, org FROM system');
+  const orgByCode = Object.fromEntries(systems.map((system) => [system.sys_code, system.org]));
+  if (!workItemMatchesOrganization(item, await resolveOrganizationValues(user?.org), orgByCode)) throw forbidden('无该机构数据权限');
+}
 
 /** 计算一组任务的节点状态（含单一代表状态 status，供阶段标签展示） */
 function nodeState(tasks) {
@@ -283,6 +291,7 @@ export default async function overviewRoutes(fastify) {
 
     const groups = {};
     for (const r of workItems) {
+      if (isOrganizationRestricted(request.currentUser) && !workItemMatchesOrganization(r, await resolveOrganizationValues(request.currentUser?.org), Object.fromEntries(Object.entries(sysMap).map(([code, system]) => [code, system.org])))) continue;
       const org = reqOrg(r, sysMap, devMap);
       const chain = buildChain(r, devMap, testMap, rtMap, r.firstLabel);
       const mainSystems = parseJsonArray(r.main_systems);
@@ -371,6 +380,7 @@ export default async function overviewRoutes(fastify) {
     const reqCode = request.params.reqCode;
     const req = await getWorkItem(reqCode);
     if (!req || !['requirement', 'ticket'].includes(req.entity_type)) throw notFound('需求/工单不存在');
+    await assertOverviewOrganizationAccess(req, request.currentUser);
 
     const attachOf = (type, id) => listByEntity(type, id);
     // 任务：附加 附件 + 负责人解析 + 实施系统解析

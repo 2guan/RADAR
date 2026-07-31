@@ -25,11 +25,12 @@ import {
 import { auditCreate, auditUpdate, auditDelete } from '../../platform/audit/index.js';
 import { listByEntity } from '../../platform/attachments/index.js';
 import { exportXlsx, parseXlsx } from '../../platform/import-export/index.js';
-import { windowIds, inClause, resolveDictAttr, resolveSystemCodes, resolveReleasePoint, formatAttachments } from '../settings/reference-data/index.js';
-import { ok, notFound, badRequest, parseJsonArray, parseJsonObject } from '../../platform/runtime/index.js';
+import { windowIds, inClause, resolveDictAttr, resolveOrganizationValues, resolveSystemCodes, resolveReleasePoint, formatAttachments } from '../settings/reference-data/index.js';
+import { ok, notFound, badRequest, forbidden, parseJsonArray, parseJsonObject } from '../../platform/runtime/index.js';
 import { assertStatusChangePermission } from '../settings/process-configuration/index.js';
 import { resolveCurrentTaskStatuses } from '../overview/index.js';
 import { isActivePersonName } from '../identity-access/index.js';
+import { isOrganizationRestricted, workItemMatchesOrganization } from '../../shared/utils/organization-scope.js';
 
 // 导入/导出列定义
 const IO_COLUMNS = [
@@ -146,6 +147,28 @@ function validateTerminal(reqId, statusAttr, mainSystems) {
   }
 }
 
+async function appendOrganizationScope(wh, params, table, user) {
+  if (!isOrganizationRestricted(user)) return;
+  const organizations = await resolveOrganizationValues(user?.org);
+  if (!organizations.length) { wh.push('1=0'); return; }
+  const placeholders = organizations.map(() => '?').join(',');
+  wh.push(`(${table}.implementation_org IN (${placeholders}) OR EXISTS (
+    SELECT 1 FROM system scope_system
+     WHERE scope_system.org IN (${placeholders}) AND (
+       ${dialect.jsonArrayContains(`${table}.main_systems`, 'scope_system.sys_code')}
+       OR ${dialect.jsonArrayContains(`${table}.collab_dev_systems`, 'scope_system.sys_code')}
+     )
+  ))`);
+  params.push(...organizations, ...organizations);
+}
+
+async function assertOrganizationAccess(row, user) {
+  if (!isOrganizationRestricted(user)) return;
+  const systems = await all('SELECT sys_code, org FROM system');
+  const orgByCode = Object.fromEntries(systems.map((s) => [s.sys_code, s.org]));
+  if (!workItemMatchesOrganization(row, await resolveOrganizationValues(user?.org), orgByCode)) throw forbidden('无该机构数据权限');
+}
+
 export default async function requirementRoutes(fastify) {
   // 列表（按所选投产窗口过滤；多选用 IN，留空=全部）
   fastify.post('/requirements/list', { preHandler: fastify.requirePerm('requirement', 'view') }, async (request) => {
@@ -160,6 +183,7 @@ export default async function requirementRoutes(fastify) {
       wh.push(win.where);
       params.push(...win.params);
     }
+    await appendOrganizationScope(wh, params, 'requirement', request.currentUser);
     
     // 提取并处理自定义/复杂字段
     const filters = Array.isArray(body.filters) ? body.filters : [];
@@ -315,6 +339,7 @@ export default async function requirementRoutes(fastify) {
   fastify.get('/requirements/:id', { preHandler: fastify.requirePerm('requirement', 'view') }, async (request) => {
     const row = await get('SELECT * FROM requirement WHERE id = ?', request.params.id);
     if (!row) throw notFound();
+    await assertOrganizationAccess(row, request.currentUser);
     return ok({ ...decode(row), has_tasks: await linkedTaskCount(row.req_code) > 0, attachments: await listByEntity('requirement', row.id) });
   });
 
@@ -322,6 +347,7 @@ export default async function requirementRoutes(fastify) {
   fastify.get('/requirements/by-code/:code', { preHandler: fastify.requirePerm('requirement', 'view') }, async (request) => {
     const row = await get('SELECT * FROM requirement WHERE req_code = ?', request.params.code);
     if (!row) throw notFound();
+    await assertOrganizationAccess(row, request.currentUser);
     return ok({ ...decode(row), has_tasks: await linkedTaskCount(row.req_code) > 0, attachments: await listByEntity('requirement', row.id) });
   });
 
@@ -377,6 +403,7 @@ export default async function requirementRoutes(fastify) {
     const id = request.params.id;
     const old = await get('SELECT * FROM requirement WHERE id = ?', id);
     if (!old) throw notFound();
+    await assertOrganizationAccess(old, request.currentUser);
     const body = request.body || {};
     const picked = await normalizeAnalysisFields(pick(body));
     if (Object.hasOwn(picked, 'priority')) picked.priority = normalizeConfiguredFieldValue('requirement', 'priority', picked.priority);
@@ -442,6 +469,7 @@ export default async function requirementRoutes(fastify) {
     const id = request.params.id;
     const row = await get('SELECT * FROM requirement WHERE id = ?', id);
     if (!row) throw notFound();
+    await assertOrganizationAccess(row, request.currentUser);
     // 已关联开发/测试任务的需求不可删除
     if (await linkedTaskCount(row.req_code) > 0) throw badRequest('该需求已关联开发/测试任务，无法删除');
     await run('DELETE FROM requirement WHERE id = ?', id);
@@ -452,7 +480,12 @@ export default async function requirementRoutes(fastify) {
   // 导出
   fastify.post('/requirements/export', { preHandler: fastify.requirePerm('requirement', 'export') }, async (request, reply) => {
     const body = request.body || {};
-    const { where: baseWhere, params: baseParams } = inClause('release_point_id', windowIds(body));
+    const { where: initialWhere, params: initialParams } = inClause('release_point_id', windowIds(body));
+    const exportWh = initialWhere ? [initialWhere] : [];
+    const exportParams = [...initialParams];
+    await appendOrganizationScope(exportWh, exportParams, 'requirement', request.currentUser);
+    const baseWhere = exportWh.join(' AND ');
+    const baseParams = exportParams;
     const result = await listQuery({
       table: 'requirement', columns: COLUMNS, searchColumns: SEARCH,
       query: { ...body, pageSize: 0 }, baseWhere, baseParams,

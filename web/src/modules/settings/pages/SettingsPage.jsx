@@ -354,6 +354,10 @@ function RoleManager() {
           render: (v) => PRESETS[v]?.name || v || '蔚蓝',
         },
         {
+          title: '全机构权限', dataIndex: 'all_org_access', width: 130,
+          render: (v) => <Tag color={Number(v) !== 0 ? 'green' : 'default'}>{Number(v) !== 0 ? '是' : '否'}</Tag>,
+        },
+        {
           title: '会签角色',
           dataIndex: 'is_signoff_role',
           render: (v) => (v ? <Tag className="status-tag tag-system" style={{ margin: 0 }}>会签</Tag> : '—')
@@ -362,7 +366,7 @@ function RoleManager() {
         { title: '会签评审点', dataIndex: 'signoff_review_points', width: 240, render: renderTwoLineSignoffConfig },
         { title: '内置', dataIndex: 'is_builtin', width: 80, render: (v) => (v ? <Tag>内置</Tag> : '—') },
       ]}
-      transformIn={(row) => ({ ...row, is_signoff_role: !!row.is_signoff_role })}
+      transformIn={(row) => ({ ...row, is_signoff_role: !!row.is_signoff_role, all_org_access: Number(row.all_org_access) !== 0 })}
       transformOut={(v) => ({
         ...v,
         signoff_responsibility: v.is_signoff_role ? v.signoff_responsibility : null,
@@ -377,6 +381,9 @@ function RoleManager() {
           </Form.Item>
           <Form.Item name="default_theme" label="默认主题" initialValue="sky" rules={[{ required: true, message: '请选择默认主题' }]}>
             <Select options={themeOptions} placeholder="选择默认主题" />
+          </Form.Item>
+          <Form.Item name="all_org_access" label="全机构权限" valuePropName="checked" initialValue={true} extra="该角色成员默认可查看全部机构数据；人员管理可为个别人员单独覆盖。">
+            <Switch checkedChildren="是" unCheckedChildren="否" />
           </Form.Item>
           <Form.Item name="is_signoff_role" label="会签角色" valuePropName="checked" extra="打标后该角色将出现在投产管理的评审会签中，且仅该角色人员可签署/驳回">
             <Switch checkedChildren="是" unCheckedChildren="否" />

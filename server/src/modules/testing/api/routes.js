@@ -21,8 +21,8 @@ import {
 } from '../../settings/process-configuration/index.js';
 import { auditCreate, auditUpdate, auditDelete } from '../../../platform/audit/index.js';
 import { listByEntity } from '../../../platform/attachments/index.js';
-import { windowIds, inClause, resolveDictAttr, resolveSystemCode, formatAttachments } from '../../settings/reference-data/index.js';
-import { ok, notFound, badRequest } from '../../../platform/runtime/index.js';
+import { windowIds, inClause, resolveDictAttr, resolveOrganizationValues, resolveSystemCode, formatAttachments } from '../../settings/reference-data/index.js';
+import { ok, notFound, badRequest, forbidden } from '../../../platform/runtime/index.js';
 import { assertStatusChangePermission } from '../../settings/process-configuration/index.js';
 import { exportXlsx, parseXlsx } from '../../../platform/import-export/index.js';
 import {
@@ -31,6 +31,8 @@ import {
 } from '../../development/index.js';
 import { codePrefix, codeTemplateValues, formatCode } from '../../../shared/utils/code-template.js';
 import { resolveCurrentTaskStatuses } from '../../overview/index.js';
+import { isOrganizationRestricted, workItemMatchesOrganization } from '../../../shared/utils/organization-scope.js';
+import { isActivePersonName } from '../../identity-access/index.js';
 
 // 导入模板列定义
 const IO_COLUMNS = [
@@ -40,6 +42,7 @@ const IO_COLUMNS = [
   { key: 'test_type', title: '测试类型' },
   { key: 'status', title: '测试状态' },
   { key: 'owner', title: '测试负责人' },
+  { key: 'intake_owner', title: '测试承接人' },
   { key: 'impl_system', title: '测试实施系统' },
   { key: 'impl_org', title: '测试实施方' },
   { key: 'plan_start', title: '计划开始时间' },
@@ -50,17 +53,43 @@ const IO_COLUMNS = [
 
 const TYPE_NAME = { SIT: '应用组装测试', UAT: '用户测试', NFT: '非功能测试', SEC: '安全测试' };
 const COLUMNS = [
-  'id', 'req_code', 'task_code', 'task_name', 'test_type', 'status', 'owner', 'impl_system', 'impl_org',
+  'id', 'req_code', 'task_code', 'task_name', 'test_type', 'status', 'owner', 'intake_owner', 'impl_system', 'impl_org',
   'plan_start', 'plan_end', 'actual_start', 'actual_end', 'deviation_rate', 'created_at',
 ];
-const SEARCH = ['task_code', 'task_name', 'owner', 'impl_system'];
-const WRITABLE = ['task_name', 'status', 'owner', 'impl_system', 'impl_org',
+const SEARCH = ['task_code', 'task_name', 'owner', 'intake_owner', 'impl_system'];
+const WRITABLE = ['task_name', 'status', 'owner', 'intake_owner', 'impl_system', 'impl_org',
   'plan_start', 'plan_end', 'actual_start', 'actual_end'];
 const LABELS = {
-  task_name: '测试任务名称', test_type: '测试类型', status: '测试状态', owner: '测试负责人', impl_system: '测试实施系统',
+  task_name: '测试任务名称', test_type: '测试类型', status: '测试状态', owner: '测试负责人', intake_owner: '测试承接人', impl_system: '测试实施系统',
   impl_org: '测试实施方', plan_start: '计划开始时间', plan_end: '计划结束时间',
   actual_start: '实际开始时间', actual_end: '实际结束时间', deviation_rate: '排期偏差率',
 };
+
+async function organizationWorkItemCodes(user) {
+  if (!isOrganizationRestricted(user)) return null;
+  if (!user?.org) return [];
+  const [items, systems] = await Promise.all([
+    all(`SELECT req_code AS work_item_code, implementation_org, main_systems, collab_dev_systems FROM requirement
+         UNION ALL SELECT ticket_code AS work_item_code, implementation_org, main_systems, collab_dev_systems FROM ticket`),
+    all('SELECT sys_code, org FROM system'),
+  ]);
+  const orgByCode = Object.fromEntries(systems.map((system) => [system.sys_code, system.org]));
+  const organizations = await resolveOrganizationValues(user.org);
+  return items.filter((item) => workItemMatchesOrganization(item, organizations, orgByCode)).map((item) => item.work_item_code);
+}
+
+async function appendOrganizationScope(wh, params, field, user) {
+  const codes = await organizationWorkItemCodes(user);
+  if (codes === null) return;
+  if (!codes.length) { wh.push('1=0'); return; }
+  const clause = inClause(field, codes);
+  wh.push(clause.where); params.push(...clause.params);
+}
+
+async function assertWorkItemOrganizationAccess(reqCode, user) {
+  const codes = await organizationWorkItemCodes(user);
+  if (codes !== null && !codes.includes(reqCode)) throw forbidden('无该机构数据权限');
+}
 export default async function testTaskRoutes(fastify) {
   const requireTestPerm = async (request, action, testType) => {
     if (!TYPE_NAME[testType]) throw badRequest('测试类型非法');
@@ -77,6 +106,7 @@ export default async function testTaskRoutes(fastify) {
     await requireTestPerm(request, 'view', body.testType);
     const wh = [];
     const params = [];
+    await appendOrganizationScope(wh, params, 'req_code', request.currentUser);
 
     if (body.testType) {
       wh.push('test_type = ?');
@@ -205,6 +235,7 @@ export default async function testTaskRoutes(fastify) {
     const row = await get('SELECT * FROM test_task WHERE id = ?', request.params.id);
     if (!row) throw notFound();
     await requireTestPerm(request, 'view', row.test_type);
+    await assertWorkItemOrganizationAccess(row.req_code, request.currentUser);
     return ok(await buildTestDetail(row));
   });
 
@@ -213,7 +244,40 @@ export default async function testTaskRoutes(fastify) {
     const row = await get('SELECT * FROM test_task WHERE task_code = ?', request.params.code);
     if (!row) throw notFound();
     await requireTestPerm(request, 'view', row.test_type);
+    await assertWorkItemOrganizationAccess(row.req_code, request.currentUser);
     return ok(await buildTestDetail(row));
+  });
+
+  // 承接候选二次裁决：整体任务已建或全部拆分任务已建时，不再显示该工作项。
+  fastify.post('/test-tasks/intake-pending-codes', async (request) => {
+    const { testType } = request.body || {};
+    await requireTestPerm(request, 'create', testType);
+    if (!TYPE_NAME[testType]) throw badRequest('测试类型非法');
+    const requestedCodes = [...new Set((Array.isArray(request.body?.reqCodes) ? request.body.reqCodes : []).map(String).filter(Boolean))].slice(0, 500);
+    if (!requestedCodes.length) return ok([]);
+    const scopedCodes = await organizationWorkItemCodes(request.currentUser);
+    const permittedCodes = scopedCodes === null ? requestedCodes : requestedCodes.filter((code) => scopedCodes.includes(code));
+    if (!permittedCodes.length) return ok([]);
+    const clause = inClause('req_code', permittedCodes);
+    const existingRows = await all(`SELECT req_code, impl_system, task_name FROM test_task WHERE test_type = ? AND ${clause.where}`, testType, ...clause.params);
+    const existingByCode = new Map();
+    for (const row of existingRows) {
+      if (!existingByCode.has(row.req_code)) existingByCode.set(row.req_code, []);
+      existingByCode.get(row.req_code).push(row);
+    }
+    const systems = await all('SELECT sys_code, sys_name FROM system');
+    const sysName = new Map(systems.map((system) => [system.sys_code, system.sys_name]));
+    const pending = [];
+    for (const code of permittedCodes) {
+      const item = await getWorkItem(code);
+      if (!item) continue;
+      const existing = existingByCode.get(code) || [];
+      const overallExists = existing.some((task) => task.task_name === `${testType}-${item.title}`);
+      const splitSystems = [...new Set([...(item.main_systems || []), ...(item.collab_test_systems || [])])];
+      const allSplitExists = splitSystems.length > 0 && splitSystems.every((sysCode) => existing.some((task) => task.impl_system === sysCode && task.task_name === `${testType}-${item.title}-${sysName.get(sysCode) || sysCode}`));
+      if (!overallExists && !allSplitExists) pending.push(code);
+    }
+    return ok(pending);
   });
 
   // 测试承接预览
@@ -224,12 +288,13 @@ export default async function testTaskRoutes(fastify) {
     if (!testType) throw badRequest('请选择测试类型');
     const req = await getWorkItem(reqCode);
     if (!req) throw notFound('需求/工单不存在');
+    await assertWorkItemOrganizationAccess(reqCode, request.currentUser);
     const releaseWindow = (await releaseDateMapForCodes([reqCode]))[reqCode];
 
     const main = req.main_systems || [];
     const collab = req.collab_test_systems || [];
 
-    const existingTasks = await all('SELECT impl_system, task_code, task_name, status FROM test_task WHERE req_code = ? AND test_type = ?', reqCode, testType);
+    const existingTasks = await all('SELECT impl_system, task_code, task_name, status, owner FROM test_task WHERE req_code = ? AND test_type = ?', reqCode, testType);
 
     const systems = await all('SELECT sys_code, sys_name FROM system');
     const sysMap = new Map(systems.map(s => [s.sys_code, s.sys_name]));
@@ -270,6 +335,7 @@ export default async function testTaskRoutes(fastify) {
       exists: !!overallExist,
       taskCode: overallTaskCode,
       taskName: overallTaskName,
+      owner: overallExist?.owner,
       status: overallExist ? '已建任务' : '新建任务',
     };
 
@@ -302,6 +368,7 @@ export default async function testTaskRoutes(fastify) {
           exists: true,
           taskCode: exist.task_code,
           taskName: exist.task_name,
+          owner: exist.owner,
           status: '已建任务',
         });
       } else {
@@ -328,12 +395,13 @@ export default async function testTaskRoutes(fastify) {
 
   // 测试承接
   fastify.post('/test-tasks/intake', async (request) => {
-    const { reqCode, testType, systems, splitMode } = request.body || {};
+    const { reqCode, testType, assignments, splitMode } = request.body || {};
     await requireTestPerm(request, 'create', testType);
     if (!reqCode) throw badRequest('请选择需求/工单');
     if (!TYPE_NAME[testType]) throw badRequest('测试类型非法');
     const req = await getWorkItem(reqCode);
     if (!req) throw notFound('需求/工单不存在');
+    await assertWorkItemOrganizationAccess(reqCode, request.currentUser);
     const releaseWindow = (await releaseDateMapForCodes([reqCode]))[reqCode];
 
     const main = req.main_systems || [];
@@ -342,15 +410,26 @@ export default async function testTaskRoutes(fastify) {
     const systemsList = await all('SELECT sys_code, sys_name FROM system');
     const sysMap = new Map(systemsList.map(s => [s.sys_code, s.sys_name]));
 
+    const assignmentBySystem = new Map((Array.isArray(assignments) ? assignments : []).map((item) => [item?.sysCode, String(item?.owner || '').trim()]));
     let targets = [];
     if (splitMode === 'overall') {
-      targets = [{ sysCode: firstMainSysCode, taskName: `${testType}-${req.title}`, isSplit: false }];
+      const overallKey = firstMainSysCode || 'overall';
+      targets = [{ sysCode: firstMainSysCode, assignmentKey: overallKey, taskName: `${testType}-${req.title}`, isSplit: false }];
     } else {
-      const sysCodes = Array.isArray(systems) && systems.length ? systems : [];
+      const sysCodes = [...assignmentBySystem.keys()];
       for (const sysCode of sysCodes) {
         const sysName = sysMap.get(sysCode) || sysCode;
-        targets.push({ sysCode, taskName: `${testType}-${req.title}-${sysName}`, isSplit: true });
+        targets.push({ sysCode, assignmentKey: sysCode, taskName: `${testType}-${req.title}-${sysName}`, isSplit: true });
       }
+    }
+    if (!targets.length) throw badRequest('请至少选择一个测试任务');
+    const configuredSystems = new Set([...main, ...(req.collab_test_systems || [])]);
+    if (splitMode !== 'overall' && targets.some((target) => !configuredSystems.has(target.sysCode))) throw badRequest('存在不属于该需求/工单的测试系统');
+    for (const target of targets) {
+      const owner = assignmentBySystem.get(target.assignmentKey);
+      if (!owner) throw badRequest('请为每个测试任务选择测试负责人');
+      if (!await isActivePersonName(owner)) throw badRequest(`测试负责人 [${owner}] 不存在或已停用`);
+      target.owner = owner;
     }
 
     const existing = await all('SELECT impl_system, task_name FROM test_task WHERE req_code = ? AND test_type = ?', reqCode, testType);
@@ -365,9 +444,9 @@ export default async function testTaskRoutes(fastify) {
         const sys = t.sysCode ? await get('SELECT * FROM system WHERE sys_code = ?', t.sysCode) : null;
         const taskCode = await generateTestTaskCode(testType, reqCode, releaseWindow);
         const res = await run(
-          `INSERT INTO test_task (req_code, task_code, task_name, test_type, status, impl_system, impl_org, registrar, register_time)
-           VALUES (?,?,?,?,?,?,?,?,?)`,
-          reqCode, taskCode, t.taskName, testType, initialStatus, t.sysCode || null, sys?.org || null,
+          `INSERT INTO test_task (req_code, task_code, task_name, test_type, status, owner, intake_owner, impl_system, impl_org, registrar, register_time)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+          reqCode, taskCode, t.taskName, testType, initialStatus, t.owner, request.currentUser?.name || null, t.sysCode || null, sys?.org || null,
           request.currentUser?.name, new Date().toISOString().slice(0, 10),
         );
         await auditCreate('test', res.lastInsertRowid, taskCode, request.currentUser?.name);
@@ -384,6 +463,7 @@ export default async function testTaskRoutes(fastify) {
     const old = await get('SELECT * FROM test_task WHERE id = ?', id);
     if (!old) throw notFound();
     await requireAnyTestPerm(request, ['edit', 'status.edit'], old.test_type);
+    await assertWorkItemOrganizationAccess(old.req_code, request.currentUser);
     const body = request.body || {};
     const data = {};
     for (const k of WRITABLE) if (body[k] !== undefined) data[k] = body[k];
@@ -409,6 +489,7 @@ export default async function testTaskRoutes(fastify) {
     const row = await get('SELECT * FROM test_task WHERE id = ?', id);
     if (!row) throw notFound();
     await requireTestPerm(request, 'delete', row.test_type);
+    await assertWorkItemOrganizationAccess(row.req_code, request.currentUser);
     await run('DELETE FROM test_task WHERE id = ?', id);
     await auditDelete('test', id, row.task_code, request.currentUser?.name);
     return ok(null, '删除成功');
@@ -423,6 +504,12 @@ export default async function testTaskRoutes(fastify) {
     // 未指定工作项时，按当前投产点范围过滤；空范围代表全部投产点。
     let finalWhere = baseWhere;
     let finalParams = [...baseParams];
+    const scopedCodes = await organizationWorkItemCodes(request.currentUser);
+    if (scopedCodes !== null) {
+      const scope = inClause('req_code', scopedCodes);
+      finalWhere = [finalWhere, scope.where || '1=0'].filter(Boolean).join(' AND ');
+      finalParams.push(...scope.params);
+    }
     if (!body.req_code) {
       const codes = await workItemCodesInReleasePoints(windowIds(body));
       if (codes) {
@@ -597,6 +684,7 @@ export default async function testTaskRoutes(fastify) {
             compareAndPush('test_type', '测试类型', TYPE_NAME[exists.test_type] || exists.test_type || '', TYPE_NAME[testTypeCode] || testTypeCode || '');
             compareAndPush('status', '测试状态', exists.status || '', status || '');
             compareAndPush('owner', '测试负责人', exists.owner || '', r.owner || '');
+            compareAndPush('intake_owner', '测试承接人', exists.intake_owner || '', r.intake_owner || '');
             compareAndPush('impl_system', '测试实施系统', sysMap[exists.impl_system] || exists.impl_system || '', sysMap[implSystem] || implSystem || '');
             compareAndPush('impl_org', '测试实施方', exists.impl_org || '', implOrg || '');
             compareAndPush('plan_start', '计划开始时间', exists.plan_start || '', r.plan_start || '');
@@ -608,15 +696,15 @@ export default async function testTaskRoutes(fastify) {
               const devRate = calcDeviation(r.plan_start || exists.plan_start, r.plan_end || exists.plan_end, r.actual_end || exists.actual_end);
               await run(
                 `UPDATE test_task SET 
-                   task_name=?, test_type=?, status=?, owner=?, impl_system=?, impl_org=?,
+                   task_name=?, test_type=?, status=?, owner=?, intake_owner=?, impl_system=?, impl_org=?,
                    plan_start=?, plan_end=?, actual_start=?, actual_end=?, deviation_rate=?, 
                    updated_at=datetime('now','localtime') 
                  WHERE id=?`,
-                r.task_name, testTypeCode, status, r.owner || null, implSystem || null, implOrg || null,
+                r.task_name, testTypeCode, status, r.owner || null, r.intake_owner || null, implSystem || null, implOrg || null,
                 r.plan_start || null, r.plan_end || null, r.actual_start || null, r.actual_end || null, devRate, exists.id
               );
               await auditUpdate('test', exists.id, code, request.currentUser?.name, exists, {
-                task_name: r.task_name, test_type: testTypeCode, status, owner: r.owner || null,
+                task_name: r.task_name, test_type: testTypeCode, status, owner: r.owner || null, intake_owner: r.intake_owner || null,
                 impl_system: implSystem, impl_org: implOrg, plan_start: r.plan_start || null, plan_end: r.plan_end || null,
                 actual_start: r.actual_start || null, actual_end: r.actual_end || null, deviation_rate: devRate
               }, LABELS);
@@ -639,10 +727,10 @@ export default async function testTaskRoutes(fastify) {
             const devRate = calcDeviation(r.plan_start, r.plan_end, r.actual_end);
             const res = await run(
               `INSERT INTO test_task 
-                 (req_code, task_code, task_name, test_type, status, owner, impl_system, impl_org,
+                 (req_code, task_code, task_name, test_type, status, owner, intake_owner, impl_system, impl_org,
                   plan_start, plan_end, actual_start, actual_end, deviation_rate, registrar, register_time)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-              r.req_code, code, r.task_name, testTypeCode, status, r.owner || null, implSystem || null, implOrg || null,
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+              r.req_code, code, r.task_name, testTypeCode, status, r.owner || null, r.intake_owner || null, implSystem || null, implOrg || null,
               r.plan_start || null, r.plan_end || null, r.actual_start || null, r.actual_end || null, devRate,
               request.currentUser?.name, new Date().toISOString().slice(0, 10)
             );

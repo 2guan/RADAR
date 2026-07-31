@@ -56,12 +56,12 @@ const NATIVE_FIELD_DEFAULTS = {
   ],
   dev: [
     ['task_name', '开发任务名称', 'text'], ['content', '开发内容概述', 'textarea'], ['status', '开发状态', 'select'],
-    ['owner', '开发负责人', 'person', 'person'], ['impl_system', '开发实施系统', 'select', 'system'], ['impl_org', '开发实施方', 'select', 'dict:org'],
+    ['owner', '开发负责人', 'person', 'person'], ['intake_owner', '开发承接人', 'person', 'person'], ['impl_system', '开发实施系统', 'select', 'system'], ['impl_org', '开发实施方', 'select', 'dict:org'],
     ['plan_start', '计划开始时间', 'date'], ['plan_end', '计划结束时间', 'date'], ['actual_start', '实际开始时间', 'date'], ['actual_end', '实际完成时间', 'date'],
     ['impact_analysis', '影响性分析', 'component', '', 0, 'impact_analysis'],
   ],
   test: [
-    ['task_name', '测试任务名称', 'text'], ['status', '测试状态', 'select'], ['owner', '测试负责人', 'person', 'person'],
+    ['task_name', '测试任务名称', 'text'], ['status', '测试状态', 'select'], ['owner', '测试负责人', 'person', 'person'], ['intake_owner', '测试承接人', 'person', 'person'],
     ['impl_system', '测试实施系统', 'select', 'system'], ['impl_org', '测试实施方', 'select', 'dict:org'],
     ['plan_start', '计划开始时间', 'date'], ['plan_end', '计划结束时间', 'date'], ['actual_start', '实际开始时间', 'date'], ['actual_end', '实际完成时间', 'date'],
     ['coverage_analysis', '测试覆盖性分析', 'component', '', 0, 'coverage_analysis'],
@@ -89,7 +89,7 @@ const NATIVE_FIELD_DEFAULTS = {
  * 内置配置目录是字段语义的唯一代码基线：数据库只保存管理员可调整的布局、可见性和状态规则。
  * `renderer` 明确区分可由公共控件呈现的普通字段和必须由业务 JSX 声明的复杂控件。
  */
-export const BUILTIN_CONFIGURATION_UPGRADE_ID = 'settings.builtin-configuration.v3';
+export const BUILTIN_CONFIGURATION_UPGRADE_ID = 'settings.builtin-configuration.v5';
 export const PRIORITY_OPTIONS = [
   { value: '高', label: '高' },
   { value: '中', label: '中' },

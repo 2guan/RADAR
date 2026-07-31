@@ -5,7 +5,7 @@
  * 作者：hengguan
  */
 
-export const LOCAL_STAGE_CONTENT_SEED = Object.freeze({
+const RAW_LOCAL_STAGE_CONTENT_SEED = {
   "source": "current-local-settings",
   "captured_on": "2026-07-31",
   "scopes": [
@@ -150,6 +150,31 @@ export const LOCAL_STAGE_CONTENT_SEED = Object.freeze({
           "list_visible": 1,
           "filterable": 1,
           "dashboard_dimension": 1,
+          "sort": 50,
+          "is_builtin": 1,
+          "rules": {
+            "开发承接": 0,
+            "开发设计": 0,
+            "开发实施": 0,
+            "单元测试": 0,
+            "开发完成": 0
+          }
+        },
+        {
+          "field_key": "intake_owner",
+          "label": "开发承接人",
+          "field_kind": "native",
+          "input_type": "person",
+          "source_key": "person",
+          "multiple": 0,
+          "native_column": "intake_owner",
+          "component_key": "",
+          "section_key": "task",
+          "column_span": 12,
+          "visible": 1,
+          "list_visible": 1,
+          "filterable": 1,
+          "dashboard_dimension": 1,
           "sort": 30,
           "is_builtin": 1,
           "rules": {
@@ -195,12 +220,12 @@ export const LOCAL_STAGE_CONTENT_SEED = Object.freeze({
           "native_column": "impl_system",
           "component_key": "",
           "section_key": "task",
-          "column_span": 24,
+          "column_span": 12,
           "visible": 1,
           "list_visible": 1,
           "filterable": 1,
           "dashboard_dimension": 1,
-          "sort": 50,
+          "sort": 60,
           "is_builtin": 1,
           "rules": {
             "开发承接": 0,
@@ -1466,7 +1491,7 @@ export const LOCAL_STAGE_CONTENT_SEED = Object.freeze({
           "visible": 1,
       "list_visible": 1,
       "filterable": 1,
-      "dashboard_dimension": 1,
+          "dashboard_dimension": 1,
       "sort": 90,
           "is_builtin": 1,
           "rules": {
@@ -1639,12 +1664,12 @@ export const LOCAL_STAGE_CONTENT_SEED = Object.freeze({
           "native_column": "impl_system",
           "component_key": "",
           "section_key": "task",
-          "column_span": 24,
+          "column_span": 12,
           "visible": 1,
           "list_visible": 1,
           "filterable": 1,
           "dashboard_dimension": 1,
-          "sort": 20,
+          "sort": 50,
           "is_builtin": 1,
           "rules": {
             "测试承接": 0,
@@ -1669,7 +1694,32 @@ export const LOCAL_STAGE_CONTENT_SEED = Object.freeze({
           "list_visible": 1,
           "filterable": 1,
           "dashboard_dimension": 1,
-          "sort": 30,
+          "sort": 40,
+          "is_builtin": 1,
+          "rules": {
+            "测试承接": 0,
+            "测试方案": 0,
+            "测试实施": 0,
+            "测试报告": 0,
+            "测试完成": 0
+          }
+        },
+        {
+          "field_key": "intake_owner",
+          "label": "测试承接人",
+          "field_kind": "native",
+          "input_type": "person",
+          "source_key": "person",
+          "multiple": 0,
+          "native_column": "intake_owner",
+          "component_key": "",
+          "section_key": "task",
+          "column_span": 12,
+          "visible": 1,
+          "list_visible": 1,
+          "filterable": 1,
+          "dashboard_dimension": 1,
+          "sort": 20,
           "is_builtin": 1,
           "rules": {
             "测试承接": 0,
@@ -1694,7 +1744,7 @@ export const LOCAL_STAGE_CONTENT_SEED = Object.freeze({
           "list_visible": 0,
           "filterable": 1,
           "dashboard_dimension": 1,
-          "sort": 40,
+          "sort": 30,
           "is_builtin": 1,
           "rules": {
             "测试承接": 0,
@@ -1857,7 +1907,7 @@ export const LOCAL_STAGE_CONTENT_SEED = Object.freeze({
         {
           "section_key": "extension",
           "title": "扩展信息",
-          "sort": 40,
+          "sort": 30,
           "collapsed": 0,
           "is_builtin": 1,
           "layout_mode": "right",
@@ -1875,7 +1925,7 @@ export const LOCAL_STAGE_CONTENT_SEED = Object.freeze({
           "native_column": "task_name",
           "component_key": "",
           "section_key": "task",
-          "column_span": 24,
+          "column_span": 12,
           "visible": 1,
           "list_visible": 1,
           "filterable": 0,
@@ -1925,12 +1975,12 @@ export const LOCAL_STAGE_CONTENT_SEED = Object.freeze({
           "native_column": "impl_system",
           "component_key": "",
           "section_key": "task",
-          "column_span": 24,
+          "column_span": 12,
           "visible": 1,
           "list_visible": 1,
           "filterable": 1,
           "dashboard_dimension": 1,
-          "sort": 20,
+          "sort": 50,
           "is_builtin": 1,
           "rules": {
             "测试承接": 0,
@@ -2125,7 +2175,7 @@ export const LOCAL_STAGE_CONTENT_SEED = Object.freeze({
         {
           "section_key": "coverage",
           "title": "测试覆盖性分析",
-          "sort": 20,
+          "sort": 50,
           "collapsed": 0,
           "is_builtin": 1,
           "layout_mode": "right",
@@ -2134,7 +2184,7 @@ export const LOCAL_STAGE_CONTENT_SEED = Object.freeze({
         {
           "section_key": "schedule",
           "title": "排期",
-          "sort": 30,
+          "sort": 40,
           "collapsed": 0,
           "is_builtin": 1,
           "layout_mode": "left",
@@ -2170,7 +2220,7 @@ export const LOCAL_STAGE_CONTENT_SEED = Object.freeze({
           "native_column": "task_name",
           "component_key": "",
           "section_key": "task",
-          "column_span": 24,
+          "column_span": 12,
           "visible": 1,
           "list_visible": 1,
           "filterable": 0,
@@ -2225,7 +2275,7 @@ export const LOCAL_STAGE_CONTENT_SEED = Object.freeze({
           "list_visible": 1,
           "filterable": 1,
           "dashboard_dimension": 1,
-          "sort": 20,
+          "sort": 50,
           "is_builtin": 1,
           "rules": {
             "测试承接": 0,
@@ -3217,7 +3267,7 @@ export const LOCAL_STAGE_CONTENT_SEED = Object.freeze({
           "visible": 1,
       "list_visible": 1,
       "filterable": 1,
-      "dashboard_dimension": 1,
+          "dashboard_dimension": 1,
       "sort": 90,
           "is_builtin": 1,
           "rules": {
@@ -3267,4 +3317,72 @@ export const LOCAL_STAGE_CONTENT_SEED = Object.freeze({
       ]
     }
   ]
+};
+
+function withIntakeOwner(scope) {
+  if (scope.scope_key !== 'dev' && !scope.scope_key.startsWith('test.')) return scope;
+  if (scope.fields.some((field) => field.field_key === 'intake_owner')) return scope;
+  const ownerIndex = scope.fields.findIndex((field) => field.field_key === 'owner');
+  if (ownerIndex < 0) return scope;
+  const owner = scope.fields[ownerIndex];
+  return {
+    ...scope,
+    fields: [
+      ...scope.fields.slice(0, ownerIndex + 1),
+      {
+        ...owner,
+        field_key: 'intake_owner',
+        label: scope.scope_key === 'dev' ? '开发承接人' : '测试承接人',
+        native_column: 'intake_owner',
+        sort: 20,
+      },
+      ...scope.fields.slice(ownerIndex + 1),
+    ],
+  };
+}
+
+// 本地“输入项配置”是新库的初始布局事实源；此处记录已由管理员确认的展示顺序和宽度。
+// 仅影响全新库及缺失字段补齐，不会覆盖既有环境中的管理员布局。
+const CURRENT_LOCAL_LAYOUT_OVERRIDES = {
+  'test.SEC': {
+    sections: { extension: { sort: 40 } },
+    fields: {
+      task_name: { column_span: 24 },
+      owner: { sort: 40 },
+      impl_org: { sort: 30 },
+    },
+  },
+  'test.SIT': {
+    sections: { coverage: { sort: 20 }, schedule: { sort: 30 } },
+    fields: {
+      task_name: { column_span: 24 },
+      impl_system: { column_span: 12 },
+      owner: { sort: 40 },
+      impl_org: { sort: 30 },
+    },
+  },
+  'test.UAT': {
+    fields: {
+      impl_system: { column_span: 12, sort: 50 },
+      owner: { sort: 40 },
+      impl_org: { sort: 30 },
+    },
+  },
+};
+
+function withCurrentLocalLayout(scope) {
+  const overrides = CURRENT_LOCAL_LAYOUT_OVERRIDES[scope.scope_key] || {};
+  const merge = (items, values = {}) => items
+    .map((item) => ({ ...item, ...(values[item.field_key || item.section_key] || {}) }))
+    .sort((left, right) => left.sort - right.sort);
+  return {
+    ...scope,
+    sections: merge(scope.sections, overrides.sections),
+    fields: merge(scope.fields, overrides.fields),
+  };
+}
+
+export const LOCAL_STAGE_CONTENT_SEED = Object.freeze({
+  ...RAW_LOCAL_STAGE_CONTENT_SEED,
+  scopes: RAW_LOCAL_STAGE_CONTENT_SEED.scopes.map(withIntakeOwner).map(withCurrentLocalLayout),
 });

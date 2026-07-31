@@ -6,7 +6,7 @@
  */
 
 import { useRef, useState, useMemo, useEffect } from 'react';
-import { Card, Button, Space, Modal, Tag, Popconfirm, message, Table, Input, Spin, List, Radio, Checkbox } from 'antd';
+import { Card, Button, Space, Modal, Tag, Popconfirm, message, Table, Input, Spin, List, Radio, Checkbox, Select } from 'antd';
 import { ToolOutlined, EditOutlined, DeleteOutlined, ImportOutlined, ExportOutlined } from '@ant-design/icons';
 import { DataTable, FilterPanel, ResizableTitle } from '../../../shared/ui/index.js';
 import { StatusBadge, TaskEditor, TaskStatusBadge } from '../../../shared/workflow/index.js';
@@ -34,6 +34,7 @@ export default function DevTasks() {
   const [selectedReq, setSelectedReq] = useState(null);
   const [previewList, setPreviewList] = useState([]);
   const [selectedNewSystems, setSelectedNewSystems] = useState([]);
+  const [selectedOwners, setSelectedOwners] = useState({});
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [saving, setSaving] = useState(false);
   const [reqColWidths, setReqColWidths] = useState({});
@@ -74,6 +75,7 @@ export default function DevTasks() {
     { field: 'release_point_id', label: '计划投产点', type: 'select', op: 'in', options: pointOptions },
     { field: 'status', label: '开发状态', type: 'select', op: 'in', options: statusOptions },
     { field: 'owner', label: '开发负责人', type: 'select', op: 'in', options: userOptions },
+    { field: 'intake_owner', label: '开发承接人', type: 'select', op: 'in', options: userOptions },
     { field: 'impl_org', label: '开发实施方', type: 'select', op: 'in', options: orgOptions },
     { field: 'owners', label: '负责人', type: 'select', op: 'in', options: userOptions },
     { field: 'impl_system', label: '实施系统', type: 'select', op: 'in', options: systemOptions },
@@ -119,11 +121,13 @@ export default function DevTasks() {
     const list = [...reqs, ...tickets].filter(
       (r) => !r.release_stage_type || (r.release_stage_type !== 'in-progress' && r.release_stage_type !== 'final')
     );
-    setReqList(list);
+    const pendingCodes = await apiPost('/dev-tasks/intake-pending-codes', { reqCodes: list.map((item) => item.req_code) });
+    setReqList(list.filter((item) => (pendingCodes || []).includes(item.req_code)));
     setSearchText('');
     setSelectedReq(null);
     setPreviewList([]);
     setSelectedNewSystems([]);
+    setSelectedOwners({});
     setIntakeOpen(true);
   };
 
@@ -142,6 +146,7 @@ export default function DevTasks() {
           .filter((t) => !t.exists)
           .map((t) => t.sysCode);
         setSelectedNewSystems(checkable);
+        setSelectedOwners({});
       } catch (err) {
         message.error(err.message || '加载预览失败');
       } finally {
@@ -150,6 +155,7 @@ export default function DevTasks() {
     } else {
       setPreviewList([]);
       setSelectedNewSystems([]);
+      setSelectedOwners({});
     }
   };
 
@@ -166,11 +172,15 @@ export default function DevTasks() {
       message.warning('请至少勾选一个需要新建的任务');
       return;
     }
+    if (selectedNewSystems.some((sysCode) => !selectedOwners[sysCode])) {
+      message.warning('请为每个勾选的开发任务选择开发负责人');
+      return;
+    }
     setSaving(true);
     try {
       const res = await apiPost('/dev-tasks/intake', {
         reqCode: selectedReq.req_code,
-        systems: selectedNewSystems,
+        assignments: selectedNewSystems.map((sysCode) => ({ sysCode, owner: selectedOwners[sysCode] })),
       });
       message.success(`已成功承接 ${res.length} 个开发任务`);
       setIntakeOpen(false);
@@ -213,7 +223,8 @@ export default function DevTasks() {
         </span>
       ),
     },
-    { title: '负责人', dataIndex: 'owner', key: 'owner' },
+    { title: '开发负责人', dataIndex: 'owner', key: 'owner' },
+    { title: '开发承接人', dataIndex: 'intake_owner', key: 'intake_owner' },
     {
       title: '实施系统',
       dataIndex: 'impl_system_name',
@@ -338,6 +349,22 @@ export default function DevTasks() {
       key: 'taskName',
       ellipsis: true,
     },
+    {
+      title: '开发负责人', key: 'intake_owner', width: 180,
+      render: (_, record) => record.exists ? <span>{record.owner || '—'}</span> : (
+        <Select
+          value={selectedOwners[record.sysCode]}
+          options={userOptions}
+          placeholder="选择开发负责人"
+          size="small"
+          showSearch
+          optionFilterProp="label"
+          style={{ width: '100%' }}
+          onClick={(event) => event.stopPropagation()}
+          onChange={(owner) => setSelectedOwners((current) => ({ ...current, [record.sysCode]: owner }))}
+        />
+      ),
+    },
   ];
 
   // 列宽拖拽支持
@@ -421,7 +448,8 @@ export default function DevTasks() {
               {item.impl_system_name && (
                 <Tag className="status-tag tag-system" style={{ borderRadius: 2, margin: 0 }}>{item.impl_system_name}</Tag>
               )}
-              <span>负责人：{item.owner || '—'}</span>
+              <span>开发负责人：{item.owner || '—'}</span>
+              <span>开发承接人：{item.intake_owner || '—'}</span>
             </Space>
           </Space>
         )}
@@ -582,6 +610,18 @@ export default function DevTasks() {
                             <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--radar-ink)' }}>
                               任务名称：{item.taskName}
                             </div>
+                            <Select
+                              value={selectedOwners[item.sysCode]}
+                              options={userOptions}
+                              placeholder="选择开发负责人（必填）"
+                              size="small"
+                              showSearch
+                              optionFilterProp="label"
+                              disabled={item.exists}
+                              style={{ width: '100%' }}
+                              onClick={(event) => event.stopPropagation()}
+                              onChange={(owner) => setSelectedOwners((current) => ({ ...current, [item.sysCode]: owner }))}
+                            />
                           </Space>
                         </Card>
                       );

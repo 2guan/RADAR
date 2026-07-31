@@ -24,8 +24,8 @@ import {
 } from '../../settings/process-configuration/index.js';
 import { auditCreate, auditUpdate, auditDelete } from '../../../platform/audit/index.js';
 import { listByEntity } from '../../../platform/attachments/index.js';
-import { windowIds, inClause, resolveDictAttr, resolveSystemCode, formatAttachments } from '../../settings/reference-data/index.js';
-import { ok, notFound, badRequest } from '../../../platform/runtime/index.js';
+import { windowIds, inClause, resolveDictAttr, resolveOrganizationValues, resolveSystemCode, formatAttachments } from '../../settings/reference-data/index.js';
+import { ok, notFound, badRequest, forbidden } from '../../../platform/runtime/index.js';
 import { assertStatusChangePermission } from '../../settings/process-configuration/index.js';
 import { exportXlsx, parseXlsx } from '../../../platform/import-export/index.js';
 import {
@@ -34,6 +34,8 @@ import {
 } from '../index.js';
 import { codePrefix, codeTemplateValues, formatCode } from '../../../shared/utils/code-template.js';
 import { resolveCurrentTaskStatuses } from '../../overview/index.js';
+import { isOrganizationRestricted, organizationMatches, workItemMatchesOrganization } from '../../../shared/utils/organization-scope.js';
+import { isActivePersonName } from '../../identity-access/index.js';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
 
@@ -45,6 +47,7 @@ const IO_COLUMNS = [
   { key: 'content', title: '开发内容概述' },
   { key: 'status', title: '开发状态' },
   { key: 'owner', title: '开发负责人' },
+  { key: 'intake_owner', title: '开发承接人' },
   { key: 'impl_system', title: '开发实施系统' },
   { key: 'impl_org', title: '开发实施方' },
   { key: 'plan_start', title: '计划开始时间' },
@@ -54,14 +57,40 @@ const IO_COLUMNS = [
 ];
 
 const COLUMNS = [
-  'id', 'req_code', 'task_code', 'task_name', 'content', 'status', 'owner', 'impl_system', 'impl_org',
+  'id', 'req_code', 'task_code', 'task_name', 'content', 'status', 'owner', 'intake_owner', 'impl_system', 'impl_org',
   'plan_start', 'plan_end', 'actual_start', 'actual_end', 'deviation_rate', 'created_at',
 ];
-const SEARCH = ['task_code', 'task_name', 'owner', 'impl_system'];
-const WRITABLE = ['task_name', 'content', 'status', 'owner', 'impl_system', 'impl_org',
+const SEARCH = ['task_code', 'task_name', 'owner', 'intake_owner', 'impl_system'];
+
+async function organizationWorkItemCodes(user) {
+  if (!isOrganizationRestricted(user)) return null;
+  if (!user?.org) return [];
+  const [items, systems] = await Promise.all([
+    all(`SELECT req_code AS work_item_code, implementation_org, main_systems, collab_dev_systems FROM requirement
+         UNION ALL SELECT ticket_code AS work_item_code, implementation_org, main_systems, collab_dev_systems FROM ticket`),
+    all('SELECT sys_code, org FROM system'),
+  ]);
+  const orgByCode = Object.fromEntries(systems.map((system) => [system.sys_code, system.org]));
+  const organizations = await resolveOrganizationValues(user.org);
+  return items.filter((item) => workItemMatchesOrganization(item, organizations, orgByCode)).map((item) => item.work_item_code);
+}
+
+async function appendOrganizationScope(wh, params, field, user) {
+  const codes = await organizationWorkItemCodes(user);
+  if (codes === null) return;
+  if (!codes.length) { wh.push('1=0'); return; }
+  const clause = inClause(field, codes);
+  wh.push(clause.where); params.push(...clause.params);
+}
+
+async function assertWorkItemOrganizationAccess(reqCode, user) {
+  const codes = await organizationWorkItemCodes(user);
+  if (codes !== null && !codes.includes(reqCode)) throw forbidden('无该机构数据权限');
+}
+const WRITABLE = ['task_name', 'content', 'status', 'owner', 'intake_owner', 'impl_system', 'impl_org',
   'plan_start', 'plan_end', 'actual_start', 'actual_end'];
 const LABELS = {
-  task_name: '开发任务名称', content: '开发内容概述', status: '开发状态', owner: '开发负责人',
+  task_name: '开发任务名称', content: '开发内容概述', status: '开发状态', owner: '开发负责人', intake_owner: '开发承接人',
   impl_system: '开发实施系统', impl_org: '开发实施方', plan_start: '计划开始时间', plan_end: '计划结束时间',
   actual_start: '实际开始时间', actual_end: '实际结束时间', deviation_rate: '排期偏差率',
 };
@@ -189,6 +218,7 @@ export default async function devTaskRoutes(fastify) {
     const body = request.body || {};
     const wh = [];
     const params = [];
+    await appendOrganizationScope(wh, params, 'req_code', request.currentUser);
 
     const filters = Array.isArray(body.filters) ? body.filters : [];
     const normalFilters = [];
@@ -303,6 +333,7 @@ export default async function devTaskRoutes(fastify) {
   fastify.get('/dev-tasks/:id', { preHandler: fastify.requirePerm('dev', 'view') }, async (request) => {
     const row = await get('SELECT * FROM dev_task WHERE id = ?', request.params.id);
     if (!row) throw notFound();
+    await assertWorkItemOrganizationAccess(row.req_code, request.currentUser);
     return ok(await buildDevDetail(row));
   });
 
@@ -310,6 +341,7 @@ export default async function devTaskRoutes(fastify) {
   fastify.get('/dev-tasks/by-code/:code', { preHandler: fastify.requirePerm('dev', 'view') }, async (request) => {
     const row = await get('SELECT * FROM dev_task WHERE task_code = ?', request.params.code);
     if (!row) throw notFound();
+    await assertWorkItemOrganizationAccess(row.req_code, request.currentUser);
     return ok(await buildDevDetail(row));
   });
 
@@ -338,21 +370,53 @@ export default async function devTaskRoutes(fastify) {
     return reply.send(Buffer.from(buf));
   });
 
+  // 承接候选二次裁决：前端先按既有列表状态过滤，本接口仅保留还有未建开发任务的工作项。
+  fastify.post('/dev-tasks/intake-pending-codes', { preHandler: fastify.requirePerm('dev', 'create') }, async (request) => {
+    const requestedCodes = [...new Set((Array.isArray(request.body?.reqCodes) ? request.body.reqCodes : []).map(String).filter(Boolean))].slice(0, 500);
+    if (!requestedCodes.length) return ok([]);
+    const scopedCodes = await organizationWorkItemCodes(request.currentUser);
+    const permittedCodes = scopedCodes === null ? requestedCodes : requestedCodes.filter((code) => scopedCodes.includes(code));
+    if (!permittedCodes.length) return ok([]);
+    const systems = await all('SELECT sys_code, org FROM system');
+    const systemOrg = new Map(systems.map((system) => [system.sys_code, system.org]));
+    const organizations = isOrganizationRestricted(request.currentUser)
+      ? await resolveOrganizationValues(request.currentUser.org)
+      : null;
+    const clause = inClause('req_code', permittedCodes);
+    const existingRows = await all(`SELECT req_code, impl_system FROM dev_task WHERE ${clause.where}`, ...clause.params);
+    const existingByCode = new Map();
+    for (const row of existingRows) {
+      if (!existingByCode.has(row.req_code)) existingByCode.set(row.req_code, new Set());
+      existingByCode.get(row.req_code).add(row.impl_system);
+    }
+    const pending = [];
+    for (const code of permittedCodes) {
+      const item = await getWorkItem(code);
+      if (!item) continue;
+      const configured = [...new Set([...(item.main_systems || []), ...(item.collab_dev_systems || [])])];
+      const implementationOrgMatched = organizations && organizationMatches(item.implementation_org, organizations);
+      const allowed = configured.filter((sysCode) => !organizations || implementationOrgMatched || organizationMatches(systemOrg.get(sysCode), organizations));
+      if (allowed.some((sysCode) => !existingByCode.get(code)?.has(sysCode))) pending.push(code);
+    }
+    return ok(pending);
+  });
+
   // 开发承接预览
   fastify.post('/dev-tasks/intake-preview', { preHandler: fastify.requirePerm('dev', 'create') }, async (request) => {
     const { reqCode } = request.body || {};
     if (!reqCode) throw badRequest('请选择需求/工单');
     const req = await getWorkItem(reqCode);
     if (!req) throw notFound('需求/工单不存在');
+    await assertWorkItemOrganizationAccess(reqCode, request.currentUser);
     const releaseWindow = (await releaseDateMapForCodes([reqCode]))[reqCode];
 
     const main = req.main_systems || [];
     const collab = req.collab_dev_systems || [];
 
-    const existingTasks = await all('SELECT impl_system, task_code, task_name, status FROM dev_task WHERE req_code = ?', reqCode);
+    const existingTasks = await all('SELECT impl_system, task_code, task_name, status, owner FROM dev_task WHERE req_code = ?', reqCode);
     const existingMap = new Map(existingTasks.map(t => [t.impl_system, t]));
 
-    const systems = await all('SELECT sys_code, sys_name FROM system');
+    const systems = await all('SELECT sys_code, sys_name, org FROM system');
     const sysMap = new Map(systems.map(s => [s.sys_code, s.sys_name]));
 
     const allSystems = [];
@@ -386,7 +450,13 @@ export default async function devTaskRoutes(fastify) {
     const list = [];
     let currentMax = max;
 
+    const organizations = isOrganizationRestricted(request.currentUser)
+      ? await resolveOrganizationValues(request.currentUser.org)
+      : null;
+    // 手工实施机构是业务人员对工作项实施归属的明确确认，可纠正系统主数据尚未同步的归属。
+    const implementationOrgMatched = organizations && organizationMatches(req.implementation_org, organizations);
     for (const item of allSystems) {
+      if (organizations && !implementationOrgMatched && !organizationMatches(systems.find((system) => system.sys_code === item.sysCode)?.org, organizations)) continue;
       const sysName = sysMap.get(item.sysCode) || item.sysCode;
       const exist = existingMap.get(item.sysCode);
       if (exist) {
@@ -397,6 +467,7 @@ export default async function devTaskRoutes(fastify) {
           exists: true,
           taskCode: exist.task_code,
           taskName: exist.task_name,
+          owner: exist.owner,
           status: '已建任务',
         });
       } else {
@@ -420,17 +491,34 @@ export default async function devTaskRoutes(fastify) {
 
   // 开发承接（按系统拆分）
   fastify.post('/dev-tasks/intake', { preHandler: fastify.requirePerm('dev', 'create') }, async (request) => {
-    const { reqCode, systems } = request.body || {};
+    const { reqCode, assignments } = request.body || {};
     if (!reqCode) throw badRequest('请选择需求/工单');
     const req = await getWorkItem(reqCode);
     if (!req) throw notFound('需求/工单不存在');
+    await assertWorkItemOrganizationAccess(reqCode, request.currentUser);
     const releaseWindow = (await releaseDateMapForCodes([reqCode]))[reqCode];
 
     // 目标系统：默认主责系统 ∪ 协同改造系统；可由 systems 指定子集
     const main = req.main_systems || [];
     const collab = req.collab_dev_systems || [];
-    let targets = Array.isArray(systems) && systems.length ? systems : [...new Set([...main, ...collab])];
+    const assignmentBySystem = new Map((Array.isArray(assignments) ? assignments : []).map((item) => [item?.sysCode, String(item?.owner || '').trim()]));
+    let targets = [...assignmentBySystem.keys()];
     if (!targets.length) throw badRequest('该需求/工单未配置主责/协同改造系统，无法承接开发');
+    const configuredSystems = new Set([...main, ...collab]);
+    if (targets.some((sysCode) => !configuredSystems.has(sysCode))) throw badRequest('存在不属于该需求/工单的开发系统');
+    for (const sysCode of targets) {
+      const owner = assignmentBySystem.get(sysCode);
+      if (!owner) throw badRequest('请为每个开发任务选择开发负责人');
+      if (!await isActivePersonName(owner)) throw badRequest(`开发负责人 [${owner}] 不存在或已停用`);
+    }
+    if (isOrganizationRestricted(request.currentUser)) {
+      const organizations = await resolveOrganizationValues(request.currentUser.org);
+      const implementationOrgMatched = organizationMatches(req.implementation_org, organizations);
+      for (const sysCode of targets) {
+        const sys = await get('SELECT org FROM system WHERE sys_code = ?', sysCode);
+        if (!sys || (!implementationOrgMatched && !organizationMatches(sys.org, organizations))) throw forbidden('仅可承接本人机构实施系统');
+      }
+    }
 
     // 已存在开发任务的系统跳过
     const existing = new Set((await all('SELECT impl_system FROM dev_task WHERE req_code = ?', reqCode)).map((r) => r.impl_system));
@@ -445,9 +533,9 @@ export default async function devTaskRoutes(fastify) {
         const taskCode = await generateDevTaskCode(reqCode, releaseWindow);
         const taskName = `RW-${req.title}-${sys?.sys_name || sysCode}`;
         const res = await run(
-          `INSERT INTO dev_task (req_code, task_code, task_name, status, impl_system, impl_org, registrar, register_time)
-           VALUES (?,?,?,?,?,?,?,?)`,
-          reqCode, taskCode, taskName, initialStatus, sysCode, sys?.org || null,
+          `INSERT INTO dev_task (req_code, task_code, task_name, status, owner, intake_owner, impl_system, impl_org, registrar, register_time)
+           VALUES (?,?,?,?,?,?,?,?,?,?)`,
+          reqCode, taskCode, taskName, initialStatus, assignmentBySystem.get(sysCode), request.currentUser?.name || null, sysCode, sys?.org || null,
           request.currentUser?.name, new Date().toISOString().slice(0, 10),
         );
         await auditCreate('dev', res.lastInsertRowid, taskCode, request.currentUser?.name);
@@ -463,6 +551,7 @@ export default async function devTaskRoutes(fastify) {
     const id = request.params.id;
     const old = await get('SELECT * FROM dev_task WHERE id = ?', id);
     if (!old) throw notFound();
+    await assertWorkItemOrganizationAccess(old.req_code, request.currentUser);
     const body = request.body || {};
     const data = {};
     for (const k of WRITABLE) if (body[k] !== undefined) data[k] = body[k];
@@ -488,6 +577,7 @@ export default async function devTaskRoutes(fastify) {
     const id = request.params.id;
     const row = await get('SELECT * FROM dev_task WHERE id = ?', id);
     if (!row) throw notFound();
+    await assertWorkItemOrganizationAccess(row.req_code, request.currentUser);
     await run('DELETE FROM dev_task WHERE id = ?', id);
     await auditDelete('dev', id, row.task_code, request.currentUser?.name);
     return ok(null, '删除成功');
@@ -501,6 +591,12 @@ export default async function devTaskRoutes(fastify) {
     // 未指定工作项时，按当前投产点范围过滤；空范围代表全部投产点。
     let finalWhere = baseWhere;
     let finalParams = [...baseParams];
+    const scopedCodes = await organizationWorkItemCodes(request.currentUser);
+    if (scopedCodes !== null) {
+      const scope = inClause('req_code', scopedCodes);
+      finalWhere = [finalWhere, scope.where || '1=0'].filter(Boolean).join(' AND ');
+      finalParams.push(...scope.params);
+    }
     if (!body.req_code) {
       const codes = await workItemCodesInReleasePoints(windowIds(body));
       if (codes) {
@@ -652,6 +748,7 @@ export default async function devTaskRoutes(fastify) {
             compareAndPush('content', '开发内容概述', exists.content || '', r.content || '');
             compareAndPush('status', '开发状态', exists.status || '', status || '');
             compareAndPush('owner', '开发负责人', exists.owner || '', r.owner || '');
+            compareAndPush('intake_owner', '开发承接人', exists.intake_owner || '', r.intake_owner || '');
             compareAndPush('impl_system', '开发实施系统', sysMap[exists.impl_system] || exists.impl_system || '', sysMap[implSystem] || implSystem || '');
             compareAndPush('impl_org', '开发实施方', exists.impl_org || '', implOrg || '');
             compareAndPush('plan_start', '计划开始时间', exists.plan_start || '', r.plan_start || '');
@@ -663,15 +760,15 @@ export default async function devTaskRoutes(fastify) {
               const devRate = calcDeviation(r.plan_start || exists.plan_start, r.plan_end || exists.plan_end, r.actual_end || exists.actual_end);
               await run(
                 `UPDATE dev_task SET 
-                   task_name=?, content=?, status=?, owner=?, impl_system=?, impl_org=?, 
+                   task_name=?, content=?, status=?, owner=?, intake_owner=?, impl_system=?, impl_org=?,
                    plan_start=?, plan_end=?, actual_start=?, actual_end=?, deviation_rate=?, 
                    updated_at=datetime('now','localtime') 
                  WHERE id=?`,
-                r.task_name, r.content || null, status, r.owner || null, implSystem || null, implOrg || null,
+                r.task_name, r.content || null, status, r.owner || null, r.intake_owner || null, implSystem || null, implOrg || null,
                 r.plan_start || null, r.plan_end || null, r.actual_start || null, r.actual_end || null, devRate, exists.id
               );
               await auditUpdate('dev', exists.id, code, request.currentUser?.name, exists, {
-                task_name: r.task_name, content: r.content || null, status, owner: r.owner || null,
+                task_name: r.task_name, content: r.content || null, status, owner: r.owner || null, intake_owner: r.intake_owner || null,
                 impl_system: implSystem, impl_org: implOrg, plan_start: r.plan_start || null, plan_end: r.plan_end || null,
                 actual_start: r.actual_start || null, actual_end: r.actual_end || null, deviation_rate: devRate
               }, LABELS);
@@ -694,10 +791,10 @@ export default async function devTaskRoutes(fastify) {
             const devRate = calcDeviation(r.plan_start, r.plan_end, r.actual_end);
             const res = await run(
               `INSERT INTO dev_task 
-                 (req_code, task_code, task_name, content, status, owner, impl_system, impl_org, 
+                 (req_code, task_code, task_name, content, status, owner, intake_owner, impl_system, impl_org,
                   plan_start, plan_end, actual_start, actual_end, deviation_rate, registrar, register_time)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-              r.req_code, code, r.task_name, r.content || null, status, r.owner || null, implSystem || null, implOrg || null,
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+              r.req_code, code, r.task_name, r.content || null, status, r.owner || null, r.intake_owner || null, implSystem || null, implOrg || null,
               r.plan_start || null, r.plan_end || null, r.actual_start || null, r.actual_end || null, devRate,
               request.currentUser?.name, new Date().toISOString().slice(0, 10)
             );

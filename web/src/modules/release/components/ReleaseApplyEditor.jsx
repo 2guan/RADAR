@@ -8,9 +8,9 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { Form, Input, Row, Col, Button, Select, Tabs, Tag, message, Tooltip } from 'antd';
+import { Form, Input, Row, Col, Button, Select, Tag, message, Tooltip } from 'antd';
 import { HistoryOutlined, CloseOutlined, ThunderboltOutlined, PlusOutlined, MinusCircleOutlined } from '@ant-design/icons';
-import { DictSelect, SystemSelect, makeReleasePointOptions, ReleasePointText } from '../../settings/reference-data/index.js';
+import { DictSelect, makeReleasePointOptions, ReleasePointText } from '../../settings/reference-data/index.js';
 import { StageContentPanel, StageSectionLayout, useStageFormConfig } from '../../settings/process-configuration/index.js';
 import { StatusBadge } from '../../../shared/workflow/index.js';
 import { HistoryDrawer } from '../../../platform/audit/index.js';
@@ -30,7 +30,7 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
   const [current, setCurrent] = useState(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [genLoading, setGenLoading] = useState(false);
-  const { can } = useAppStore();
+  const { can, user } = useAppStore();
   const releasePointIds = useAppStore((s) => s.releasePointIds);
   const { isMobile } = useResponsive();
   // 既有申请（按 id 或变更编号加载）即为编辑/查看态；其余为新增
@@ -61,7 +61,6 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
   const [systems, setSystems] = useState([]); // 系统 [{sys_code,sys_name,org,out_dept,deploy_dept}]
   const [selReqs, setSelReqs] = useState([]); // 已选需求编号
   const [selTickets, setSelTickets] = useState([]); // 已选工单编号
-  const [refTab, setRefTab] = useState('req');
   const [isDirty, setIsDirty] = useState(false);
 
   const debounceRef = useRef(null);
@@ -86,7 +85,6 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
       setCurrent(null);
       setSelReqs(Array.isArray(defaultReqCodes) ? [...defaultReqCodes] : []);
       setSelTickets(Array.isArray(defaultTicketCodes) ? [...defaultTicketCodes] : []);
-      setRefTab(defaultType === 'ticket' ? 'ticket' : 'req');
       form.resetFields();
       form.setFieldsValue({
         delivery_units: [{ artifact_type: undefined, delivery_unit: undefined, new_version: undefined }],
@@ -132,9 +130,10 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
     return [...set];
   })();
 
-  const reqOptions = reqs.map((r) => ({ value: r.req_code, label: `${r.req_code}　${r.title}`, searchLabel: `${r.req_code}　${r.title}` }));
-  const ticketOptions = tickets.map((t) => ({
-    value: t.ticket_code,
+  const workItemOptions = [
+    ...reqs.map((r) => ({ value: `requirement:${r.req_code}`, label: `需求　${r.req_code}　${r.title}`, searchLabel: `${r.req_code}　${r.title}` })),
+    ...tickets.map((t) => ({
+    value: `ticket:${t.ticket_code}`,
     label: (
       <span>
         {t.ticket_code}　{t.title}
@@ -142,7 +141,8 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
       </span>
     ),
     searchLabel: `${t.ticket_code}　${t.title}${t.release_date ? `　${t.release_date}` : ''}`,
-  }));
+  })),
+  ];
   // ── 申请投产点与所选需求/工单计划投产点的一致性校验（仅提示，不阻断提交） ──
   const selectedReqObjs = selReqs.map((c) => reqs.find((r) => r.req_code === c)).filter(Boolean);
   const selectedTicketObjs = selTickets.map((c) => tickets.find((t) => t.ticket_code === c)).filter(Boolean);
@@ -175,6 +175,19 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
     if (first && first.release_point_id != null) {
       form.setFieldValue('release_point_id', first.release_point_id);
       autoGenCode(first.release_point_id, first.ticket_code);
+    }
+  };
+
+  const onWorkItemsChange = (values) => {
+    const reqCodes = values.filter((value) => value.startsWith('requirement:')).map((value) => value.slice('requirement:'.length));
+    const ticketCodes = values.filter((value) => value.startsWith('ticket:')).map((value) => value.slice('ticket:'.length));
+    setSelReqs(reqCodes);
+    setSelTickets(ticketCodes);
+    if (!readonly) setIsDirty(true);
+    const first = reqCodes.length ? reqs.find((row) => row.req_code === reqCodes[0]) : tickets.find((row) => row.ticket_code === ticketCodes[0]);
+    if (first?.release_point_id != null) {
+      form.setFieldValue('release_point_id', first.release_point_id);
+      autoGenCode(first.release_point_id, first.req_code || first.ticket_code);
     }
   };
 
@@ -330,36 +343,15 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
             {visible('ref_codes') && (
             <div className="form-section-card stage-detail-section-references">
               <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>关联需求/工单</div>
-              {/* 新增时显示 TAB 下拉选择；编辑时不可修改，仅展示已选 */}
+              {/* 新增时统一搜索需求/工单；编辑时不可修改，仅展示已选 */}
               {!isEdit && (
-                <Tabs
-                  size="small"
-                  activeKey={refTab}
-                  onChange={setRefTab}
-                  items={[
-                    {
-                      key: 'req', label: `需求${selReqs.length ? `（${selReqs.length}）` : ''}`,
-                      children: (
-                        <Select
-                          mode="multiple" value={selReqs} onChange={onSelReqsChange} options={reqOptions}
-                          size="small" showSearch allowClear={false} optionFilterProp="searchLabel" placeholder="按需求编号或标题检索"
-                          style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} maxTagCount={0}
-                          tabIndex={readonly ? -1 : undefined}
-                        />
-                      ),
-                    },
-                    {
-                      key: 'ticket', label: `工单${selTickets.length ? `（${selTickets.length}）` : ''}`,
-                      children: (
-                        <Select
-                          mode="multiple" value={selTickets} onChange={onSelTicketsChange} options={ticketOptions}
-                          size="small" showSearch allowClear={false} optionFilterProp="searchLabel" placeholder="按工单编号或概述检索"
-                          style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} maxTagCount={0}
-                          tabIndex={readonly ? -1 : undefined}
-                        />
-                      ),
-                    },
-                  ]}
+                <Select
+                  mode="multiple"
+                  value={[...selReqs.map((code) => `requirement:${code}`), ...selTickets.map((code) => `ticket:${code}`)]}
+                  onChange={onWorkItemsChange} options={workItemOptions}
+                  size="small" showSearch allowClear={false} optionFilterProp="searchLabel" placeholder="搜索需求/工单编号或标题"
+                  style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} maxTagCount={0}
+                  tabIndex={readonly ? -1 : undefined}
                 />
               )}
               {/* 已选需求、工单合并展示在带底纹的区域 */}
@@ -433,8 +425,9 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
 
               {visible('change_system') && (
                 <Form.Item name="change_system" label="变更系统" rules={required.rules('change_system', '变更系统', { action: '请选择' })} style={{ marginBottom: 4 }}>
-                  <SystemSelect single size="small" placeholder="输入系统编号或名称检索"
-                    style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} />
+                  <Select size="small" showSearch optionFilterProp="searchLabel" placeholder="输入系统编号或名称检索"
+                    style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }}
+                    options={systems.filter((system) => user?.allOrgAccess !== false || (user?.organizationValues || [user?.org]).includes(system.org)).map((system) => ({ value: system.sys_code, label: `${system.sys_code} - ${system.sys_name}`, searchLabel: `${system.sys_code} ${system.sys_name}` }))} />
                 </Form.Item>
               )}
               {visible('change_system') && !readonly && recommendedSystems.length > 0 && (

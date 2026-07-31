@@ -7,7 +7,7 @@
  */
 
 import { useRef, useState, useMemo, useEffect, forwardRef, useImperativeHandle } from 'react';
-import { Card, Button, Space, Modal, Tag, Popconfirm, message, Table, Input, Spin, List, Radio, Checkbox } from 'antd';
+import { Card, Button, Space, Modal, Tag, Popconfirm, message, Table, Input, Spin, List, Radio, Checkbox, Select } from 'antd';
 import { ExperimentOutlined, EditOutlined, DeleteOutlined, ImportOutlined, ExportOutlined } from '@ant-design/icons';
 import { DataTable, FilterPanel, ResizableTitle } from '../../../shared/ui/index.js';
 import { StatusBadge, TaskEditor, TaskStatusBadge } from '../../../shared/workflow/index.js';
@@ -39,6 +39,7 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
   const [previewData, setPreviewData] = useState({ overall: [], split: [] });
   const [splitMode, setSplitMode] = useState('overall');
   const [selectedNewSystems, setSelectedNewSystems] = useState([]);
+  const [selectedOwners, setSelectedOwners] = useState({});
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [saving, setSaving] = useState(false);
   const [reqColWidths, setReqColWidths] = useState({});
@@ -79,6 +80,7 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
     { field: 'release_point_id', label: '计划投产点', type: 'select', op: 'in', options: pointOptions },
     { field: 'status', label: '测试状态', type: 'select', op: 'in', options: statusOptions },
     { field: 'owner', label: '测试负责人', type: 'select', op: 'in', options: userOptions },
+    { field: 'intake_owner', label: '测试承接人', type: 'select', op: 'in', options: userOptions },
     { field: 'impl_org', label: '测试实施方', type: 'select', op: 'in', options: orgOptions },
     { field: 'owners', label: '负责人', type: 'select', op: 'in', options: userOptions },
     { field: 'impl_system', label: '实施系统', type: 'select', op: 'in', options: systemOptions },
@@ -118,12 +120,14 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
     const list = [...reqs, ...tickets].filter(
       (r) => !r.release_stage_type || (r.release_stage_type !== 'in-progress' && r.release_stage_type !== 'final')
     );
-    setReqList(list);
+    const pendingCodes = await apiPost('/test-tasks/intake-pending-codes', { testType, reqCodes: list.map((item) => item.req_code) });
+    setReqList(list.filter((item) => (pendingCodes || []).includes(item.req_code)));
     setSearchText('');
     setSelectedReq(null);
     setPreviewData({ overall: [], split: [] });
     setSplitMode('overall');
     setSelectedNewSystems([]);
+    setSelectedOwners({});
     setIntakeOpen(true);
   };
 
@@ -137,6 +141,7 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
         const currentList = res ? (splitMode === 'overall' ? res.overall : res.split) : [];
         const checkable = currentList.filter(t => !t.exists).map(t => t.sysCode);
         setSelectedNewSystems(checkable);
+        setSelectedOwners({});
       } catch (err) {
         message.error(err.message || '加载预览失败');
       } finally {
@@ -145,6 +150,7 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
     } else {
       setPreviewData({ overall: [], split: [] });
       setSelectedNewSystems([]);
+      setSelectedOwners({});
     }
   };
 
@@ -153,6 +159,7 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
     const currentList = mode === 'overall' ? previewData.overall : previewData.split;
     const checkable = (currentList || []).filter(t => !t.exists).map(t => t.sysCode);
     setSelectedNewSystems(checkable);
+    setSelectedOwners({});
   };
 
   const doIntake = async () => {
@@ -164,12 +171,16 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
       message.warning('请至少勾选一个需要新建的任务');
       return;
     }
+    if (selectedNewSystems.some((sysCode) => !selectedOwners[sysCode])) {
+      message.warning('请为每个勾选的测试任务选择测试负责人');
+      return;
+    }
     setSaving(true);
     try {
       const res = await apiPost('/test-tasks/intake', {
         reqCode: selectedReq.req_code,
         testType,
-        systems: selectedNewSystems,
+        assignments: selectedNewSystems.map((sysCode) => ({ sysCode, owner: selectedOwners[sysCode] })),
         splitMode,
       });
       message.success(`已成功承接 ${res.length} 个${TYPE_LABEL[testType]}任务`);
@@ -213,7 +224,8 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
         </span>
       ),
     },
-    { title: '负责人', dataIndex: 'owner', key: 'owner' },
+    { title: '测试负责人', dataIndex: 'owner', key: 'owner' },
+    { title: '测试承接人', dataIndex: 'intake_owner', key: 'intake_owner' },
     {
       title: '实施系统',
       dataIndex: 'impl_system_name',
@@ -339,6 +351,22 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
       key: 'taskName',
       ellipsis: true,
     },
+    {
+      title: '测试负责人', key: 'intake_owner', width: 180,
+      render: (_, record) => record.exists ? <span>{record.owner || '—'}</span> : (
+        <Select
+          value={selectedOwners[record.sysCode]}
+          options={userOptions}
+          placeholder="选择测试负责人"
+          size="small"
+          showSearch
+          optionFilterProp="label"
+          style={{ width: '100%' }}
+          onClick={(event) => event.stopPropagation()}
+          onChange={(owner) => setSelectedOwners((current) => ({ ...current, [record.sysCode]: owner }))}
+        />
+      ),
+    },
   ];
 
   const handleReqResize = (key) => (w) => setReqColWidths((prev) => ({ ...prev, [key]: w }));
@@ -411,7 +439,8 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
               {item.impl_system_name && (
                 <Tag className="status-tag tag-system" style={{ borderRadius: 2, margin: 0 }}>{item.impl_system_name}</Tag>
               )}
-              <span>负责人：{item.owner || '—'}</span>
+              <span>测试负责人：{item.owner || '—'}</span>
+              <span>测试承接人：{item.intake_owner || '—'}</span>
             </Space>
           </Space>
         )}
@@ -586,6 +615,18 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
                             <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--radar-ink)' }}>
                               任务名称：{item.taskName}
                             </div>
+                            <Select
+                              value={selectedOwners[item.sysCode]}
+                              options={userOptions}
+                              placeholder="选择测试负责人（必填）"
+                              size="small"
+                              showSearch
+                              optionFilterProp="label"
+                              disabled={item.exists}
+                              style={{ width: '100%' }}
+                              onClick={(event) => event.stopPropagation()}
+                              onChange={(owner) => setSelectedOwners((current) => ({ ...current, [item.sysCode]: owner }))}
+                            />
                           </Space>
                         </Card>
                       );

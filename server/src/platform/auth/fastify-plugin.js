@@ -12,6 +12,7 @@ import { config } from '../runtime/config.js';
 import { all, get } from '../persistence/index.js';
 import { unauthorized, forbidden } from '../runtime/index.js';
 import { isPasswordExpired } from './password.js';
+import { resolveEffectiveAllOrgAccess } from '../../shared/utils/organization-scope.js';
 
 /**
  * 查询用户的全部已授予权限集合（"module:action" 字符串集）。
@@ -44,8 +45,17 @@ async function authPlugin(fastify) {
       throw unauthorized();
     }
     const userId = request.user?.id;
-    const u = await get('SELECT id, phone, name, org, status, is_super, password_changed_at, created_at FROM user WHERE id = ?', userId);
+    const u = await get('SELECT id, phone, name, org, status, is_super, all_org_access_override, password_changed_at, created_at FROM user WHERE id = ?', userId);
     if (!u || u.status !== '启用') throw unauthorized('账号不存在或已停用');
+    const roles = await all(
+      `SELECT r.code, r.name, r.all_org_access
+         FROM role r JOIN user_role ur ON ur.role_id = r.id
+        WHERE ur.user_id = ?`,
+      userId,
+    );
+    const resolved = resolveEffectiveAllOrgAccess(u, roles);
+    u.effective_all_org_access = resolved.allOrgAccess;
+    u.all_org_access_source = resolved.source;
     request.currentUser = u;
 
     // 检查密码是否过期（排除 /auth/me, /auth/change-password, /auth/logout）
