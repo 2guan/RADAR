@@ -10,6 +10,7 @@ export {
   loadStageContentSchema,
   loadStageContentValues,
   patchStageContentValues,
+  subscribeStageContentConfigUpdated,
 } from './api/stageContentDataCache.js';
 export { default as StageConfiguration } from './components/StageConfiguration.jsx';
 export { default as StageContentPanel } from './components/StageContentPanel.jsx';

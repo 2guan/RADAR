@@ -65,22 +65,34 @@ export default function Requirements() {
   const userOptions = users.map(u => ({ value: u.name, label: `${u.name} (${u.phone})` }));
   const systemOptions = systems.map(s => ({ value: s.sys_code, label: `${s.sys_code} - ${s.sys_name}` }));
 
-  // 需求的固定筛选字段与可配置的阶段字段合并为同一份列表契约。
+  const fallbackNativeFilterLabels = { implementation_org: '实施机构', req_code: '需求编号', issue_no: 'OA编号/工单编号', release_point_id: '计划投产点', status: '需求状态', req_type: '需求类型', is_accounting: '是否涉账', priority: '优先级', propose_dept: '提出部门', proposer: '提出人', receiver: '需求接收人', workload: '工作量', registrar: '录入人', register_time: '录入时间', main_systems: '主责系统', collab_dev_systems: '协同改造系统' };
+  const fallbackNativeFilters = [
+    'implementation_org', 'req_code', 'issue_no', 'release_point_id', 'status', 'req_type', 'is_accounting', 'priority',
+    'propose_dept', 'proposer', 'receiver', 'workload', 'registrar', 'register_time', 'main_systems', 'collab_dev_systems',
+  ].map((field_key) => ({ field_key, label: fallbackNativeFilterLabels[field_key] }));
+  const nativeFilterFields = stageList.loaded ? stageList.nativeFilterFields : fallbackNativeFilters;
+  const nativeFilterConfig = (field) => {
+    const label = field.label;
+    const text = (placeholder = `${label}检索`) => ({ field: field.field_key, label, type: 'input', op: 'like', placeholder });
+    switch (field.field_key) {
+      case 'implementation_org': return { field: field.field_key, label, type: 'select', op: 'in', options: orgOptions, isPrimary: true };
+      case 'req_code': return { ...text('需求编号检索'), isPrimary: true };
+      case 'release_point_id': return { field: field.field_key, label, type: 'select', op: 'in', options: pointOptions };
+      case 'status': return { field: field.field_key, label, type: 'select', op: 'in', options: statusOptions };
+      case 'req_type': return { field: field.field_key, label, type: 'select', op: 'in', options: typeOptions };
+      case 'is_accounting': return { field: field.field_key, label, type: 'select', op: 'in', options: [{ value: '否', label: '否' }, { value: '是', label: '是' }] };
+      case 'priority': return { field: field.field_key, label, type: 'select', op: 'in', options: [{ value: '高', label: '高' }, { value: '中', label: '中' }, { value: '低', label: '低' }] };
+      case 'propose_dept': return { field: field.field_key, label, type: 'select', op: 'in', options: reqDeptOptions };
+      case 'proposer': case 'receiver': case 'registrar': case 'yn_owner': case 'jk_owner': return { field: field.field_key, label, type: 'select', op: 'in', options: userOptions };
+      case 'main_systems': case 'collab_dev_systems': case 'collab_test_systems': return { field: field.field_key, label, type: 'select', op: 'in', options: systemOptions };
+      default: return text();
+    }
+  };
+  // `content`、`owners` 是固定的组合检索，不是输入项配置字段；其余条件逐项服从字段开关。
   const filterConfigs = [
-    { field: 'org', label: '实施机构', type: 'select', op: 'in', options: orgOptions, isPrimary: true },
-    { field: 'req_code', label: '需求编号', type: 'input', isPrimary: true, op: 'like', placeholder: '需求编号检索' },
+    ...nativeFilterFields.map(nativeFilterConfig),
     { field: 'content', label: '需求内容', type: 'input', isPrimary: true, op: 'like', placeholder: '需求标题或概述检索' },
-    { field: 'issue_no', label: '关联问题/工单', type: 'input', op: 'like', placeholder: '问题/工单编号检索' },
-    { field: 'release_point_id', label: '计划投产点', type: 'select', op: 'in', options: pointOptions },
-    { field: 'status', label: '需求状态', type: 'select', op: 'in', options: statusOptions },
-    { field: 'req_type', label: '需求类型', type: 'select', op: 'in', options: typeOptions },
-    { field: 'is_accounting', label: '是否涉账', type: 'select', op: 'in', options: [{ value: '否', label: '否' }, { value: '是', label: '是' }] },
-    { field: 'priority', label: '优先级', type: 'select', op: 'in', options: [{ value: '高', label: '高' }, { value: '中', label: '中' }, { value: '低', label: '低' }] },
-    { field: 'propose_dept', label: '提出部门', type: 'select', op: 'in', options: reqDeptOptions },
-    { field: 'proposer', label: '提出人', type: 'select', op: 'in', options: userOptions },
     { field: 'owners', label: '负责人', type: 'select', op: 'in', options: userOptions },
-    { field: 'main_systems', label: '主责系统', type: 'select', op: 'in', options: systemOptions },
-    { field: 'collab_systems', label: '协同系统', type: 'select', op: 'in', options: systemOptions },
     ...stageList.filterConfigs,
   ];
 
@@ -155,6 +167,11 @@ export default function Requirements() {
       key: 'proposer',
       render: (val) => (Array.isArray(val) ? val.join(', ') : (val || '—')),
     },
+      { title: '实施机构', dataIndex: 'implementation_org', key: 'implementation_org' },
+    { title: '需求接收人', dataIndex: 'receiver', key: 'receiver' },
+    { title: '工作量', dataIndex: 'workload', key: 'workload' },
+    { title: '录入人', dataIndex: 'registrar', key: 'registrar' },
+    { title: '录入时间', dataIndex: 'register_time', key: 'register_time', sorter: true },
     {
       title: '提出时间',
       dataIndex: 'propose_time',
@@ -209,6 +226,17 @@ export default function Requirements() {
     },
   ];
 
+  const nativeColumnAliases = { release_point_id: 'release_date', main_systems: 'main_systems_names', collab_dev_systems: 'collab_dev_systems_names' };
+  const columnByKey = new Map(columns.map((column) => [column.key, column]));
+  const configuredNativeColumns = stageList.loaded
+    ? stageList.nativeListFields.map((field) => {
+      const column = columnByKey.get(nativeColumnAliases[field.field_key] || field.field_key);
+      return column
+        ? { ...column, key: field.field_key, title: field.label }
+        : { title: field.label, dataIndex: field.field_key, key: field.field_key, render: (value) => Array.isArray(value) ? (value.join('、') || '—') : (value || '—') };
+    })
+    : columns.slice(1, -1);
+
   return (
     <Card
       title={
@@ -236,7 +264,7 @@ export default function Requirements() {
         ]}
       />
       <DataTable
-        ref={tableRef} columns={[...columns.slice(0, -1), ...stageList.columns, columns.at(-1)]} fetcher={fetcher}
+        ref={tableRef} columns={[columns[0], ...configuredNativeColumns, ...stageList.columns, columns.at(-1)]} fetcher={fetcher}
         baseQuery={{ releasePointIds, filters: filterQuery }}
         showSearch={false}
         onRowClick={openEdit}

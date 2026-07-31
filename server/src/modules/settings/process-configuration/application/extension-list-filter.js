@@ -25,7 +25,7 @@ export async function buildExtensionListFilter({
   const definition = await get(
     `SELECT id, input_type, source_key, multiple FROM stage_field_definition
       WHERE scope_key = ? AND field_key = ? AND field_kind = 'extension'
-        AND visible = 1 AND filterable = 1 AND deleted_at IS NULL`,
+        AND filterable = 1 AND deleted_at IS NULL`,
     scopeKey,
     fieldKey,
   );

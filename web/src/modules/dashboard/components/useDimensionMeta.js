@@ -8,6 +8,7 @@
 
 import { useEffect, useState } from 'react';
 import { apiGet } from '../api/index.js';
+import { subscribeStageContentConfigUpdated } from '../../settings/process-configuration/index.js';
 
 // 需要预载的字典分类（覆盖所有 dict:* optionSource）
 const DICT_CATS = ['process_status', 'req_type', 'ticket_type', 'org', 'sector'];
@@ -88,13 +89,20 @@ export function useDimensionMeta() {
 
   useEffect(() => {
     let alive = true;
-    if (!metaCache) {
-      metaCache = fetchMeta().catch((e) => { metaCache = null; throw e; });
-    }
-    metaCache
-      .then((m) => { if (alive) { setMeta(m); setReady(true); } })
-      .catch(() => { /* 失败保持未就绪，下次进入会重试 */ });
-    return () => { alive = false; };
+    const load = () => {
+      if (!metaCache) metaCache = fetchMeta().catch((e) => { metaCache = null; throw e; });
+      metaCache
+        .then((m) => { if (alive) { setMeta(m); setReady(true); } })
+        .catch(() => { /* 失败保持当前维度，下次进入会重试 */ });
+    };
+    load();
+    // 输入项配置保存后，已打开的仪表盘也要重新获取可用维度，不能要求用户手工刷新。
+    const unsubscribe = subscribeStageContentConfigUpdated('', () => {
+      metaCache = null;
+      setReady(false);
+      load();
+    });
+    return () => { alive = false; unsubscribe(); };
   }, []);
 
   /** 某数据源的可用维度 [{key,label,optionSource,isDate}] */

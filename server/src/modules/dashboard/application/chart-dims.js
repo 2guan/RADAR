@@ -180,6 +180,17 @@ function systemCodes(source, row) {
 
 function uniq(arr) { return Array.from(new Set(arr)); }
 
+/** 由输入项配置启用的原生字段维度，兼容 SQLite JSON 字符串与 TDSQL 数组返回。 */
+function nativeDimensionValues(item, fieldKey) {
+  const raw = item?.[fieldKey];
+  if (raw === undefined || raw === null || raw === '') return ['未填写'];
+  const values = Array.isArray(raw)
+    ? raw
+    : (['main_systems', 'collab_dev_systems', 'collab_test_systems', 'proposer'].includes(fieldKey) ? parseJsonArray(raw) : [raw]);
+  const normalized = values.map((value) => String(value || '').trim()).filter(Boolean);
+  return normalized.length ? uniq(normalized) : ['未填写'];
+}
+
 /**
  * 当“阶段状态”被放在“当前任务阶段”的下级时，取该阶段自己的任务状态。
  * 例如当前任务阶段分组为“开发”，二级维度的阶段状态应来自 dev_task，
@@ -228,9 +239,9 @@ export function extract(source, dim, row, ctx, filters) {
   }
   if (dim.startsWith('native:')) {
     const [, scopeKey, fieldKey] = dim.split(':');
-    if (fieldKey !== 'priority' || row._stageScope !== scopeKey) return ['未填写'];
+    if (!fieldKey || row._stageScope !== scopeKey) return ['未填写'];
     const item = row._workItem || row;
-    return [item.priority || '中'];
+    return nativeDimensionValues(item, fieldKey);
   }
   // 统一效能统计记录保留其所属需求/工单；阶段记录本身只用于“阶段状态”。
   if (source === 'analytics') {
@@ -499,7 +510,7 @@ export function aggregate({ source, dimension, xAxisDimension, filters = {}, gro
 /** 校验维度是否属于该源（防注入/越权维度） */
 export function isValidDim(source, dim) {
   // 动态字段仅可在统一效能统计源中使用；其是否真实存在由仪表盘元数据接口控制。
-  return !!dim && (SOURCES[source]?.dims.includes(dim) || (source === 'analytics' && /^(extension:[A-Za-z0-9._-]+:\d+|native:(requirement|ticket):priority)$/.test(dim)));
+  return !!dim && (SOURCES[source]?.dims.includes(dim) || (source === 'analytics' && /^(extension:[A-Za-z0-9._-]+:\d+|native:(requirement|ticket):[A-Za-z0-9_]+)$/.test(dim)));
 }
 
 /** 取测试源对应的 test_type（非测试源返回 null） */

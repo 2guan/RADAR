@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0",
+  "requirement": { "id": "REQ-20260730-005", "ref": "hengguan/REQ-20260730-005", "title": "需求与工单分析补充实施、接收与录入字段", "status": "ready", "document": "docs/requirements/hengguan/REQ-20260730-005/requirement.md" },
+  "assignment": { "module": "requirements", "developer": "hengguan", "module_owner": "hengguan", "branch": "hengguan/REQ-20260730-005-analysis-fields", "worktree": "codex-desktop-current-worktree" },
+  "ai": { "enabled": true, "approved_service": "Codex desktop", "model": "approved-by-user", "contains_confidential_information": false, "context_sanitized": true, "production_access": false },
+  "scope": {
+    "writable_paths": [
+      "docs/requirements/hengguan/REQ-20260730-005/**",
+      "server/src/modules/requirements/**", "web/src/modules/requirements/**", "server/test/requirements/**", "server/test/**",
+      "server/src/modules/tickets/**", "web/src/modules/tickets/**", "server/test/tickets/**",
+      "server/src/modules/dashboard/**", "web/src/modules/dashboard/**",
+      "server/src/modules/identity-access/index.js", "server/src/modules/identity-access/contracts/**", "server/test/identity-access/**",
+      "server/src/modules/settings/process-configuration/**", "server/src/bootstrap/seed.js",
+      "governance/modules.yaml",
+      "server/src/platform/persistence/migrations/0041_analysis_fields.sql", "server/src/platform/persistence/migrations/tdsql/0021_analysis_fields.sql"
+    ],
+    "read_only_paths": ["docs/governance/PROJECT-RULES.md", "docs/governance/AI-CODING-RULES.md", "docs/governance/GITHUB-RULES.md", "governance/modules.yaml", "PRODUCT.md", "server/templates/**"],
+    "forbidden_paths": [".env", "**/.env", "**/*secret*", "**/*credential*", "attachments/**"]
+  },
+  "public_capability_change": { "required": true, "shared_change_issue": "REQ-20260730-005", "reason": "identity-access 新增仅供需求与工单校验接收人的语义明确只读人员契约；需求、工单和仪表盘均消费 settings 已登记的字段呈现能力，旧接口保持兼容。", "target_modules": ["requirements", "tickets", "settings", "dashboard", "identity-access"], "new_methods": ["isActivePersonName", "subscribeStageContentConfigUpdated"], "existing_method_changed": false, "semantic_name_confirmed": true, "old_behavior_preserved": true, "owner_approved": true, "owner_review_required_before_merge": true },
+  "database": { "changed": true, "migration_paths": ["server/src/platform/persistence/migrations/0041_analysis_fields.sql", "server/src/platform/persistence/migrations/tdsql/0021_analysis_fields.sql"], "mysql8_compatible": true, "historical_data_impact": "requirement 与 ticket 的新增可空列对历史记录保持空值；issue_no、registrar、register_time 历史值不改写。", "rollback_or_compensation": "回退应用代码即可停止使用新字段；新增列保留不会破坏旧版本。物理删除列须在停写和备份后另立迁移需求。" },
+  "external_access": { "changed": false, "api_paths": [], "readable_field_whitelist": [], "writable_field_whitelist": [], "action_whitelist": [], "audit_required": true },
+  "required_tests": [
+    { "name": "field_unit_and_migration", "command": "npm test --prefix server" },
+    { "name": "api", "command": "npm run test:api --prefix server" },
+    { "name": "permission", "command": "npm run test:rbac --prefix server" },
+    { "name": "frontend_build", "command": "npm run build --prefix web" },
+    { "name": "diff_check", "command": "git diff --check" }
+  ],
+  "risk": { "level": "important", "reasons": ["需求与工单双表迁移", "已有环境的流程输入项配置升级", "服务端字段校验与导入导出一致性"], "required_approvals": ["hengguan"] },
+  "completion": { "changed_files_report_required": true, "test_result_report_required": true, "known_risks_report_required": true, "rollback_report_required": true, "requirement_acceptance_required": true }
+}

@@ -23,15 +23,15 @@ const DYNAMIC_STAGE_SCOPE = {
   uat: 'test.UAT', nft: 'test.NFT', sec: 'test.SEC', release: 'release',
 };
 
-/** 公开管理员启用的扩展字段，以及受固定业务枚举约束的内置优先级维度。 */
+/** 公开管理员启用的输入项维度；详情可见性不影响独立的仪表盘能力。 */
 async function dynamicDashboardDimensions() {
   const rows = await all(`SELECT id, scope_key, field_key, field_kind, label, input_type, source_key, multiple
     FROM stage_field_definition
     WHERE dashboard_dimension = 1 AND deleted_at IS NULL
-      AND ((field_kind = 'extension' AND visible = 1) OR (field_kind = 'native' AND field_key = 'priority'))
+      AND field_kind IN ('extension', 'native')
     ORDER BY scope_key, sort, id`);
   return rows.map((row) => ({
-    key: row.field_kind === 'native' ? `native:${row.scope_key}:priority` : `extension:${row.scope_key}:${row.id}`,
+    key: row.field_kind === 'native' ? `native:${row.scope_key}:${row.field_key}` : `extension:${row.scope_key}:${row.id}`,
     label: row.label,
     optionSource: row.source_key || 'free',
     isDate: ['date', 'datetime'].includes(row.input_type),

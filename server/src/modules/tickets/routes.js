@@ -28,6 +28,7 @@ import { windowIds, inClause, resolveDictAttr, resolveSystemCodes, resolveReleas
 import { ok, notFound, badRequest, parseJsonArray, parseJsonObject } from '../../platform/runtime/index.js';
 import { assertStatusChangePermission } from '../settings/process-configuration/index.js';
 import { resolveCurrentTaskStatuses } from '../overview/index.js';
+import { isActivePersonName } from '../identity-access/index.js';
 
 // 导入/导出列定义
 const IO_COLUMNS = [
@@ -47,20 +48,23 @@ const IO_COLUMNS = [
   { key: 'main_systems', title: '主责系统' },
   { key: 'collab_dev_systems', title: '协同改造系统' },
   { key: 'collab_test_systems', title: '协同测试系统' },
-  { key: 'issue_no', title: '关联问题/工单编号' },
+  { key: 'issue_no', title: 'OA编号/工单编号' },
+  { key: 'implementation_org', title: '实施机构' },
+  { key: 'receiver', title: '需求接收人' },
+  { key: 'workload', title: '工作量' },
 ];
 
 const COLUMNS = [
   'id', 'ticket_code', 'title', 'summary', 'status', 'ticket_type', 'propose_dept', 'proposer',
   'yn_owner', 'jk_owner', 'propose_time', 'release_point_id', 'registrar', 'register_time', 'created_at',
-  'issue_no', 'is_accounting', 'priority',
+  'issue_no', 'is_accounting', 'priority', 'implementation_org', 'receiver', 'workload',
 ];
 const SEARCH = ['ticket_code', 'title', 'summary', 'proposer', 'issue_no'];
 const JSON_FIELDS = ['main_systems', 'collab_dev_systems', 'collab_test_systems', 'proposer'];
 const WRITABLE = [
   'ticket_code', 'title', 'summary', 'status', 'ticket_type', 'propose_dept', 'proposer', 'yn_owner', 'jk_owner',
   'propose_time', 'main_systems', 'collab_dev_systems', 'collab_test_systems', 'release_point_id',
-  'issue_no', 'is_accounting', 'priority',
+  'issue_no', 'is_accounting', 'priority', 'implementation_org', 'receiver', 'workload',
 ];
 const LABELS = {
   ticket_code: '工单编号', title: '工单概述', summary: '工单详情', status: '工单状态', ticket_type: '工单类型',
@@ -68,7 +72,7 @@ const LABELS = {
   propose_dept: '提出部门', proposer: '提出人', yn_owner: '云南农信工单负责人',
   jk_owner: '建信金科工单负责人', propose_time: '提出时间', main_systems: '主责系统',
   collab_dev_systems: '协同改造系统', collab_test_systems: '协同测试系统', release_point_id: '计划投产点',
-  issue_no: '关联问题/工单编号',
+  issue_no: 'OA编号/工单编号', implementation_org: '实施机构', receiver: '需求接收人', workload: '工作量',
 };
 
 /** 把 JSON 字符串字段解析为数组返回给前端 */
@@ -92,6 +96,31 @@ function encodeField(data) {
 function pick(body) {
   const out = {};
   for (const k of WRITABLE) if (body[k] !== undefined) out[k] = body[k];
+  return out;
+}
+
+async function normalizeAnalysisFields(data) {
+  const out = { ...data };
+  if (out.implementation_org !== undefined) {
+    const value = String(out.implementation_org || '').trim();
+    if (!value) out.implementation_org = null;
+    else {
+      const resolved = await resolveDictAttr('org', value);
+      if (!resolved) throw badRequest(`实施机构 [${value}] 不存在或已停用`);
+      out.implementation_org = resolved;
+    }
+  }
+  if (out.receiver !== undefined) {
+    const value = String(out.receiver || '').trim();
+    if (/[，,]/.test(value)) throw badRequest('需求接收人仅支持选择 1 人');
+    if (value && !await isActivePersonName(value)) throw badRequest(`需求接收人 [${value}] 不存在或已停用`);
+    out.receiver = value || null;
+  }
+  if (out.workload !== undefined) {
+    const value = String(out.workload || '').trim();
+    if (/[\r\n]/.test(value) || value.length > 255) throw badRequest('工作量仅支持 255 字以内的单行文本');
+    out.workload = value || null;
+  }
   return out;
 }
 
@@ -175,6 +204,13 @@ export default async function ticketRoutes(fastify) {
           wh.push(dialect.jsonArrayOverlaps('ticket.main_systems', placeholders));
           params.push(...codes);
         }
+      } else if (f.field === 'collab_dev_systems' || f.field === 'collab_test_systems') {
+        const codes = Array.isArray(f.value) ? f.value : [f.value];
+        if (codes.length) {
+          const placeholders = codes.map(() => '?').join(',');
+          wh.push(dialect.jsonArrayOverlaps(`ticket.${f.field}`, placeholders));
+          params.push(...codes);
+        }
       } else if (f.field === 'collab_systems') {
         const codes = Array.isArray(f.value) ? f.value : [f.value];
         if (codes.length) {
@@ -184,6 +220,13 @@ export default async function ticketRoutes(fastify) {
             ${dialect.jsonArrayOverlaps('ticket.collab_test_systems', placeholders)}
           )`);
           params.push(...codes, ...codes);
+        }
+      } else if (f.field === 'proposer') {
+        const people = Array.isArray(f.value) ? f.value : [f.value];
+        if (people.length) {
+          const placeholders = people.map(() => '?').join(',');
+          wh.push(dialect.jsonArrayOverlaps('ticket.proposer', placeholders));
+          params.push(...people);
         }
       } else {
         normalFilters.push(f);
@@ -310,7 +353,7 @@ export default async function ticketRoutes(fastify) {
     }
     const initialStatus = await defaultProcessStatus('工单', 'initial', '工单登记');
 
-    const picked = pick(body);
+    const picked = await normalizeAnalysisFields(pick(body));
     picked.priority = normalizeConfiguredFieldValue('ticket', 'priority', body.priority);
     await validateRequiredFields('ticket', await statusTypeForProcessStatus(body.status || initialStatus), {
       ...body, ...picked,
@@ -352,7 +395,7 @@ export default async function ticketRoutes(fastify) {
     const old = await get('SELECT * FROM ticket WHERE id = ?', id);
     if (!old) throw notFound();
     const body = request.body || {};
-    const picked = pick(body);
+    const picked = await normalizeAnalysisFields(pick(body));
     if (Object.hasOwn(picked, 'priority')) picked.priority = normalizeConfiguredFieldValue('ticket', 'priority', picked.priority);
     await assertStatusChangePermission(fastify, request, 'ticket', old.status, picked);
 
@@ -442,9 +485,12 @@ export default async function ticketRoutes(fastify) {
       { key: 'main_systems', title: '主责系统' },
       { key: 'collab_dev_systems', title: '协同改造系统' },
       { key: 'collab_test_systems', title: '协同测试系统' },
-      { key: 'issue_no', title: '关联问题/工单编号' },
-      { key: 'registrar', title: '登记人' },
-      { key: 'register_time', title: '登记时间' },
+      { key: 'issue_no', title: 'OA编号/工单编号' },
+      { key: 'implementation_org', title: '实施机构' },
+      { key: 'receiver', title: '需求接收人' },
+      { key: 'workload', title: '工作量' },
+      { key: 'registrar', title: '录入人' },
+      { key: 'register_time', title: '录入时间' },
     ];
 
     const mappedList = result.list.map(row => {
@@ -530,6 +576,11 @@ export default async function ticketRoutes(fastify) {
             ? String(r.proposer).split(/[，,]/).map(s => s.trim()).filter(Boolean)
             : [];
           const proposerJson = JSON.stringify(proposerArray);
+          const analysisFields = await normalizeAnalysisFields({
+            implementation_org: r.implementation_org,
+            receiver: r.receiver,
+            workload: r.workload,
+          });
           const extensionValues = await extensionValuesFromExcelRow('ticket', r);
 
           let code = String(r.ticket_code || '').trim();
@@ -575,7 +626,10 @@ export default async function ticketRoutes(fastify) {
             compareAndPush('yn_owner', '云南农信工单负责人', exists.yn_owner || '', r.yn_owner || '');
             compareAndPush('jk_owner', '建信金科工单负责人', exists.jk_owner || '', r.jk_owner || '');
             compareAndPush('propose_time', '提出时间', exists.propose_time || '', r.propose_time || '');
-            compareAndPush('issue_no', '关联问题/工单编号', exists.issue_no || '', r.issue_no || '');
+            compareAndPush('issue_no', 'OA编号/工单编号', exists.issue_no || '', r.issue_no || '');
+            compareAndPush('implementation_org', '实施机构', exists.implementation_org || '', analysisFields.implementation_org || '');
+            compareAndPush('receiver', '需求接收人', exists.receiver || '', analysisFields.receiver || '');
+            compareAndPush('workload', '工作量', exists.workload || '', analysisFields.workload || '');
             
             // 计划投产点比较
             const oldRpDate = rpMap[exists.release_point_id] || '';
@@ -593,19 +647,20 @@ export default async function ticketRoutes(fastify) {
                 `UPDATE ticket SET 
                    title=?, summary=?, status=?, ticket_type=?, is_accounting=?, priority=?, propose_dept=?, proposer=?, yn_owner=?, jk_owner=?,
                    propose_time=?, release_point_id=?, main_systems=?, collab_dev_systems=?, collab_test_systems=?, 
-                   issue_no=?,
+                   issue_no=?, implementation_org=?, receiver=?, workload=?,
                    updated_at=datetime('now','localtime') 
                  WHERE id=?`,
                 r.title, r.summary || null, status, reqType || null, isAccounting, priority, proposeDept || null, proposerJson,
                 r.yn_owner || null, r.jk_owner || null, r.propose_time || null, rpId,
-                mainSystems, collabDevSystems, collabTestSystems, r.issue_no || null, exists.id
+                mainSystems, collabDevSystems, collabTestSystems, r.issue_no || null,
+                analysisFields.implementation_org, analysisFields.receiver, analysisFields.workload, exists.id
               );
               await auditUpdate('ticket', exists.id, code, request.currentUser?.name, exists, {
                 title: r.title, summary: r.summary || null, status, ticket_type: reqType || null, is_accounting: isAccounting, priority,
                 propose_dept: proposeDept || null, proposer: proposerJson, yn_owner: r.yn_owner || null,
                 jk_owner: r.jk_owner || null, propose_time: r.propose_time || null, release_point_id: rpId,
                 main_systems: mainSystems, collab_dev_systems: collabDevSystems, collab_test_systems: collabTestSystems,
-                issue_no: r.issue_no || null
+                issue_no: r.issue_no || null, ...analysisFields
               }, LABELS);
             }
             await saveExtensionValues('ticket', exists.id, extensionValues, request.currentUser?.name);
@@ -625,12 +680,12 @@ export default async function ticketRoutes(fastify) {
             const res = await run(
               `INSERT INTO ticket 
                  (ticket_code, title, summary, status, ticket_type, is_accounting, priority, propose_dept, proposer, yn_owner, jk_owner,
-                  propose_time, release_point_id, main_systems, collab_dev_systems, collab_test_systems, registrar, register_time, issue_no)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+                  propose_time, release_point_id, main_systems, collab_dev_systems, collab_test_systems, registrar, register_time, issue_no, implementation_org, receiver, workload)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
               code, r.title, r.summary || null, status, reqType || null, isAccounting, priority, proposeDept || null, proposerJson,
               r.yn_owner || null, r.jk_owner || null, r.propose_time || null, rpId,
               mainSystems, collabDevSystems, collabTestSystems, request.currentUser?.name, new Date().toISOString().slice(0, 10),
-              r.issue_no || null
+              r.issue_no || null, analysisFields.implementation_org, analysisFields.receiver, analysisFields.workload
             );
             await auditCreate('ticket', res.lastInsertRowid, code, request.currentUser?.name);
             await saveExtensionValues('ticket', res.lastInsertRowid, extensionValues, request.currentUser?.name);
