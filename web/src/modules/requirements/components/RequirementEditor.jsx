@@ -24,6 +24,12 @@ import { useResponsive } from '../../../platform/ui/useResponsive.js';
 // ─── 模块级系统列表缓存（与 SystemSelect 共用同一接口，但单独维护以供下方组件使用） ───
 let _sysCache = null;
 
+function formatRegisterTime(value) {
+  if (!value) return '—';
+  const match = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{1,2}))?/.exec(String(value));
+  return match ? `${Number(match[2])}-${Number(match[3])} ${Number(match[4] || 0)}:${String(match[5] || '0').padStart(2, '0')}` : value;
+}
+
 /**
  * 系统选择子区块：标题在左、选择框在右，已选系统逐个展示在下方、可单独删除。
  * single=true 时为单选：已选一个后再选会自动替换（主责系统）；否则不限个数（协同系统）。
@@ -526,8 +532,16 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
                 </Form.Item>
               </StageBuiltinField>
               <StageBuiltinField fieldKey="receiver" defaultSection="owners"><Form.Item name="receiver" label="需求接收人" rules={required.rules('receiver', '需求接收人', { action: '请选择' })} style={{ marginBottom: 8 }}><PersonPicker style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择需求接收人" size="small" /></Form.Item></StageBuiltinField>
-              <StageBuiltinField fieldKey="registrar" defaultSection="owners"><Form.Item name="registrar" label="录入人" style={{ marginBottom: 8 }}><Input size="small" readOnly /></Form.Item></StageBuiltinField>
-              <StageBuiltinField fieldKey="register_time" defaultSection="owners"><Form.Item name="register_time" label="录入时间" style={{ marginBottom: 0 }}><Input size="small" readOnly /></Form.Item></StageBuiltinField>
+              {current && <StageBuiltinField fieldKey="registrar" defaultSection="owners">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--radar-text-secondary)', minHeight: 24 }}>
+                  <span style={{ width: 80 }}>录入人：</span><span>{current.registrar || '—'}</span>
+                </div>
+              </StageBuiltinField>}
+              {current && <StageBuiltinField fieldKey="register_time" defaultSection="owners">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--radar-text-secondary)', minHeight: 24 }}>
+                  <span style={{ width: 80 }}>录入时间：</span><span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace' }}>{formatRegisterTime(current.register_time)}</span>
+                </div>
+              </StageBuiltinField>}
           </StageBuiltinFields>
           {/* 交付件与扩展信息均由公共配置渲染，移动交付件布局后立即跟随生效。 */}
           <StageContentPanel ref={extensionPanelRef} scopeKey="requirement" entityType="requirement" entityId={current?.id} readOnly={readonly} onDirtyChange={() => setIsDirty(true)} />
