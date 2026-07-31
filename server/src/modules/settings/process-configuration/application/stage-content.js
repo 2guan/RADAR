@@ -43,7 +43,7 @@ const NATIVE_FIELD_DEFAULTS = {
     ['summary', '需求概述', 'textarea'], ['implementation_org', '实施机构', 'select', 'dict:org'], ['main_systems', '主责系统', 'select', 'system', 1],
     ['collab_dev_systems', '协同改造系统', 'select', 'system', 1], ['collab_test_systems', '协同测试系统', 'select', 'system', 1],
     ['propose_dept', '提出部门', 'select', 'dict:req_dept'], ['proposer', '提出人', 'person', 'person', 1],
-    ['yn_owner', '云南农信业务负责人', 'person', 'person'], ['jk_owner', '建信金科业务负责人', 'person', 'person'], ['receiver', '需求接收人', 'person', 'person'], ['registrar', '录入人', 'text'], ['register_time', '录入时间', 'date'],
+    ['yn_owner', '云南农信业务负责人', 'person', 'person'], ['jk_owner', '建信金科业务负责人', 'person', 'person'], ['receiver', '需求接收人', 'person', 'person'], ['registrar', '录入人信息', 'text'],
   ],
   ticket: [
     ['ticket_code', '工单编号', 'text'], ['status', '工单状态', 'select'], ['ticket_type', '工单类型', 'select', 'dict:ticket_type'],
@@ -52,7 +52,7 @@ const NATIVE_FIELD_DEFAULTS = {
     ['summary', '工单详情', 'textarea'], ['implementation_org', '实施机构', 'select', 'dict:org'], ['main_systems', '主责系统', 'select', 'system', 1],
     ['collab_dev_systems', '协同改造系统', 'select', 'system', 1], ['collab_test_systems', '协同测试系统', 'select', 'system', 1],
     ['propose_dept', '提出部门', 'select', 'dict:req_dept'], ['proposer', '提出人', 'person', 'person', 1],
-    ['yn_owner', '云南农信工单负责人', 'person', 'person'], ['jk_owner', '建信金科工单负责人', 'person', 'person'], ['receiver', '需求接收人', 'person', 'person'], ['registrar', '录入人', 'text'], ['register_time', '录入时间', 'date'],
+    ['yn_owner', '云南农信工单负责人', 'person', 'person'], ['jk_owner', '建信金科工单负责人', 'person', 'person'], ['receiver', '需求接收人', 'person', 'person'], ['registrar', '录入人信息', 'text'],
   ],
   dev: [
     ['task_name', '开发任务名称', 'text'], ['content', '开发内容概述', 'textarea'], ['status', '开发状态', 'select'],
@@ -89,7 +89,7 @@ const NATIVE_FIELD_DEFAULTS = {
  * 内置配置目录是字段语义的唯一代码基线：数据库只保存管理员可调整的布局、可见性和状态规则。
  * `renderer` 明确区分可由公共控件呈现的普通字段和必须由业务 JSX 声明的复杂控件。
  */
-export const BUILTIN_CONFIGURATION_UPGRADE_ID = 'settings.builtin-configuration.v2';
+export const BUILTIN_CONFIGURATION_UPGRADE_ID = 'settings.builtin-configuration.v3';
 export const PRIORITY_OPTIONS = [
   { value: '高', label: '高' },
   { value: '中', label: '中' },
@@ -172,6 +172,7 @@ const CUSTOM_DELIVERABLE_TEMPLATE_HANDLERS = {
 };
 
 const BUILTIN_METADATA_VERSION_KEY = 'stage.content.builtin-metadata.v2';
+const REGISTRATION_INFO_VERSION_KEY = 'stage.content.registration-info.v1';
 // v6：按本地详情页已确认的两列纵向顺序校准内置分区，供新库与 mock 重建共用。
 const BUILTIN_LAYOUT_VERSION_KEY = 'stage.content.builtin-layout.v7';
 const DELIVERABLE_SECTION_PRESENTATION_VERSION_KEY = 'stage.content.deliverable-section-presentation.v1';
@@ -364,6 +365,67 @@ async function replaceRules(table, idColumn, definitionId, rules, statuses) {
   }
 }
 
+async function ensureStageScopes(added = null) {
+  for (const [scopeKey, label, entityType, tableName, statusCategory, statusStage, statusField, permissionModule] of STAGE_SCOPE_DEFAULTS) {
+    if (await get('SELECT scope_key FROM stage_scope WHERE scope_key = ?', scopeKey)) continue;
+    await run('INSERT INTO stage_scope (scope_key, label, entity_type, table_name, status_category, status_stage, status_field, permission_module) VALUES (?,?,?,?,?,?,?,?)', scopeKey, label, entityType, tableName, statusCategory, statusStage, statusField, permissionModule);
+    added?.push(`scope:${scopeKey}`);
+  }
+}
+
+/** 当前本地配置快照以状态值而非数据库 ID 保存，初始化时再绑定到目标库的字典状态。 */
+function snapshotRulesToStatusIds(rules, statuses) {
+  return Object.fromEntries(statuses.map((status) => [status.id, asBool(rules?.[status.value]) ? 1 : 0]));
+}
+
+/**
+ * 以稳定键重放经确认的输入项、分区与交付件快照。仅插入完全缺失的定义，
+ * 因而既有环境的管理员调整、软删除和历史附件均不会被覆盖。
+ */
+async function seedStageContentSnapshot(snapshot, added = null) {
+  if (!Array.isArray(snapshot?.scopes)) throw new Error('阶段内容 Seed 快照格式非法');
+  await ensureStageScopes(added);
+  for (const scopeSnapshot of snapshot.scopes) {
+    const scopeKey = String(scopeSnapshot.scope_key || '');
+    if (!scopeKey) throw new Error('阶段内容 Seed 快照缺少范围编码');
+    await getStageScope(scopeKey);
+    const sectionIds = new Map();
+    for (const section of scopeSnapshot.sections || []) {
+      const sectionKey = safeKey(section.section_key, '分区编码');
+      let row = await get('SELECT id, deleted_at FROM stage_section WHERE scope_key = ? AND section_key = ?', scopeKey, sectionKey);
+      if (!row) {
+        const res = await run('INSERT INTO stage_section (scope_key, section_key, title, sort, collapsed, is_builtin, layout_mode, show_title) VALUES (?,?,?,?,?,?,?,?)', scopeKey, sectionKey, String(section.title || '').trim(), Number(section.sort || 0), asBool(section.collapsed) ? 1 : 0, asBool(section.is_builtin) ? 1 : 0, section.layout_mode || 'left', asBool(section.show_title) ? 1 : 0);
+        row = { id: res.lastInsertRowid };
+        added?.push(`section:${scopeKey}.${sectionKey}`);
+      }
+      if (!row.deleted_at) sectionIds.set(sectionKey, row.id);
+    }
+    const statuses = await listStageStatuses(scopeKey);
+    for (const field of scopeSnapshot.fields || []) {
+      const fieldKey = safeKey(field.field_key, '输入项编码');
+      if (await get('SELECT id FROM stage_field_definition WHERE scope_key = ? AND field_key = ?', scopeKey, fieldKey)) continue;
+      const res = await run(`INSERT INTO stage_field_definition (scope_key, field_key, label, field_kind, input_type, source_key, multiple, native_column, component_key, section_id, column_span, visible, list_visible, filterable, dashboard_dimension, sort, is_builtin) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, scopeKey, fieldKey, String(field.label || '').trim(), field.field_kind, field.input_type, field.source_key || null, asBool(field.multiple) ? 1 : 0, field.native_column || null, field.component_key || null, sectionIds.get(field.section_key) || null, Number(field.column_span) === 24 ? 24 : 12, asBool(field.visible) ? 1 : 0, asBool(field.list_visible) ? 1 : 0, asBool(field.filterable) ? 1 : 0, asBool(field.dashboard_dimension) ? 1 : 0, Number(field.sort || 0), asBool(field.is_builtin) ? 1 : 0);
+      if (Object.keys(field.rules || {}).length) await replaceRules('stage_field_status_rule', 'field_definition_id', res.lastInsertRowid, snapshotRulesToStatusIds(field.rules, statuses), statuses);
+      added?.push(`field:${scopeKey}.${fieldKey}`);
+    }
+    for (const deliverable of scopeSnapshot.deliverables || []) {
+      const deliverableKey = safeKey(deliverable.deliverable_key, '交付件编码');
+      let row = await get('SELECT id FROM deliverable_definition WHERE scope_key = ? AND deliverable_key = ?', scopeKey, deliverableKey);
+      if (!row) {
+        const res = await run('INSERT INTO deliverable_definition (scope_key, deliverable_key, label, input_mode, visible, sort, layout_mode) VALUES (?,?,?,?,?,?,?)', scopeKey, deliverableKey, String(deliverable.label || '').trim(), deliverable.input_mode, asBool(deliverable.visible) ? 1 : 0, Number(deliverable.sort || 0), deliverable.layout_mode || 'left');
+        row = { id: res.lastInsertRowid };
+        if (Object.keys(deliverable.rules || {}).length) await replaceRules('deliverable_status_rule', 'deliverable_definition_id', row.id, snapshotRulesToStatusIds(deliverable.rules, statuses), statuses);
+        added?.push(`deliverable:${scopeKey}.${deliverableKey}`);
+      }
+      for (const template of deliverable.templates || []) {
+        if (!template.handler_key || template.template_mode !== 'custom') continue;
+        if (await get('SELECT id FROM deliverable_template_version WHERE deliverable_definition_id = ? AND template_mode = ? AND handler_key = ? AND version_no = ? AND deleted_at IS NULL', row.id, template.template_mode, template.handler_key, Number(template.version_no || 0))) continue;
+        await run('INSERT INTO deliverable_template_version (deliverable_definition_id, template_mode, handler_key, version_no, enabled) VALUES (?,?,?,?,?)', row.id, template.template_mode, template.handler_key, Number(template.version_no || 0), asBool(template.enabled) ? 1 : 0);
+      }
+    }
+  }
+}
+
 export async function saveSection(scopeKey, body, operator) {
   await getStageScope(scopeKey);
   const sectionKey = safeKey(body.section_key, '分区编码');
@@ -397,6 +459,47 @@ export async function deleteSection(scopeKey, id, operator) {
   if (used?.c) throw badRequest('分区仍包含输入项，请先调整输入项布局');
   await run(`UPDATE stage_section SET deleted_at=${dialect.now} WHERE id=?`, id);
   await recordConfigRevision(scopeKey, 'content', operator);
+}
+
+/** 同一分区的字段布局必须一次提交，避免逐项更新导致配置修订膨胀或中途失败。 */
+export async function saveSectionFieldLayout(scopeKey, body, operator) {
+  const scope = await getStageScope(scopeKey);
+  const sectionId = Number(body?.section_id || 0);
+  const fieldIds = Array.isArray(body?.field_ids) ? body.field_ids.map((id) => Number(id)) : null;
+  const columnSpans = body?.column_spans;
+  if (!Number.isInteger(sectionId) || sectionId <= 0) throw badRequest('请选择需要排序的分区');
+  if (!fieldIds || fieldIds.some((id) => !Number.isInteger(id) || id <= 0)) throw badRequest('字段排序参数非法');
+  if (new Set(fieldIds).size !== fieldIds.length) throw badRequest('字段排序不能包含重复输入项');
+  if (!columnSpans || typeof columnSpans !== 'object' || Array.isArray(columnSpans)) throw badRequest('字段宽度参数非法');
+  const spanIds = Object.keys(columnSpans).map((id) => Number(id));
+  if (spanIds.some((id) => !Number.isInteger(id) || id <= 0) || spanIds.length !== fieldIds.length || fieldIds.some((id) => !Object.hasOwn(columnSpans, id))) {
+    throw badRequest('字段宽度必须覆盖该分区的全部输入项');
+  }
+  const spanById = new Map(fieldIds.map((id) => [id, Number(columnSpans[id])]));
+  if ([...spanById.values()].some((span) => ![12, 24].includes(span))) throw badRequest('字段宽度仅支持半行或整行');
+
+  const section = await get('SELECT id FROM stage_section WHERE id = ? AND scope_key = ? AND deleted_at IS NULL', sectionId, scopeKey);
+  if (!section) throw badRequest('所属分区不存在');
+  // 状态字段由各阶段详情标题栏独立承载，不能以空白网格槽位参与分区排序或宽度保存。
+  const configuredFields = await all(`SELECT id, sort, column_span FROM stage_field_definition
+    WHERE scope_key = ? AND section_id = ? AND deleted_at IS NULL AND field_key <> ? ORDER BY sort, id`, scopeKey, sectionId, scope.status_field);
+  if (configuredFields.length !== fieldIds.length || configuredFields.some((field) => !fieldIds.includes(field.id))) {
+    throw badRequest('字段排序必须包含该分区的全部输入项');
+  }
+  const hasChanged = configuredFields.some((field, index) => (
+    field.id !== fieldIds[index]
+    || Number(field.sort) !== (index + 1) * 10
+    || Number(field.column_span) !== spanById.get(field.id)
+  ));
+  if (!hasChanged) return configuredFields;
+
+  await tx(async () => {
+    for (const [index, fieldId] of fieldIds.entries()) {
+      await run(`UPDATE stage_field_definition SET sort = ?, column_span = ?, updated_at = ${dialect.now} WHERE id = ?`, (index + 1) * 10, spanById.get(fieldId), fieldId);
+    }
+    await recordConfigRevision(scopeKey, 'content', operator);
+  });
+  return await all(`SELECT * FROM stage_field_definition WHERE scope_key = ? AND section_id = ? AND deleted_at IS NULL AND field_key <> ? ORDER BY sort, id`, scopeKey, sectionId, scope.status_field);
 }
 
 export async function saveFieldDefinition(scopeKey, body, operator) {
@@ -434,8 +537,12 @@ export async function saveFieldDefinition(scopeKey, body, operator) {
   }
   // 新增扩展字段的默认值与配置界面保持一致：只进入详情页，避免未确认口径的数据直接进入列表、筛选和仪表盘。
   const visible = !exists && body.visible === undefined ? 1 : (asBool(body.visible) ? 1 : 0);
+  // 业务组件是结构化交互或聚合区域，没有可安全映射的一行值；仅详情显示能力适用。
+  const supportsListCapabilities = inputType !== 'component';
   const presentationData = [sectionId, Number(body.column_span) === 24 ? 24 : 12, visible,
-    asBool(body.list_visible) ? 1 : 0, asBool(body.filterable) ? 1 : 0, asBool(body.dashboard_dimension) ? 1 : 0, Number(body.sort || 0)];
+    supportsListCapabilities && asBool(body.list_visible) ? 1 : 0,
+    supportsListCapabilities && asBool(body.filterable) ? 1 : 0,
+    supportsListCapabilities && asBool(body.dashboard_dimension) ? 1 : 0, Number(body.sort || 0)];
   let fieldId = id;
   if (exists) {
     await run(`UPDATE stage_field_definition SET label=?, section_id=?, column_span=?, visible=?, list_visible=?, filterable=?, dashboard_dimension=?, sort=?, updated_at=${dialect.now} WHERE id=?`, label, ...presentationData, id);
@@ -784,7 +891,11 @@ export async function assertDeliverableRemovable(attachment) {
 }
 
 /** 保存默认范围、分区、内置字段及已有交付件定义。仅在全新库首次种子化时插入。 */
-export async function seedStageContentDefaults({ builtinMetadata = {}, sectionDefaults = {} } = {}) {
+export async function seedStageContentDefaults({ builtinMetadata = {}, sectionDefaults = {}, snapshot = null } = {}) {
+  if (snapshot) {
+    await seedStageContentSnapshot(snapshot);
+    return;
+  }
   for (const [scopeKey, label, entityType, tableName, statusCategory, statusStage, statusField, permissionModule] of STAGE_SCOPE_DEFAULTS) {
     if (!await get('SELECT scope_key FROM stage_scope WHERE scope_key = ?', scopeKey)) {
       await run('INSERT INTO stage_scope (scope_key, label, entity_type, table_name, status_category, status_stage, status_field, permission_module) VALUES (?,?,?,?,?,?,?,?)', scopeKey, label, entityType, tableName, statusCategory, statusStage, statusField, permissionModule);
@@ -842,12 +953,17 @@ export async function seedStageContentDefaults({ builtinMetadata = {}, sectionDe
  * 为已运行环境补齐目录中新出现的默认定义。该入口不调用全量种子校准：
  * 已存在（包括软删除）的分区、字段、交付件、规则和模板均视为管理员意图，绝不覆盖。
  */
-export async function applyBuiltinConfigurationUpgrades({ builtinMetadata = {}, sectionDefaults = {} } = {}) {
-  return await tx(async () => {
+export async function applyBuiltinConfigurationUpgrades({ builtinMetadata = {}, sectionDefaults = {}, snapshot = null } = {}) {
+  const upgrade = await tx(async () => {
     const applied = await get('SELECT upgrade_id FROM configuration_upgrade_ledger WHERE upgrade_id = ?', BUILTIN_CONFIGURATION_UPGRADE_ID);
     if (applied) return { applied: false, upgrade_id: BUILTIN_CONFIGURATION_UPGRADE_ID, added: [] };
 
     const added = [];
+    if (snapshot) {
+      await seedStageContentSnapshot(snapshot, added);
+      await run('INSERT INTO configuration_upgrade_ledger (upgrade_id, details) VALUES (?,?)', BUILTIN_CONFIGURATION_UPGRADE_ID, JSON.stringify({ added }));
+      return { applied: true, upgrade_id: BUILTIN_CONFIGURATION_UPGRADE_ID, added };
+    }
     for (const [scopeKey, label, entityType, tableName, statusCategory, statusStage, statusField, permissionModule] of STAGE_SCOPE_DEFAULTS) {
       if (!await get('SELECT scope_key FROM stage_scope WHERE scope_key = ?', scopeKey)) {
         await run('INSERT INTO stage_scope (scope_key, label, entity_type, table_name, status_category, status_stage, status_field, permission_module) VALUES (?,?,?,?,?,?,?,?)', scopeKey, label, entityType, tableName, statusCategory, statusStage, statusField, permissionModule);
@@ -892,6 +1008,8 @@ export async function applyBuiltinConfigurationUpgrades({ builtinMetadata = {}, 
     await run('INSERT INTO configuration_upgrade_ledger (upgrade_id, details) VALUES (?,?)', BUILTIN_CONFIGURATION_UPGRADE_ID, JSON.stringify({ added }));
     return { applied: true, upgrade_id: BUILTIN_CONFIGURATION_UPGRADE_ID, added };
   });
+  await synchronizeRegistrationInfoFields();
+  return upgrade;
 }
 
 /**
@@ -947,6 +1065,21 @@ async function synchronizeBuiltinFieldMetadata(builtinMetadata) {
       WHERE scope_key=? AND field_key='register_time' AND label='登记时间'`, '录入时间', scopeKey);
   }
   await run('INSERT INTO app_config (key, value, remark) VALUES (?,?,?)', BUILTIN_METADATA_VERSION_KEY, '1', '分析字段默认展示、筛选与兼容文案校准版本');
+}
+
+/** 将录入人和录入时间收敛为一个只读展示项；底层两列仍保留用于审计与历史兼容。 */
+async function synchronizeRegistrationInfoFields() {
+  if (await get('SELECT value FROM app_config WHERE key = ?', REGISTRATION_INFO_VERSION_KEY)) return;
+  await tx(async () => {
+    if (await get('SELECT value FROM app_config WHERE key = ?', REGISTRATION_INFO_VERSION_KEY)) return;
+    for (const scopeKey of ['requirement', 'ticket']) {
+      await run(`UPDATE stage_field_definition SET label=?, updated_at=${dialect.now}
+        WHERE scope_key=? AND field_key='registrar' AND field_kind='native' AND is_builtin=1 AND deleted_at IS NULL`, '录入人信息', scopeKey);
+      await run(`UPDATE stage_field_definition SET deleted_at=${dialect.now}, updated_at=${dialect.now}
+        WHERE scope_key=? AND field_key='register_time' AND field_kind='native' AND is_builtin=1 AND deleted_at IS NULL`, scopeKey);
+    }
+    await run('INSERT INTO app_config (key, value, remark) VALUES (?,?,?)', REGISTRATION_INFO_VERSION_KEY, '1', '需求和工单录入信息输入项合并版本');
+  });
 }
 
 /**

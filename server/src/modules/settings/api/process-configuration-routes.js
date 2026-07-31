@@ -27,6 +27,7 @@ import {
   saveExtensionValues,
   saveFieldDefinition,
   saveSection,
+  saveSectionFieldLayout,
   PRIORITY_OPTIONS,
 } from '../process-configuration/index.js';
 
@@ -114,6 +115,9 @@ export default async function stageContentRoutes(fastify) {
   });
   fastify.put('/settings/stage-content/:scopeKey/fields/:id', { preHandler: fastify.requirePerm('settings', 'edit') }, async (request) => {
     return ok(await saveFieldDefinition(request.params.scopeKey, { ...(request.body || {}), id: Number(request.params.id) }, request.currentUser?.name));
+  });
+  fastify.put('/settings/stage-content/:scopeKey/field-layout', { preHandler: fastify.requirePerm('settings', 'edit') }, async (request) => {
+    return ok(await saveSectionFieldLayout(request.params.scopeKey, request.body || {}, request.currentUser?.name));
   });
   fastify.delete('/settings/stage-content/:scopeKey/fields/:id', { preHandler: fastify.requirePerm('settings', 'edit') }, async (request) => {
     await deleteFieldDefinition(request.params.scopeKey, Number(request.params.id), request.currentUser?.name);

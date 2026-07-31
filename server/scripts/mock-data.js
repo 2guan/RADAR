@@ -13,6 +13,7 @@
  */
 
 import { db, get, all, run, tx, closeDb } from '../src/platform/persistence/engine/index.js';
+import path from 'node:path';
 import { config } from '../src/platform/runtime/config.js';
 import { runMigrations } from '../src/platform/persistence/migrate.js';
 import { runSeed } from '../src/bootstrap/seed.js';
@@ -486,8 +487,15 @@ const DEV_ACTIONS = ['接口改造', '数据迁移', '规则配置', '页面重�
 // 业务参与方机构（用于实施方/部门口径）
 // ---------------------------------------------------------------------------
 const IMPL_ORGS = ['上海事业群', '北京事业群', '成都事业群', '深圳事业群', '武汉事业群', '厦门事业群', '大数据中心', '交付事业部', '基础技术中心'];
+const ANALYSIS_WORKLOADS = ['1 人日', '2 人日', '3 人日', '5 人日', '8 人日'];
 
-// 清空业务/人员数据（保留字典/系统/角色/权限/超级管理员/仪表盘图表配置）
+function registrationTime(date, index) {
+  const hour = 8 + (index % 9);
+  const minute = (index * 17) % 60;
+  return `${date} ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+}
+
+// 清空业务/人员数据（保留字典、系统、角色、权限、超级管理员、仪表盘及全部流程配置）。
 async function wipe() {
   const tables = [
     'release_signoff', 'release_system', 'release_task', 'release_apply_reference', 'release_apply',
@@ -498,13 +506,8 @@ async function wipe() {
   // 公共内容填写值随演示业务数据重置；内置字段、业务组件与分区元数据由 seed 保留。
   await run('DELETE FROM stage_field_value');
   await run('DELETE FROM content_config_revision');
-  await run(`DELETE FROM deliverable_status_rule
-    WHERE deliverable_definition_id IN (SELECT id FROM deliverable_definition WHERE deliverable_key NOT LIKE 'builtin_%')`);
-  await run("DELETE FROM deliverable_definition WHERE deliverable_key NOT LIKE 'builtin_%'");
-  await run(`DELETE FROM stage_field_status_rule
-    WHERE field_definition_id IN (SELECT id FROM stage_field_definition WHERE is_builtin = 0)`);
-  await run('DELETE FROM stage_field_definition WHERE is_builtin = 0');
-  await run('DELETE FROM stage_section WHERE is_builtin = 0');
+  // 输入项、分区、状态规则、交付件及模板都是系统设置配置，不属于 Mock 业务数据。
+  // 不能按“是否内置”删除，否则自定义交付件或扩展字段会在重建后丢失。
   // 删除除引导超管(admin)外的全部演示人员，保证可重复执行；user_role 随级联删除。
   await run('DELETE FROM user WHERE phone <> ?', config.superAdmin.phone);
   // release_point 被需求/投产申请引用，需在其后清空
@@ -604,6 +607,15 @@ export async function runMock() {
     const sysByCode = {};
     for (const s of systems) sysByCode[s.sys_code] = s;
     const sysCodes = systems.map((s) => s.sys_code);
+    const implementationOrgs = (await all('SELECT attr_value FROM dict_item WHERE category = ? ORDER BY sort, id', 'org'))
+      .map((row) => row.attr_value)
+      .filter(Boolean);
+    const activePeople = (await all('SELECT name FROM user WHERE status = ? ORDER BY id', '启用'))
+      .map((row) => row.name)
+      .filter(Boolean);
+    if (!implementationOrgs.length || !activePeople.length) {
+      throw new Error('Mock 数据缺少实施机构字典或启用人员，无法生成需求/工单分析字段');
+    }
 
     // ----------------------------------------------------------------------
     // 3) 需求画像分配（共 120 个）
@@ -632,7 +644,7 @@ export async function runMock() {
     let devCount = 0;
     let testCount = 0;
 
-    for (const spec of specs) {
+    for (const [reqIndex, spec] of specs.entries()) {
       const main = pickN(sysCodes, 1 + Math.floor(rng() * 2));
       const collabDev = rng() < 0.3 ? pickN(sysCodes.filter((c) => !main.includes(c)), 1) : [];
       const collabTest = rng() < 0.25 ? pickN(sysCodes.filter((c) => !main.includes(c)), 1) : [];
@@ -641,11 +653,16 @@ export async function runMock() {
       const reqStatus = REQ_DONE.has(spec.profile) ? '分析完成'
         : (spec.profile === 'analysis' ? '需求分析' : '需求登记');
       const proposeTime = shift(ymd(spec.rp.date), -60 - Math.floor(rng() * 60));
+      const issueNo = `OA${proposeTime.replaceAll('-', '')}${String(reqIndex + 1).padStart(3, '0')}`;
+      const implementationOrg = implementationOrgs[reqIndex % implementationOrgs.length];
+      const receiver = activePeople[(reqIndex * 7) % activePeople.length];
+      const workload = ANALYSIS_WORKLOADS[reqIndex % ANALYSIS_WORKLOADS.length];
       const res = await run(
         `INSERT INTO requirement
            (req_code, title, summary, status, req_type, propose_dept, proposer, yn_owner, jk_owner,
-            propose_time, main_systems, collab_dev_systems, collab_test_systems, release_point_id, registrar, register_time)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+            propose_time, main_systems, collab_dev_systems, collab_test_systems,
+            release_point_id, issue_no, implementation_org, receiver, workload, registrar, register_time)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         code, `${sysByCode[main[0]].sys_name}${topic}`,
         `针对${sysByCode[main[0]].sys_name}的${topic}，覆盖相关业务规则与接口改造，确保${spec.rp.date.slice(0, 6)}投产窗口如期交付。`,
         reqStatus,
@@ -654,7 +671,8 @@ export async function runMock() {
         JSON.stringify([pickUser('农信业务')]), pickUser('农信业务'), pickUser('金科业务'),
         proposeTime,
         JSON.stringify(main), JSON.stringify(collabDev), JSON.stringify(collabTest),
-        spec.rp.id, pickUser('农信业务'), shift(proposeTime, 2),
+        spec.rp.id, issueNo, implementationOrg, receiver, workload,
+        pickUser('农信业务'), registrationTime(shift(proposeTime, 2), reqIndex),
       );
       const reqId = res.lastInsertRowid;
       await auditCreate('requirement', reqId, code, '系统初始化');
@@ -949,13 +967,16 @@ export async function runMock() {
       const tStatus = TICKET_STATUS[tspec.profile];
       const main = [issueSystemCode(linkedIssue)];
       const proposeTime = shift(ymd(tspec.rp.date), -40 - Math.floor(rng() * 20));
+      const implementationOrg = implementationOrgs[(i + 5) % implementationOrgs.length];
+      const receiver = activePeople[(i * 7 + 3) % activePeople.length];
+      const workload = ANALYSIS_WORKLOADS[(i + 2) % ANALYSIS_WORKLOADS.length];
       await run(
         `INSERT INTO ticket
            (ticket_code, title, summary, status, ticket_type, is_accounting,
             propose_dept, proposer, yn_owner, jk_owner, propose_time,
             main_systems, collab_dev_systems, collab_test_systems,
-            release_point_id, issue_no, registrar, register_time)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+            release_point_id, issue_no, implementation_org, receiver, workload, registrar, register_time)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         code,
         linkedIssue.summary.slice(0, 50).trimEnd() + (linkedIssue.summary.length > 50 ? '…' : ''),
         linkedIssue.details || linkedIssue.summary,
@@ -964,8 +985,8 @@ export async function runMock() {
         pickUser('农信业务'), pickUser('金科业务'),
         proposeTime,
         JSON.stringify(main), JSON.stringify([]), JSON.stringify([]),
-        tspec.rp.id, linkedIssue.code,
-        pickUser('农信业务'), shift(proposeTime, 1),
+        tspec.rp.id, linkedIssue.code, implementationOrg, receiver, workload,
+        pickUser('农信业务'), registrationTime(shift(proposeTime, 1), i),
       );
       const ticketId = (await get('SELECT id FROM ticket WHERE ticket_code = ?', code)).id;
       await auditCreate('ticket', ticketId, code, '系统初始化');
@@ -1131,6 +1152,19 @@ export async function runMock() {
       }
     }
 
+    const analysisMockFields = ['issue_no', 'implementation_org', 'receiver', 'workload', 'registrar', 'register_time'];
+    for (const [table, codeColumn] of [['requirement', 'req_code'], ['ticket', 'ticket_code']]) {
+      const rows = await all(`SELECT ${codeColumn} AS code, ${analysisMockFields.join(', ')} FROM ${table}`);
+      const invalid = rows.find((row) => (
+        analysisMockFields.some((field) => !String(row[field] || '').trim())
+        || !implementationOrgs.includes(row.implementation_org)
+        || !activePeople.includes(row.receiver)
+        || /[\r\n]/.test(row.workload)
+        || !/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(row.register_time)
+      ));
+      if (invalid) throw new Error(`Mock ${table} 分析字段未完整填充：${invalid.code}`);
+    }
+
     const stat = {
       用户: (await get('SELECT COUNT(*) c FROM user')).c,
       会签角色: signRoles.map((r) => r.name).join('、'),
@@ -1159,8 +1193,8 @@ export async function runMock() {
   });
 }
 
-// 直接运行：node scripts/mock-data.js
-if (import.meta.url === `file://${process.argv[1]}`) {
+// 兼容从仓库根目录（node server/scripts/mock-data.js）和 server 目录直接执行。
+if (process.argv[1] && path.basename(process.argv[1]) === 'mock-data.js') {
   try {
     await runMock();
     db.exec?.('PRAGMA wal_checkpoint(TRUNCATE);');

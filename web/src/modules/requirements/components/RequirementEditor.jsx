@@ -12,7 +12,7 @@ import { Form, Input, DatePicker, Row, Col, Button, Select, Tag, message, Toolti
 import { HistoryOutlined, CloseOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { DictSelect, PersonPicker, makeReleasePointOptions } from '../../settings/reference-data/index.js';
-import { StageBuiltinCatalogField, StageBuiltinField, StageBuiltinFields, StageContentPanel, StageSectionLayout, useDefaultProcessStatus, useRequiredFields } from '../../settings/process-configuration/index.js';
+import { StageBuiltinField, StageBuiltinFields, StageContentPanel, StageSectionLayout, useDefaultProcessStatus, useRequiredFields } from '../../settings/process-configuration/index.js';
 import { HistoryDrawer } from '../../../platform/audit/index.js';
 import { CodeLink } from '../../../platform/routing/index.js';
 import { EditorShell } from '../../../shared/ui/index.js';
@@ -23,6 +23,14 @@ import { useResponsive } from '../../../platform/ui/useResponsive.js';
 
 // ─── 模块级系统列表缓存（与 SystemSelect 共用同一接口，但单独维护以供下方组件使用） ───
 let _sysCache = null;
+
+function formatRegisterTime(value, fallbackValue) {
+  const valueMatch = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{1,2}))?/.exec(String(value || ''));
+  const source = valueMatch?.[4] ? value : (fallbackValue || value);
+  if (!source) return '—';
+  const match = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{1,2}))?/.exec(String(source));
+  return match ? `${Number(match[2])}-${Number(match[3])} ${Number(match[4] || 0)}:${String(match[5] || '0').padStart(2, '0')}` : value;
+}
 
 /**
  * 系统选择子区块：标题在左、选择框在右，已选系统逐个展示在下方、可单独删除。
@@ -463,8 +471,6 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
                       />
                     </Form.Item>
                 </StageBuiltinField>
-                <StageBuiltinCatalogField fieldKey="priority" defaultSection="basic" readonly={readonly} rules={required.rules('priority', '优先级', { action: '请选择' })} />
-
               {/* 需求标题 */}
               <StageBuiltinField fieldKey="title" defaultSection="basic" defaultColumnSpan={24}>
                 <Form.Item name="title" label="需求标题" rules={required.rules('title', '需求标题', { message: '请输入需求标题' })} style={{ marginBottom: 8 }}>
@@ -526,8 +532,12 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
                 </Form.Item>
               </StageBuiltinField>
               <StageBuiltinField fieldKey="receiver" defaultSection="owners"><Form.Item name="receiver" label="需求接收人" rules={required.rules('receiver', '需求接收人', { action: '请选择' })} style={{ marginBottom: 8 }}><PersonPicker style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择需求接收人" size="small" /></Form.Item></StageBuiltinField>
-              <StageBuiltinField fieldKey="registrar" defaultSection="owners"><Form.Item name="registrar" label="录入人" style={{ marginBottom: 8 }}><Input size="small" readOnly /></Form.Item></StageBuiltinField>
-              <StageBuiltinField fieldKey="register_time" defaultSection="owners"><Form.Item name="register_time" label="录入时间" style={{ marginBottom: 0 }}><Input size="small" readOnly /></Form.Item></StageBuiltinField>
+              {current && <StageBuiltinField fieldKey="registrar" defaultSection="owners">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 11, color: 'var(--radar-text-secondary)', minHeight: 42 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ width: 80 }}>录入人信息：</span><span>{current.registrar || '—'}</span></div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ width: 80 }}>录入时间：</span><span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace' }}>{formatRegisterTime(current.register_time, current.created_at)}</span></div>
+                </div>
+              </StageBuiltinField>}
           </StageBuiltinFields>
           {/* 交付件与扩展信息均由公共配置渲染，移动交付件布局后立即跟随生效。 */}
           <StageContentPanel ref={extensionPanelRef} scopeKey="requirement" entityType="requirement" entityId={current?.id} readOnly={readonly} onDirtyChange={() => setIsDirty(true)} />

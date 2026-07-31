@@ -23,6 +23,13 @@ import { ImportModal } from '../../../platform/import-export/index.js';
 import { makeReleasePointOptions, ReleasePointText } from '../../settings/reference-data/index.js';
 import { useStageListFields } from '../../settings/process-configuration/index.js';
 
+function formatRegistrationTime(value, fallbackValue) {
+  const valueMatch = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{1,2}))?/.exec(String(value || ''));
+  const source = valueMatch?.[4] ? value : (fallbackValue || value);
+  const match = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{1,2}))?/.exec(String(source || ''));
+  return match ? `${Number(match[2])}-${Number(match[3])} ${Number(match[4] || 0)}:${String(match[5] || '0').padStart(2, '0')}` : '—';
+}
+
 export default function Tickets() {
   const stageList = useStageListFields('ticket');
   const tableRef = useRef();
@@ -65,10 +72,10 @@ export default function Tickets() {
   const userOptions = users.map(u => ({ value: u.name, label: `${u.name} (${u.phone})` }));
   const systemOptions = systems.map(s => ({ value: s.sys_code, label: `${s.sys_code} - ${s.sys_name}` }));
 
-  const fallbackNativeFilterLabels = { implementation_org: '实施机构', ticket_code: '工单编号', issue_no: 'OA编号/工单编号', release_point_id: '计划投产点', status: '工单状态', ticket_type: '工单类型', is_accounting: '是否涉账', priority: '优先级', propose_dept: '提出部门', proposer: '提出人', receiver: '需求接收人', workload: '工作量', registrar: '录入人', register_time: '录入时间', main_systems: '主责系统', collab_dev_systems: '协同改造系统' };
+  const fallbackNativeFilterLabels = { implementation_org: '实施机构', ticket_code: '工单编号', issue_no: 'OA编号/工单编号', release_point_id: '计划投产点', status: '工单状态', ticket_type: '工单类型', is_accounting: '是否涉账', priority: '优先级', propose_dept: '提出部门', proposer: '提出人', receiver: '需求接收人', workload: '工作量', registrar: '录入人信息', main_systems: '主责系统', collab_dev_systems: '协同改造系统' };
   const fallbackNativeFilters = [
     'implementation_org', 'ticket_code', 'issue_no', 'release_point_id', 'status', 'ticket_type', 'is_accounting', 'priority',
-    'propose_dept', 'proposer', 'receiver', 'workload', 'registrar', 'register_time', 'main_systems', 'collab_dev_systems',
+    'propose_dept', 'proposer', 'receiver', 'workload', 'registrar', 'main_systems', 'collab_dev_systems',
   ].map((field_key) => ({ field_key, label: fallbackNativeFilterLabels[field_key] }));
   const nativeFilterFields = stageList.loaded ? stageList.nativeFilterFields : fallbackNativeFilters;
   const nativeFilterConfig = (field) => {
@@ -121,12 +128,6 @@ export default function Tickets() {
     { title: '任务状态', dataIndex: 'task_status_short', key: 'task_status', align: 'center', width: 120, render: (_, row) => <TaskStatusBadge shortStatus={row.task_status_short} status={row.task_status_value} fullStatus={row.task_status} /> },
     { title: '工单状态', dataIndex: 'status', key: 'status', align: 'center', render: (s) => <StatusBadge status={s} /> },
     {
-      title: '计划投产点',
-      dataIndex: 'release_date',
-      key: 'release_date',
-      render: (val) => <ReleasePointText value={val} />,
-    },
-    {
       title: '工单编号',
       dataIndex: 'ticket_code',
       key: 'ticket_code',
@@ -136,6 +137,12 @@ export default function Tickets() {
           {val}
         </span>
       ),
+    },
+    {
+      title: '计划投产点',
+      dataIndex: 'release_date',
+      key: 'release_date',
+      render: (val) => <ReleasePointText value={val} />,
     },
     {
       title: '工单概述',
@@ -170,8 +177,15 @@ export default function Tickets() {
     { title: '实施机构', dataIndex: 'implementation_org', key: 'implementation_org' },
     { title: '需求接收人', dataIndex: 'receiver', key: 'receiver' },
     { title: '工作量', dataIndex: 'workload', key: 'workload' },
-    { title: '录入人', dataIndex: 'registrar', key: 'registrar' },
-    { title: '录入时间', dataIndex: 'register_time', key: 'register_time', sorter: true },
+    {
+      title: '录入人信息', dataIndex: 'registrar', key: 'registrar',
+      render: (_, row) => (
+        <div style={{ fontSize: 11, lineHeight: 1.5 }}>
+          <div>{row.registrar || '—'}</div>
+          <div style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', color: 'var(--radar-text-secondary)' }}>{formatRegistrationTime(row.register_time, row.created_at)}</div>
+        </div>
+      ),
+    },
     {
       title: '提出时间',
       dataIndex: 'propose_time',
@@ -236,6 +250,9 @@ export default function Tickets() {
         : { title: field.label, dataIndex: field.field_key, key: field.field_key, render: (value) => Array.isArray(value) ? (value.join('、') || '—') : (value || '—') };
     })
     : columns.slice(1, -1);
+  // 任务状态为固定上下文；工单状态和编号按业务识别顺序固定在其后，其他配置列保持管理员既有排序。
+  const nativeListColumns = ['status', 'ticket_code'].flatMap((fieldKey) => configuredNativeColumns.filter((column) => column.key === fieldKey))
+    .concat(configuredNativeColumns.filter((column) => !['status', 'ticket_code'].includes(column.key)));
 
   return (
     <Card
@@ -264,7 +281,7 @@ export default function Tickets() {
         ]}
       />
       <DataTable
-        ref={tableRef} columns={[columns[0], ...configuredNativeColumns, ...stageList.columns, columns.at(-1)]} fetcher={fetcher}
+        ref={tableRef} columns={[columns[0], ...nativeListColumns, ...stageList.columns, columns.at(-1)]} fetcher={fetcher}
         baseQuery={{ releasePointIds, filters: filterQuery }}
         showSearch={false}
         onRowClick={openEdit}

@@ -240,7 +240,9 @@ export function extract(source, dim, row, ctx, filters) {
   if (dim.startsWith('native:')) {
     const [, scopeKey, fieldKey] = dim.split(':');
     if (!fieldKey || row._stageScope !== scopeKey) return ['未填写'];
-    const item = row._workItem || row;
+    // 分析阶段的原生字段属于需求/工单；开发、测试和投产阶段字段必须从阶段记录本身取值，
+    // 不能误回退到关联工作项，否则已启用维度会全部显示为“未填写”。
+    const item = ['requirement', 'ticket'].includes(scopeKey) ? (row._workItem || row) : row;
     return nativeDimensionValues(item, fieldKey);
   }
   // 统一效能统计记录保留其所属需求/工单；阶段记录本身只用于“阶段状态”。

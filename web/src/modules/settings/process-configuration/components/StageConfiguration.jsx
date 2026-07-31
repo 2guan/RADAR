@@ -9,7 +9,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { App, Button, Card, Checkbox, Empty, Form, Input, InputNumber, List, Modal, Popconfirm, Row, Col, Select, Space, Table, Tabs, Tag, Tooltip, Upload } from 'antd';
-import { DeleteOutlined, EditOutlined, HolderOutlined, PlusOutlined, SettingOutlined } from '@ant-design/icons';
+import { DeleteOutlined, DownOutlined, EditOutlined, HolderOutlined, PlusOutlined, SettingOutlined, UpOutlined } from '@ant-design/icons';
 import { apiDelete, apiGet, apiPost, apiPut, rawClient } from '../../../../platform/api.js';
 import { MENU } from '../../../../platform/routing/menu.js';
 import { buildStageSectionLayout } from '../../../../shared/workflow/index.js';
@@ -156,14 +156,25 @@ function RequiredRuleTags({ statuses, rules = {} }) {
  */
 function SectionEditor({ open, config, messageApi, onClose, onSaved, isMobile }) {
   const [sections, setSections] = useState([]);
+  const [fieldOrders, setFieldOrders] = useState({});
+  const [dirtyFieldSectionIds, setDirtyFieldSectionIds] = useState(() => new Set());
   const [saving, setSaving] = useState(false);
+  const isSectionLayoutField = (field) => field.field_key !== config?.scope?.status_field;
   useEffect(() => {
-    if (open) setSections((config?.sections || []).map((item) => ({
+    if (!open) return;
+    const nextSections = (config?.sections || []).map((item) => ({
       ...item,
       client_key: `section_${item.id}`,
       collapsed: !!item.collapsed,
       show_title: item.show_title !== 0,
-    })));
+    }));
+    const orders = Object.fromEntries(nextSections.map((section) => [section.id, []]));
+    for (const field of [...(config?.fields || [])].filter(isSectionLayoutField).sort((a, b) => Number(a.sort || 0) - Number(b.sort || 0) || Number(a.id || 0) - Number(b.id || 0))) {
+      if (orders[field.section_id]) orders[field.section_id].push(field);
+    }
+    setSections(nextSections);
+    setFieldOrders(orders);
+    setDirtyFieldSectionIds(new Set());
   }, [open, config]);
 
   const resetSort = (items) => items.map((item, index) => ({ ...item, sort: (index + 1) * 10 }));
@@ -196,6 +207,49 @@ function SectionEditor({ open, config, messageApi, onClose, onSaved, isMobile })
   const removeSection = async (section) => {
     if (section.id) await apiDelete(`/settings/stage-content/${config.scope.scope_key}/sections/${section.id}`);
     setSections((old) => resetSort(old.filter((item) => item.client_key !== section.client_key)));
+    setDirtyFieldSectionIds((old) => {
+      const next = new Set(old);
+      next.delete(section.id);
+      return next;
+    });
+  };
+  const markFieldSectionDirty = (sectionId) => setDirtyFieldSectionIds((old) => new Set(old).add(sectionId));
+  const moveField = (sectionId, fieldId, targetId = null) => {
+    if (!sectionId || !fieldId) return;
+    const fields = fieldOrders[sectionId] || [];
+    if (!fields.some((field) => field.id === fieldId)) return;
+    setFieldOrders((old) => {
+      const current = old[sectionId] || [];
+      const moving = current.find((field) => field.id === fieldId);
+      if (!moving) return old;
+      const rest = current.filter((field) => field.id !== fieldId);
+      const targetIndex = targetId ? rest.findIndex((field) => field.id === targetId) : rest.length;
+      const next = [...rest];
+      next.splice(targetIndex < 0 ? next.length : targetIndex, 0, moving);
+      if (next.every((field, index) => field.id === current[index]?.id)) return old;
+      return { ...old, [sectionId]: next };
+    });
+    markFieldSectionDirty(sectionId);
+  };
+  const moveFieldByOffset = (sectionId, fieldId, offset) => {
+    const fields = fieldOrders[sectionId] || [];
+    const index = fields.findIndex((field) => field.id === fieldId);
+    const target = fields[index + offset];
+    if (index < 0 || !target) return;
+    setFieldOrders((old) => {
+      const next = [...(old[sectionId] || [])];
+      const [moving] = next.splice(index, 1);
+      next.splice(index + offset, 0, moving);
+      return { ...old, [sectionId]: next };
+    });
+    markFieldSectionDirty(sectionId);
+  };
+  const setFieldColumnSpan = (sectionId, fieldId, columnSpan) => {
+    setFieldOrders((old) => ({
+      ...old,
+      [sectionId]: (old[sectionId] || []).map((field) => field.id === fieldId ? { ...field, column_span: columnSpan } : field),
+    }));
+    markFieldSectionDirty(sectionId);
   };
   const save = async () => {
     if (sections.some((section) => !String(section.title || '').trim())) {
@@ -207,16 +261,51 @@ function SectionEditor({ open, config, messageApi, onClose, onSaved, isMobile })
       for (const section of sections) {
         await apiPost(`/settings/stage-content/${config.scope.scope_key}/sections`, section);
       }
+      for (const sectionId of dirtyFieldSectionIds) {
+        const fields = fieldOrders[sectionId] || [];
+        await apiPut(`/settings/stage-content/${config.scope.scope_key}/field-layout`, {
+          section_id: sectionId,
+          field_ids: fields.map((field) => field.id),
+          column_spans: Object.fromEntries(fields.map((field) => [field.id, field.column_span === 24 ? 24 : 12])),
+        });
+      }
       messageApi.success('分区配置已保存');
       onSaved();
     } finally { setSaving(false); }
   };
   const previewPlan = buildStageSectionLayout(sections.map((section, index) => ({ ...section, key: section.client_key, index, order: section.sort })));
+  const previewField = (section, field, index, fields) => <div key={field.id} draggable
+    style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', alignItems: 'center', columnGap: 6, rowGap: 6, minWidth: 0, padding: '6px 8px', border: '1px solid var(--radar-border-light)', background: 'var(--radar-surface)', cursor: 'grab', gridColumn: field.column_span === 24 ? '1 / -1' : 'auto' }}
+    onDragStart={(event) => { event.stopPropagation(); event.dataTransfer.setData('stage-field-id', String(field.id)); event.dataTransfer.effectAllowed = 'move'; }}
+    onDragOver={(event) => { event.preventDefault(); event.stopPropagation(); }}
+    onDrop={(event) => { event.preventDefault(); event.stopPropagation(); moveField(section.id, Number(event.dataTransfer.getData('stage-field-id')), field.id); }}>
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, minWidth: 0 }}>
+      <HolderOutlined style={{ flex: '0 0 auto', marginTop: 2, color: 'var(--radar-text-secondary)' }} aria-hidden />
+      <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{field.label}</span>
+    </div>
+    <FieldKindTag kind={field.field_kind} />
+    <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
+      <Space.Compact size="small">
+        <Tooltip title="半行（50%）"><Button size="small" style={{ paddingInline: 5, fontSize: 11 }} type={field.column_span === 12 ? 'primary' : 'default'} onClick={() => setFieldColumnSpan(section.id, field.id, 12)} aria-label={`将${field.label}设为半行（50%）`}>50%</Button></Tooltip>
+        <Tooltip title="整行（100%）"><Button size="small" style={{ paddingInline: 5, fontSize: 11 }} type={field.column_span === 24 ? 'primary' : 'default'} onClick={() => setFieldColumnSpan(section.id, field.id, 24)} aria-label={`将${field.label}设为整行（100%）`}>100%</Button></Tooltip>
+      </Space.Compact>
+      <Space size={0}>
+        <Tooltip title="上移"><Button type="text" size="small" icon={<UpOutlined />} disabled={index === 0} onClick={() => moveFieldByOffset(section.id, field.id, -1)} aria-label={`上移${field.label}`} /></Tooltip>
+        <Tooltip title="下移"><Button type="text" size="small" icon={<DownOutlined />} disabled={index === fields.length - 1} onClick={() => moveFieldByOffset(section.id, field.id, 1)} aria-label={`下移${field.label}`} /></Tooltip>
+      </Space>
+    </div>
+  </div>;
   const previewCard = (section) => {
+    const fields = fieldOrders[section.id] || [];
     return <div key={section.client_key} draggable className="form-section-card stage-section-preview-card"
         onDragStart={(event) => event.dataTransfer.setData('section-key', section.client_key)}
         onDragOver={(event) => event.preventDefault()}
-        onDrop={(event) => { event.preventDefault(); event.stopPropagation(); moveSection(event.dataTransfer.getData('section-key'), section.client_key); }}>
+        onDrop={(event) => {
+          event.preventDefault(); event.stopPropagation();
+          const fieldId = Number(event.dataTransfer.getData('stage-field-id'));
+          if (fieldId) moveField(section.id, fieldId);
+          else moveSection(event.dataTransfer.getData('section-key'), section.client_key);
+        }}>
         <div className="stage-section-preview-toolbar">
           <HolderOutlined className="stage-section-preview-handle" />
           <Input size="small" value={section.title} onChange={(event) => updateSection(section.client_key, { title: event.target.value })} aria-label="分区名称" />
@@ -231,7 +320,11 @@ function SectionEditor({ open, config, messageApi, onClose, onSaved, isMobile })
         </div>
         <div className="stage-section-preview-body">
           {section.show_title && <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>{section.title || '未命名分区'}</div>}
-          {section.collapsed ? <span>默认以折叠状态展示</span> : <span>详情页内容预览区域</span>}
+          {section.collapsed && <div style={{ marginBottom: 8 }}>详情页默认折叠；以下字段用于配置预览。</div>}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 6 }} onDragOver={(event) => { event.preventDefault(); event.stopPropagation(); }} onDrop={(event) => { event.preventDefault(); event.stopPropagation(); moveField(section.id, Number(event.dataTransfer.getData('stage-field-id'))); }}>
+            {fields.map((field, index) => previewField(section, field, index, fields))}
+            {!fields.length && <div style={{ padding: '8px 0', color: 'var(--radar-text-secondary)' }}>暂无输入项，请在输入项详情中设置布局分区。</div>}
+          </div>
         </div>
       </div>;
   };
@@ -253,14 +346,22 @@ function SectionEditor({ open, config, messageApi, onClose, onSaved, isMobile })
       {lane('right', '右侧')}
     </div>;
   };
+  const unassignedFields = [...(config?.fields || [])]
+    .filter((field) => isSectionLayoutField(field) && !sections.some((section) => section.id === field.section_id))
+    .sort((a, b) => Number(a.sort || 0) - Number(b.sort || 0) || Number(a.id || 0) - Number(b.id || 0));
   return <Modal open={open} title="分区配置" width={isMobile ? 'calc(100vw - 16px)' : 980} onCancel={onClose} onOk={save} confirmLoading={saving} destroyOnHidden className="stage-config-editor-modal">
-    <div className="stage-section-preview-hint">直接拖拽卡片调整全局顺序；每张卡片可切换左侧、右侧或整行。整行模块可放在任意位置。</div>
+    <div className="stage-section-preview-hint">拖拽卡片调整分区布局；分区内可拖拽字段调整详情顺序，也可用上下按钮操作。阶段状态固定在详情页顶部，不参与分区配置；字段跨分区移动请在输入项详情中修改。</div>
     <div className="stage-section-preview-canvas"
       onDragOver={(event) => event.preventDefault()}
       onDrop={(event) => { event.preventDefault(); moveSection(event.dataTransfer.getData('section-key')); }}>
       {previewPlan.segments.map(previewSegment)}
       {!sections.length && <div className="stage-section-preview-empty">拖拽分区到此处</div>}
     </div>
+    {!!unassignedFields.length && <div className="form-section-card" style={{ marginBottom: 12, padding: '10px 12px' }}>
+      <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>未分区输入项</div>
+      <div style={{ color: 'var(--radar-text-secondary)', marginBottom: 8 }}>请在输入项详情中选择布局分区后，才可在这里排序。</div>
+      <Space size={[6, 6]} wrap>{unassignedFields.map((field) => <Tag key={field.id}>{field.label}</Tag>)}</Space>
+    </div>}
     <Button type="dashed" block icon={<PlusOutlined />} onClick={addSection}>新增扩展分区</Button>
   </Modal>;
 }
@@ -270,6 +371,7 @@ function FieldEditor({ open, field, config, sourceOptions, messageApi, onClose, 
   const [saving, setSaving] = useState(false);
   const isNew = !field || field.__new === true;
   const isExtension = isNew || field?.field_kind === 'extension';
+  const isComponent = field?.input_type === 'component';
   useEffect(() => {
     if (!open) return;
     form.resetFields();
@@ -334,7 +436,7 @@ function FieldEditor({ open, field, config, sourceOptions, messageApi, onClose, 
             <Col span={6} xs={12}><Form.Item name="column_span" label="布局宽度"><Select options={[{ value: 12, label: '半行' }, { value: 24, label: '整行' }]} /></Form.Item></Col>
             <Col span={6} xs={12}><Form.Item name="sort" label="排序"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
             {isExtension && <Col span={24}><Form.Item name="multiple" valuePropName="checked" style={{ marginBottom: 8 }}><Checkbox>允许多选（Excel 导入、导出以英文逗号分隔）</Checkbox></Form.Item></Col>}
-            <Col span={24}><Space size={[18, 8]} wrap><Form.Item name="visible" valuePropName="checked" noStyle><Checkbox>详情页显示</Checkbox></Form.Item><Form.Item name="list_visible" valuePropName="checked" noStyle><Checkbox>列表展示</Checkbox></Form.Item><Form.Item name="filterable" valuePropName="checked" noStyle><Checkbox>作为筛选条件</Checkbox></Form.Item><Form.Item name="dashboard_dimension" valuePropName="checked" noStyle><Checkbox>作为仪表盘维度</Checkbox></Form.Item></Space></Col>
+            <Col span={24}><Space size={[18, 8]} wrap><Form.Item name="visible" valuePropName="checked" noStyle><Checkbox>详情页显示</Checkbox></Form.Item><Form.Item name="list_visible" valuePropName="checked" noStyle><Checkbox disabled={isComponent}>列表展示</Checkbox></Form.Item><Form.Item name="filterable" valuePropName="checked" noStyle><Checkbox disabled={isComponent}>作为筛选条件</Checkbox></Form.Item><Form.Item name="dashboard_dimension" valuePropName="checked" noStyle><Checkbox disabled={isComponent}>作为仪表盘维度</Checkbox></Form.Item>{isComponent && <span style={{ color: 'var(--radar-text-secondary)' }}>业务组件仅支持详情页显示</span>}</Space></Col>
           </Row>
         </div>
         <div className="form-section-card">

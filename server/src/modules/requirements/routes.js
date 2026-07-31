@@ -76,6 +76,11 @@ const LABELS = {
   issue_no: 'OA编号/工单编号', implementation_org: '实施机构', receiver: '需求接收人', workload: '工作量',
 };
 
+function formatRegistrationTime(date = new Date()) {
+  const pad = (value) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 /** 把 JSON 字符串字段解析为数组返回给前端 */
 function decode(row) {
   if (!row) return row;
@@ -354,7 +359,7 @@ export default async function requirementRoutes(fastify) {
         code,
         body.status || initialStatus,
         request.currentUser?.name,
-        new Date().toISOString().slice(0, 10),
+        formatRegistrationTime(),
         ...Object.keys(data).map((k) => data[k]),
       ];
       const res = await run(
@@ -682,7 +687,7 @@ export default async function requirementRoutes(fastify) {
                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
               code, r.title, r.summary || null, status, reqType || null, isAccounting, priority, proposeDept || null, proposerJson,
               r.yn_owner || null, r.jk_owner || null, r.propose_time || null, rpId,
-              mainSystems, collabDevSystems, collabTestSystems, request.currentUser?.name, new Date().toISOString().slice(0, 10),
+              mainSystems, collabDevSystems, collabTestSystems, request.currentUser?.name, formatRegistrationTime(),
               r.issue_no || null, analysisFields.implementation_org, analysisFields.receiver, analysisFields.workload
             );
             await auditCreate('requirement', res.lastInsertRowid, code, request.currentUser?.name);

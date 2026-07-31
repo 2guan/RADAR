@@ -10,11 +10,12 @@ import { get, run, tx, all } from '../platform/persistence/index.js';
 import { hashPassword } from '../platform/auth/index.js';
 import { config } from '../platform/runtime/config.js';
 import { applyBuiltinConfigurationUpgrades, DEFAULT_REQUIRED_FIELD_CONFIG, REQUIRED_FIELDS_CONFIG_KEY, seedStageContentDefaults } from '../modules/settings/process-configuration/index.js';
+import { LOCAL_STAGE_CONTENT_SEED } from '../modules/settings/process-configuration/application/local-stage-content-seed.js';
 import { parseJsonObject, logger } from '../platform/runtime/index.js';
 
 // 种子版本是“内置默认配置”而非业务数据版本；仅在首次初始化或显式升级版本时执行全量校准。
 const SEED_VERSION_KEY = 'runtime.seed.version';
-const SEED_VERSION = '20260727.2';
+const SEED_VERSION = '20260731.1';
 
 // 角色定义（角色标识、名称、是否内置、是否会签角色）
 // 会签角色（signoff:1）：投产评审会签由以下 9 个角色完成。
@@ -208,7 +209,7 @@ export const STAGE_BUILTIN_FIELD_METADATA = {
     propose_time: { section: 'basic', required_from: 'initial', list: 1, dashboard: 1 }, issue_no: { section: 'basic', filter: 1 }, is_accounting: { section: 'basic', required_from: 'initial', filter: 1 }, priority: { section: 'basic', list: 1, filter: 1, dashboard: 1 }, workload: { section: 'basic', list: 1, filter: 1 },
     title: { section: 'basic', required_from: 'initial', list: 1 }, summary: { section: 'basic', required_from: 'initial' }, implementation_org: { section: 'systems', list: 1, filter: 1 }, main_systems: { section: 'systems', required_from: 'initial', list: 1, filter: 1, dashboard: 1 },
     collab_dev_systems: { section: 'systems', list: 1, filter: 1 }, collab_test_systems: { section: 'systems', filter: 1 }, propose_dept: { section: 'owners', required_from: 'initial', filter: 1, dashboard: 1 },
-    proposer: { section: 'owners', required_from: 'initial', list: 1, filter: 1 }, yn_owner: { section: 'owners' }, jk_owner: { section: 'owners' }, receiver: { section: 'owners', list: 1, filter: 1 }, registrar: { section: 'owners', list: 1, filter: 1 }, register_time: { section: 'owners', list: 1, filter: 1 },
+    proposer: { section: 'owners', required_from: 'initial', list: 1, filter: 1 }, yn_owner: { section: 'owners' }, jk_owner: { section: 'owners' }, receiver: { section: 'owners', list: 1, filter: 1 }, registrar: { section: 'owners', list: 1, filter: 1 },
   },
   ticket: {
     ticket_code: { section: 'basic', required_from: 'initial', list: 1, filter: 1 }, status: { section: 'basic', list: 1, filter: 1, dashboard: 1 },
@@ -216,7 +217,7 @@ export const STAGE_BUILTIN_FIELD_METADATA = {
     propose_time: { section: 'basic', required_from: 'initial', list: 1, dashboard: 1 }, issue_no: { section: 'basic', filter: 1 }, is_accounting: { section: 'basic', required_from: 'initial', filter: 1 }, priority: { section: 'basic', list: 1, filter: 1, dashboard: 1 }, workload: { section: 'basic', list: 1, filter: 1 },
     title: { section: 'basic', required_from: 'initial', list: 1 }, summary: { section: 'basic', required_from: 'initial' }, implementation_org: { section: 'systems', list: 1, filter: 1 }, main_systems: { section: 'systems', required_from: 'initial', list: 1, filter: 1, dashboard: 1 },
     collab_dev_systems: { section: 'systems', list: 1, filter: 1 }, collab_test_systems: { section: 'systems', filter: 1 }, propose_dept: { section: 'owners', required_from: 'initial', filter: 1, dashboard: 1 },
-    proposer: { section: 'owners', required_from: 'initial', list: 1, filter: 1 }, yn_owner: { section: 'owners' }, jk_owner: { section: 'owners' }, receiver: { section: 'owners', list: 1, filter: 1 }, registrar: { section: 'owners', list: 1, filter: 1 }, register_time: { section: 'owners', list: 1, filter: 1 },
+    proposer: { section: 'owners', required_from: 'initial', list: 1, filter: 1 }, yn_owner: { section: 'owners' }, jk_owner: { section: 'owners' }, receiver: { section: 'owners', list: 1, filter: 1 }, registrar: { section: 'owners', list: 1, filter: 1 },
   },
   dev: {
     task_name: { section: 'task', list: 1 }, content: { section: 'task' }, status: { section: 'task', list: 1, filter: 1, dashboard: 1 }, owner: { section: 'task', list: 1, filter: 1, dashboard: 1 },
@@ -565,6 +566,7 @@ export async function runSeed() {
     await seedStageContentDefaults({
       builtinMetadata: STAGE_BUILTIN_FIELD_METADATA,
       sectionDefaults: STAGE_BUILTIN_SECTION_DEFAULTS,
+      snapshot: LOCAL_STAGE_CONTENT_SEED,
     });
 
     // 3) 所属系统
@@ -696,6 +698,7 @@ export async function runSeed() {
   const upgrade = await applyBuiltinConfigurationUpgrades({
     builtinMetadata: STAGE_BUILTIN_FIELD_METADATA,
     sectionDefaults: STAGE_BUILTIN_SECTION_DEFAULTS,
+    snapshot: LOCAL_STAGE_CONTENT_SEED,
   });
 
   logger.info(seeded ? '[初始化] 种子数据已就绪' : '[初始化] 种子版本已就绪，跳过重复校准');
