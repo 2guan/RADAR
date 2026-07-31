@@ -89,7 +89,7 @@ const NATIVE_FIELD_DEFAULTS = {
  * 内置配置目录是字段语义的唯一代码基线：数据库只保存管理员可调整的布局、可见性和状态规则。
  * `renderer` 明确区分可由公共控件呈现的普通字段和必须由业务 JSX 声明的复杂控件。
  */
-export const BUILTIN_CONFIGURATION_UPGRADE_ID = 'settings.builtin-configuration.v2';
+export const BUILTIN_CONFIGURATION_UPGRADE_ID = 'settings.builtin-configuration.v3';
 export const PRIORITY_OPTIONS = [
   { value: '高', label: '高' },
   { value: '中', label: '中' },
@@ -362,6 +362,67 @@ async function replaceRules(table, idColumn, definitionId, rules, statuses) {
   const normalized = normalizeRules(rules, statuses);
   for (const status of statuses) {
     await run(`INSERT INTO ${table} (${idColumn}, status_dict_item_id, required) VALUES (?,?,?)`, definitionId, status.id, normalized[status.id] || 0);
+  }
+}
+
+async function ensureStageScopes(added = null) {
+  for (const [scopeKey, label, entityType, tableName, statusCategory, statusStage, statusField, permissionModule] of STAGE_SCOPE_DEFAULTS) {
+    if (await get('SELECT scope_key FROM stage_scope WHERE scope_key = ?', scopeKey)) continue;
+    await run('INSERT INTO stage_scope (scope_key, label, entity_type, table_name, status_category, status_stage, status_field, permission_module) VALUES (?,?,?,?,?,?,?,?)', scopeKey, label, entityType, tableName, statusCategory, statusStage, statusField, permissionModule);
+    added?.push(`scope:${scopeKey}`);
+  }
+}
+
+/** 当前本地配置快照以状态值而非数据库 ID 保存，初始化时再绑定到目标库的字典状态。 */
+function snapshotRulesToStatusIds(rules, statuses) {
+  return Object.fromEntries(statuses.map((status) => [status.id, asBool(rules?.[status.value]) ? 1 : 0]));
+}
+
+/**
+ * 以稳定键重放经确认的输入项、分区与交付件快照。仅插入完全缺失的定义，
+ * 因而既有环境的管理员调整、软删除和历史附件均不会被覆盖。
+ */
+async function seedStageContentSnapshot(snapshot, added = null) {
+  if (!Array.isArray(snapshot?.scopes)) throw new Error('阶段内容 Seed 快照格式非法');
+  await ensureStageScopes(added);
+  for (const scopeSnapshot of snapshot.scopes) {
+    const scopeKey = String(scopeSnapshot.scope_key || '');
+    if (!scopeKey) throw new Error('阶段内容 Seed 快照缺少范围编码');
+    await getStageScope(scopeKey);
+    const sectionIds = new Map();
+    for (const section of scopeSnapshot.sections || []) {
+      const sectionKey = safeKey(section.section_key, '分区编码');
+      let row = await get('SELECT id, deleted_at FROM stage_section WHERE scope_key = ? AND section_key = ?', scopeKey, sectionKey);
+      if (!row) {
+        const res = await run('INSERT INTO stage_section (scope_key, section_key, title, sort, collapsed, is_builtin, layout_mode, show_title) VALUES (?,?,?,?,?,?,?,?)', scopeKey, sectionKey, String(section.title || '').trim(), Number(section.sort || 0), asBool(section.collapsed) ? 1 : 0, asBool(section.is_builtin) ? 1 : 0, section.layout_mode || 'left', asBool(section.show_title) ? 1 : 0);
+        row = { id: res.lastInsertRowid };
+        added?.push(`section:${scopeKey}.${sectionKey}`);
+      }
+      if (!row.deleted_at) sectionIds.set(sectionKey, row.id);
+    }
+    const statuses = await listStageStatuses(scopeKey);
+    for (const field of scopeSnapshot.fields || []) {
+      const fieldKey = safeKey(field.field_key, '输入项编码');
+      if (await get('SELECT id FROM stage_field_definition WHERE scope_key = ? AND field_key = ?', scopeKey, fieldKey)) continue;
+      const res = await run(`INSERT INTO stage_field_definition (scope_key, field_key, label, field_kind, input_type, source_key, multiple, native_column, component_key, section_id, column_span, visible, list_visible, filterable, dashboard_dimension, sort, is_builtin) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, scopeKey, fieldKey, String(field.label || '').trim(), field.field_kind, field.input_type, field.source_key || null, asBool(field.multiple) ? 1 : 0, field.native_column || null, field.component_key || null, sectionIds.get(field.section_key) || null, Number(field.column_span) === 24 ? 24 : 12, asBool(field.visible) ? 1 : 0, asBool(field.list_visible) ? 1 : 0, asBool(field.filterable) ? 1 : 0, asBool(field.dashboard_dimension) ? 1 : 0, Number(field.sort || 0), asBool(field.is_builtin) ? 1 : 0);
+      if (Object.keys(field.rules || {}).length) await replaceRules('stage_field_status_rule', 'field_definition_id', res.lastInsertRowid, snapshotRulesToStatusIds(field.rules, statuses), statuses);
+      added?.push(`field:${scopeKey}.${fieldKey}`);
+    }
+    for (const deliverable of scopeSnapshot.deliverables || []) {
+      const deliverableKey = safeKey(deliverable.deliverable_key, '交付件编码');
+      let row = await get('SELECT id FROM deliverable_definition WHERE scope_key = ? AND deliverable_key = ?', scopeKey, deliverableKey);
+      if (!row) {
+        const res = await run('INSERT INTO deliverable_definition (scope_key, deliverable_key, label, input_mode, visible, sort, layout_mode) VALUES (?,?,?,?,?,?,?)', scopeKey, deliverableKey, String(deliverable.label || '').trim(), deliverable.input_mode, asBool(deliverable.visible) ? 1 : 0, Number(deliverable.sort || 0), deliverable.layout_mode || 'left');
+        row = { id: res.lastInsertRowid };
+        if (Object.keys(deliverable.rules || {}).length) await replaceRules('deliverable_status_rule', 'deliverable_definition_id', row.id, snapshotRulesToStatusIds(deliverable.rules, statuses), statuses);
+        added?.push(`deliverable:${scopeKey}.${deliverableKey}`);
+      }
+      for (const template of deliverable.templates || []) {
+        if (!template.handler_key || template.template_mode !== 'custom') continue;
+        if (await get('SELECT id FROM deliverable_template_version WHERE deliverable_definition_id = ? AND template_mode = ? AND handler_key = ? AND version_no = ? AND deleted_at IS NULL', row.id, template.template_mode, template.handler_key, Number(template.version_no || 0))) continue;
+        await run('INSERT INTO deliverable_template_version (deliverable_definition_id, template_mode, handler_key, version_no, enabled) VALUES (?,?,?,?,?)', row.id, template.template_mode, template.handler_key, Number(template.version_no || 0), asBool(template.enabled) ? 1 : 0);
+      }
+    }
   }
 }
 
@@ -830,7 +891,11 @@ export async function assertDeliverableRemovable(attachment) {
 }
 
 /** 保存默认范围、分区、内置字段及已有交付件定义。仅在全新库首次种子化时插入。 */
-export async function seedStageContentDefaults({ builtinMetadata = {}, sectionDefaults = {} } = {}) {
+export async function seedStageContentDefaults({ builtinMetadata = {}, sectionDefaults = {}, snapshot = null } = {}) {
+  if (snapshot) {
+    await seedStageContentSnapshot(snapshot);
+    return;
+  }
   for (const [scopeKey, label, entityType, tableName, statusCategory, statusStage, statusField, permissionModule] of STAGE_SCOPE_DEFAULTS) {
     if (!await get('SELECT scope_key FROM stage_scope WHERE scope_key = ?', scopeKey)) {
       await run('INSERT INTO stage_scope (scope_key, label, entity_type, table_name, status_category, status_stage, status_field, permission_module) VALUES (?,?,?,?,?,?,?,?)', scopeKey, label, entityType, tableName, statusCategory, statusStage, statusField, permissionModule);
@@ -888,12 +953,17 @@ export async function seedStageContentDefaults({ builtinMetadata = {}, sectionDe
  * 为已运行环境补齐目录中新出现的默认定义。该入口不调用全量种子校准：
  * 已存在（包括软删除）的分区、字段、交付件、规则和模板均视为管理员意图，绝不覆盖。
  */
-export async function applyBuiltinConfigurationUpgrades({ builtinMetadata = {}, sectionDefaults = {} } = {}) {
+export async function applyBuiltinConfigurationUpgrades({ builtinMetadata = {}, sectionDefaults = {}, snapshot = null } = {}) {
   const upgrade = await tx(async () => {
     const applied = await get('SELECT upgrade_id FROM configuration_upgrade_ledger WHERE upgrade_id = ?', BUILTIN_CONFIGURATION_UPGRADE_ID);
     if (applied) return { applied: false, upgrade_id: BUILTIN_CONFIGURATION_UPGRADE_ID, added: [] };
 
     const added = [];
+    if (snapshot) {
+      await seedStageContentSnapshot(snapshot, added);
+      await run('INSERT INTO configuration_upgrade_ledger (upgrade_id, details) VALUES (?,?)', BUILTIN_CONFIGURATION_UPGRADE_ID, JSON.stringify({ added }));
+      return { applied: true, upgrade_id: BUILTIN_CONFIGURATION_UPGRADE_ID, added };
+    }
     for (const [scopeKey, label, entityType, tableName, statusCategory, statusStage, statusField, permissionModule] of STAGE_SCOPE_DEFAULTS) {
       if (!await get('SELECT scope_key FROM stage_scope WHERE scope_key = ?', scopeKey)) {
         await run('INSERT INTO stage_scope (scope_key, label, entity_type, table_name, status_category, status_stage, status_field, permission_module) VALUES (?,?,?,?,?,?,?,?)', scopeKey, label, entityType, tableName, statusCategory, statusStage, statusField, permissionModule);

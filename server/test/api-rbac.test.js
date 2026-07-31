@@ -32,6 +32,7 @@ if (!process.env.RADAR_RUN_API_TESTS) {
   const { claimRequirementCode, generateRequirementCode, previewRequirementCode } = await import('../src/modules/requirements/index.js');
   const { applyBuiltinConfigurationUpgrades, BUILTIN_CONFIGURATION_UPGRADE_ID } = await import('../src/modules/settings/process-configuration/index.js');
   const { STAGE_BUILTIN_FIELD_METADATA, STAGE_BUILTIN_SECTION_DEFAULTS } = await import('../src/bootstrap/seed.js');
+  const { LOCAL_STAGE_CONTENT_SEED } = await import('../src/modules/settings/process-configuration/application/local-stage-content-seed.js');
   await runMigrations();
   await runSeed();
   const app = await buildApp();
@@ -178,41 +179,38 @@ if (!process.env.RADAR_RUN_API_TESTS) {
     assert.equal(refreshedChecklist.template?.handler_key, 'dev.coding-checklist');
   });
 
-  test('阶段配置初始种子使用已确认的输入项与交付件布局、必填规则', async () => {
+  test('阶段配置初始种子完整重放本地确认的输入项、分区和交付件快照', async () => {
     const administrator = await get('SELECT id, phone FROM user WHERE is_super = 1 LIMIT 1');
     const token = await app.jwt.sign({ id: administrator.id, phone: administrator.phone });
     const headers = { authorization: `Bearer ${token}`, 'x-requested-by': 'RADAR' };
 
-    const expectedLayouts = {
-      requirement: [['basic', 'left'], ['systems', 'right'], ['owners', 'right'], ['extension', 'right'], ['deliverables', 'right']],
-      ticket: [['basic', 'left'], ['systems', 'right'], ['owners', 'right'], ['extension', 'right'], ['deliverables', 'right']],
-      dev: [['task', 'left'], ['impact', 'right'], ['schedule', 'left'], ['deliverables', 'right'], ['extension', 'right']],
-      'test.SIT': [['task', 'left'], ['coverage', 'right'], ['schedule', 'left'], ['deliverables', 'right'], ['extension', 'right']],
-      'test.UAT': [['task', 'left'], ['schedule', 'left'], ['deliverables', 'right'], ['extension', 'right']],
-      'test.NFT': [['task', 'left'], ['schedule', 'left'], ['deliverables', 'right'], ['extension', 'right']],
-      'test.SEC': [['task', 'left'], ['schedule', 'left'], ['deliverables', 'right'], ['extension', 'right']],
-      release_apply: [['references', 'left'], ['content', 'left'], ['change', 'right'], ['deliverables', 'right'], ['extension', 'right'], ['artifacts', 'full']],
-      release: [['basic', 'left'], ['signoff', 'left'], ['release_info', 'right'], ['deliverables', 'right'], ['extension', 'left'], ['artifacts', 'right']],
-    };
-    for (const [scopeKey, expected] of Object.entries(expectedLayouts)) {
-      const response = await app.inject({ method: 'GET', url: `/api/settings/stage-content/${scopeKey}`, headers });
+    for (const expected of LOCAL_STAGE_CONTENT_SEED.scopes) {
+      const response = await app.inject({ method: 'GET', url: `/api/settings/stage-content/${expected.scope_key}`, headers });
       assert.equal(response.statusCode, 200);
+      const config = response.json().data;
+      const sectionKeyById = new Map(config.sections.map((section) => [section.id, section.section_key]));
+      const toRulesByValue = (rules = {}) => Object.fromEntries(config.statuses
+        .filter((status) => Object.hasOwn(rules, status.id))
+        .map((status) => [status.value, Number(!!rules[status.id])]))
       assert.deepEqual(
-        response.json().data.sections.map((section) => [section.section_key, section.layout_mode]),
-        expected,
-        `${scopeKey} 的初始分区顺序与列位置应与详情页一致`,
+        config.sections.map((section) => ({ section_key: section.section_key, title: section.title, sort: section.sort, collapsed: section.collapsed, is_builtin: section.is_builtin, layout_mode: section.layout_mode, show_title: section.show_title })),
+        expected.sections,
+        `${expected.scope_key} 的分区配置应与本地 Seed 快照一致`,
       );
+      assert.deepEqual(config.fields.map((field) => ({
+        field_key: field.field_key, label: field.label, field_kind: field.field_kind, input_type: field.input_type,
+        source_key: field.source_key || '', multiple: field.multiple, native_column: field.native_column || '', component_key: field.component_key || '',
+        section_key: sectionKeyById.get(field.section_id), column_span: field.column_span, visible: field.visible, list_visible: field.list_visible,
+        filterable: field.filterable, dashboard_dimension: field.dashboard_dimension, sort: field.sort, is_builtin: field.is_builtin,
+        ...(Object.keys(field.rules || {}).length ? { rules: toRulesByValue(field.rules) } : {}),
+      })), expected.fields, `${expected.scope_key} 的输入项配置应与本地 Seed 快照一致`);
+      assert.deepEqual(config.deliverables.map((deliverable) => ({
+        deliverable_key: deliverable.deliverable_key, label: deliverable.label, input_mode: deliverable.input_mode, visible: deliverable.visible,
+        sort: deliverable.sort, layout_mode: deliverable.layout_mode,
+        ...(Object.keys(deliverable.rules || {}).length ? { rules: toRulesByValue(deliverable.rules) } : {}),
+        ...(deliverable.template ? { templates: [{ template_mode: deliverable.template.template_mode, handler_key: deliverable.template.handler_key, version_no: deliverable.template.version_no, enabled: deliverable.template.enabled }] } : {}),
+      })), expected.deliverables, `${expected.scope_key} 的交付件配置应与本地 Seed 快照一致`);
     }
-
-    const releaseApply = await app.inject({ method: 'GET', url: '/api/settings/stage-content/release_apply', headers });
-    const releaseApplySections = new Map(releaseApply.json().data.sections.map((section) => [section.section_key, section]));
-    assert.equal(releaseApplySections.get('artifacts').collapsed, 1);
-
-    const release = await app.inject({ method: 'GET', url: '/api/settings/stage-content/release', headers });
-    const releasePlan = release.json().data.deliverables.find((item) => item.label === '投产变更方案');
-    const releaseFinalStatuses = release.json().data.statuses.filter((status) => status.state_type === 'final');
-    assert.equal(releasePlan.rules[releaseFinalStatuses[0].id], true);
-    assert.equal(releasePlan.rules[releaseFinalStatuses[1].id], true);
   });
 
   test('配置升级仅补齐缺失目录项且保留管理员配置', async () => {
@@ -230,19 +228,22 @@ if (!process.env.RADAR_RUN_API_TESTS) {
     const first = await applyBuiltinConfigurationUpgrades({
       builtinMetadata: STAGE_BUILTIN_FIELD_METADATA,
       sectionDefaults: STAGE_BUILTIN_SECTION_DEFAULTS,
+      snapshot: LOCAL_STAGE_CONTENT_SEED,
     });
     assert.equal(first.applied, true);
     assert.ok(first.added.includes('field:requirement.priority'));
     assert.ok(first.added.includes('deliverable:requirement.builtin_1'));
     const restored = await get("SELECT sort, list_visible, filterable FROM stage_field_definition WHERE scope_key = 'requirement' AND field_key = 'priority'");
-    assert.equal(restored.sort, 70);
-    assert.equal(restored.list_visible, 1);
-    assert.equal(restored.filterable, 1);
+    const expectedPriority = LOCAL_STAGE_CONTENT_SEED.scopes.find((scope) => scope.scope_key === 'requirement').fields.find((field) => field.field_key === 'priority');
+    assert.equal(restored.sort, expectedPriority.sort);
+    assert.equal(restored.list_visible, expectedPriority.list_visible);
+    assert.equal(restored.filterable, expectedPriority.filterable);
     assert.equal((await get("SELECT label FROM deliverable_definition WHERE scope_key = 'requirement' AND deliverable_key = 'builtin_1'")).label, '需求说明书');
     assert.equal((await get('SELECT sort FROM stage_field_definition WHERE id = ?', original.id)).sort, 987);
     const second = await applyBuiltinConfigurationUpgrades({
       builtinMetadata: STAGE_BUILTIN_FIELD_METADATA,
       sectionDefaults: STAGE_BUILTIN_SECTION_DEFAULTS,
+      snapshot: LOCAL_STAGE_CONTENT_SEED,
     });
     assert.equal(second.applied, false);
   });

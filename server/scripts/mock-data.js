@@ -13,6 +13,7 @@
  */
 
 import { db, get, all, run, tx, closeDb } from '../src/platform/persistence/engine/index.js';
+import path from 'node:path';
 import { config } from '../src/platform/runtime/config.js';
 import { runMigrations } from '../src/platform/persistence/migrate.js';
 import { runSeed } from '../src/bootstrap/seed.js';
@@ -494,7 +495,7 @@ function registrationTime(date, index) {
   return `${date} ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
 }
 
-// 清空业务/人员数据（保留字典/系统/角色/权限/超级管理员/仪表盘图表配置）
+// 清空业务/人员数据（保留字典、系统、角色、权限、超级管理员、仪表盘及全部流程配置）。
 async function wipe() {
   const tables = [
     'release_signoff', 'release_system', 'release_task', 'release_apply_reference', 'release_apply',
@@ -505,13 +506,8 @@ async function wipe() {
   // 公共内容填写值随演示业务数据重置；内置字段、业务组件与分区元数据由 seed 保留。
   await run('DELETE FROM stage_field_value');
   await run('DELETE FROM content_config_revision');
-  await run(`DELETE FROM deliverable_status_rule
-    WHERE deliverable_definition_id IN (SELECT id FROM deliverable_definition WHERE deliverable_key NOT LIKE 'builtin_%')`);
-  await run("DELETE FROM deliverable_definition WHERE deliverable_key NOT LIKE 'builtin_%'");
-  await run(`DELETE FROM stage_field_status_rule
-    WHERE field_definition_id IN (SELECT id FROM stage_field_definition WHERE is_builtin = 0)`);
-  await run('DELETE FROM stage_field_definition WHERE is_builtin = 0');
-  await run('DELETE FROM stage_section WHERE is_builtin = 0');
+  // 输入项、分区、状态规则、交付件及模板都是系统设置配置，不属于 Mock 业务数据。
+  // 不能按“是否内置”删除，否则自定义交付件或扩展字段会在重建后丢失。
   // 删除除引导超管(admin)外的全部演示人员，保证可重复执行；user_role 随级联删除。
   await run('DELETE FROM user WHERE phone <> ?', config.superAdmin.phone);
   // release_point 被需求/投产申请引用，需在其后清空
@@ -1197,8 +1193,8 @@ export async function runMock() {
   });
 }
 
-// 直接运行：node scripts/mock-data.js
-if (import.meta.url === `file://${process.argv[1]}`) {
+// 兼容从仓库根目录（node server/scripts/mock-data.js）和 server 目录直接执行。
+if (process.argv[1] && path.basename(process.argv[1]) === 'mock-data.js') {
   try {
     await runMock();
     db.exec?.('PRAGMA wal_checkpoint(TRUNCATE);');
