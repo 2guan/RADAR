@@ -12,7 +12,7 @@ import { AutoComplete, Form, Input, DatePicker, Row, Col, Button, Select, Tag, m
 import { HistoryOutlined, CloseOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { DictSelect, PersonPicker, makeReleasePointOptions } from '../../settings/reference-data/index.js';
-import { StageBuiltinCatalogField, StageBuiltinField, StageBuiltinFields, StageContentPanel, StageSectionLayout, useDefaultProcessStatus, useRequiredFields } from '../../settings/process-configuration/index.js';
+import { StageBuiltinField, StageBuiltinFields, StageContentPanel, StageSectionLayout, useDefaultProcessStatus, useRequiredFields } from '../../settings/process-configuration/index.js';
 import { HistoryDrawer } from '../../../platform/audit/index.js';
 import { CodeLink } from '../../../platform/routing/index.js';
 import { EditorShell } from '../../../shared/ui/index.js';
@@ -520,8 +520,6 @@ export default function TicketEditor({ open, mode = 'modal', code, reqId, defaul
                       />
                     </Form.Item>
                 </StageBuiltinField>
-                <StageBuiltinCatalogField fieldKey="priority" defaultSection="basic" readonly={readonly} rules={required.rules('priority', '优先级', { action: '请选择' })} />
-
               {/* 工单概述 */}
               <StageBuiltinField fieldKey="title" defaultSection="basic" defaultColumnSpan={24}>
                 <Form.Item name="title" label="工单概述" rules={required.rules('title', '工单概述', { message: '请输入工单概述' })} style={{ marginBottom: 8 }}>

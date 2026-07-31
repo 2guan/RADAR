@@ -12,7 +12,7 @@ import { Form, Input, DatePicker, Row, Col, Button, Select, Tag, message, Toolti
 import { HistoryOutlined, CloseOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { DictSelect, PersonPicker, makeReleasePointOptions } from '../../settings/reference-data/index.js';
-import { StageBuiltinCatalogField, StageBuiltinField, StageBuiltinFields, StageContentPanel, StageSectionLayout, useDefaultProcessStatus, useRequiredFields } from '../../settings/process-configuration/index.js';
+import { StageBuiltinField, StageBuiltinFields, StageContentPanel, StageSectionLayout, useDefaultProcessStatus, useRequiredFields } from '../../settings/process-configuration/index.js';
 import { HistoryDrawer } from '../../../platform/audit/index.js';
 import { CodeLink } from '../../../platform/routing/index.js';
 import { EditorShell } from '../../../shared/ui/index.js';
@@ -471,8 +471,6 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
                       />
                     </Form.Item>
                 </StageBuiltinField>
-                <StageBuiltinCatalogField fieldKey="priority" defaultSection="basic" readonly={readonly} rules={required.rules('priority', '优先级', { action: '请选择' })} />
-
               {/* 需求标题 */}
               <StageBuiltinField fieldKey="title" defaultSection="basic" defaultColumnSpan={24}>
                 <Form.Item name="title" label="需求标题" rules={required.rules('title', '需求标题', { message: '请输入需求标题' })} style={{ marginBottom: 8 }}>

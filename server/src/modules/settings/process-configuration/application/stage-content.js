@@ -400,6 +400,47 @@ export async function deleteSection(scopeKey, id, operator) {
   await recordConfigRevision(scopeKey, 'content', operator);
 }
 
+/** 同一分区的字段布局必须一次提交，避免逐项更新导致配置修订膨胀或中途失败。 */
+export async function saveSectionFieldLayout(scopeKey, body, operator) {
+  const scope = await getStageScope(scopeKey);
+  const sectionId = Number(body?.section_id || 0);
+  const fieldIds = Array.isArray(body?.field_ids) ? body.field_ids.map((id) => Number(id)) : null;
+  const columnSpans = body?.column_spans;
+  if (!Number.isInteger(sectionId) || sectionId <= 0) throw badRequest('请选择需要排序的分区');
+  if (!fieldIds || fieldIds.some((id) => !Number.isInteger(id) || id <= 0)) throw badRequest('字段排序参数非法');
+  if (new Set(fieldIds).size !== fieldIds.length) throw badRequest('字段排序不能包含重复输入项');
+  if (!columnSpans || typeof columnSpans !== 'object' || Array.isArray(columnSpans)) throw badRequest('字段宽度参数非法');
+  const spanIds = Object.keys(columnSpans).map((id) => Number(id));
+  if (spanIds.some((id) => !Number.isInteger(id) || id <= 0) || spanIds.length !== fieldIds.length || fieldIds.some((id) => !Object.hasOwn(columnSpans, id))) {
+    throw badRequest('字段宽度必须覆盖该分区的全部输入项');
+  }
+  const spanById = new Map(fieldIds.map((id) => [id, Number(columnSpans[id])]));
+  if ([...spanById.values()].some((span) => ![12, 24].includes(span))) throw badRequest('字段宽度仅支持半行或整行');
+
+  const section = await get('SELECT id FROM stage_section WHERE id = ? AND scope_key = ? AND deleted_at IS NULL', sectionId, scopeKey);
+  if (!section) throw badRequest('所属分区不存在');
+  // 状态字段由各阶段详情标题栏独立承载，不能以空白网格槽位参与分区排序或宽度保存。
+  const configuredFields = await all(`SELECT id, sort, column_span FROM stage_field_definition
+    WHERE scope_key = ? AND section_id = ? AND deleted_at IS NULL AND field_key <> ? ORDER BY sort, id`, scopeKey, sectionId, scope.status_field);
+  if (configuredFields.length !== fieldIds.length || configuredFields.some((field) => !fieldIds.includes(field.id))) {
+    throw badRequest('字段排序必须包含该分区的全部输入项');
+  }
+  const hasChanged = configuredFields.some((field, index) => (
+    field.id !== fieldIds[index]
+    || Number(field.sort) !== (index + 1) * 10
+    || Number(field.column_span) !== spanById.get(field.id)
+  ));
+  if (!hasChanged) return configuredFields;
+
+  await tx(async () => {
+    for (const [index, fieldId] of fieldIds.entries()) {
+      await run(`UPDATE stage_field_definition SET sort = ?, column_span = ?, updated_at = ${dialect.now} WHERE id = ?`, (index + 1) * 10, spanById.get(fieldId), fieldId);
+    }
+    await recordConfigRevision(scopeKey, 'content', operator);
+  });
+  return await all(`SELECT * FROM stage_field_definition WHERE scope_key = ? AND section_id = ? AND deleted_at IS NULL AND field_key <> ? ORDER BY sort, id`, scopeKey, sectionId, scope.status_field);
+}
+
 export async function saveFieldDefinition(scopeKey, body, operator) {
   const scope = await getStageScope(scopeKey);
   const statuses = await listStageStatuses(scopeKey);

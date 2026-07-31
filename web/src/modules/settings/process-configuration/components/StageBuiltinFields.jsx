@@ -14,9 +14,13 @@ function normalizeScope(scopeKey) {
 }
 
 function directFieldDescriptors(children) {
-  return Children.toArray(children)
-    .filter((child) => (child?.type === StageBuiltinField || child?.type === StageBuiltinCatalogField) && child.props?.fieldKey)
-    .map((child) => child.props);
+  const uniqueByKey = new Map();
+  for (const child of Children.toArray(children)) {
+    if ((child?.type !== StageBuiltinField && child?.type !== StageBuiltinCatalogField) || !child.props?.fieldKey) continue;
+    // 每个字段只允许一个真实网格槽位；保留首次声明，避免空目录渲染或误复制的声明挤占半行。
+    if (!uniqueByKey.has(child.props.fieldKey)) uniqueByKey.set(child.props.fieldKey, child.props);
+  }
+  return [...uniqueByKey.values()];
 }
 
 /**
@@ -47,6 +51,7 @@ export default function StageBuiltinFields({ scopeKey, defaults = {}, children }
 
   const model = useMemo(() => {
     const configured = new Map((schema?.fields || []).map((field) => [field.field_key, field]));
+    const statusFieldKey = schema?.scope?.status_field;
     const fallbackSections = Object.entries(defaults).map(([section_key, definition], index) => ({
       section_key,
       title: definition.title || '',
@@ -60,6 +65,8 @@ export default function StageBuiltinFields({ scopeKey, defaults = {}, children }
     const sectionById = new Map(sections.map((section) => [section.id, section]));
     const placementByKey = new Map();
     for (const descriptor of descriptors) {
+      // 所有阶段的状态均由详情页标题栏承载，不能作为分区内容占用字段网格。
+      if (descriptor.fieldKey === statusFieldKey) continue;
       const field = configured.get(descriptor.fieldKey);
       // 配置可能引用已删除分区；此时按业务声明的默认分区展示，而不是让字段消失。
       const section = sectionById.get(field?.section_id)

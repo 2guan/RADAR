@@ -347,6 +347,80 @@ if (!process.env.RADAR_RUN_API_TESTS) {
     assert.equal(after.count, before.count + 1);
   });
 
+  test('系统设置分区字段布局按完整集合原子保存', async () => {
+    const administrator = await get('SELECT id, phone FROM user WHERE is_super = 1 LIMIT 1');
+    const headers = { authorization: `Bearer ${await app.jwt.sign({ id: administrator.id, phone: administrator.phone })}`, 'x-requested-by': 'RADAR' };
+    const configResponse = await app.inject({ method: 'GET', url: '/api/settings/stage-content/requirement', headers });
+    assert.equal(configResponse.statusCode, 200);
+    const config = configResponse.json().data;
+    const section = config.sections.find((item) => item.section_key === 'basic');
+    const statusField = config.fields.find((item) => item.field_key === config.scope.status_field);
+    assert.ok(statusField);
+    const fields = config.fields.filter((item) => item.section_id === section.id && item.id !== statusField?.id).sort((a, b) => a.sort - b.sort || a.id - b.id);
+    assert.ok(fields.length >= 2);
+    const beforeById = new Map(fields.map((field) => [field.id, {
+      section_id: field.section_id,
+      visible: field.visible,
+      list_visible: field.list_visible,
+      filterable: field.filterable,
+      dashboard_dimension: field.dashboard_dimension,
+    }]));
+    const reorderedIds = [fields[1].id, fields[0].id, ...fields.slice(2).map((field) => field.id)];
+    const columnSpans = Object.fromEntries(fields.map((field) => [field.id, field.column_span]));
+    columnSpans[reorderedIds[0]] = columnSpans[reorderedIds[0]] === 24 ? 12 : 24;
+    const beforeRevision = await get("SELECT COUNT(*) AS count FROM content_config_revision WHERE scope_key = 'requirement' AND config_type = 'content'");
+    const sorted = await app.inject({
+      method: 'PUT', url: '/api/settings/stage-content/requirement/field-layout', headers,
+      payload: { section_id: section.id, field_ids: reorderedIds, column_spans: columnSpans },
+    });
+    assert.equal(sorted.statusCode, 200);
+    assert.deepEqual(sorted.json().data.map((field) => field.id), reorderedIds);
+    assert.deepEqual(sorted.json().data.map((field) => field.sort), reorderedIds.map((_, index) => (index + 1) * 10));
+    assert.deepEqual(sorted.json().data.map((field) => field.column_span), reorderedIds.map((id) => columnSpans[id]));
+    const afterRevision = await get("SELECT COUNT(*) AS count FROM content_config_revision WHERE scope_key = 'requirement' AND config_type = 'content'");
+    assert.equal(afterRevision.count, beforeRevision.count + 1);
+
+    const refreshed = await app.inject({ method: 'GET', url: '/api/settings/stage-content/requirement', headers });
+    const orderedFields = refreshed.json().data.fields.filter((field) => field.section_id === section.id && field.id !== statusField.id);
+    assert.deepEqual(orderedFields.map((field) => field.id), reorderedIds);
+    for (const field of orderedFields) assert.deepEqual({
+      section_id: field.section_id,
+      visible: field.visible,
+      list_visible: field.list_visible,
+      filterable: field.filterable,
+      dashboard_dimension: field.dashboard_dimension,
+    }, beforeById.get(field.id));
+    assert.deepEqual(orderedFields.map((field) => field.column_span), reorderedIds.map((id) => columnSpans[id]));
+    const unchangedStatus = refreshed.json().data.fields.find((field) => field.id === statusField?.id);
+    assert.equal(unchangedStatus?.sort, statusField?.sort);
+    assert.equal(unchangedStatus?.column_span, statusField?.column_span);
+
+    const incomplete = await app.inject({
+      method: 'PUT', url: '/api/settings/stage-content/requirement/field-layout', headers,
+      payload: { section_id: section.id, field_ids: reorderedIds.slice(1), column_spans: columnSpans },
+    });
+    assert.equal(incomplete.statusCode, 400);
+    assert.match(incomplete.json().message, /字段宽度|全部输入项/);
+
+    const withStatus = await app.inject({
+      method: 'PUT', url: '/api/settings/stage-content/requirement/field-layout', headers,
+      payload: { section_id: section.id, field_ids: [...reorderedIds, statusField.id], column_spans: { ...columnSpans, [statusField.id]: statusField.column_span } },
+    });
+    assert.equal(withStatus.statusCode, 400);
+    assert.match(withStatus.json().message, /全部输入项/);
+
+    const noPermission = await run(
+      "INSERT INTO user (phone, name, org, password_hash, status, is_super, password_changed_at) VALUES (?,?,?,?,?,?,datetime('now','localtime'))",
+      'section-sort-rbac-user', '分区排序无权限用户', '测试机构', 'not-used', '启用', 0,
+    );
+    const forbiddenHeaders = { authorization: `Bearer ${await app.jwt.sign({ id: noPermission.lastInsertRowid, phone: 'section-sort-rbac-user' })}`, 'x-requested-by': 'RADAR' };
+    const forbidden = await app.inject({
+      method: 'PUT', url: '/api/settings/stage-content/requirement/field-layout', headers: forbiddenHeaders,
+      payload: { section_id: section.id, field_ids: reorderedIds, column_spans: columnSpans },
+    });
+    assert.equal(forbidden.statusCode, 403);
+  });
+
   test('系统设置新增交付件时由服务端生成编码并保存配置修订', async () => {
     const administrator = await get('SELECT id, phone FROM user WHERE is_super = 1 LIMIT 1');
     const token = await app.jwt.sign({ id: administrator.id, phone: administrator.phone });
