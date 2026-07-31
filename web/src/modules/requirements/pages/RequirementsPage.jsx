@@ -236,6 +236,9 @@ export default function Requirements() {
         : { title: field.label, dataIndex: field.field_key, key: field.field_key, render: (value) => Array.isArray(value) ? (value.join('、') || '—') : (value || '—') };
     })
     : columns.slice(1, -1);
+  // 任务状态为固定上下文；需求状态和编号按业务识别顺序固定在其后，其他配置列保持管理员既有排序。
+  const nativeListColumns = ['status', 'req_code'].flatMap((fieldKey) => configuredNativeColumns.filter((column) => column.key === fieldKey))
+    .concat(configuredNativeColumns.filter((column) => !['status', 'req_code'].includes(column.key)));
 
   return (
     <Card
@@ -264,7 +267,7 @@ export default function Requirements() {
         ]}
       />
       <DataTable
-        ref={tableRef} columns={[columns[0], ...configuredNativeColumns, ...stageList.columns, columns.at(-1)]} fetcher={fetcher}
+        ref={tableRef} columns={[columns[0], ...nativeListColumns, ...stageList.columns, columns.at(-1)]} fetcher={fetcher}
         baseQuery={{ releasePointIds, filters: filterQuery }}
         showSearch={false}
         onRowClick={openEdit}
