@@ -15,7 +15,7 @@ import { get, all, run, tx, dialect } from '../../platform/persistence/index.js'
 import { auditUpdate } from '../../platform/audit/index.js';
 import { windowIds, formatAttachments, resolveOrganizationValues } from '../settings/reference-data/index.js';
 import { ok, notFound, badRequest, forbidden, parseJsonArray } from '../../platform/runtime/index.js';
-import { assertStatusChangePermission, defaultDictAttr, defaultProcessStatus, statusTypeForReleaseStatus, validateRequiredFields } from '../settings/process-configuration/index.js';
+import { assertStatusChangePermission, defaultDictAttr, defaultProcessStatus } from '../settings/process-configuration/index.js';
 import { exportXlsx } from '../../platform/import-export/index.js';
 import { signatureDataUrl, resolveAttachmentPath } from '../../platform/attachments/index.js';
 import { buildReleaseWordDoc } from './index.js';
@@ -1031,7 +1031,6 @@ export default async function releaseRoutes(fastify) {
     const keys = Object.keys(updateData);
     if (keys.length > 0) {
       const merged = { ...rt, ...updateData };
-      await validateRequiredFields('release', statusTypeForReleaseStatus(merged.status), merged);
       await validateStageContent('release', merged);
       await run(
         `UPDATE release_task SET ${keys.map((k) => `${k}=?`).join(',')}, updated_at=datetime('now','localtime') WHERE id=?`,

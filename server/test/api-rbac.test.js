@@ -86,6 +86,53 @@ if (!process.env.RADAR_RUN_API_TESTS) {
     assert.equal(response.json().code, 403);
   });
 
+  test('流程输入项状态规则是需求和工单详情保存的唯一必填事实源', async () => {
+    const administrator = await get('SELECT id, phone FROM user WHERE is_super = 1 LIMIT 1');
+    const headers = { authorization: `Bearer ${await app.jwt.sign({ id: administrator.id, phone: administrator.phone })}`, 'x-requested-by': 'RADAR' };
+    const releasePoint = await get('SELECT id FROM release_point ORDER BY id LIMIT 1');
+    const cases = [
+      { scopeKey: 'requirement', table: 'requirement', codeKey: 'req_code', code: 'REQUIRED-RULE-REQ-001', status: '需求登记', title: '需求规则唯一事实源' },
+      { scopeKey: 'ticket', table: 'ticket', codeKey: 'ticket_code', code: 'REQUIRED-RULE-TICKET-001', status: '工单登记', title: '工单规则唯一事实源' },
+    ];
+
+    for (const item of cases) {
+      const schemaResponse = await app.inject({ method: 'GET', url: `/api/settings/stage-content/${item.scopeKey}`, headers });
+      assert.equal(schemaResponse.statusCode, 200);
+      const schema = schemaResponse.json().data;
+      const initialStatus = schema.statuses.find((status) => status.value === item.status);
+      const implementationOrg = schema.fields.find((field) => field.field_key === 'implementation_org');
+      const mainSystems = schema.fields.find((field) => field.field_key === 'main_systems');
+      assert.ok(initialStatus && implementationOrg && mainSystems);
+      const originalRules = await all(`SELECT field_definition_id, required FROM stage_field_status_rule
+        WHERE status_dict_item_id = ? AND field_definition_id IN (?, ?)`, initialStatus.id, implementationOrg.id, mainSystems.id);
+      try {
+        await run('UPDATE stage_field_status_rule SET required = 1 WHERE field_definition_id = ? AND status_dict_item_id = ?', implementationOrg.id, initialStatus.id);
+        await run('UPDATE stage_field_status_rule SET required = 0 WHERE field_definition_id = ? AND status_dict_item_id = ?', mainSystems.id, initialStatus.id);
+        const typeKey = item.scopeKey === 'requirement' ? 'req_type' : 'ticket_type';
+        const inserted = await run(`INSERT INTO ${item.table} (${item.codeKey}, title, summary, status, ${typeKey}, is_accounting, propose_dept, proposer, propose_time, release_point_id, main_systems)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+        item.code, item.title, '用于验证系统设置必填规则', item.status, '业务需求', '否', '计划财务板块', JSON.stringify(['测试用户']), '2026-07-31', releasePoint.id, JSON.stringify([]));
+
+        const missingImplementationOrg = await app.inject({
+          method: 'PUT', url: `/api/${item.scopeKey === 'requirement' ? 'requirements' : 'tickets'}/${inserted.lastInsertRowid}`,
+          headers, payload: { title: `${item.title}-缺失实施机构` },
+        });
+        assert.equal(missingImplementationOrg.statusCode, 400);
+        assert.match(missingImplementationOrg.json().message, /实施机构/);
+
+        const optionalMainSystems = await app.inject({
+          method: 'PUT', url: `/api/${item.scopeKey === 'requirement' ? 'requirements' : 'tickets'}/${inserted.lastInsertRowid}`,
+          headers, payload: { implementation_org: '测试机构', main_systems: [] },
+        });
+        assert.equal(optionalMainSystems.statusCode, 200);
+      } finally {
+        for (const rule of originalRules) {
+          await run('UPDATE stage_field_status_rule SET required = ? WHERE field_definition_id = ? AND status_dict_item_id = ?', rule.required, rule.field_definition_id, initialStatus.id);
+        }
+      }
+    }
+  });
+
   test('角色全机构权限默认值可由人员单独覆盖，且认证上下文返回最终值', async () => {
     const administrator = await get('SELECT id, phone FROM user WHERE is_super = 1 LIMIT 1');
     const adminHeaders = { authorization: `Bearer ${await app.jwt.sign({ id: administrator.id, phone: administrator.phone })}`, 'x-requested-by': 'RADAR' };

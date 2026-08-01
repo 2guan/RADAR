@@ -8,8 +8,7 @@
 
 import { get, all, run, tx, listQuery } from '../../../platform/persistence/index.js';
 import {
-  buildExtensionListFilter, defaultProcessStatus, statusTypeForProcessStatus,
-  validateRequiredFields,
+  buildExtensionListFilter, defaultProcessStatus,
 } from '../../settings/process-configuration/index.js';
 import {
   appendStageExcelValues,
@@ -470,7 +469,6 @@ export default async function testTaskRoutes(fastify) {
     await assertStatusChangePermission(fastify, request, `test.${old.test_type}`, old.status, data);
 
     const merged = { ...old, ...data };
-    await validateRequiredFields('test', await statusTypeForProcessStatus(merged.status), merged);
     await validateStageContent(`test.${merged.test_type}`, merged);
     data.deviation_rate = calcDeviation(merged.plan_start, merged.plan_end, merged.actual_end);
 

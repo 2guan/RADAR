@@ -820,6 +820,9 @@ export async function validateStageContent(scopeKey, row) {
   const extensionValues = row?.id ? await getExtensionValues(scopeKey, row.id) : {};
   for (const field of config.fields) {
     if (!field.visible || !field.rules?.[statusId]) continue;
+    // 扩展值依赖主记录 ID。新建阶段没有可安全承载它们的实体时，先允许主记录落库；
+    // 后续扩展值保存、主记录更新和状态流转仍会按同一规则完整校验。
+    if (field.field_kind === 'extension' && !row?.id) continue;
     if (field.field_kind === 'component') {
       if (await componentMissing(field.component_key, row)) missing.push(field.label);
       continue;

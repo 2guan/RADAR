@@ -11,8 +11,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { get, all, run, tx, listQuery } from '../../../platform/persistence/index.js';
 import {
-  buildExtensionListFilter, defaultProcessStatus, statusTypeForProcessStatus,
-  validateRequiredFields,
+  buildExtensionListFilter, defaultProcessStatus,
 } from '../../settings/process-configuration/index.js';
 import {
   appendStageExcelValues,
@@ -558,7 +557,6 @@ export default async function devTaskRoutes(fastify) {
     await assertStatusChangePermission(fastify, request, 'dev', old.status, data);
 
     const merged = { ...old, ...data };
-    await validateRequiredFields('dev', await statusTypeForProcessStatus(merged.status), merged);
     await validateStageContent('dev', merged);
     // 重算偏差率
     data.deviation_rate = calcDeviation(merged.plan_start, merged.plan_end, merged.actual_end);

@@ -678,7 +678,7 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
               </div>}
 
               {/* 投产审批的公共扩展信息与会签同属左侧业务主区域。 */}
-              <StageContentPanel scopeKey="release" entityType="release" entityId={detail.releaseTask?.id} readOnly={!editable} renderDeliverableAction={renderDeliverableAction} />
+              <StageContentPanel scopeKey="release" entityType="release" entityId={detail.releaseTask?.id} readOnly={!editable} statusValue={statusValue} renderDeliverableAction={renderDeliverableAction} />
             </Col>
 
             {/* ── 右栏 ── */}
@@ -732,9 +732,9 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
                   )}
                 </div>
               </div>}
-              <StageContentPanel scopeKey="release" entityType="release" entityId={detail.releaseTask?.id} readOnly={!editable} position="right" renderDeliverableAction={renderDeliverableAction} />
+              <StageContentPanel scopeKey="release" entityType="release" entityId={detail.releaseTask?.id} readOnly={!editable} statusValue={statusValue} position="right" renderDeliverableAction={renderDeliverableAction} />
             </Col>
-            <StageContentPanel scopeKey="release" entityType="release" entityId={detail.releaseTask?.id} readOnly={!editable} position="full" renderDeliverableAction={renderDeliverableAction} />
+            <StageContentPanel scopeKey="release" entityType="release" entityId={detail.releaseTask?.id} readOnly={!editable} statusValue={statusValue} position="full" renderDeliverableAction={renderDeliverableAction} />
           </Row>
         </div>
       )}

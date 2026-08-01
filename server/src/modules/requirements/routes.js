@@ -11,7 +11,6 @@ import { listQuery } from '../../platform/persistence/index.js';
 import { claimRequirementCode, previewRequirementCode, requirementCodeRequiresReleasePoint } from './index.js';
 import {
   buildExtensionListFilter, defaultProcessStatus, isTerminalStatus,
-  statusTypeForProcessStatus, validateRequiredFields,
 } from '../settings/process-configuration/index.js';
 import {
   appendStageExcelValues,
@@ -363,11 +362,6 @@ export default async function requirementRoutes(fastify) {
 
     const picked = await normalizeAnalysisFields(pick(body));
     picked.priority = normalizeConfiguredFieldValue('requirement', 'priority', body.priority);
-    await validateRequiredFields('requirement', await statusTypeForProcessStatus(body.status || initialStatus), {
-      ...body, ...picked,
-      req_code: body.req_code || '__AUTO__',
-      status: body.status || initialStatus,
-    });
     await validateStageContent('requirement', { ...body, ...picked, status: body.status || initialStatus });
 
     const data = encodeField(picked);
@@ -420,7 +414,6 @@ export default async function requirementRoutes(fastify) {
     // 终态校验：用提交后的状态与主责系统
     const newStatus = picked.status ?? old.status;
     const newMain = picked.main_systems ?? parseJsonArray(old.main_systems);
-    await validateRequiredFields('requirement', await statusTypeForProcessStatus(newStatus), { ...decode(old), ...picked, status: newStatus });
     await validateStageContent('requirement', { ...decode(old), ...picked, status: newStatus });
     validateTerminal(id, newStatus, newMain);
 
