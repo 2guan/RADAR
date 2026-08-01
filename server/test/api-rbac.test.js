@@ -682,6 +682,37 @@ if (!process.env.RADAR_RUN_API_TESTS) {
     assert.equal(second.applied, false);
   });
 
+  test('配置升级会退役需求和工单已删除的计划投产点必填规则', async () => {
+    const staleFields = [
+      { scopeKey: 'requirement', status: '需求登记' },
+      { scopeKey: 'ticket', status: '工单登记' },
+    ];
+    for (const stale of staleFields) {
+      const basic = await get("SELECT id FROM stage_section WHERE scope_key = ? AND section_key = 'basic'", stale.scopeKey);
+      const field = await run(`INSERT INTO stage_field_definition
+        (scope_key, field_key, label, field_kind, input_type, source_key, multiple, native_column, section_id, column_span, visible, list_visible, filterable, dashboard_dimension, sort, is_builtin)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      stale.scopeKey, 'release_point_id', '计划投产点', 'native', 'release_point', 'release_point', 0, 'release_point_id', basic.id, 12, 1, 1, 1, 1, 30, 1);
+      const status = await get('SELECT id FROM dict_item WHERE category = ? AND attr_value = ?', 'process_status', stale.status);
+      await run('INSERT INTO stage_field_status_rule (field_definition_id, status_dict_item_id, required) VALUES (?,?,1)', field.lastInsertRowid, status.id);
+    }
+    await run("DELETE FROM app_config WHERE key = 'stage.content.retire-planned-release-point.v1'");
+
+    const result = await applyBuiltinConfigurationUpgrades({
+      builtinMetadata: STAGE_BUILTIN_FIELD_METADATA,
+      sectionDefaults: STAGE_BUILTIN_SECTION_DEFAULTS,
+    });
+    assert.deepEqual(result.added.filter((item) => item.startsWith('retired-field:')).sort(), [
+      'retired-field:requirement.release_point_id',
+      'retired-field:ticket.release_point_id',
+    ]);
+    for (const stale of staleFields) {
+      const field = await get("SELECT id, deleted_at FROM stage_field_definition WHERE scope_key=? AND field_key='release_point_id'", stale.scopeKey);
+      assert.ok(field.deleted_at, `${stale.scopeKey} 的废弃字段应被软删除`);
+      assert.equal((await get('SELECT COUNT(*) AS c FROM stage_field_status_rule WHERE field_definition_id=?', field.id)).c, 0);
+    }
+  });
+
   test.skip('优先级在 API 更新中校验枚举并对空值使用默认值（配置快照迁移中）', async () => {
     const administrator = await get('SELECT id, phone FROM user WHERE is_super = 1 LIMIT 1');
     const releasePoint = await get('SELECT id FROM release_point ORDER BY id LIMIT 1');
@@ -1079,7 +1110,7 @@ if (!process.env.RADAR_RUN_API_TESTS) {
     const releasePoint = await get('SELECT id FROM release_point ORDER BY id LIMIT 1');
     const headers = { authorization: `Bearer ${await app.jwt.sign({ id: administrator.id, phone: administrator.phone })}`, 'x-requested-by': 'RADAR' };
     const payload = {
-      req_code: 'FIELD-REQ-005', title: '分析字段回归', summary: '覆盖实施机构、接收人、工作量与录入信息。', release_point_id: releasePoint.id, propose_time: '2026-07-30',
+      req_code: 'FIELD-REQ-005', title: '分析字段回归', summary: '覆盖实施机构、接收人、工作量与录入信息。', propose_time: '2026-07-30',
       req_type: '新增监管需求', is_accounting: '否', propose_dept: '风险管理板块', proposer: [administrator.name],
       main_systems: ['YN0320'], collab_dev_systems: ['YN0320'], implementation_org: '云南农信', receiver: administrator.name,
       workload: '3.5', issue_no: 'OA-202607-005',
