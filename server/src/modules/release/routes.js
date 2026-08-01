@@ -882,6 +882,45 @@ function applyFilters(rows, filters) {
   return out;
 }
 
+// 投产审批列表由多个业务对象聚合而成，不能交给通用 SQL 列表查询排序。
+// 这里仅接受前端声明的稳定键，并在筛选完成、分页之前排序，保证跨页顺序一致。
+function sortReleaseRows(rows, sort) {
+  const sorters = (Array.isArray(sort) ? sort : [])
+    .filter((item) => item && ['task_status', 'release_status', 'review_status', 'signoff', 'release_date', 'impl_org', 'change_codes', 'code', 'title'].includes(item.field))
+    .map((item) => ({ field: item.field, direction: String(item.order).toLowerCase() === 'desc' ? -1 : 1 }));
+  if (!sorters.length) return rows;
+
+  const valueFor = (row, field) => {
+    if (field === 'signoff') {
+      const total = Number(row.signoff?.total || 0);
+      // 已签比例优先；同一比例下驳回数更高的记录排在后面（升序时）。
+      return [total ? Number(row.signoff?.signed || 0) / total : 0, Number(row.signoff?.rejected || 0), total];
+    }
+    if (field === 'change_codes') return (row.change_codes || []).join(',');
+    if (field === 'task_status') return row.task_status || row.task_status_short || '';
+    return row[field] ?? '';
+  };
+  const compare = (left, right) => {
+    if (Array.isArray(left) && Array.isArray(right)) {
+      for (let index = 0; index < left.length; index += 1) {
+        const result = compare(left[index], right[index]);
+        if (result) return result;
+      }
+      return 0;
+    }
+    if (typeof left === 'number' && typeof right === 'number') return left - right;
+    return String(left).localeCompare(String(right), 'zh-Hans-CN', { numeric: true });
+  };
+
+  return [...rows].sort((a, b) => {
+    for (const sorter of sorters) {
+      const result = compare(valueFor(a, sorter.field), valueFor(b, sorter.field));
+      if (result) return result * sorter.direction;
+    }
+    return 0;
+  });
+}
+
 export default async function releaseRoutes(fastify) {
   // 列表：投产申请所选需求/工单/问题逐条展开
   fastify.post('/release/list', { preHandler: fastify.requirePerm('release', 'view') }, async (request) => {
@@ -891,7 +930,7 @@ export default async function releaseRoutes(fastify) {
     for (const entity of all0) {
       try { await assertReleaseWorkItemOrganizationAccess(entity.code, request.currentUser); scoped.push(entity); } catch (error) { if (!isOrganizationRestricted(request.currentUser)) throw error; }
     }
-    const filtered = applyFilters(scoped, body.filters);
+    const filtered = sortReleaseRows(applyFilters(scoped, body.filters), body.sort);
 
     const page = Number(body.page) || 1;
     const pageSize = Number(body.pageSize) || 10;

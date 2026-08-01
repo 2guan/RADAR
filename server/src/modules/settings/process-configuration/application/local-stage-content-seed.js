@@ -3344,28 +3344,59 @@ function withIntakeOwner(scope) {
 // 本地“输入项配置”是新库的初始布局事实源；此处记录已由管理员确认的展示顺序和宽度。
 // 仅影响全新库及缺失字段补齐，不会覆盖既有环境中的管理员布局。
 const CURRENT_LOCAL_LAYOUT_OVERRIDES = {
+  // 列表首次打开的默认字段与用户级列偏好恢复默认值保持一致；仅作用于新库快照。
+  requirement: {
+    fields: {
+      status: { list_visible: 1, sort: 20 }, req_code: { list_visible: 1, sort: 30 }, req_type: { list_visible: 1, sort: 40 },
+      title: { list_visible: 1, sort: 50 }, implementation_org: { list_visible: 1, sort: 60 },
+      main_systems: { list_visible: 1, sort: 70 }, collab_dev_systems: { list_visible: 1, sort: 80 },
+      apply_release_points: { list_visible: 0 }, collab_test_systems: { list_visible: 0 },
+    },
+  },
+  ticket: {
+    fields: {
+      status: { list_visible: 1, sort: 20 }, ticket_code: { list_visible: 1, sort: 30 }, ticket_type: { list_visible: 1, sort: 40 },
+      title: { list_visible: 1, sort: 50 }, implementation_org: { list_visible: 1, sort: 60 },
+      main_systems: { list_visible: 1, sort: 70 }, collab_dev_systems: { list_visible: 1, sort: 80 },
+      apply_release_points: { list_visible: 0 }, collab_test_systems: { list_visible: 0 },
+    },
+  },
+  dev: {
+    fields: {
+      status: { list_visible: 1, sort: 20 }, task_name: { list_visible: 1, sort: 30 },
+      owner: { list_visible: 1, sort: 40 }, impl_system: { list_visible: 1, sort: 50 },
+      intake_owner: { list_visible: 0 }, impl_org: { list_visible: 0 }, content: { list_visible: 0 },
+    },
+  },
+  'test.NFT': { fields: { status: { list_visible: 1, sort: 20 }, task_name: { list_visible: 1, sort: 30 }, owner: { list_visible: 1, sort: 40 }, impl_system: { list_visible: 1, sort: 50 }, intake_owner: { list_visible: 0 }, impl_org: { list_visible: 0 } } },
+  release_apply: {
+    fields: {
+      release_point_id: { list_visible: 1, sort: 20 }, change_code: { list_visible: 1, sort: 30 },
+      change_system: { list_visible: 1, sort: 40 }, impl_org: { list_visible: 1, sort: 50 }, change_content: { list_visible: 1, sort: 60 },
+    },
+  },
+  release: { fields: { status: { list_visible: 1, sort: 20 } } },
   'test.SEC': {
     sections: { extension: { sort: 40 } },
     fields: {
-      task_name: { column_span: 24 },
-      owner: { sort: 40 },
-      impl_org: { sort: 30 },
+      task_name: { column_span: 24, list_visible: 1, sort: 30 },
+      status: { list_visible: 1, sort: 20 }, owner: { list_visible: 1, sort: 40 },
+      impl_system: { list_visible: 1, sort: 50 }, intake_owner: { list_visible: 0 }, impl_org: { list_visible: 0 },
     },
   },
   'test.SIT': {
     sections: { coverage: { sort: 20 }, schedule: { sort: 30 } },
     fields: {
-      task_name: { column_span: 24 },
-      impl_system: { column_span: 12 },
-      owner: { sort: 40 },
-      impl_org: { sort: 30 },
+      task_name: { column_span: 24, list_visible: 1, sort: 30 },
+      status: { list_visible: 1, sort: 20 }, impl_system: { column_span: 12, list_visible: 1, sort: 50 },
+      owner: { list_visible: 1, sort: 40 }, intake_owner: { list_visible: 0 }, impl_org: { list_visible: 0 },
     },
   },
   'test.UAT': {
     fields: {
-      impl_system: { column_span: 12, sort: 50 },
-      owner: { sort: 40 },
-      impl_org: { sort: 30 },
+      task_name: { list_visible: 1, sort: 30 }, status: { list_visible: 1, sort: 20 },
+      impl_system: { column_span: 12, list_visible: 1, sort: 50 }, owner: { list_visible: 1, sort: 40 },
+      intake_owner: { list_visible: 0 }, impl_org: { list_visible: 0 },
     },
   },
 };

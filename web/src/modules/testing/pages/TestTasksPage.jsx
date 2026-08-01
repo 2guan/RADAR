@@ -101,7 +101,7 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
   const onDelete = async (row) => { await apiDelete(`/test-tasks/${row.id}`); message.success('已删除'); tableRef.current?.reload(); };
 
   useImperativeHandle(ref, () => ({
-    openIntake
+    openIntake,
   }));
 
   const openIntake = async () => {
@@ -204,7 +204,7 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
   };
 
   const columns = [
-    { title: '任务状态', dataIndex: 'task_status_short', key: 'task_status', align: 'center', width: 120, render: (_, row) => <TaskStatusBadge shortStatus={row.task_status_short} status={row.task_status_value} fullStatus={row.task_status} /> },
+    { title: '任务状态', dataIndex: 'task_status_short', key: 'task_status', sortKey: 'status', align: 'center', width: 120, render: (_, row) => <TaskStatusBadge shortStatus={row.task_status_short} status={row.task_status_value} fullStatus={row.task_status} /> },
     { title: `${TYPE_LABEL[testType]}状态`, dataIndex: 'status', key: 'status', align: 'center', render: (s) => <StatusBadge status={s} /> },
     {
       title: '任务编号',
@@ -234,6 +234,7 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
       title: '实施系统',
       dataIndex: 'impl_system_name',
       key: 'impl_system_name',
+      sortKey: 'impl_system',
       render: (val) => val ? (
         <Tag className="status-tag tag-system" style={{ borderRadius: 2, margin: 0 }}>{val}</Tag>
       ) : '—',
@@ -434,7 +435,9 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
         ]}
       />
       <DataTable
-        ref={tableRef} columns={[...columns.slice(0, -1), ...stageList.columns, columns.at(-1)]} fetcher={fetcher}
+        ref={tableRef} columns={[...columns.slice(0, -1), ...stageList.allColumns, columns.at(-1)]} fetcher={fetcher}
+        listPreferenceKey="testing.tasks"
+        defaultColumnKeys={['task_status', 'status', 'task_code', 'task_name', 'req_code', 'owner', 'impl_system_name', 'deviation_rate']}
         baseQuery={{ releasePointIds, testType, filters: filterQuery }} 
         showSearch={false}
         onRowClick={(r) => setEditId(r.id)}

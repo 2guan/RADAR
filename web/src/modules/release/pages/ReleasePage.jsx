@@ -70,12 +70,12 @@ export default function Release() {
   // 会签进度由服务端聚合，列表仅负责保持审批状态和业务对象的可读呈现。
   const columns = [
     {
-      title: '任务状态', dataIndex: 'task_status_short', key: 'task_status', align: 'center', width: 120,
+      title: '任务状态', dataIndex: 'task_status_short', key: 'task_status', sortKey: 'task_status', align: 'center', width: 120,
       render: (_, row) => <TaskStatusBadge shortStatus={row.task_status_short} status={row.task_status_value} fullStatus={row.task_status} />,
     },
-    { title: '投产状态', dataIndex: 'release_status', key: 'release_status', align: 'center', width: 96, render: (s) => <StatusBadge status={s} /> },
+    { title: '投产状态', dataIndex: 'release_status', key: 'release_status', sortKey: 'release_status', align: 'center', width: 96, render: (s) => <StatusBadge status={s} /> },
     {
-      title: '评审状态', dataIndex: 'review_status', key: 'review_status', align: 'center', width: 96,
+      title: '评审状态', dataIndex: 'review_status', key: 'review_status', sortKey: 'review_status', align: 'center', width: 96,
       render: (s) => (
         s ? (
           <StatusBadge
@@ -86,7 +86,7 @@ export default function Release() {
       ),
     },
     {
-      title: '会签进度', key: 'signoff', width: 130,
+      title: '会签进度', key: 'signoff', sortKey: 'signoff', width: 130,
       render: (_, r) => (r.signoff.total ? (
         <Space size={4}>
           <Tag className={`status-tag ${r.signoff.signed === 0 ? 'status-tag-initial' : (r.signoff.signed >= r.signoff.total ? 'status-tag-final' : 'status-tag-in-progress')}`} style={{ margin: 0 }}>签 {r.signoff.signed}</Tag>
@@ -96,17 +96,18 @@ export default function Release() {
       ) : '—'),
     },
     {
-      title: '申请投产点', dataIndex: 'release_date', key: 'release_date', width: 120,
+      title: '申请投产点', dataIndex: 'release_date', key: 'release_date', sortKey: 'release_date', width: 120,
       render: (val) => <ReleasePointText value={val} />,
     },
     {
-      title: '实施机构', dataIndex: 'impl_org', key: 'impl_org', width: 110, ellipsis: true,
+      title: '实施机构', dataIndex: 'impl_org', key: 'impl_org', sortKey: 'impl_org', width: 110, ellipsis: true,
       render: (v) => v || '—',
     },
     {
       title: '变更编号',
       dataIndex: 'change_codes',
       key: 'change_codes',
+      sortKey: 'change_codes',
       width: 170,
       render: (codes) => {
         const list = Array.isArray(codes) ? codes : [];
@@ -141,6 +142,8 @@ export default function Release() {
         </div>
       ),
     },
+    // 审批列表没有行级编辑动作，但保留固定操作列承载统一的列设置入口。
+    { title: '操作', key: 'op', width: 80, fixed: 'right', render: () => null },
   ];
 
   return (
@@ -156,6 +159,8 @@ export default function Release() {
       />
       <DataTable
         ref={tableRef} columns={columns} fetcher={fetcher} baseQuery={{ releasePointIds, filters: filterQuery }} rowKey={(r) => `${r.code}_${r.release_point_id ?? 'none'}`}
+        listPreferenceKey="release.approval"
+        defaultColumnKeys={['task_status', 'release_status', 'review_status', 'signoff', 'release_date', 'impl_org', 'change_codes', 'code', 'title']}
         showSearch={false}
         tableScroll={{ x: 1300 }}
         onRowClick={(r) => setDetailTarget({ code: r.code, releasePointId: r.release_point_id })}

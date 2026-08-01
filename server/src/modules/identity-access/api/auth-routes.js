@@ -13,6 +13,7 @@ import { verifyPassword, hashPassword, validatePasswordComplexity, isPasswordExp
 import { ok, badRequest } from '../../../platform/runtime/index.js';
 import { createCaptcha, verifyCaptcha } from '../../../platform/auth/index.js';
 import { resolveOrganizationValues } from '../../settings/reference-data/index.js';
+import { deleteListPreference, getListPreference, saveListPreference } from '../application/list-preferences.js';
 
 export default async function authRoutes(fastify) {
   // 获取验证码（无需登录）
@@ -185,6 +186,27 @@ export default async function authRoutes(fastify) {
       permissions,
       mustChangePassword: expired,
     });
+  });
+
+  // 当前用户的业务列表列偏好。用户 ID 始终来自 JWT，防止跨用户读写。
+  fastify.get('/user-list-preferences/:listKey', { preHandler: fastify.authenticate }, async (request) => {
+    const preference = await getListPreference(request.currentUser.id, request.params.listKey);
+    return ok(preference);
+  });
+
+  fastify.put('/user-list-preferences/:listKey', { preHandler: fastify.authenticate }, async (request) => {
+    const preference = await saveListPreference({
+      userId: request.currentUser.id,
+      listKey: request.params.listKey,
+      body: request.body || {},
+      operator: request.currentUser.name,
+    });
+    return ok(preference);
+  });
+
+  fastify.delete('/user-list-preferences/:listKey', { preHandler: fastify.authenticate }, async (request) => {
+    await deleteListPreference({ userId: request.currentUser.id, listKey: request.params.listKey, operator: request.currentUser.name });
+    return ok(null);
   });
 
   // 登出（无状态 JWT，前端清除 token 即可，这里仅作语义占位）

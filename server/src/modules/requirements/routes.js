@@ -58,7 +58,7 @@ const IO_COLUMNS = [
 
 const COLUMNS = [
   'id', 'req_code', 'title', 'summary', 'status', 'req_type', 'propose_dept', 'proposer',
-  'yn_owner', 'jk_owner', 'propose_time', 'expected_release_date', 'registrar', 'register_time', 'created_at',
+  'yn_owner', 'jk_owner', 'propose_time', 'expected_release_date', 'main_systems', 'collab_dev_systems', 'collab_test_systems', 'registrar', 'register_time', 'created_at',
   'issue_no', 'is_accounting', 'priority', 'implementation_org', 'receiver', 'workload',
 ];
 const SEARCH = ['req_code', 'title', 'summary', 'proposer', 'issue_no'];

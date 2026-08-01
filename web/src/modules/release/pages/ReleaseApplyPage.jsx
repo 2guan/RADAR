@@ -80,7 +80,7 @@ export default function ReleaseApply() {
   // 固定业务列与阶段扩展列会在 DataTable 中合并，操作列始终保持在最右侧。
   const columns = [
     {
-      title: '评审状态', dataIndex: 'review_status', key: 'review_status', width: 88, align: 'center',
+      title: '评审状态', dataIndex: 'review_status', key: 'review_status', sortKey: 'review_status', width: 88, align: 'center',
       render: (v) => (
         v ? (
           <StatusBadge
@@ -91,8 +91,8 @@ export default function ReleaseApply() {
       ),
     },
     { title: '变更编号', dataIndex: 'change_code', key: 'change_code', width: 120, sorter: true, render: (v) => <span style={{ ...monoStyle, fontWeight: 500 }}>{v}</span> },
-    { title: '申请投产点', dataIndex: 'release_date', key: 'release_date', width: 118, render: (v) => <ReleasePointText value={v} /> },
-    { title: '变更系统', dataIndex: 'change_system_name', key: 'change_system_name', width: 110, ellipsis: true, render: (v) => v || '—' },
+    { title: '申请投产点', dataIndex: 'release_date', key: 'release_date', sortKey: 'release_point_id', width: 118, render: (v) => <ReleasePointText value={v} /> },
+    { title: '变更系统', dataIndex: 'change_system_name', key: 'change_system_name', sortKey: 'change_system', width: 110, ellipsis: true, render: (v) => v || '—' },
     {
       title: '变更内容', dataIndex: 'change_content', key: 'change_content', width: 260,
       render: (v) => (
@@ -105,7 +105,7 @@ export default function ReleaseApply() {
       ),
     },
     {
-      title: '交付制品', key: 'delivery_units', width: 150,
+      title: '交付制品', key: 'delivery_units', sortKey: 'delivery_units', width: 150,
       render: (_, row) => {
         const units = Array.isArray(row.delivery_units) ? row.delivery_units : [];
         if (!units.length) return '—';
@@ -171,7 +171,9 @@ export default function ReleaseApply() {
         ]}
       />
       <DataTable
-        ref={tableRef} columns={[...columns.slice(0, -1), ...stageList.columns, columns.at(-1)]} fetcher={fetcher}
+        ref={tableRef} columns={[...columns.slice(0, -1), ...stageList.allColumns, columns.at(-1)]} fetcher={fetcher}
+        listPreferenceKey="release.apply"
+        defaultColumnKeys={['review_status', 'release_date', 'change_code', 'change_system_name', 'impl_org', 'change_content', 'delivery_units']}
         baseQuery={{ releasePointIds, filters: filterQuery }}
         showSearch={false}
         tableLayout="fixed"
