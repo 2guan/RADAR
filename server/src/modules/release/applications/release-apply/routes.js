@@ -26,10 +26,11 @@ import {
   validateStageContent,
 } from '../../../settings/process-configuration/index.js';
 
-// 列表查询可排序/筛选的列白名单（不含派生 review_status）
+// 列表查询可排序/筛选的列白名单。review_status 在申请写入时同步保存，
+// 列表仍会实时重算它以保证展示值与审批实例一致。
 const COLUMNS = [
   'id', 'change_code', 'change_content', 'impact_scope', 'change_system', 'impl_org', 'delivery_units',
-  'release_point_id', 'registrar', 'register_time', 'created_at',
+  'release_point_id', 'review_status', 'registrar', 'register_time', 'created_at',
 ];
 const SEARCH = ['change_code', 'change_content', 'change_system'];
 const JSON_FIELDS = ['ref_codes', 'delivery_units'];

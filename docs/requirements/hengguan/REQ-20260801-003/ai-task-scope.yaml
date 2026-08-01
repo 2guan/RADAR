@@ -1,0 +1,89 @@
+{
+  "schema_version": "1.0",
+  "requirement": {
+    "id": "REQ-20260801-003",
+    "ref": "hengguan/REQ-20260801-003",
+    "title": "统一列表展示与用户级列偏好",
+    "status": "ready",
+    "document": "docs/requirements/hengguan/REQ-20260801-003/requirement.md",
+    "internet_ai_coding_allowed": true
+  },
+  "assignment": {
+    "developer": "hengguan",
+    "module": "governance",
+    "module_owner": "hengguan",
+    "branch": "hengguan/REQ-20260801-003-list-personalization",
+    "base_branch": "origin/main",
+    "worktree": "codex-desktop-current-worktree"
+  },
+  "ai": {
+    "enabled": true,
+    "approved_service": "Codex desktop",
+    "model": "approved-by-user",
+    "contains_confidential_information": false,
+    "context_sanitized": true,
+    "production_access": false
+  },
+  "scope": {
+    "writable_paths": [
+      "docs/requirements/hengguan/REQ-20260801-003/**",
+      "server/src/platform/persistence/migrations/0045_user_list_preferences.sql",
+      "server/src/platform/persistence/migrations/tdsql/0025_user_list_preferences.sql",
+      "server/src/modules/identity-access/**",
+      "server/src/modules/settings/process-configuration/**",
+      "web/src/modules/settings/process-configuration/**",
+      "server/src/bootstrap/seed.js",
+      "server/scripts/mock-data.js",
+      "server/src/modules/requirements/**",
+      "server/src/modules/tickets/**",
+      "server/src/modules/development/**",
+      "server/src/modules/testing/**",
+      "server/src/modules/release/**",
+      "web/src/shared/ui/**",
+      "web/src/modules/requirements/**",
+      "web/src/modules/tickets/**",
+      "web/src/modules/development/**",
+      "web/src/modules/testing/**",
+      "web/src/modules/release/**",
+      "server/test/**"
+    ],
+    "read_only_paths": [
+      "AGENTS.md", "DESIGN.md", "docs/governance/**", "docs/architecture/**", ".agents/skills/radar-delivery-engineer/**",
+      "server/src/platform/auth/**", "server/src/platform/audit/**", "web/src/platform/**"
+    ],
+    "forbidden_paths": [
+      ".github/**", "docs/reports/**", ".env", "**/.env", "**/*secret*", "**/*credential*", "attachments/**"
+    ]
+  },
+  "public_capability_change": {
+    "required": true,
+    "shared_change_issue": "hengguan/REQ-20260801-003",
+    "target_modules": ["governance", "platform/persistence", "identity-access", "shared/contracts", "requirements", "tickets", "development", "testing", "release", "settings"],
+    "new_methods": ["identity-access 用户级列表偏好读取、覆盖保存与恢复默认公开接口", "shared DataTable 列布局元数据与个人偏好接入"],
+    "existing_method_changed": true,
+    "semantic_name_confirmed": true,
+    "old_behavior_preserved": true,
+    "compatibility_note": "既有列表查询响应和阶段字段配置接口保持兼容；无个人偏好时继续使用当前默认列基线。",
+    "owner_approved": true,
+    "owner_review_required_before_merge": true
+  },
+  "database": {
+    "changed": true,
+    "migration_paths": ["server/src/platform/persistence/migrations/0045_user_list_preferences.sql", "server/src/platform/persistence/migrations/tdsql/0025_user_list_preferences.sql"],
+    "mysql8_compatible": true,
+    "historical_data_impact": "新增空表，不回填；现有用户首次打开六个列表使用配置默认列。",
+    "rollback_or_compensation": "应用回退可保留偏好表；如需删除，在后续独立双端迁移中备份后删除，避免丢失用户个人配置。"
+  },
+  "external_access": {"changed": false, "api_paths": [], "readable_field_whitelist": [], "writable_field_whitelist": [], "action_whitelist": [], "audit_required": true},
+  "required_tests": [
+    {"name": "build", "command": "npm run build --prefix web"},
+    {"name": "unit", "command": "npm test --prefix server"},
+    {"name": "api", "command": "npm run test:api --prefix server"},
+    {"name": "permission", "command": "npm run test:rbac --prefix server"},
+    {"name": "migration_parity", "command": "node scripts/check-migration-parity.mjs && node scripts/check-mysql8-migrations.mjs"},
+    {"name": "ui_sources", "command": "node scripts/check-ui-data-sources.mjs"},
+    {"name": "runtime", "command": "node scripts/verify-app-runtime.mjs"}
+  ],
+  "risk": {"level": "important", "reasons": ["共享 DataTable 回归", "用户级写接口和审计", "SQLite/TDSQL 双端迁移", "六阶段配置默认值调整"], "required_approvals": ["hengguan"]},
+  "completion": {"changed_files_report_required": true, "test_result_report_required": true, "known_risks_report_required": true, "rollback_report_required": true, "requirement_acceptance_required": true}
+}

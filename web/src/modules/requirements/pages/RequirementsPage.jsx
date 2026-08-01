@@ -125,7 +125,7 @@ export default function Requirements() {
 
   // 关联开发或测试任务的需求禁止删除，避免破坏交付链路的可追溯性。
   const columns = [
-    { title: '任务状态', dataIndex: 'task_status_short', key: 'task_status', align: 'center', width: 120, render: (_, row) => <TaskStatusBadge shortStatus={row.task_status_short} status={row.task_status_value} fullStatus={row.task_status} /> },
+    { title: '任务状态', dataIndex: 'task_status_short', key: 'task_status', sortKey: 'status', align: 'center', width: 120, render: (_, row) => <TaskStatusBadge shortStatus={row.task_status_short} status={row.task_status_value} fullStatus={row.task_status} /> },
     { title: '需求状态', dataIndex: 'status', key: 'status', align: 'center', render: (s) => <StatusBadge status={s} /> },
     {
       title: '需求编号',
@@ -142,6 +142,7 @@ export default function Requirements() {
       title: '申请投产点',
       dataIndex: 'apply_release_points',
       key: 'apply_release_points',
+      sortKey: 'expected_release_date',
       render: (values) => Array.isArray(values) && values.length ? (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
           {values.map((value) => <ReleasePointText key={value} value={value} />)}
@@ -205,6 +206,7 @@ export default function Requirements() {
       title: '主责系统',
       dataIndex: 'main_systems_names',
       key: 'main_systems_names',
+      sortKey: 'main_systems',
       render: (arr) => (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
           {(arr || []).map((name) => (
@@ -217,6 +219,7 @@ export default function Requirements() {
       title: '协同改造系统',
       dataIndex: 'collab_dev_systems_names',
       key: 'collab_dev_systems_names',
+      sortKey: 'collab_dev_systems',
       render: (arr) => (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
           {(arr || []).map((name) => (
@@ -285,7 +288,9 @@ export default function Requirements() {
         ]}
       />
       <DataTable
-        ref={tableRef} columns={[columns[0], ...nativeListColumns, ...stageList.columns, columns.at(-1)]} fetcher={fetcher}
+        ref={tableRef} columns={[columns[0], ...columns.slice(1, -1), ...stageList.allColumns, columns.at(-1)]} fetcher={fetcher}
+        listPreferenceKey="requirements.analysis"
+        defaultColumnKeys={['task_status', 'status', 'req_code', 'req_type', 'title', 'implementation_org', 'main_systems_names', 'collab_dev_systems_names']}
         baseQuery={{ releasePointIds, filters: filterQuery }}
         showSearch={false}
         onRowClick={openEdit}

@@ -92,6 +92,51 @@ if (!process.env.RADAR_RUN_API_TESTS) {
     assert.equal(response.headers['cache-control'], 'no-cache');
   });
 
+  test('重点列表的展示别名与投产审批聚合字段均可按稳定键排序', async () => {
+    const administrator = await get('SELECT id, phone FROM user WHERE is_super = 1 LIMIT 1');
+    const headers = { authorization: `Bearer ${await app.jwt.sign({ id: administrator.id, phone: administrator.phone })}`, 'x-requested-by': 'RADAR' };
+    const point = await run('INSERT INTO release_point (release_date, version_type) VALUES (?,?)', '20991231', '常规版本');
+    const releasePointId = Number(point.lastInsertRowid);
+    const rows = [
+      { code: 'LIST-SORT-REQ-A', org: '乙机构', change: 'CHG-SORT-B', status: '待投产', review: '待评审', signed: '未签署' },
+      { code: 'LIST-SORT-REQ-B', org: '甲机构', change: 'CHG-SORT-A', status: '投产完成', review: '评审同意', signed: '已签署' },
+    ];
+    for (const row of rows) {
+      await run('INSERT INTO requirement (req_code, title, status) VALUES (?,?,?)', row.code, `${row.code} 标题`, '需求分析完成');
+      const apply = await run(
+        'INSERT INTO release_apply (change_code, change_content, impl_org, release_point_id, ref_codes, review_status) VALUES (?,?,?,?,?,?)',
+        row.change, '列表排序回归', row.org, releasePointId, JSON.stringify([row.code]), row.review,
+      );
+      await run('INSERT INTO release_apply_reference (release_apply_id, ref_code, release_point_id) VALUES (?,?,?)', apply.lastInsertRowid, row.code, releasePointId);
+      const task = await run(
+        'INSERT INTO release_task (req_code, release_point_id, entity_type, status, review_status) VALUES (?,?,?,?,?)',
+        row.code, releasePointId, 'requirement', row.status, row.review,
+      );
+      await run('INSERT INTO release_signoff (release_task_id, role_name, result) VALUES (?,?,?)', task.lastInsertRowid, '列表排序角色', row.signed);
+    }
+
+    const releaseByOrg = await app.inject({
+      method: 'POST', url: '/api/release/list', headers,
+      payload: { releasePointIds: [releasePointId], pageSize: 100, sort: [{ field: 'impl_org', order: 'asc' }] },
+    });
+    assert.equal(releaseByOrg.statusCode, 200, releaseByOrg.body);
+    assert.deepEqual(releaseByOrg.json().data.list.map((row) => row.code), ['LIST-SORT-REQ-B', 'LIST-SORT-REQ-A']);
+
+    const releaseBySignoff = await app.inject({
+      method: 'POST', url: '/api/release/list', headers,
+      payload: { releasePointIds: [releasePointId], pageSize: 100, sort: [{ field: 'signoff', order: 'desc' }] },
+    });
+    assert.equal(releaseBySignoff.statusCode, 200, releaseBySignoff.body);
+    assert.equal(releaseBySignoff.json().data.list[0].code, 'LIST-SORT-REQ-B');
+
+    const applyByReview = await app.inject({
+      method: 'POST', url: '/api/release-apply/list', headers,
+      payload: { releasePointIds: [releasePointId], pageSize: 100, sort: [{ field: 'review_status', order: 'desc' }] },
+    });
+    assert.equal(applyByReview.statusCode, 200, applyByReview.body);
+    assert.deepEqual(applyByReview.json().data.list.map((row) => row.change_code), ['CHG-SORT-A', 'CHG-SORT-B']);
+  });
+
   test('protected API rejects unauthenticated requests', async () => {
     const response = await app.inject({
       method: 'POST',
@@ -101,6 +146,36 @@ if (!process.env.RADAR_RUN_API_TESTS) {
     });
     assert.equal(response.statusCode, 401);
     assert.equal(response.json().code, 401);
+  });
+
+  test('用户列表偏好按认证用户隔离、校验字段并记录审计', async () => {
+    const administrator = await get('SELECT id, phone, name FROM user WHERE is_super = 1 LIMIT 1');
+    const headers = { authorization: `Bearer ${await app.jwt.sign({ id: administrator.id, phone: administrator.phone })}`, 'x-requested-by': 'RADAR' };
+    const payload = {
+      visibleKeys: ['task_status', 'status', 'req_code', 'title'],
+      orderedKeys: ['task_status', 'status', 'req_code', 'title'],
+      widthByKey: { task_status: 120, title: 280 },
+    };
+    const saved = await app.inject({ method: 'PUT', url: '/api/user-list-preferences/requirements.analysis', headers, payload });
+    assert.equal(saved.statusCode, 200, saved.body);
+    assert.deepEqual(saved.json().data, payload);
+    const loaded = await app.inject({ method: 'GET', url: '/api/user-list-preferences/requirements.analysis', headers });
+    assert.deepEqual(loaded.json().data, payload);
+    assert.ok(await get("SELECT id FROM audit_log WHERE entity_type = 'user_list_preference' AND entity_code = 'requirements.analysis' AND action = 'create'"));
+
+    const other = await run("INSERT INTO user (phone, name, org, password_hash, status, password_changed_at) VALUES (?,?,?,?,?,datetime('now','localtime'))", 'preference-other-user', '偏好隔离用户', '测试机构', 'not-used', '启用');
+    const otherHeaders = { authorization: `Bearer ${await app.jwt.sign({ id: other.lastInsertRowid, phone: 'preference-other-user' })}`, 'x-requested-by': 'RADAR' };
+    const otherLoaded = await app.inject({ method: 'GET', url: '/api/user-list-preferences/requirements.analysis', headers: otherHeaders });
+    assert.equal(otherLoaded.statusCode, 200);
+    assert.equal(otherLoaded.json().data, null);
+
+    const invalid = await app.inject({ method: 'PUT', url: '/api/user-list-preferences/requirements.analysis', headers, payload: { ...payload, visibleKeys: ['op'], orderedKeys: ['op'] } });
+    assert.equal(invalid.statusCode, 400);
+    assert.deepEqual((await app.inject({ method: 'GET', url: '/api/user-list-preferences/requirements.analysis', headers })).json().data, payload);
+
+    const deleted = await app.inject({ method: 'DELETE', url: '/api/user-list-preferences/requirements.analysis', headers });
+    assert.equal(deleted.statusCode, 200);
+    assert.equal((await app.inject({ method: 'GET', url: '/api/user-list-preferences/requirements.analysis', headers })).json().data, null);
   });
 
   test('RBAC rejects an authenticated user without the required permission', async () => {

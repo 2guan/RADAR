@@ -89,7 +89,7 @@ const NATIVE_FIELD_DEFAULTS = {
  * 内置配置目录是字段语义的唯一代码基线：数据库只保存管理员可调整的布局、可见性和状态规则。
  * `renderer` 明确区分可由公共控件呈现的普通字段和必须由业务 JSX 声明的复杂控件。
  */
-export const BUILTIN_CONFIGURATION_UPGRADE_ID = 'settings.builtin-configuration.v6';
+export const BUILTIN_CONFIGURATION_UPGRADE_ID = 'settings.builtin-configuration.v7-list-defaults';
 export const PRIORITY_OPTIONS = [
   { value: '高', label: '高' },
   { value: '中', label: '中' },
@@ -621,7 +621,7 @@ export async function listStageListFields(scopeKey) {
   return await all(`SELECT id, field_key, label, input_type, source_key, multiple, list_visible, filterable, sort
     FROM stage_field_definition
     WHERE scope_key = ? AND field_kind = 'extension'
-      AND (list_visible = 1 OR filterable = 1) AND deleted_at IS NULL
+      AND deleted_at IS NULL
     ORDER BY sort, id`, scopeKey);
 }
 

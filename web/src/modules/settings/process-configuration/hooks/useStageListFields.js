@@ -68,5 +68,10 @@ export function useStageListFields(scopeKey) {
       title: field.label, key: field.field_kind === 'extension' ? `extension:${field.field_key}` : field.field_key,
       render: (_, row) => field.field_kind === 'extension' ? ((row._stage_fields?.[field.field_key] || []).join('、') || '—') : (row[field.field_key] || '—'),
     })),
+    // 列设置允许用户临时添加本阶段所有扩展字段；默认列表仍仅消费 list_visible。
+    allColumns: (schema?.fields || []).filter((field) => field.field_kind === 'extension').map((field) => ({
+      title: field.label, key: `extension:${field.field_key}`,
+      render: (_, row) => ((row._stage_fields?.[field.field_key] || []).join('、') || '—'),
+    })),
   }), [options, schema]);
 }
