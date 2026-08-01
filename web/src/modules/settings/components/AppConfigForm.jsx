@@ -46,6 +46,15 @@ export default function AppConfigForm({ mode, items }) {
     .replaceAll('{投产窗口}', '{投产点}')
     .replaceAll('{序号}', '{序号[3]}');
 
+  const parseMultiSelectValue = (value) => {
+    try {
+      const parsed = JSON.parse(String(value || '[]'));
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  };
+
   useEffect(() => {
     apiGet('/settings/app-config').then((rows) => {
       const map = {};
@@ -56,6 +65,8 @@ export default function AppConfigForm({ mode, items }) {
             map[r.key] = r.value === 'true' || r.value === '1';
           } else if (def.type === 'number') {
             map[r.key] = r.value !== null && r.value !== '' ? Number(r.value) : undefined;
+          } else if (def.type === 'multi-select') {
+            map[r.key] = parseMultiSelectValue(r.value);
           } else {
             map[r.key] = mode === 'code' && r.key.startsWith('code.')
               ? normalizeCodeTemplate(r.value)
@@ -80,6 +91,8 @@ export default function AppConfigForm({ mode, items }) {
         val = val ? 'true' : 'false';
       } else if (it.type === 'number') {
         val = val !== undefined && val !== null ? String(val) : '';
+      } else if (it.type === 'multi-select') {
+        val = JSON.stringify(Array.isArray(val) ? val : []);
       }
       payload[it.key] = val;
     }
@@ -119,6 +132,8 @@ export default function AppConfigForm({ mode, items }) {
             ? <Switch />
             : it.type === 'number'
               ? <InputNumber style={{ width: '100%' }} placeholder={it.placeholder} min={it.min} max={it.max} />
+              : it.type === 'multi-select'
+                ? <Select mode="multiple" options={it.options || []} placeholder={it.placeholder} allowClear />
               : it.type === 'select'
                 ? <Select options={it.options || []} placeholder={it.placeholder} />
                 : it.type === 'password'

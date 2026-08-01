@@ -40,6 +40,7 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
   const [splitMode, setSplitMode] = useState('overall');
   const [selectedNewSystems, setSelectedNewSystems] = useState([]);
   const [selectedOwners, setSelectedOwners] = useState({});
+  const [selectedImplOrgs, setSelectedImplOrgs] = useState({});
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [saving, setSaving] = useState(false);
   const [reqColWidths, setReqColWidths] = useState({});
@@ -73,6 +74,9 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
   const statusOptions = statuses.map(s => ({ value: s.attr_value, label: s.display_value }));
   const userOptions = users.map(u => ({ value: u.name, label: `${u.name} (${u.phone})` }));
   const systemOptions = systems.map(s => ({ value: s.sys_code, label: `${s.sys_code} - ${s.sys_name}` }));
+  const defaultImplOrgsFor = (tasks) => Object.fromEntries((tasks || [])
+    .filter((task) => !task.exists && task.defaultImplOrg)
+    .map((task) => [task.sysCode, task.defaultImplOrg]));
 
   const filterConfigs = [
     { field: 'task_code', label: '测试任务编号', type: 'input', isPrimary: true, op: 'like', placeholder: '测试任务编号检索' },
@@ -128,6 +132,7 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
     setSplitMode('overall');
     setSelectedNewSystems([]);
     setSelectedOwners({});
+    setSelectedImplOrgs({});
     setIntakeOpen(true);
   };
 
@@ -142,6 +147,7 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
         const checkable = currentList.filter(t => !t.exists).map(t => t.sysCode);
         setSelectedNewSystems(checkable);
         setSelectedOwners({});
+        setSelectedImplOrgs(defaultImplOrgsFor(currentList));
       } catch (err) {
         message.error(err.message || '加载预览失败');
       } finally {
@@ -151,6 +157,7 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
       setPreviewData({ overall: [], split: [] });
       setSelectedNewSystems([]);
       setSelectedOwners({});
+      setSelectedImplOrgs({});
     }
   };
 
@@ -160,6 +167,7 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
     const checkable = (currentList || []).filter(t => !t.exists).map(t => t.sysCode);
     setSelectedNewSystems(checkable);
     setSelectedOwners({});
+    setSelectedImplOrgs(defaultImplOrgsFor(currentList));
   };
 
   const doIntake = async () => {
@@ -175,12 +183,18 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
       message.warning('请为每个勾选的测试任务选择测试负责人');
       return;
     }
+    if (selectedNewSystems.some((sysCode) => !selectedImplOrgs[sysCode])) {
+      message.warning('请为每个勾选的测试任务选择测试实施方');
+      return;
+    }
     setSaving(true);
     try {
       const res = await apiPost('/test-tasks/intake', {
         reqCode: selectedReq.req_code,
         testType,
-        assignments: selectedNewSystems.map((sysCode) => ({ sysCode, owner: selectedOwners[sysCode] })),
+        assignments: selectedNewSystems.map((sysCode) => ({
+          sysCode, owner: selectedOwners[sysCode], implOrg: selectedImplOrgs[sysCode],
+        })),
         splitMode,
       });
       message.success(`已成功承接 ${res.length} 个${TYPE_LABEL[testType]}任务`);
@@ -352,6 +366,22 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
       ellipsis: true,
     },
     {
+      title: '测试实施方', key: 'impl_org', width: 170,
+      render: (_, record) => record.exists ? <span>—</span> : (
+        <Select
+          value={selectedImplOrgs[record.sysCode]}
+          options={orgOptions}
+          placeholder="选择测试实施方"
+          size="small"
+          showSearch
+          optionFilterProp="label"
+          style={{ width: '100%' }}
+          onClick={(event) => event.stopPropagation()}
+          onChange={(implOrg) => setSelectedImplOrgs((current) => ({ ...current, [record.sysCode]: implOrg }))}
+        />
+      ),
+    },
+    {
       title: '测试负责人', key: 'intake_owner', width: 180,
       render: (_, record) => record.exists ? <span>{record.owner || '—'}</span> : (
         <Select
@@ -449,7 +479,7 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
       <Modal
         open={intakeOpen}
         title={`${TYPE_LABEL[testType]}承接`}
-        width={920}
+        width={isMobile ? 'calc(100vw - 24px)' : 1180}
         onCancel={() => setIntakeOpen(false)}
         onOk={doIntake}
         confirmLoading={saving}
@@ -615,6 +645,19 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
                             <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--radar-ink)' }}>
                               任务名称：{item.taskName}
                             </div>
+                            {!item.exists && (
+                              <Select
+                                value={selectedImplOrgs[item.sysCode]}
+                                options={orgOptions}
+                                placeholder="选择测试实施方（必填）"
+                                size="small"
+                                showSearch
+                                optionFilterProp="label"
+                                style={{ width: '100%' }}
+                                onClick={(event) => event.stopPropagation()}
+                                onChange={(implOrg) => setSelectedImplOrgs((current) => ({ ...current, [item.sysCode]: implOrg }))}
+                              />
+                            )}
                             <Select
                               value={selectedOwners[item.sysCode]}
                               options={userOptions}

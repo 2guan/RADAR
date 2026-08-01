@@ -408,6 +408,11 @@ function RoleManager() {
 
 export default function Settings() {
   const { isMobile } = useResponsive();
+  const [intakeOverrideOrgs, setIntakeOverrideOrgs] = useState([]);
+  useEffect(() => {
+    apiGet('/dict/by-category/org').then(setIntakeOverrideOrgs).catch(() => {});
+  }, []);
+  const intakeOverrideOrgOptions = intakeOverrideOrgs.map((org) => ({ value: org.attr_value, label: org.display_value }));
   // 基础配置子 Tab
   const baseConfig = (
     <Tabs items={[
@@ -442,6 +447,16 @@ export default function Settings() {
           { key: 'security.lockout.enabled', label: '启用登录失败锁定', type: 'switch', extra: '密码连续输入错误达到上限后锁定账号一段时间' },
           { key: 'security.lockout.maxAttempts', label: '最大密码错误尝试次数', type: 'number', min: 1, max: 10, placeholder: '默认 5' },
           { key: 'security.lockout.durationMinutes', label: '账号锁定时长（分钟）', type: 'number', min: 1, max: 1440, placeholder: '默认 15' },
+        ]} />,
+      },
+      {
+        key: 'development-intake', label: '开发承接规则',
+        children: <AppConfigForm mode="development-intake" items={[
+          {
+            key: 'development.intake.implementation_org_override_orgs', label: '实施方统一预填机构', type: 'multi-select',
+            options: intakeOverrideOrgOptions, placeholder: '选择需统一预填的来源实施机构',
+            extra: '临时规则：来源需求/工单的实施机构命中名单时，开发承接的所有系统均预填该机构。清空名单即可停用。',
+          },
         ]} />,
       },
       {

@@ -20,7 +20,7 @@ import {
 } from '../../settings/process-configuration/index.js';
 import { auditCreate, auditUpdate, auditDelete } from '../../../platform/audit/index.js';
 import { listByEntity } from '../../../platform/attachments/index.js';
-import { windowIds, inClause, resolveDictAttr, resolveOrganizationValues, resolveSystemCode, formatAttachments } from '../../settings/reference-data/index.js';
+import { windowIds, inClause, resolveDictAttr, resolveExistingDictAttr, resolveOrganizationValues, resolveSystemCode, formatAttachments } from '../../settings/reference-data/index.js';
 import { ok, notFound, badRequest, forbidden } from '../../../platform/runtime/index.js';
 import { assertStatusChangePermission } from '../../settings/process-configuration/index.js';
 import { exportXlsx, parseXlsx } from '../../../platform/import-export/index.js';
@@ -49,6 +49,20 @@ const IO_COLUMNS = [
   { key: 'actual_start', title: '实际开始时间' },
   { key: 'actual_end', title: '实际结束时间' },
 ];
+
+function intakeAssignmentMap(assignments) {
+  const result = new Map();
+  for (const item of Array.isArray(assignments) ? assignments : []) {
+    const sysCode = String(item?.sysCode || '').trim();
+    if (!sysCode) throw badRequest('测试任务缺少实施系统');
+    if (result.has(sysCode)) throw badRequest(`测试任务实施系统 [${sysCode}] 重复`);
+    result.set(sysCode, {
+      owner: String(item?.owner || '').trim(),
+      implOrg: String(item?.implOrg || '').trim(),
+    });
+  }
+  return result;
+}
 
 const TYPE_NAME = { SIT: '应用组装测试', UAT: '用户测试', NFT: '非功能测试', SEC: '安全测试' };
 const COLUMNS = [
@@ -295,8 +309,9 @@ export default async function testTaskRoutes(fastify) {
 
     const existingTasks = await all('SELECT impl_system, task_code, task_name, status, owner FROM test_task WHERE req_code = ? AND test_type = ?', reqCode, testType);
 
-    const systems = await all('SELECT sys_code, sys_name FROM system');
+    const systems = await all('SELECT sys_code, sys_name, org FROM system');
     const sysMap = new Map(systems.map(s => [s.sys_code, s.sys_name]));
+    const sysOrgMap = new Map(systems.map(s => [s.sys_code, s.org]));
 
     const tplRow = await get(`SELECT value FROM app_config WHERE key = 'code.test.${testType}'`);
     const tpl = tplRow?.value || `${testType}_{需求/工单编号}_{序号[3]}`;
@@ -326,6 +341,7 @@ export default async function testTaskRoutes(fastify) {
 
     const firstMainSysCode = main[0] || null;
     const firstMainSysName = firstMainSysCode ? (sysMap.get(firstMainSysCode) || firstMainSysCode) : '';
+    const mainSystemOrg = firstMainSysCode ? (sysOrgMap.get(firstMainSysCode) || null) : null;
 
     const overallRow = {
       sysCode: firstMainSysCode || 'overall',
@@ -335,6 +351,7 @@ export default async function testTaskRoutes(fastify) {
       taskCode: overallTaskCode,
       taskName: overallTaskName,
       owner: overallExist?.owner,
+      defaultImplOrg: mainSystemOrg,
       status: overallExist ? '已建任务' : '新建任务',
     };
 
@@ -368,6 +385,7 @@ export default async function testTaskRoutes(fastify) {
           taskCode: exist.task_code,
           taskName: exist.task_name,
           owner: exist.owner,
+          defaultImplOrg: mainSystemOrg,
           status: '已建任务',
         });
       } else {
@@ -381,6 +399,7 @@ export default async function testTaskRoutes(fastify) {
           exists: false,
           taskCode,
           taskName,
+          defaultImplOrg: mainSystemOrg,
           status: '新建任务',
         });
       }
@@ -409,7 +428,7 @@ export default async function testTaskRoutes(fastify) {
     const systemsList = await all('SELECT sys_code, sys_name FROM system');
     const sysMap = new Map(systemsList.map(s => [s.sys_code, s.sys_name]));
 
-    const assignmentBySystem = new Map((Array.isArray(assignments) ? assignments : []).map((item) => [item?.sysCode, String(item?.owner || '').trim()]));
+    const assignmentBySystem = intakeAssignmentMap(assignments);
     let targets = [];
     if (splitMode === 'overall') {
       const overallKey = firstMainSysCode || 'overall';
@@ -425,10 +444,13 @@ export default async function testTaskRoutes(fastify) {
     const configuredSystems = new Set([...main, ...(req.collab_test_systems || [])]);
     if (splitMode !== 'overall' && targets.some((target) => !configuredSystems.has(target.sysCode))) throw badRequest('存在不属于该需求/工单的测试系统');
     for (const target of targets) {
-      const owner = assignmentBySystem.get(target.assignmentKey);
-      if (!owner) throw badRequest('请为每个测试任务选择测试负责人');
-      if (!await isActivePersonName(owner)) throw badRequest(`测试负责人 [${owner}] 不存在或已停用`);
-      target.owner = owner;
+      const assignment = assignmentBySystem.get(target.assignmentKey);
+      if (!assignment?.owner) throw badRequest('请为每个测试任务选择测试负责人');
+      if (!await isActivePersonName(assignment.owner)) throw badRequest(`测试负责人 [${assignment.owner}] 不存在或已停用`);
+      assignment.implOrg = await resolveExistingDictAttr('org', assignment.implOrg);
+      if (!assignment.implOrg) throw badRequest('请为每个测试任务选择有效的测试实施方');
+      target.owner = assignment.owner;
+      target.implOrg = assignment.implOrg;
     }
 
     const existing = await all('SELECT impl_system, task_name FROM test_task WHERE req_code = ? AND test_type = ?', reqCode, testType);
@@ -440,12 +462,11 @@ export default async function testTaskRoutes(fastify) {
       const out = [];
       const initialStatus = await defaultProcessStatus('测试', 'initial', '测试承接');
       for (const t of targets) {
-        const sys = t.sysCode ? await get('SELECT * FROM system WHERE sys_code = ?', t.sysCode) : null;
         const taskCode = await generateTestTaskCode(testType, reqCode, releaseWindow);
         const res = await run(
           `INSERT INTO test_task (req_code, task_code, task_name, test_type, status, owner, intake_owner, impl_system, impl_org, registrar, register_time)
            VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-          reqCode, taskCode, t.taskName, testType, initialStatus, t.owner, request.currentUser?.name || null, t.sysCode || null, sys?.org || null,
+          reqCode, taskCode, t.taskName, testType, initialStatus, t.owner, request.currentUser?.name || null, t.sysCode || null, t.implOrg,
           request.currentUser?.name, new Date().toISOString().slice(0, 10),
         );
         await auditCreate('test', res.lastInsertRowid, taskCode, request.currentUser?.name);

@@ -23,13 +23,16 @@ import {
 } from '../../settings/process-configuration/index.js';
 import { auditCreate, auditUpdate, auditDelete } from '../../../platform/audit/index.js';
 import { listByEntity } from '../../../platform/attachments/index.js';
-import { windowIds, inClause, resolveDictAttr, resolveOrganizationValues, resolveSystemCode, formatAttachments } from '../../settings/reference-data/index.js';
+import {
+  getDevelopmentIntakeImplementationOrgOverrideOrgs,
+  windowIds, inClause, resolveDictAttr, resolveExistingDictAttr, resolveOrganizationValues, resolveSystemCode, formatAttachments,
+} from '../../settings/reference-data/index.js';
 import { ok, notFound, badRequest, forbidden } from '../../../platform/runtime/index.js';
 import { assertStatusChangePermission } from '../../settings/process-configuration/index.js';
 import { exportXlsx, parseXlsx } from '../../../platform/import-export/index.js';
 import {
   calcDeviation, decodeChangeItem, formatImpactItemsText, generateDevTaskCode,
-  getWorkItem, workItemCodesInReleasePoints, releaseDateMapForCodes,
+  getWorkItem, replaceWorkItemDevelopmentSystemRoles, workItemCodesInReleasePoints, releaseDateMapForCodes,
 } from '../index.js';
 import { codePrefix, codeTemplateValues, formatCode } from '../../../shared/utils/code-template.js';
 import { resolveCurrentTaskStatuses } from '../../overview/index.js';
@@ -93,6 +96,62 @@ const LABELS = {
   impl_system: '开发实施系统', impl_org: '开发实施方', plan_start: '计划开始时间', plan_end: '计划结束时间',
   actual_start: '实际开始时间', actual_end: '实际结束时间', deviation_rate: '排期偏差率',
 };
+
+function configuredDevelopmentSystemRoles(main, collab) {
+  const rows = [];
+  const seen = new Set();
+  for (const sysCode of main || []) {
+    if (sysCode && !seen.has(sysCode)) {
+      seen.add(sysCode);
+      rows.push({ sysCode, role: '主责' });
+    }
+  }
+  for (const sysCode of collab || []) {
+    if (sysCode && !seen.has(sysCode)) {
+      seen.add(sysCode);
+      rows.push({ sysCode, role: '协同' });
+    }
+  }
+  return rows;
+}
+
+function intakeAssignmentMap(assignments) {
+  const result = new Map();
+  for (const item of Array.isArray(assignments) ? assignments : []) {
+    const sysCode = String(item?.sysCode || '').trim();
+    if (!sysCode) throw badRequest('开发任务缺少实施系统');
+    if (result.has(sysCode)) throw badRequest(`开发任务实施系统 [${sysCode}] 重复`);
+    result.set(sysCode, {
+      owner: String(item?.owner || '').trim(),
+      implOrg: String(item?.implOrg || '').trim(),
+    });
+  }
+  return result;
+}
+
+function intakeSystemRoleMap(systemRoles) {
+  const result = new Map();
+  for (const item of Array.isArray(systemRoles) ? systemRoles : []) {
+    const sysCode = String(item?.sysCode || '').trim();
+    const role = String(item?.role || '').trim();
+    if (!sysCode) throw badRequest('开发系统角色缺少实施系统');
+    if (!['主责', '协同'].includes(role)) throw badRequest(`开发系统 [${sysCode}] 的角色仅支持主责或协同`);
+    if (result.has(sysCode)) throw badRequest(`开发系统 [${sysCode}] 的角色重复`);
+    result.set(sysCode, role);
+  }
+  return result;
+}
+
+async function visibleDevelopmentSystemCodes(req, systemRoles, user) {
+  if (!isOrganizationRestricted(user)) return new Set(systemRoles.map((item) => item.sysCode));
+  const organizations = await resolveOrganizationValues(user?.org);
+  const implementationOrgMatched = organizationMatches(req.implementation_org, organizations);
+  const systems = await all('SELECT sys_code, org FROM system');
+  const orgBySystem = new Map(systems.map((system) => [system.sys_code, system.org]));
+  return new Set(systemRoles
+    .filter((item) => implementationOrgMatched || organizationMatches(orgBySystem.get(item.sysCode), organizations))
+    .map((item) => item.sysCode));
+}
 const TEMPLATE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../templates/dev-documents');
 
 async function templatePath(filename) {
@@ -417,21 +476,11 @@ export default async function devTaskRoutes(fastify) {
 
     const systems = await all('SELECT sys_code, sys_name, org FROM system');
     const sysMap = new Map(systems.map(s => [s.sys_code, s.sys_name]));
+    const sysOrgMap = new Map(systems.map(s => [s.sys_code, s.org]));
+    const overrideOrgs = new Set(await getDevelopmentIntakeImplementationOrgOverrideOrgs());
+    const sharedDefaultImplOrg = overrideOrgs.has(req.implementation_org) ? req.implementation_org : null;
 
-    const allSystems = [];
-    const seen = new Set();
-    for (const sysCode of main) {
-      if (!seen.has(sysCode)) {
-        seen.add(sysCode);
-        allSystems.push({ sysCode, role: '主责' });
-      }
-    }
-    for (const sysCode of collab) {
-      if (!seen.has(sysCode)) {
-        seen.add(sysCode);
-        allSystems.push({ sysCode, role: '协同' });
-      }
-    }
+    const allSystems = configuredDevelopmentSystemRoles(main, collab);
 
     const tplRow = await get("SELECT value FROM app_config WHERE key = 'code.dev'");
     const tpl = tplRow?.value || 'RW_{需求/工单编号}_{序号[3]}';
@@ -467,6 +516,7 @@ export default async function devTaskRoutes(fastify) {
           taskCode: exist.task_code,
           taskName: exist.task_name,
           owner: exist.owner,
+          defaultImplOrg: sharedDefaultImplOrg || sysOrgMap.get(item.sysCode) || null,
           status: '已建任务',
         });
       } else {
@@ -480,6 +530,7 @@ export default async function devTaskRoutes(fastify) {
           exists: false,
           taskCode,
           taskName,
+          defaultImplOrg: sharedDefaultImplOrg || sysOrgMap.get(item.sysCode) || null,
           status: '新建任务',
         });
       }
@@ -490,25 +541,41 @@ export default async function devTaskRoutes(fastify) {
 
   // 开发承接（按系统拆分）
   fastify.post('/dev-tasks/intake', { preHandler: fastify.requirePerm('dev', 'create') }, async (request) => {
-    const { reqCode, assignments } = request.body || {};
+    const { reqCode, assignments, systemRoles } = request.body || {};
     if (!reqCode) throw badRequest('请选择需求/工单');
     const req = await getWorkItem(reqCode);
     if (!req) throw notFound('需求/工单不存在');
     await assertWorkItemOrganizationAccess(reqCode, request.currentUser);
     const releaseWindow = (await releaseDateMapForCodes([reqCode]))[reqCode];
 
-    // 目标系统：默认主责系统 ∪ 协同改造系统；可由 systems 指定子集
+    // 角色确认覆盖当前用户可见的完整预览集合；无可见权限的系统维持原角色，避免越权覆盖。
     const main = req.main_systems || [];
     const collab = req.collab_dev_systems || [];
-    const assignmentBySystem = new Map((Array.isArray(assignments) ? assignments : []).map((item) => [item?.sysCode, String(item?.owner || '').trim()]));
+    const configuredRoles = configuredDevelopmentSystemRoles(main, collab);
+    const configuredSystems = new Set(configuredRoles.map((item) => item.sysCode));
+    const roleBySystem = intakeSystemRoleMap(systemRoles);
+    const visibleSystems = await visibleDevelopmentSystemCodes(req, configuredRoles, request.currentUser);
+    if (roleBySystem.size !== visibleSystems.size || [...visibleSystems].some((sysCode) => !roleBySystem.has(sysCode))) {
+      throw badRequest('请确认预览中的全部开发系统角色');
+    }
+    if ([...roleBySystem.keys()].some((sysCode) => !visibleSystems.has(sysCode))) {
+      throw badRequest('存在不属于当前承接预览的开发系统角色');
+    }
+    const finalRoles = configuredRoles.map((item) => ({ ...item, role: roleBySystem.get(item.sysCode) || item.role }));
+    const nextMainSystems = finalRoles.filter((item) => item.role === '主责').map((item) => item.sysCode);
+    const nextCollabSystems = finalRoles.filter((item) => item.role === '协同').map((item) => item.sysCode);
+    if (nextMainSystems.length !== 1) throw badRequest('开发系统角色必须且只能选择一个主责系统');
+
+    const assignmentBySystem = intakeAssignmentMap(assignments);
     let targets = [...assignmentBySystem.keys()];
     if (!targets.length) throw badRequest('该需求/工单未配置主责/协同改造系统，无法承接开发');
-    const configuredSystems = new Set([...main, ...collab]);
     if (targets.some((sysCode) => !configuredSystems.has(sysCode))) throw badRequest('存在不属于该需求/工单的开发系统');
     for (const sysCode of targets) {
-      const owner = assignmentBySystem.get(sysCode);
-      if (!owner) throw badRequest('请为每个开发任务选择开发负责人');
-      if (!await isActivePersonName(owner)) throw badRequest(`开发负责人 [${owner}] 不存在或已停用`);
+      const assignment = assignmentBySystem.get(sysCode);
+      if (!assignment.owner) throw badRequest('请为每个开发任务选择开发负责人');
+      if (!await isActivePersonName(assignment.owner)) throw badRequest(`开发负责人 [${assignment.owner}] 不存在或已停用`);
+      assignment.implOrg = await resolveExistingDictAttr('org', assignment.implOrg);
+      if (!assignment.implOrg) throw badRequest('请为每个开发任务选择有效的开发实施方');
     }
     if (isOrganizationRestricted(request.currentUser)) {
       const organizations = await resolveOrganizationValues(request.currentUser.org);
@@ -534,12 +601,19 @@ export default async function devTaskRoutes(fastify) {
         const res = await run(
           `INSERT INTO dev_task (req_code, task_code, task_name, status, owner, intake_owner, impl_system, impl_org, registrar, register_time)
            VALUES (?,?,?,?,?,?,?,?,?,?)`,
-          reqCode, taskCode, taskName, initialStatus, assignmentBySystem.get(sysCode), request.currentUser?.name || null, sysCode, sys?.org || null,
+          reqCode, taskCode, taskName, initialStatus, assignmentBySystem.get(sysCode).owner, request.currentUser?.name || null, sysCode, assignmentBySystem.get(sysCode).implOrg,
           request.currentUser?.name, new Date().toISOString().slice(0, 10),
         );
         await auditCreate('dev', res.lastInsertRowid, taskCode, request.currentUser?.name);
         out.push({ id: res.lastInsertRowid, task_code: taskCode });
       }
+      const updated = await replaceWorkItemDevelopmentSystemRoles({
+        workItemCode: reqCode,
+        mainSystem: nextMainSystems[0],
+        collabSystems: nextCollabSystems,
+        actor: request.currentUser?.name,
+      });
+      if (!updated) throw notFound('需求/工单不存在');
       return out;
     });
     return ok(created, `已承接 ${created.length} 个开发任务`);
