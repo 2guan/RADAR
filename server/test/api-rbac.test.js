@@ -85,6 +85,46 @@ if (!process.env.RADAR_RUN_API_TESTS) {
     assert.ok(overview.json().data.list.flatMap((group) => group.cards).some((card) => card.code === appliedCode));
   });
 
+  test('投产申请新增默认实施机构取唯一开发实施方，并安全处理无匹配和冲突', async () => {
+    const administrator = await get('SELECT id, phone FROM user WHERE is_super = 1 LIMIT 1');
+    const headers = { authorization: `Bearer ${await app.jwt.sign({ id: administrator.id, phone: administrator.phone })}`, 'x-requested-by': 'RADAR' };
+    const workItemCode = 'RELEASE-APPLY-IMPL-ORG-001';
+    await run('INSERT INTO requirement (req_code, title, status) VALUES (?,?,?)', workItemCode, '投产申请实施机构默认值回归', '需求登记');
+    await run(
+      'INSERT INTO dev_task (req_code, task_code, status, impl_system, impl_org) VALUES (?,?,?,?,?)',
+      workItemCode, 'DEV-RELEASE-APPLY-IMPL-ORG-001', '开发承接', 'IMPL-ORG-SYS', '示例开发机构',
+    );
+
+    const unauthorized = await app.inject({
+      method: 'POST', url: '/api/release-apply/implementation-org-default',
+      payload: { refCodes: [workItemCode], systemCode: 'IMPL-ORG-SYS' },
+    });
+    assert.equal(unauthorized.statusCode, 401);
+
+    const resolved = await app.inject({
+      method: 'POST', url: '/api/release-apply/implementation-org-default', headers,
+      payload: { refCodes: [workItemCode], systemCode: 'IMPL-ORG-SYS' },
+    });
+    assert.equal(resolved.statusCode, 200, resolved.body);
+    assert.deepEqual(resolved.json().data, { implOrg: '示例开发机构', reason: 'resolved' });
+
+    const unmatched = await app.inject({
+      method: 'POST', url: '/api/release-apply/implementation-org-default', headers,
+      payload: { refCodes: [workItemCode], systemCode: 'NO-DEV-TASK-SYS' },
+    });
+    assert.deepEqual(unmatched.json().data, { implOrg: null, reason: 'no_match' });
+
+    await run(
+      'INSERT INTO dev_task (req_code, task_code, status, impl_system, impl_org) VALUES (?,?,?,?,?)',
+      workItemCode, 'DEV-RELEASE-APPLY-IMPL-ORG-002', '开发承接', 'IMPL-ORG-SYS', '另一示例开发机构',
+    );
+    const conflict = await app.inject({
+      method: 'POST', url: '/api/release-apply/implementation-org-default', headers,
+      payload: { refCodes: [workItemCode], systemCode: 'IMPL-ORG-SYS' },
+    });
+    assert.deepEqual(conflict.json().data, { implOrg: null, reason: 'conflict' });
+  });
+
   test('生产静态首页可返回且使用 no-cache，避免 Fastify 静态回调导致服务退出', async () => {
     const response = await app.inject({ method: 'GET', url: '/' });
     assert.equal(response.statusCode, 200);
