@@ -50,7 +50,7 @@
     "existing_method_changed": false,
     "semantic_name_confirmed": true,
     "old_behavior_preserved": true,
-    "compatibility_note": "既有投产申请 CRUD、开发任务接口、实施机构字段和系统主数据不变；仅新增态默认值来源从系统机构改为唯一匹配开发实施方。",
+    "compatibility_note": "既有投产申请 CRUD、开发任务接口、实施机构字段和系统主数据不变；新增态优先使用唯一匹配开发实施方，未命中或冲突时保持系统机构默认值。",
     "owner_approved": true,
     "owner_review_required_before_merge": true
   },

@@ -156,13 +156,16 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
   const loadImplementationOrgDefault = async (systemCode, refCodes = [...selReqs, ...selTickets]) => {
     if (isEdit) return;
     const requestId = ++implOrgRequestRef.current;
-    form.setFieldValue('impl_org', undefined);
+    const systemImplementationOrg = sysMap[systemCode]?.org || undefined;
+    form.setFieldValue('impl_org', systemImplementationOrg);
     if (!systemCode) {
       setImplOrgHint('');
       return;
     }
     if (!refCodes.length) {
-      setImplOrgHint('请先关联需求或工单后自动获取开发实施方');
+      setImplOrgHint(systemImplementationOrg
+        ? '未关联需求或工单，已按系统所属实施机构填入，可手工调整'
+        : '请先关联需求或工单后自动获取开发实施方');
       return;
     }
     setImplOrgHint('正在读取对应开发任务的开发实施方…');
@@ -173,13 +176,19 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
         form.setFieldValue('impl_org', result.implOrg);
         setImplOrgHint('已按对应开发任务的开发实施方自动填入，可手工调整');
       } else if (result.reason === 'conflict') {
-        setImplOrgHint('对应开发任务存在多个开发实施方，请手工选择实施机构');
+        setImplOrgHint(systemImplementationOrg
+          ? '对应开发任务存在多个开发实施方，已按系统所属实施机构填入，可手工调整'
+          : '对应开发任务存在多个开发实施方，请手工选择实施机构');
       } else {
-        setImplOrgHint('未找到对应开发任务的开发实施方，请手工选择实施机构');
+        setImplOrgHint(systemImplementationOrg
+          ? '未找到对应开发任务的开发实施方，已按系统所属实施机构填入，可手工调整'
+          : '未找到对应开发任务的开发实施方，请手工选择实施机构');
       }
     } catch {
       if (requestId !== implOrgRequestRef.current || form.getFieldValue('change_system') !== systemCode) return;
-      setImplOrgHint('无法自动获取开发实施方，请手工选择实施机构');
+      setImplOrgHint(systemImplementationOrg
+        ? '无法自动获取开发实施方，已按系统所属实施机构填入，可手工调整'
+        : '无法自动获取开发实施方，请手工选择实施机构');
     }
   };
 
@@ -441,7 +450,7 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
               )}
 
               {visible('impl_org') && (
-                <Form.Item name="impl_org" label="实施机构" extra={!isEdit ? implOrgHint || null : null} rules={required.rules('impl_org', '实施机构', { action: '请选择' })} style={{ marginBottom: 8 }}>
+                <Form.Item name="impl_org" label="实施机构" extra={!isEdit && implOrgHint ? <span style={{ fontSize: 11, lineHeight: 1.35 }}>{implOrgHint}</span> : null} rules={required.rules('impl_org', '实施机构', { action: '请选择' })} style={{ marginBottom: 8 }}>
                   <DictSelect category="org" size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} />
                 </Form.Item>
               )}
