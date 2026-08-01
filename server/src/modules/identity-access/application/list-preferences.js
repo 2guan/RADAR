@@ -81,6 +81,8 @@ export async function saveListPreference({ userId, listKey, body, operator }) {
   const old = await get('SELECT id, payload FROM user_list_preference WHERE user_id = ? AND list_key = ?', userId, listKey);
   const encoded = JSON.stringify(payload);
   let id = old?.id;
+  // 同一用户、同一列表只保留一份完整快照；更新与首次保存分别写入对应审计动作，
+  // 审计中仅记录脱敏后的“列表布局”字段名，避免扩大个人工作习惯数据的可见范围。
   if (old) {
     await run(`UPDATE user_list_preference SET payload = ?, updated_at = ${dialect.now} WHERE id = ?`, encoded, id);
     await auditUpdate('user_list_preference', id, listKey, operator, { payload: old.payload }, { payload: encoded }, { payload: '列表布局' });
