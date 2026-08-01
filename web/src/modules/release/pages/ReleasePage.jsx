@@ -2,7 +2,7 @@
  * 文件：web/src/modules/release/pages/ReleasePage.jsx
  * 说明：审批对象来源于投产申请的 ref_codes（需求、工单或问题）；不再列出全部投产点需求，也不再有「UAT 终态发起评审」逻辑。
  * 用途：投产审批页面。逐条展示「投产申请」中所选择的需求/工单/问题，含投产状态、评审状态、申请投产点、
- *       需求/问题/工单编号、需求标题/工单概述/问题概述、会签进度。点击行打开投产审批详情（复用 ReleaseDetail）。
+ *       需求/问题/工单编号、需求标题/工单标题/问题概述、会签进度。点击行打开投产审批详情（复用 ReleaseDetail）。
  * 作者：hengguan
  */
 
@@ -46,7 +46,7 @@ export default function Release() {
     { field: 'impl_org', label: '实施机构', type: 'select', isPrimary: true, op: 'in', options: orgOptions },
     { field: 'change_code', label: '变更编号', type: 'input', isPrimary: true, op: 'like', placeholder: '变更编号检索' },
     { field: 'code', label: '需求/问题/工单编号', type: 'input', isPrimary: true, op: 'like', placeholder: '需求/问题/工单编号检索' },
-    { field: 'content', label: '标题/概述', type: 'input', isPrimary: true, op: 'like', placeholder: '需求标题、工单概述或问题概述检索' },
+    { field: 'content', label: '标题/概述', type: 'input', isPrimary: true, op: 'like', placeholder: '需求标题、工单标题或问题概述检索' },
     { field: 'status', label: '投产状态', type: 'select', op: 'in', options: statusOptions },
     { field: 'review_status', label: '评审状态', type: 'select', op: 'in', options: reviewOptions },
   ];
@@ -130,7 +130,7 @@ export default function Release() {
       ),
     },
     {
-      title: '需求标题/工单概述/问题概述', dataIndex: 'title', key: 'title',
+      title: '需求标题/工单标题/问题概述', dataIndex: 'title', key: 'title',
       width: 360,
       render: (v) => (
         <div

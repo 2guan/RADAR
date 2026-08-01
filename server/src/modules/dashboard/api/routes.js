@@ -18,6 +18,7 @@ import {
 import { buildTaskStatusChain } from '../../overview/index.js';
 import { parseJsonArray } from '../../../platform/runtime/index.js';
 import { isOrganizationRestricted, workItemMatchesOrganization } from '../../../shared/utils/organization-scope.js';
+import { workItemCodesForAppliedReleasePoints } from '../../release/index.js';
 
 const DYNAMIC_STAGE_SCOPE = {
   analysis: { requirement: 'requirement', ticket: 'ticket' }, dev: 'dev', sit: 'test.SIT',
@@ -59,11 +60,8 @@ function isChartDimensionAllowed(source, dimension, analytics, dynamicDimensions
 /** 取所选投产窗口下的需求/工单编号集合；ids 为空返回 null（=全部，不过滤） */
 async function workItemCodesInWindow(ids) {
   if (!ids?.length) return null;
-  const sub = inClause('release_point_id', ids);
-  return [
-    ...(await all(`SELECT req_code AS code FROM requirement WHERE ${sub.where}`, ...sub.params)).map((r) => r.code),
-    ...(await all(`SELECT ticket_code AS code FROM ticket WHERE ${sub.where}`, ...sub.params)).map((r) => r.code),
-  ];
+  const rows = await all('SELECT req_code AS code FROM requirement UNION ALL SELECT ticket_code AS code FROM ticket');
+  return workItemCodesForAppliedReleasePoints(rows.map((row) => row.code), ids);
 }
 
 async function workItemCodesInOrganization(user) {
@@ -228,21 +226,19 @@ export default async function dashboardRoutes(fastify) {
       `SELECT status, COUNT(*) AS count FROM ${table}${where ? ` WHERE ${where}` : ''} GROUP BY status`,
       ...params,
     );
-    const pointFilter = (column) => {
-      if (!winIds?.length) return { where: '', params: [] };
-      return { where: `${column} IN (${winIds.map(() => '?').join(',')})`, params: winIds };
-    };
+    const windowCodes = await workItemCodesInWindow(winIds);
+    const pointFilter = (column) => windowCodes === null ? { where: '', params: [] }
+      : (windowCodes.length ? { where: `${column} IN (${windowCodes.map(() => '?').join(',')})`, params: windowCodes } : { where: '1=0', params: [] });
     const taskWindowFilter = (taskAlias, testType = null) => {
       const params = [];
       const pieces = [];
       if (testType) { pieces.push(`${taskAlias}.test_type = ?`); params.push(testType); }
-      if (winIds?.length) {
-        const placeholders = winIds.map(() => '?').join(',');
-        pieces.push(`(
-          EXISTS (SELECT 1 FROM requirement r WHERE r.req_code = ${taskAlias}.req_code AND r.release_point_id IN (${placeholders}))
-          OR EXISTS (SELECT 1 FROM ticket t WHERE t.ticket_code = ${taskAlias}.req_code AND t.release_point_id IN (${placeholders}))
-        )`);
-        params.push(...winIds, ...winIds);
+      if (windowCodes !== null) {
+        if (!windowCodes.length) pieces.push('1=0');
+        else {
+          pieces.push(`${taskAlias}.req_code IN (${windowCodes.map(() => '?').join(',')})`);
+          params.push(...windowCodes);
+        }
       }
       return { where: pieces.join(' AND '), params };
     };
@@ -250,8 +246,8 @@ export default async function dashboardRoutes(fastify) {
     const scopedCodes = await workItemCodesInOrganization(request.currentUser);
     const codeFilter = (column) => scopedCodes === null ? { where: '', params: [] } : (scopedCodes.length ? { where: `${column} IN (${scopedCodes.map(() => '?').join(',')})`, params: scopedCodes } : { where: '1=0', params: [] });
     const combine = (...filters) => ({ where: filters.filter((filter) => filter.where).map((filter) => filter.where).join(' AND '), params: filters.flatMap((filter) => filter.params) });
-    const reqFilter = combine(pointFilter('release_point_id'), codeFilter('req_code'));
-    const ticketFilter = combine(pointFilter('release_point_id'), codeFilter('ticket_code'));
+    const reqFilter = combine(pointFilter('req_code'), codeFilter('req_code'));
+    const ticketFilter = combine(pointFilter('ticket_code'), codeFilter('ticket_code'));
     const devFilter = combine(taskWindowFilter('dev_task'), codeFilter('dev_task.req_code'));
     const sitFilter = combine(taskWindowFilter('test_task', 'SIT'), codeFilter('test_task.req_code'));
     const uatFilter = combine(taskWindowFilter('test_task', 'UAT'), codeFilter('test_task.req_code'));

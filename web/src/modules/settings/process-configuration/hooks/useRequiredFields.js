@@ -10,7 +10,10 @@ import { useMemo } from 'react';
 import { useStageFormConfig } from './useStageFormConfig.js';
 
 function resolveScopeKey(moduleKey, scopeKey) {
-  if (moduleKey !== 'test' || !scopeKey) return moduleKey;
+  // 测试任务详情首次挂载时，任务类型尚未返回；此时不能请求不存在的 `test` 范围，
+  // 否则全局 API 错误提示会偶发显示“阶段不存在或已停用”。拿到真实类型后再加载 test.SIT/UAT/NFT/SEC。
+  if (moduleKey === 'test' && !scopeKey) return null;
+  if (moduleKey !== 'test') return moduleKey;
   return String(scopeKey).startsWith('test.') ? scopeKey : `test.${scopeKey}`;
 }
 

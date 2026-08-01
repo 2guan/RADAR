@@ -11,7 +11,7 @@ import { Card, Button, Space, Modal, Tag, Popconfirm, message, Table, Input, Spi
 import { ExperimentOutlined, EditOutlined, DeleteOutlined, ImportOutlined, ExportOutlined } from '@ant-design/icons';
 import { DataTable, FilterPanel, ResizableTitle } from '../../../shared/ui/index.js';
 import { StatusBadge, TaskEditor, TaskStatusBadge } from '../../../shared/workflow/index.js';
-import { SystemSelect, makeReleasePointOptions, ReleasePointText } from '../../settings/reference-data/index.js';
+import { SystemSelect } from '../../settings/reference-data/index.js';
 import { HistoryDrawer } from '../../../platform/audit/index.js';
 import Can from '../../../platform/auth/Can.jsx';
 import { apiPost, apiDelete, apiGet } from '../api/index.js';
@@ -52,14 +52,12 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
   const [importOpen, setImportOpen] = useState(false);
   
   // 下拉列表选项数据源
-  const [points, setPoints] = useState([]);
   const [orgs, setOrgs] = useState([]);
   const [statuses, setStatuses] = useState([]);
   const [users, setUsers] = useState([]);
   const [systems, setSystems] = useState([]);
 
   useEffect(() => {
-    apiGet('/release-points/all').then(setPoints).catch(() => {});
     apiGet('/dict/by-category/org').then(setOrgs).catch(() => {});
     apiGet('/dict/by-category/process_status').then(res => {
       const filtered = (res || []).filter(item => item.extra?.stage === '测试');
@@ -69,7 +67,6 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
     apiGet('/systems/all').then(setSystems).catch(() => {});
   }, []);
 
-  const pointOptions = makeReleasePointOptions(points);
   const orgOptions = orgs.map(o => ({ value: o.attr_value, label: o.display_value }));
   const statusOptions = statuses.map(s => ({ value: s.attr_value, label: s.display_value }));
   const userOptions = users.map(u => ({ value: u.name, label: `${u.name} (${u.phone})` }));
@@ -81,7 +78,6 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
   const filterConfigs = [
     { field: 'task_code', label: '测试任务编号', type: 'input', isPrimary: true, op: 'like', placeholder: '测试任务编号检索' },
     { field: 'content', label: '测试内容', type: 'input', isPrimary: true, op: 'like', placeholder: '测试任务名称检索' },
-    { field: 'release_point_id', label: '计划投产点', type: 'select', op: 'in', options: pointOptions },
     { field: 'status', label: '测试状态', type: 'select', op: 'in', options: statusOptions },
     { field: 'owner', label: '测试负责人', type: 'select', op: 'in', options: userOptions },
     { field: 'intake_owner', label: '测试承接人', type: 'select', op: 'in', options: userOptions },
@@ -211,12 +207,6 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
     { title: '任务状态', dataIndex: 'task_status_short', key: 'task_status', align: 'center', width: 120, render: (_, row) => <TaskStatusBadge shortStatus={row.task_status_short} status={row.task_status_value} fullStatus={row.task_status} /> },
     { title: `${TYPE_LABEL[testType]}状态`, dataIndex: 'status', key: 'status', align: 'center', render: (s) => <StatusBadge status={s} /> },
     {
-      title: '计划投产点',
-      dataIndex: 'release_date',
-      key: 'release_date',
-      render: (val) => <ReleasePointText value={val} />,
-    },
-    {
       title: '任务编号',
       dataIndex: 'task_code',
       key: 'task_code',
@@ -261,13 +251,6 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
   ];
 
   const reqColumns = [
-    {
-      title: '计划投产点',
-      dataIndex: 'release_date',
-      key: 'release_date',
-      width: 100,
-      render: (val) => <ReleasePointText value={val} />,
-    },
     {
       title: '类型',
       dataIndex: 'entity_label',
@@ -428,11 +411,10 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
   const filteredReqs = reqList.filter((r) => {
     if (!searchText) return true;
     const txt = searchText.toLowerCase();
-    const relDate = (r.release_date || '').toLowerCase();
     const code = (r.req_code || '').toLowerCase();
     const title = (r.title || '').toLowerCase();
     const systems = (r.main_systems_names || []).join(',').toLowerCase();
-    return relDate.includes(txt) || code.includes(txt) || title.includes(txt) || systems.includes(txt);
+    return code.includes(txt) || title.includes(txt) || systems.includes(txt);
   });
 
   const currentPreviewList = splitMode === 'overall' ? previewData.overall : previewData.split;
@@ -460,11 +442,6 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
           <Space direction="vertical" size={4} style={{ width: '100%' }}>
             <Space style={{ justifyContent: 'space-between', width: '100%' }}><strong>{item.task_code}</strong><StatusBadge status={item.status} /></Space>
             <div>{item.task_name}</div>
-            {item.release_date && (
-              <div style={{ fontSize: '11px', color: 'var(--radar-text-secondary)' }}>
-                计划投产点：<ReleasePointText value={item.release_date} />
-              </div>
-            )}
             <Space size="small">
               {item.impl_system_name && (
                 <Tag className="status-tag tag-system" style={{ borderRadius: 2, margin: 0 }}>{item.impl_system_name}</Tag>
@@ -493,7 +470,7 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
             <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>1. 选择需求/工单</div>
             <div style={{ marginBottom: 8 }}>
               <Input.Search
-                placeholder="投产点、需求/工单编号、标题/概述、主责系统检索..."
+                placeholder="需求/工单编号、标题/概述、主责系统检索..."
                 value={searchText}
                 onChange={(e) => setSearchText(e.target.value)}
                 size="small"
@@ -530,9 +507,6 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
                           <Radio checked={isSelected} />
                         </Space>
                         <div style={{ fontWeight: 600, fontSize: 13 }}>{r.title}</div>
-                        <div style={{ fontSize: 11, color: 'var(--radar-text-secondary)' }}>
-                          计划投产点：<ReleasePointText value={r.release_date} />
-                        </div>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
                           {(r.main_systems_names || []).map((name) => (
                             <Tag key={name} className="status-tag tag-system" style={{ borderRadius: 2, margin: 0, fontSize: 10 }}>{name}</Tag>

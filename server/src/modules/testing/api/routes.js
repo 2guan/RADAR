@@ -139,15 +139,10 @@ export default async function testTaskRoutes(fastify) {
       } else if (f.field === 'release_point_id') {
         hasReleasePointFilter = true;
         const ids = Array.isArray(f.value) ? f.value : [f.value];
-        if (ids.length) {
-          const placeholders = ids.map(() => '?').join(',');
-          wh.push(`req_code IN (
-            SELECT req_code FROM requirement WHERE release_point_id IN (${placeholders})
-            UNION
-            SELECT ticket_code FROM ticket WHERE release_point_id IN (${placeholders})
-          )`);
-          params.push(...ids, ...ids);
-        }
+        const codes = await workItemCodesInReleasePoints(ids);
+        const pointFilter = inClause('req_code', codes || []);
+        wh.push(pointFilter.where || '1=0');
+        params.push(...pointFilter.params);
       } else if (f.field === 'org') {
         const orgs = Array.isArray(f.value) ? f.value : [f.value];
         if (orgs.length) {
@@ -192,10 +187,8 @@ export default async function testTaskRoutes(fastify) {
       extensionFilterBuilder: buildExtensionListFilter,
     });
 
-    // 仅针对当前页任务涉及的需求/工单映射计划投产点，避免随翻页整表扫描
+    // 仅针对当前页任务涉及的需求/工单映射申请投产点，避免随翻页整表扫描
     const pageCodes = [...new Set(result.list.map((r) => r.req_code).filter(Boolean))];
-    const reqMap = await releaseDateMapForCodes(pageCodes);
-
     const systems = await all('SELECT sys_code, sys_name FROM system');
     const sysMap = {};
     for (const s of systems) {
@@ -210,7 +203,6 @@ export default async function testTaskRoutes(fastify) {
 
     result.list = result.list.map((row) => ({
       ...row,
-      release_date: reqMap[row.req_code] || null,
       entity_type: itemMap[row.req_code]?.entity_type || null,
       entity_label: itemMap[row.req_code]?.entity_label || null,
       impl_system_name: sysMap[row.impl_system] || row.impl_system,

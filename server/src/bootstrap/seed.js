@@ -10,12 +10,11 @@ import { get, run, tx, all } from '../platform/persistence/index.js';
 import { hashPassword } from '../platform/auth/index.js';
 import { config } from '../platform/runtime/config.js';
 import { applyBuiltinConfigurationUpgrades, DEFAULT_REQUIRED_FIELD_CONFIG, REQUIRED_FIELDS_CONFIG_KEY, seedStageContentDefaults } from '../modules/settings/process-configuration/index.js';
-import { LOCAL_STAGE_CONTENT_SEED } from '../modules/settings/process-configuration/application/local-stage-content-seed.js';
 import { parseJsonObject, logger } from '../platform/runtime/index.js';
 
 // 种子版本是“内置默认配置”而非业务数据版本；仅在首次初始化或显式升级版本时执行全量校准。
 const SEED_VERSION_KEY = 'runtime.seed.version';
-const SEED_VERSION = '20260801.1';
+const SEED_VERSION = '20260801.2';
 
 // 角色定义（角色标识、名称、是否内置、是否会签角色）
 // 会签角色（signoff:1）：投产评审会签由以下 9 个角色完成。
@@ -206,7 +205,7 @@ export const STAGE_BUILTIN_SECTION_DEFAULTS = {
 export const STAGE_BUILTIN_FIELD_METADATA = {
   requirement: {
     req_code: { section: 'basic', required_from: 'initial', list: 1, filter: 1 }, status: { section: 'basic', list: 1, filter: 1, dashboard: 1 },
-    req_type: { section: 'basic', required_from: 'initial', list: 1, filter: 1, dashboard: 1 }, release_point_id: { section: 'basic', required_from: 'initial', list: 1, filter: 1, dashboard: 1 },
+    req_type: { section: 'basic', required_from: 'initial', list: 1, filter: 1, dashboard: 1 }, apply_release_points: { section: 'basic', list: 1, filter: 1 }, expected_release_date: { section: 'basic', import: 1, export: 1 },
     propose_time: { section: 'basic', required_from: 'initial', list: 1, dashboard: 1 }, issue_no: { section: 'basic', filter: 1 }, is_accounting: { section: 'basic', required_from: 'initial', filter: 1 }, priority: { section: 'basic', list: 1, filter: 1, dashboard: 1 }, workload: { section: 'basic', list: 1, filter: 1 },
     title: { section: 'basic', required_from: 'initial', list: 1 }, summary: { section: 'basic', required_from: 'initial' }, implementation_org: { section: 'systems', list: 1, filter: 1 }, main_systems: { section: 'systems', required_from: 'initial', list: 1, filter: 1, dashboard: 1 },
     collab_dev_systems: { section: 'systems', list: 1, filter: 1 }, collab_test_systems: { section: 'systems', filter: 1 }, propose_dept: { section: 'owners', required_from: 'initial', filter: 1, dashboard: 1 },
@@ -214,7 +213,7 @@ export const STAGE_BUILTIN_FIELD_METADATA = {
   },
   ticket: {
     ticket_code: { section: 'basic', required_from: 'initial', list: 1, filter: 1 }, status: { section: 'basic', list: 1, filter: 1, dashboard: 1 },
-    ticket_type: { section: 'basic', required_from: 'initial', list: 1, filter: 1, dashboard: 1 }, release_point_id: { section: 'basic', required_from: 'initial', list: 1, filter: 1, dashboard: 1 },
+    ticket_type: { section: 'basic', required_from: 'initial', list: 1, filter: 1, dashboard: 1 }, apply_release_points: { section: 'basic', list: 1, filter: 1 }, expected_release_date: { section: 'basic', import: 1, export: 1 },
     propose_time: { section: 'basic', required_from: 'initial', list: 1, dashboard: 1 }, issue_no: { section: 'basic', filter: 1 }, is_accounting: { section: 'basic', required_from: 'initial', filter: 1 }, priority: { section: 'basic', list: 1, filter: 1, dashboard: 1 }, workload: { section: 'basic', list: 1, filter: 1 },
     title: { section: 'basic', required_from: 'initial', list: 1 }, summary: { section: 'basic', required_from: 'initial' }, implementation_org: { section: 'systems', list: 1, filter: 1 }, main_systems: { section: 'systems', required_from: 'initial', list: 1, filter: 1, dashboard: 1 },
     collab_dev_systems: { section: 'systems', list: 1, filter: 1 }, collab_test_systems: { section: 'systems', filter: 1 }, propose_dept: { section: 'owners', required_from: 'initial', filter: 1, dashboard: 1 },
@@ -352,8 +351,8 @@ const APP_CONFIG = [
   ['platform.fullName', 'Requirement Agile Delivery & Acceleration Resource', '平台英文全称'],
   ['platform.copyright', '© 2026 RADAR · 日常需求研发流程管理', '版权信息'],
   ['platform.themeColor', '#2F54EB', '主题色（靛蓝）'],
-  ['code.requirement', 'RC_{投产点}_{序号[3]}', '需求编号规则'],
-  ['code.ticket', 'TK_{投产点}_{序号[3]}', '工单编号规则'],
+  ['code.requirement', 'RC_{当前年月日}_{序号[3]}', '需求编号规则'],
+  ['code.ticket', 'TK_{当前年月日}_{序号[3]}', '工单编号规则'],
   ['code.dev', 'RW_{需求/工单编号}_{序号[3]}', '开发任务编号规则'],
   ['code.test.SIT', 'SIT_{需求/工单编号}_{序号[3]}', '应用组装测试任务编号规则'],
   ['code.test.UAT', 'UAT_{需求/工单编号}_{序号[3]}', '用户测试任务编号规则'],
@@ -569,7 +568,6 @@ export async function runSeed() {
     await seedStageContentDefaults({
       builtinMetadata: STAGE_BUILTIN_FIELD_METADATA,
       sectionDefaults: STAGE_BUILTIN_SECTION_DEFAULTS,
-      snapshot: LOCAL_STAGE_CONTENT_SEED,
     });
 
     // 3) 所属系统
@@ -701,7 +699,6 @@ export async function runSeed() {
   const upgrade = await applyBuiltinConfigurationUpgrades({
     builtinMetadata: STAGE_BUILTIN_FIELD_METADATA,
     sectionDefaults: STAGE_BUILTIN_SECTION_DEFAULTS,
-    snapshot: LOCAL_STAGE_CONTENT_SEED,
   });
 
   logger.info(seeded ? '[初始化] 种子数据已就绪' : '[初始化] 种子版本已就绪，跳过重复校准');

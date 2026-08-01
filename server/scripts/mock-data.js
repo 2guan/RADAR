@@ -487,7 +487,7 @@ const DEV_ACTIONS = ['接口改造', '数据迁移', '规则配置', '页面重�
 // 业务参与方机构（用于实施方/部门口径）
 // ---------------------------------------------------------------------------
 const IMPL_ORGS = ['上海事业群', '北京事业群', '成都事业群', '深圳事业群', '武汉事业群', '厦门事业群', '大数据中心', '交付事业部', '基础技术中心'];
-const ANALYSIS_WORKLOADS = ['1 人日', '2 人日', '3 人日', '5 人日', '8 人日'];
+const ANALYSIS_WORKLOADS = ['1', '2', '3', '5', '8'];
 
 function registrationTime(date, index) {
   const hour = 8 + (index % 9);
@@ -660,8 +660,8 @@ export async function runMock() {
       const res = await run(
         `INSERT INTO requirement
            (req_code, title, summary, status, req_type, propose_dept, proposer, yn_owner, jk_owner,
-            propose_time, main_systems, collab_dev_systems, collab_test_systems,
-            release_point_id, issue_no, implementation_org, receiver, workload, registrar, register_time)
+            propose_time, expected_release_date, main_systems, collab_dev_systems, collab_test_systems,
+            issue_no, implementation_org, receiver, workload, registrar, register_time)
          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         code, `${sysByCode[main[0]].sys_name}${topic}`,
         `针对${sysByCode[main[0]].sys_name}的${topic}，覆盖相关业务规则与接口改造，确保${spec.rp.date.slice(0, 6)}投产窗口如期交付。`,
@@ -669,9 +669,9 @@ export async function runMock() {
         pick(['新增需求', '已有功能的需求变更', '缺陷修复', '紧急变更']),
         pick(['云南农信', '智能云事业部', '大数据中心']),
         JSON.stringify([pickUser('农信业务')]), pickUser('农信业务'), pickUser('金科业务'),
-        proposeTime,
+        proposeTime, spec.rp.date === '投产点待定' ? null : ymd(spec.rp.date),
         JSON.stringify(main), JSON.stringify(collabDev), JSON.stringify(collabTest),
-        spec.rp.id, issueNo, implementationOrg, receiver, workload,
+        issueNo, implementationOrg, receiver, workload,
         pickUser('农信业务'), registrationTime(shift(proposeTime, 2), reqIndex),
       );
       const reqId = res.lastInsertRowid;
@@ -975,7 +975,7 @@ export async function runMock() {
            (ticket_code, title, summary, status, ticket_type, is_accounting,
             propose_dept, proposer, yn_owner, jk_owner, propose_time,
             main_systems, collab_dev_systems, collab_test_systems,
-            release_point_id, issue_no, implementation_org, receiver, workload, registrar, register_time)
+            expected_release_date, issue_no, implementation_org, receiver, workload, registrar, register_time)
          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         code,
         linkedIssue.summary.slice(0, 50).trimEnd() + (linkedIssue.summary.length > 50 ? '…' : ''),
@@ -985,7 +985,7 @@ export async function runMock() {
         pickUser('农信业务'), pickUser('金科业务'),
         proposeTime,
         JSON.stringify(main), JSON.stringify([]), JSON.stringify([]),
-        tspec.rp.id, linkedIssue.code, implementationOrg, receiver, workload,
+        tspec.rp.date === '投产点待定' ? null : ymd(tspec.rp.date), linkedIssue.code, implementationOrg, receiver, workload,
         pickUser('农信业务'), registrationTime(shift(proposeTime, 1), i),
       );
       const ticketId = (await get('SELECT id FROM ticket WHERE ticket_code = ?', code)).id;
@@ -1136,6 +1136,13 @@ export async function runMock() {
       await makeApply([req.code], req.rp, req.main[0]);
     }
 
+    // 显式保留一个多申请投产点样例，供需求/工单多值展示与“任一点命中”筛选验收。
+    const multiPointReq = approvalReqs[0];
+    const alternatePoint = rpIds.find((point) => point.id !== multiPointReq?.rp.id);
+    if (multiPointReq && alternatePoint) {
+      await makeApply([multiPointReq.code], alternatePoint, multiPointReq.main[0]);
+    }
+
     // 仅保留公共交付件凭证样例；扩展字段由管理员在配置页自行创建。
     await seedStageDeliverableDemo();
 
@@ -1159,7 +1166,7 @@ export async function runMock() {
         analysisMockFields.some((field) => !String(row[field] || '').trim())
         || !implementationOrgs.includes(row.implementation_org)
         || !activePeople.includes(row.receiver)
-        || /[\r\n]/.test(row.workload)
+        || !/^\d+(?:\.\d{1,2})?$/.test(String(row.workload || '').trim())
         || !/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(row.register_time)
       ));
       if (invalid) throw new Error(`Mock ${table} 分析字段未完整填充：${invalid.code}`);

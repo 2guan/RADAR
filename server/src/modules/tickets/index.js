@@ -6,7 +6,7 @@
  */
 
 import { get, all } from '../../platform/persistence/index.js';
-import { inClause } from '../settings/reference-data/index.js';
+import { appliedReleasePointsForWorkItems, workItemCodesForAppliedReleasePoints } from '../release/index.js';
 import { TICKET_WORK_ITEM_TYPE } from './contracts/work-item.js';
 
 export { generateTicketCode, ticketCodeRequiresReleasePoint } from './application/numbering.js';
@@ -19,18 +19,16 @@ export async function findTicketWorkItem(workItemCode) {
 }
 
 export async function ticketCodesInReleasePoints(ids) {
-  const where = inClause('release_point_id', ids);
-  if (!where.where) return [];
-  const rows = await all('SELECT ticket_code AS code FROM ticket WHERE ' + where.where, ...where.params);
-  return rows.map((row) => row.code);
+  if (!ids?.length) return null;
+  const rows = await all('SELECT ticket_code AS code FROM ticket');
+  return workItemCodesForAppliedReleasePoints(rows.map((row) => row.code), ids);
 }
 
 export async function ticketReleaseDates(codes) {
-  if (!codes.length) return {};
-  const placeholders = codes.map(() => '?').join(',');
-  const rows = await all(
-    'SELECT t.ticket_code AS code, rp.release_date FROM ticket t LEFT JOIN release_point rp ON t.release_point_id = rp.id WHERE t.ticket_code IN (' + placeholders + ')',
-    ...codes,
-  );
-  return Object.fromEntries(rows.map((row) => [row.code, row.release_date]));
+  const points = await appliedReleasePointsForWorkItems(codes);
+  return Object.fromEntries(Object.entries(points).map(([code, values]) => [code, values[0]?.release_date || null]));
+}
+
+export async function ticketAppliedReleasePoints(codes) {
+  return appliedReleasePointsForWorkItems(codes);
 }

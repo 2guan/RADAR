@@ -390,7 +390,7 @@ function IssueDetailCard({ issue, onEdit }) {
       <Field label="所属系统" col>
         <span style={{ color: 'var(--radar-ink)' }}>{issue.systemInfo?.sys_name || issue.system || '—'}</span>
       </Field>
-      <Field label="计划投产点" col>
+      <Field label="申请投产点" col>
         <ReleasePointText value={issue.release_date} style={{ color: 'var(--radar-ink)' }} />
       </Field>
 
@@ -415,7 +415,7 @@ function workItemLabel(item) {
 
 function workItemTitleLabel(item) {
   const label = workItemLabel(item);
-  if (label === '工单') return '工单概述';
+  if (label === '工单') return '工单标题';
   if (label === '需求') return '需求标题';
   return '标题/概述';
 }
@@ -435,7 +435,6 @@ function IntakeReqCard({ requirement }) {
           <Radio checked />
         </Space>
         <div style={{ fontWeight: 600, fontSize: 13 }}>{r.title}</div>
-        <div style={{ fontSize: 11, color: 'var(--radar-text-secondary)' }}>计划投产点：<ReleasePointText value={r.release_date} /></div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
           {(r.mainSystemsInfo || []).map((sys) => (
             <Tag key={sys.sys_code} className="status-tag tag-system" style={{ borderRadius: 2, margin: 0, fontSize: 10 }}>{sys.sys_name || sys.sys_code}</Tag>
@@ -568,7 +567,6 @@ export function DevIntakeModal({ open, requirement, onClose, onSaved }) {
       ),
     },
     { title: workItemTitleLabel(requirement), dataIndex: 'title', key: 'title', width: 280, ellipsis: true },
-    { title: '计划投产点', dataIndex: 'release_date', key: 'release_date', width: 140, render: (val) => <ReleasePointText value={val} /> },
     {
       title: '主责系统',
       dataIndex: 'mainSystemsInfo',
@@ -821,7 +819,6 @@ export function TestIntakeModal({ open, requirement, testType, onClose, onSaved 
       ),
     },
     { title: workItemTitleLabel(requirement), dataIndex: 'title', key: 'title', width: 280, ellipsis: true },
-    { title: '计划投产点', dataIndex: 'release_date', key: 'release_date', width: 140, render: (val) => <ReleasePointText value={val} /> },
     {
       title: '主责系统',
       dataIndex: 'mainSystemsInfo',
@@ -1235,9 +1232,9 @@ export default function Overview() {
 
   const filterConfigs = [
     { field: 'req_code', label: '需求/工单/问题编号', type: 'input', isPrimary: true, op: 'like', placeholder: '需求/工单/问题编号检索' },
-    { field: 'content', label: '需求/工单内容', type: 'input', isPrimary: true, op: 'like', placeholder: '需求标题、工单概述或问题概述检索' },
+    { field: 'content', label: '需求/工单内容', type: 'input', isPrimary: true, op: 'like', placeholder: '需求标题、工单标题或问题概述检索' },
     { field: 'org', label: '实施机构', type: 'select', isPrimary: true, op: 'in', options: orgOptions },
-    { field: 'release_point_id', label: '计划投产点', type: 'select', op: 'in', options: pointOptions },
+    { field: 'release_point_id', label: '申请投产点', type: 'select', op: 'in', options: pointOptions },
     { field: 'stage', label: '任务阶段', type: 'select', op: 'in', options: stageOptions },
     { field: 'taskStatus', label: '任务状态', type: 'select', op: 'in', options: taskStatuses },
     { field: 'main_systems', label: '主责系统', type: 'select', op: 'in', options: systemOptions },
@@ -1317,9 +1314,9 @@ export default function Overview() {
     } else if (detail.entityType === 'issue') {
       message.warning('问题不再支持发起投产申请');
     } else if (detail.entityType === 'ticket') {
-      setApplyEditor({ reqCode: code, releasePointId: detail.requirement.release_point_id, entityType: 'ticket' });
+      setApplyEditor({ reqCode: code, entityType: 'ticket' });
     } else {
-      setApplyEditor({ reqCode: code, releasePointId: detail.requirement.release_point_id, entityType: 'requirement' });
+      setApplyEditor({ reqCode: code, entityType: 'requirement' });
     }
   };
 

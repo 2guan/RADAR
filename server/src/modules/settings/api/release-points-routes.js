@@ -143,8 +143,8 @@ export default async function releasePointRoutes(fastify) {
     const id = request.params.id;
     const row = await get('SELECT * FROM release_point WHERE id = ?', id);
     if (!row) throw notFound();
-    const used = await get('SELECT COUNT(*) AS c FROM requirement WHERE release_point_id = ?', id);
-    if (used?.c > 0) throw badRequest('该投产点已被需求引用，无法删除');
+    const used = await get('SELECT COUNT(*) AS c FROM release_apply_reference WHERE release_point_id = ?', id);
+    if (used?.c > 0) throw badRequest('该投产点已被投产申请引用，无法删除');
     await run('DELETE FROM release_point WHERE id = ?', id);
     await auditDelete('release_point', id, row.release_date, request.currentUser?.name);
     return ok(null, '删除成功');

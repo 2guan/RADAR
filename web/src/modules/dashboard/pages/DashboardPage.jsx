@@ -153,7 +153,6 @@ export default function Dashboard() {
     } else {
       setReleaseApply({
         reqCode,
-        releasePointId: detail.requirement.release_point_id,
         entityType: detail.entityType === 'ticket' ? 'ticket' : 'requirement',
       });
     }

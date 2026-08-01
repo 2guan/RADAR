@@ -307,7 +307,7 @@ export async function buildReleaseWordDoc(detail, devTasksFull, testTasksFull, a
       kvRow(entityType === 'ticket' ? '云南农信工单负责人' : '云南农信业务负责人', entity.yn_owner),
       kvRow(entityType === 'ticket' ? '建信金科工单负责人' : '建信金科业务负责人', entity.jk_owner),
       kvRow(`${workLabel}状态`, entity.status),
-      kvRow('计划投产点', entity.plan_release_date || entity.release_date),
+      kvRow('申请投产点', entity.apply_release_date || entity.release_date),
     ]));
   } else {
     children.push(kvTable([

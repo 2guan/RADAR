@@ -1,0 +1,127 @@
+{
+  "schema_version": "1.0",
+  "requirement": {
+    "id": "REQ-20260801-002",
+    "ref": "hengguan/REQ-20260801-002",
+    "title": "以投产申请投产点替代计划投产点",
+    "status": "ready",
+    "document": "docs/requirements/hengguan/REQ-20260801-002/requirement.md",
+    "internet_ai_coding_allowed": true
+  },
+  "assignment": {
+    "developer": "hengguan",
+    "module": "governance",
+    "module_owner": "hengguan",
+    "branch": "hengguan/REQ-20260801-002-apply-release-point",
+    "base_branch": "origin/main",
+    "worktree": "codex-desktop-current-worktree"
+  },
+  "ai": {
+    "enabled": true,
+    "approved_service": "Codex desktop",
+    "model": "approved-by-user",
+    "contains_confidential_information": false,
+    "context_sanitized": true,
+    "production_access": false
+  },
+  "scope": {
+    "writable_paths": [
+      "docs/requirements/hengguan/REQ-20260801-002/**",
+      "governance/modules.yaml",
+      "server/src/platform/persistence/migrations/0044_replace_planned_release_point.sql",
+      "server/src/platform/persistence/migrations/tdsql/0024_replace_planned_release_point.sql",
+      "server/src/bootstrap/seed.js",
+      "server/scripts/mock-data.js",
+      "server/src/modules/release/**",
+      "server/src/modules/requirements/**",
+      "server/src/modules/tickets/**",
+      "server/src/modules/development/**",
+      "server/src/modules/testing/**",
+      "server/src/modules/overview/**",
+      "server/src/modules/dashboard/**",
+      "server/src/modules/settings/process-configuration/**",
+      "server/src/modules/settings/reference-data/**",
+      "server/src/modules/settings/api/release-points-routes.js",
+      "web/src/modules/release/**",
+      "web/src/modules/requirements/**",
+      "web/src/modules/tickets/**",
+      "web/src/modules/development/**",
+      "web/src/modules/testing/**",
+      "web/src/modules/overview/**",
+      "web/src/modules/dashboard/**",
+      "web/src/modules/settings/**",
+      "server/test/**"
+    ],
+    "read_only_paths": [
+      "AGENTS.md",
+      "DESIGN.md",
+      "docs/governance/**",
+      "docs/architecture/**",
+      ".agents/skills/radar-delivery-engineer/**",
+      "server/src/modules/identity-access/**",
+      "web/src/platform/**",
+      "web/src/shared/**"
+    ],
+    "forbidden_paths": [
+      "server/src/platform/auth/**",
+      "server/src/platform/audit/**",
+      ".github/**",
+      "docs/reports/**",
+      ".env",
+      "**/.env",
+      "**/*secret*",
+      "**/*credential*",
+      "attachments/**"
+    ]
+  },
+  "public_capability_change": {
+    "required": true,
+    "shared_change_issue": "hengguan/REQ-20260801-002",
+    "target_modules": ["release", "requirements", "tickets", "development", "testing", "overview", "dashboard", "settings", "governance"],
+    "new_methods": ["release 工作项申请投产点多值查询与反查契约"],
+    "existing_method_changed": true,
+    "semantic_name_confirmed": true,
+    "old_behavior_preserved": true,
+    "compatibility_note": "除本需求明确移除的需求/工单旧 release_point_id 字段外，既有投产申请、审批、权限与审计行为保持不变。",
+    "owner_approved": true,
+    "owner_review_required_before_merge": true
+  },
+  "database": {
+    "changed": true,
+    "migration_paths": [
+      "server/src/platform/persistence/migrations/0044_replace_planned_release_point.sql",
+      "server/src/platform/persistence/migrations/tdsql/0024_replace_planned_release_point.sql"
+    ],
+    "mysql8_compatible": true,
+    "historical_data_impact": "发布前清空目标数据库；删除 requirement/ticket 的 release_point_id 并新增 expected_release_date，不保留旧字段兼容或回填。",
+    "rollback_or_compensation": "从发布前数据库备份恢复并回退应用版本；删列后不能仅回退应用代码。"
+  },
+  "external_access": {
+    "changed": false,
+    "api_paths": [],
+    "readable_field_whitelist": [],
+    "writable_field_whitelist": [],
+    "action_whitelist": [],
+    "audit_required": true
+  },
+  "required_tests": [
+    { "name": "build", "command": "npm run build --prefix web" },
+    { "name": "unit", "command": "npm test --prefix server" },
+    { "name": "api", "command": "npm run test:api --prefix server" },
+    { "name": "permission", "command": "npm run test:rbac --prefix server" },
+    { "name": "migration_parity", "command": "node scripts/check-migration-parity.mjs && node scripts/check-mysql8-migrations.mjs" },
+    { "name": "runtime", "command": "node scripts/verify-app-runtime.mjs" }
+  ],
+  "risk": {
+    "level": "high",
+    "reasons": ["跨模块公开投产点关联契约", "SQLite/TDSQL/MySQL 8 删列迁移", "需求和工单字段、筛选、导入导出改造"],
+    "required_approvals": ["hengguan"]
+  },
+  "completion": {
+    "changed_files_report_required": true,
+    "test_result_report_required": true,
+    "known_risks_report_required": true,
+    "rollback_report_required": true,
+    "requirement_acceptance_required": true
+  }
+}

@@ -10,7 +10,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Form, Input, Row, Col, Button, Select, Tag, message, Tooltip } from 'antd';
 import { HistoryOutlined, CloseOutlined, ThunderboltOutlined, PlusOutlined, MinusCircleOutlined } from '@ant-design/icons';
-import { DictSelect, makeReleasePointOptions, ReleasePointText } from '../../settings/reference-data/index.js';
+import { DictSelect, makeReleasePointOptions } from '../../settings/reference-data/index.js';
 import { StageContentPanel, StageSectionLayout, useStageFormConfig } from '../../settings/process-configuration/index.js';
 import { StatusBadge } from '../../../shared/workflow/index.js';
 import { HistoryDrawer } from '../../../platform/audit/index.js';
@@ -25,8 +25,6 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
   const extensionPanelRef = useRef(null);
   const extensionRightPanelRef = useRef(null);
   const extensionFullPanelRef = useRef(null);
-  // 监听申请投产点，用于与所选需求的计划投产点做一致性校验提示
-  const releasePointIdValue = Form.useWatch('release_point_id', form);
   const [current, setCurrent] = useState(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [genLoading, setGenLoading] = useState(false);
@@ -70,7 +68,7 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
     setIsDirty(false);
     apiGet('/release-points/all').then(setPoints).catch(() => {});
     apiGet('/systems/all').then(setSystems).catch(() => {});
-    // 加载全部需求/工单（不限投产窗口），以便跨窗口关联与投产点一致性校验
+    // 加载全部需求/工单（不限投产窗口），以便跨窗口关联。
     apiPost('/requirements/list', { pageSize: 0, releasePointIds: [] }).then((d) => setReqs(d?.list || [])).catch(() => {});
     apiPost('/tickets/list', { pageSize: 0, releasePointIds: [] }).then((d) => setTickets(d?.list || [])).catch(() => {});
 
@@ -134,48 +132,20 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
     ...reqs.map((r) => ({ value: `requirement:${r.req_code}`, label: `需求　${r.req_code}　${r.title}`, searchLabel: `${r.req_code}　${r.title}` })),
     ...tickets.map((t) => ({
     value: `ticket:${t.ticket_code}`,
-    label: (
-      <span>
-        {t.ticket_code}　{t.title}
-        {t.release_date ? <>　<ReleasePointText value={t.release_date} /></> : null}
-      </span>
-    ),
-    searchLabel: `${t.ticket_code}　${t.title}${t.release_date ? `　${t.release_date}` : ''}`,
+    label: `${t.ticket_code}　${t.title}`,
+    searchLabel: `${t.ticket_code}　${t.title}`,
   })),
   ];
-  // ── 申请投产点与所选需求/工单计划投产点的一致性校验（仅提示，不阻断提交） ──
-  const selectedReqObjs = selReqs.map((c) => reqs.find((r) => r.req_code === c)).filter(Boolean);
-  const selectedTicketObjs = selTickets.map((c) => tickets.find((t) => t.ticket_code === c)).filter(Boolean);
-  const selectedWorkItems = [...selectedReqObjs, ...selectedTicketObjs];
-  // 取第一个需求/工单的计划投产点
-  const firstReqPointId = selectedWorkItems[0]?.release_point_id ?? null;
-  // 所选多个需求/工单是否分属不同投产点
-  const reqPointIds = [...new Set(selectedWorkItems.map((r) => r.release_point_id).filter((v) => v != null))];
-  const multiReqDiffer = reqPointIds.length > 1;
-  // 当前填写的申请投产点与首个需求/工单计划投产点不一致
-  const pointMismatch = selectedWorkItems.length > 0 && firstReqPointId != null
-    && releasePointIdValue != null && Number(releasePointIdValue) !== Number(firstReqPointId);
-
-  /** 选择需求：联动把申请投产点设为首个需求的计划投产点（仅新增态有下拉，可再手改） */
+  /** 选择需求。申请投产点由当前投产申请独立指定。 */
   const onSelReqsChange = (vals) => {
     setSelReqs(vals);
     if (!readonly) setIsDirty(true);
-    const first = reqs.find((r) => r.req_code === vals[0]);
-    if (first && first.release_point_id != null) {
-      form.setFieldValue('release_point_id', first.release_point_id);
-      autoGenCode(first.release_point_id, first.req_code);
-    }
   };
 
-  /** 选择工单：联动把申请投产点设为首个工单的计划投产点（与需求规则一致） */
+  /** 选择工单。申请投产点由当前投产申请独立指定。 */
   const onSelTicketsChange = (vals) => {
     setSelTickets(vals);
     if (!readonly) setIsDirty(true);
-    const first = tickets.find((t) => t.ticket_code === vals[0]);
-    if (first && first.release_point_id != null) {
-      form.setFieldValue('release_point_id', first.release_point_id);
-      autoGenCode(first.release_point_id, first.ticket_code);
-    }
   };
 
   const onWorkItemsChange = (values) => {
@@ -184,11 +154,6 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
     setSelReqs(reqCodes);
     setSelTickets(ticketCodes);
     if (!readonly) setIsDirty(true);
-    const first = reqCodes.length ? reqs.find((row) => row.req_code === reqCodes[0]) : tickets.find((row) => row.ticket_code === ticketCodes[0]);
-    if (first?.release_point_id != null) {
-      form.setFieldValue('release_point_id', first.release_point_id);
-      autoGenCode(first.release_point_id, first.req_code || first.ticket_code);
-    }
   };
 
   /** 选择变更系统后按系统所属机构返显实施机构（可再编辑） */
@@ -407,18 +372,11 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
                 )}
                 {visible('release_point_id') && (
                   <Col span={12}>
-                    <Form.Item name="release_point_id" label="申请投产点" rules={required.rules('release_point_id', '申请投产点', { action: '请选择' })} style={{ marginBottom: (multiReqDiffer || pointMismatch) ? 2 : 8 }}>
+                    <Form.Item name="release_point_id" label="申请投产点" rules={required.rules('release_point_id', '申请投产点', { action: '请选择' })} style={{ marginBottom: 8 }}>
                       <Select placeholder="选择申请投产点" size="small" allowClear showSearch optionFilterProp="searchLabel"
                         style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined}
                         options={makeReleasePointOptions(points, { includeVersionType: true })} />
                     </Form.Item>
-                    {/* 投产点一致性提示（仅提示，不阻断保存） */}
-                    {multiReqDiffer && (
-                      <div style={{ color: 'var(--radar-error, #ff4d4f)', fontSize: 11, lineHeight: 1.4, marginBottom: 4 }}>选择的多个需求/工单不在同一投产点</div>
-                    )}
-                    {pointMismatch && (
-                      <div style={{ color: 'var(--radar-error, #ff4d4f)', fontSize: 11, lineHeight: 1.4, marginBottom: 4 }}>选择投产点与需求/工单计划投产点不一致</div>
-                    )}
                   </Col>
                 )}
               </Row>

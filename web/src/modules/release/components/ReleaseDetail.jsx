@@ -583,8 +583,8 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
                         <strong style={{ fontSize: 13, color: 'var(--radar-ink)', display: 'block', marginBottom: 2 }}>{entity.title}</strong>
                       </div>
                       <div>
-                        <span style={{ fontSize: 11, color: 'var(--radar-text-secondary)' }}>计划投产点：</span>
-                        <ReleasePointText value={entity.plan_release_date || entity.release_date} style={{ color: 'var(--radar-ink)', fontSize: 11 }} />
+                        <span style={{ fontSize: 11, color: 'var(--radar-text-secondary)' }}>申请投产点：</span>
+                        <ReleasePointText value={entity.apply_release_date} style={{ color: 'var(--radar-ink)', fontSize: 11 }} />
                       </div>
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--radar-ink)', background: 'var(--radar-bg)', padding: '6px 10px', borderRadius: 2, maxHeight: 80, overflowY: 'auto', border: '1px solid var(--radar-border)', whiteSpace: 'pre-wrap', lineHeight: '16px' }}>
