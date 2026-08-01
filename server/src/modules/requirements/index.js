@@ -6,7 +6,7 @@
  */
 
 import { get, all } from '../../platform/persistence/index.js';
-import { inClause } from '../settings/reference-data/index.js';
+import { appliedReleasePointsForWorkItems, workItemCodesForAppliedReleasePoints } from '../release/index.js';
 import { REQUIREMENT_WORK_ITEM_TYPE } from './contracts/work-item.js';
 
 export {
@@ -21,18 +21,16 @@ export async function findRequirementWorkItem(workItemCode) {
 }
 
 export async function requirementCodesInReleasePoints(ids) {
-  const where = inClause('release_point_id', ids);
-  if (!where.where) return [];
-  const rows = await all('SELECT req_code AS code FROM requirement WHERE ' + where.where, ...where.params);
-  return rows.map((row) => row.code);
+  if (!ids?.length) return null;
+  const rows = await all('SELECT req_code AS code FROM requirement');
+  return workItemCodesForAppliedReleasePoints(rows.map((row) => row.code), ids);
 }
 
 export async function requirementReleaseDates(codes) {
-  if (!codes.length) return {};
-  const placeholders = codes.map(() => '?').join(',');
-  const rows = await all(
-    'SELECT r.req_code AS code, rp.release_date FROM requirement r LEFT JOIN release_point rp ON r.release_point_id = rp.id WHERE r.req_code IN (' + placeholders + ')',
-    ...codes,
-  );
-  return Object.fromEntries(rows.map((row) => [row.code, row.release_date]));
+  const points = await appliedReleasePointsForWorkItems(codes);
+  return Object.fromEntries(Object.entries(points).map(([code, values]) => [code, values[0]?.release_date || null]));
+}
+
+export async function requirementAppliedReleasePoints(codes) {
+  return appliedReleasePointsForWorkItems(codes);
 }

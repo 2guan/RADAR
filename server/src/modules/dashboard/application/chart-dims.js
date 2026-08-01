@@ -10,6 +10,7 @@
 import { all } from '../../../platform/persistence/index.js';
 import { parseJsonArray } from '../../../platform/runtime/index.js';
 import { buildTaskStatusChain } from '../../overview/index.js';
+import { appliedReleasePointsForWorkItems } from '../../release/index.js';
 
 // ---------------------------------------------------------------------------
 // 维度元数据（label 与选项来源；optionSource 供前端决定下拉/预设取数方式）
@@ -144,11 +145,13 @@ export async function buildContext() {
     (bucket[t.test_type] ||= []).push({ status: t.status });
   }
 
-  const rtMap = {}; const applyPointMap = {};
-  for (const rt of await all('SELECT req_code, status, release_point_id FROM release_task')) {
+  const rtMap = {};
+  for (const rt of await all('SELECT req_code, status FROM release_task')) {
     rtMap[rt.req_code] = rt.status;
-    if (rt.release_point_id != null) (applyPointMap[rt.req_code] ||= []).push(String(rt.release_point_id));
   }
+  const workItemCodes = (await all('SELECT req_code AS code FROM requirement UNION SELECT ticket_code AS code FROM ticket')).map((row) => row.code);
+  const appliedPoints = await appliedReleasePointsForWorkItems(workItemCodes);
+  const applyPointMap = Object.fromEntries(Object.entries(appliedPoints).map(([code, points]) => [code, points.map((point) => String(point.id))]));
 
   // 动态字段值只为已启用“仪表盘维度”的扩展字段加载，按阶段/实体/定义建立索引，
   // 聚合时无需 N+1 查询，也不会让跨阶段图表把其他阶段误当作未填写。
@@ -266,7 +269,8 @@ export function extract(source, dim, row, ctx, filters) {
       case 'work_item_type': return [row._entityType === 'ticket' ? '生产工单' : (item.req_type || '未分类')];
       case 'apply_release_point': return ctx.applyPointMap[item.req_code || item.ticket_code]?.length
         ? uniq(ctx.applyPointMap[item.req_code || item.ticket_code]) : ['未分配'];
-      case 'release_point': return [item.release_point_id != null ? String(item.release_point_id) : '未分配'];
+      case 'release_point': return ctx.applyPointMap[item.req_code || item.ticket_code]?.length
+        ? uniq(ctx.applyPointMap[item.req_code || item.ticket_code]) : ['未分配'];
       case 'propose_dept': return [item.propose_dept || '未分配'];
       case 'system': {
         const codes = row.impl_system ? [row.impl_system] : systemCodes(row._entityType, item);
@@ -288,7 +292,8 @@ export function extract(source, dim, row, ctx, filters) {
     case 'ticket_type': return [row.ticket_type || '未分类'];
     case 'propose_dept': return [row.propose_dept || '未分配'];
     case 'owner': return [row.owner || '未分配'];
-    case 'release_point': return [row.release_point_id != null ? String(row.release_point_id) : '未分配'];
+    case 'release_point': return ctx.applyPointMap[row.req_code || row.ticket_code]?.length
+      ? uniq(ctx.applyPointMap[row.req_code || row.ticket_code]) : ['未分配'];
     case 'system': {
       const codes = systemCodes(realSource, row);
       return codes.length ? uniq(codes) : ['未指定'];

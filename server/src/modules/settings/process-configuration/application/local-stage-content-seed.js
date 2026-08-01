@@ -1502,7 +1502,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
         },
         {
           "field_key": "workload",
-          "label": "工作量",
+          "label": "工作量(人天)",
           "field_kind": "native",
           "input_type": "text",
           "source_key": "",
@@ -3209,7 +3209,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
         },
         {
           "field_key": "title",
-          "label": "工单概述",
+          "label": "工单标题",
           "field_kind": "native",
           "input_type": "text",
           "source_key": "",
@@ -3278,7 +3278,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
         },
         {
           "field_key": "workload",
-          "label": "工作量",
+          "label": "工作量(人天)",
           "field_kind": "native",
           "input_type": "text",
           "source_key": "",

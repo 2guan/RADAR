@@ -72,9 +72,9 @@ export default function Tickets() {
   const userOptions = users.map(u => ({ value: u.name, label: `${u.name} (${u.phone})` }));
   const systemOptions = systems.map(s => ({ value: s.sys_code, label: `${s.sys_code} - ${s.sys_name}` }));
 
-  const fallbackNativeFilterLabels = { implementation_org: '实施机构', ticket_code: '工单编号', issue_no: 'OA编号/工单编号', release_point_id: '计划投产点', status: '工单状态', ticket_type: '工单类型', is_accounting: '是否涉账', priority: '优先级', propose_dept: '提出部门', proposer: '提出人', receiver: '需求接收人', workload: '工作量', registrar: '录入人信息', main_systems: '主责系统', collab_dev_systems: '协同改造系统' };
+  const fallbackNativeFilterLabels = { implementation_org: '实施机构', ticket_code: '工单编号', issue_no: 'OA编号/工单编号', apply_release_points: '申请投产点', status: '工单状态', ticket_type: '工单类型', is_accounting: '是否涉账', priority: '优先级', propose_dept: '提出部门', proposer: '提出人', receiver: '需求接收人', workload: '工作量(人天)', registrar: '录入人信息', main_systems: '主责系统', collab_dev_systems: '协同改造系统' };
   const fallbackNativeFilters = [
-    'implementation_org', 'ticket_code', 'issue_no', 'release_point_id', 'status', 'ticket_type', 'is_accounting', 'priority',
+    'implementation_org', 'ticket_code', 'issue_no', 'apply_release_points', 'status', 'ticket_type', 'is_accounting', 'priority',
     'propose_dept', 'proposer', 'receiver', 'workload', 'registrar', 'main_systems', 'collab_dev_systems',
   ].map((field_key) => ({ field_key, label: fallbackNativeFilterLabels[field_key] }));
   const nativeFilterFields = stageList.loaded ? stageList.nativeFilterFields : fallbackNativeFilters;
@@ -84,7 +84,7 @@ export default function Tickets() {
     switch (field.field_key) {
       case 'implementation_org': return { field: field.field_key, label, type: 'select', op: 'in', options: orgOptions, isPrimary: true };
       case 'ticket_code': return { ...text('工单编号检索'), isPrimary: true };
-      case 'release_point_id': return { field: field.field_key, label, type: 'select', op: 'in', options: pointOptions };
+      case 'apply_release_points': return { field: field.field_key, label, type: 'select', op: 'in', options: pointOptions };
       case 'status': return { field: field.field_key, label, type: 'select', op: 'in', options: statusOptions };
       case 'ticket_type': return { field: field.field_key, label, type: 'select', op: 'in', options: typeOptions };
       case 'is_accounting': return { field: field.field_key, label, type: 'select', op: 'in', options: [{ value: '否', label: '否' }, { value: '是', label: '是' }] };
@@ -98,7 +98,7 @@ export default function Tickets() {
   // `content`、`owners` 是固定的组合检索，不是输入项配置字段；其余条件逐项服从字段开关。
   const filterConfigs = [
     ...nativeFilterFields.map(nativeFilterConfig),
-    { field: 'content', label: '工单内容', type: 'input', isPrimary: true, op: 'like', placeholder: '工单概述或详情检索' },
+    { field: 'content', label: '工单内容', type: 'input', isPrimary: true, op: 'like', placeholder: '工单标题或详情检索' },
     { field: 'owners', label: '负责人', type: 'select', op: 'in', options: userOptions },
     ...stageList.filterConfigs,
   ];
@@ -139,13 +139,17 @@ export default function Tickets() {
       ),
     },
     {
-      title: '计划投产点',
-      dataIndex: 'release_date',
-      key: 'release_date',
-      render: (val) => <ReleasePointText value={val} />,
+      title: '申请投产点',
+      dataIndex: 'apply_release_points',
+      key: 'apply_release_points',
+      render: (values) => Array.isArray(values) && values.length ? (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
+          {values.map((value) => <ReleasePointText key={value} value={value} />)}
+        </div>
+      ) : '—',
     },
     {
-      title: '工单概述',
+      title: '工单标题',
       dataIndex: 'title',
       key: 'title',
       width: 280,
@@ -176,7 +180,7 @@ export default function Tickets() {
     },
     { title: '实施机构', dataIndex: 'implementation_org', key: 'implementation_org' },
     { title: '需求接收人', dataIndex: 'receiver', key: 'receiver' },
-    { title: '工作量', dataIndex: 'workload', key: 'workload' },
+    { title: '工作量(人天)', dataIndex: 'workload', key: 'workload' },
     {
       title: '录入人信息', dataIndex: 'registrar', key: 'registrar',
       render: (_, row) => (
@@ -240,7 +244,7 @@ export default function Tickets() {
     },
   ];
 
-  const nativeColumnAliases = { release_point_id: 'release_date', main_systems: 'main_systems_names', collab_dev_systems: 'collab_dev_systems_names' };
+  const nativeColumnAliases = { main_systems: 'main_systems_names', collab_dev_systems: 'collab_dev_systems_names' };
   const columnByKey = new Map(columns.map((column) => [column.key, column]));
   const configuredNativeColumns = stageList.loaded
     ? stageList.nativeListFields.map((field) => {
@@ -289,9 +293,12 @@ export default function Tickets() {
           <Space direction="vertical" size={4} style={{ width: '100%' }}>
             <Space style={{ justifyContent: 'space-between', width: '100%' }}><strong>{item.ticket_code}</strong><StatusBadge status={item.status} /></Space>
             <div>{item.title}</div>
-            {item.release_date && (
+            {item.apply_release_points?.length > 0 && (
               <div style={{ fontSize: '11px', color: 'var(--radar-text-secondary)' }}>
-                计划投产点：<ReleasePointText value={item.release_date} />
+                <span>申请投产点：</span>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4, marginTop: 2 }}>
+                  {item.apply_release_points.map((value) => <ReleasePointText key={value} value={value} />)}
+                </div>
               </div>
             )}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>

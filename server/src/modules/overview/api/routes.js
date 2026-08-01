@@ -13,6 +13,7 @@ import { windowIds, inClause, formatAttachments, resolveOrganizationValues } fro
 import { ok, notFound, forbidden, parseJsonArray } from '../../../platform/runtime/index.js';
 import { exportXlsx } from '../../../platform/import-export/index.js';
 import { getWorkItem, formatImpactItemsText, formatCoverageText } from '../../development/index.js';
+import { appliedReleasePointsForWorkItems, workItemCodesForAppliedReleasePoints } from '../../release/index.js';
 import { buildTaskStatusChain } from '../index.js';
 import { isOrganizationRestricted, workItemMatchesOrganization } from '../../../shared/utils/organization-scope.js';
 
@@ -142,7 +143,8 @@ async function appendIssueCards({ groups, body, targetReleasePointIds, sysMap, r
   const raParams = [];
   if (targetReleasePointIds) {
     if (!targetReleasePointIds.length) return;
-    raSql += ` WHERE release_point_id IN (${targetReleasePointIds.map(() => '?').join(',')})`;
+    // release_apply_reference 与 release_apply 都有同名列；筛选工作项引用的申请投产点，必须显式限定关联表。
+    raSql += ` WHERE rar.release_point_id IN (${targetReleasePointIds.map(() => '?').join(',')})`;
     raParams.push(...targetReleasePointIds);
   } else {
     // release_apply_reference 与 release_apply 均含投产点字段；窗口筛选必须限定为申请记录，
@@ -247,28 +249,12 @@ export default async function overviewRoutes(fastify) {
       }
     }
 
-    let sql = 'SELECT * FROM requirement';
-    let ticketSql = 'SELECT * FROM ticket';
-    const params = [];
-    const ticketParams = [];
-
-    if (targetReleasePointIds) {
-      if (targetReleasePointIds.length) {
-        sql += ` WHERE release_point_id IN (${targetReleasePointIds.map(() => '?').join(',')})`;
-        params.push(...targetReleasePointIds);
-        ticketSql += ` WHERE release_point_id IN (${targetReleasePointIds.map(() => '?').join(',')})`;
-        ticketParams.push(...targetReleasePointIds);
-      }
-    } else {
-      const win = inClause('release_point_id', windowIds(body));
-      if (win.where) { sql += ` WHERE ${win.where}`; params.push(...win.params); }
-      if (win.where) { ticketSql += ` WHERE ${win.where}`; ticketParams.push(...win.params); }
-    }
-    sql += ' ORDER BY id DESC';
-    ticketSql += ' ORDER BY id DESC';
-    const reqs = (await all(sql, ...params)).map((r) => ({ ...r, entityType: 'requirement', firstLabel: '需求' }));
-    const tickets = (await all(ticketSql, ...ticketParams)).map((t) => ({ ...t, req_code: t.ticket_code, entityType: 'ticket', firstLabel: '工单' }));
-    const workItems = [...reqs, ...tickets];
+    const reqs = (await all('SELECT * FROM requirement ORDER BY id DESC')).map((r) => ({ ...r, entityType: 'requirement', firstLabel: '需求' }));
+    const tickets = (await all('SELECT * FROM ticket ORDER BY id DESC')).map((t) => ({ ...t, req_code: t.ticket_code, entityType: 'ticket', firstLabel: '工单' }));
+    const selectedPointIds = targetReleasePointIds || windowIds(body);
+    const allWorkItems = [...reqs, ...tickets];
+    const matchedCodes = await workItemCodesForAppliedReleasePoints(allWorkItems.map((item) => item.req_code), selectedPointIds);
+    const workItems = matchedCodes ? allWorkItems.filter((item) => matchedCodes.includes(item.req_code)) : allWorkItems;
 
     // 关联状态与系统主数据一次性载入并分桶，替代逐需求 N+1 查询
     const sysMap = {};
@@ -410,7 +396,7 @@ export default async function overviewRoutes(fastify) {
     // 需求/工单：解析人员、主责系统与协同改造系统
     const mainCodes = req.main_systems || [];
     const collabCodes = req.collab_dev_systems || [];
-    const rp = req.release_point_id ? await get('SELECT release_date FROM release_point WHERE id = ?', req.release_point_id) : null;
+    const applyPointMap = await appliedReleasePointsForWorkItems([req.req_code]);
     const proposerNames = (() => {
       if (!req.proposer) return [];
       return Array.isArray(req.proposer) ? req.proposer : [req.proposer];
@@ -419,7 +405,7 @@ export default async function overviewRoutes(fastify) {
     const requirement = {
       ...req,
       req_type: req.entity_type === 'ticket' ? req.ticket_type : req.req_type,
-      release_date: rp ? rp.release_date : null,
+      apply_release_points: (applyPointMap[req.req_code] || []).map((point) => point.release_date),
       attachments: await attachOf(req.entity_type, req.id),
       proposerInfo: (await Promise.all(proposerNames.map(resolvePerson))).filter(Boolean),
       ynOwnerInfo: await resolvePerson(req.yn_owner),
@@ -437,7 +423,7 @@ export default async function overviewRoutes(fastify) {
     const issue = await get('SELECT * FROM issue WHERE issue_code = ?', code);
     if (!issue) throw notFound('问题不存在');
 
-    // 关联投产申请（取最早一条）以推导计划投产点
+    // 关联投产申请（取最早一条）以展示申请投产点。
     const ap = await get(
       `SELECT ra.release_point_id FROM release_apply_reference rar
          JOIN release_apply ra ON ra.id = rar.release_apply_id
@@ -527,28 +513,12 @@ export default async function overviewRoutes(fastify) {
       }
     }
 
-    let sql = 'SELECT * FROM requirement';
-    let ticketSql = 'SELECT * FROM ticket';
-    const params = [];
-    const ticketParams = [];
-
-    if (targetReleasePointIds) {
-      if (targetReleasePointIds.length) {
-        sql += ` WHERE release_point_id IN (${targetReleasePointIds.map(() => '?').join(',')})`;
-        params.push(...targetReleasePointIds);
-        ticketSql += ` WHERE release_point_id IN (${targetReleasePointIds.map(() => '?').join(',')})`;
-        ticketParams.push(...targetReleasePointIds);
-      }
-    } else {
-      const win = inClause('release_point_id', windowIds(body));
-      if (win.where) { sql += ` WHERE ${win.where}`; params.push(...win.params); }
-      if (win.where) { ticketSql += ` WHERE ${win.where}`; ticketParams.push(...win.params); }
-    }
-    sql += ' ORDER BY id DESC';
-    ticketSql += ' ORDER BY id DESC';
-    const reqs = (await all(sql, ...params)).map((r) => ({ ...r, entityType: 'requirement', firstLabel: '需求' }));
-    const tickets = (await all(ticketSql, ...ticketParams)).map((t) => ({ ...t, req_code: t.ticket_code, req_type: t.ticket_type, entityType: 'ticket', firstLabel: '工单' }));
-    const workItems = [...reqs, ...tickets];
+    const reqs = (await all('SELECT * FROM requirement ORDER BY id DESC')).map((r) => ({ ...r, entityType: 'requirement', firstLabel: '需求' }));
+    const tickets = (await all('SELECT * FROM ticket ORDER BY id DESC')).map((t) => ({ ...t, req_code: t.ticket_code, req_type: t.ticket_type, entityType: 'ticket', firstLabel: '工单' }));
+    const selectedPointIds = targetReleasePointIds || windowIds(body);
+    const allWorkItems = [...reqs, ...tickets];
+    const matchedCodes = await workItemCodesForAppliedReleasePoints(allWorkItems.map((item) => item.req_code), selectedPointIds);
+    const workItems = matchedCodes ? allWorkItems.filter((item) => matchedCodes.includes(item.req_code)) : allWorkItems;
 
     const sysMap = {};
     for (const s of await all('SELECT sys_code, sys_name, org FROM system')) {
@@ -567,9 +537,6 @@ export default async function overviewRoutes(fastify) {
     for (const rt of await all('SELECT * FROM release_task')) {
       rtMap[rt.req_code] = rt;
     }
-    const rps = await all('SELECT id, release_date FROM release_point');
-    const rpMap = {};
-    for (const rp of rps) rpMap[rp.id] = rp.release_date;
     const analysisCache = {};
     const analysisTextFor = async (reqCode) => {
       if (!reqCode) return { impact: '', coverage: '' };
@@ -677,7 +644,6 @@ export default async function overviewRoutes(fastify) {
         yn_owner: r.yn_owner,
         jk_owner: r.jk_owner,
         propose_time: r.propose_time,
-        release_date: rpMap[r.release_point_id] || '',
         main_systems: reqMainSys.map(c => sysMap[c]?.name || c).join(', '),
         collab_dev_systems: reqCollabDev.map(c => sysMap[c]?.name || c).join(', '),
         collab_test_systems: reqCollabTest.map(c => sysMap[c]?.name || c).join(', '),
@@ -865,7 +831,7 @@ export default async function overviewRoutes(fastify) {
       // 需求信息
       { key: 'entity_label', title: '类型' },
       { key: 'req_code', title: '需求/工单编号' },
-      { key: 'req_title', title: '需求标题/工单概述' },
+      { key: 'req_title', title: '需求标题/工单标题' },
       { key: 'req_summary', title: '需求概述/工单详情' },
       { key: 'req_status', title: '需求/工单状态' },
       { key: 'req_type', title: '需求/工单类型' },
@@ -875,7 +841,7 @@ export default async function overviewRoutes(fastify) {
       { key: 'yn_owner', title: '云南农信负责人' },
       { key: 'jk_owner', title: '建信金科负责人' },
       { key: 'propose_time', title: '提出时间' },
-      { key: 'release_date', title: '计划投产点' },
+      { key: 'release_date', title: '申请投产点' },
       { key: 'main_systems', title: '主责系统' },
       { key: 'collab_dev_systems', title: '协同改造系统' },
       { key: 'collab_test_systems', title: '协同测试系统' },

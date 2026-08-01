@@ -8,10 +8,10 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { Form, Input, DatePicker, Row, Col, Button, Select, Tag, message, Tooltip } from 'antd';
+import { Form, Input, InputNumber, DatePicker, Row, Col, Button, Select, Tag, message, Tooltip } from 'antd';
 import { HistoryOutlined, CloseOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { DictSelect, PersonPicker, makeReleasePointOptions } from '../../settings/reference-data/index.js';
+import { DictSelect, PersonPicker } from '../../settings/reference-data/index.js';
 import { StageBuiltinField, StageBuiltinFields, StageContentPanel, StageSectionLayout, useDefaultProcessStatus, useRequiredFields } from '../../settings/process-configuration/index.js';
 import { HistoryDrawer } from '../../../platform/audit/index.js';
 import { CodeLink } from '../../../platform/routing/index.js';
@@ -189,7 +189,7 @@ function PersonPickerField({ value = [], onChange, readonly, placeholder }) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default function RequirementEditor({ open, mode = 'modal', code, reqId, defaultReleasePointId, onClose, onSaved }) {
+export default function RequirementEditor({ open, mode = 'modal', code, reqId, onClose, onSaved }) {
   const [form] = Form.useForm();
   const extensionPanelRef = useRef(null);
   const extensionRightPanelRef = useRef(null);
@@ -198,7 +198,6 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
   const statusValue = Form.useWatch('status', form);
   const [current, setCurrent] = useState(null);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [points, setPoints] = useState([]);
   const [genLoading, setGenLoading] = useState(false); // 生成编号加载态
   const [isDirty, setIsDirty] = useState(false);
   const { can } = useAppStore();
@@ -219,12 +218,11 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
   useEffect(() => {
     const applyRow = (d) => {
       setCurrent(d);
-      form.setFieldsValue({ ...d, propose_time: d.propose_time ? dayjs(d.propose_time) : null });
+      form.setFieldsValue({ ...d, propose_time: d.propose_time ? dayjs(d.propose_time) : null, expected_release_date: d.expected_release_date ? dayjs(d.expected_release_date) : null });
       setIsDirty(false);
     };
     if (mode !== 'page' && !open) return;
     setIsDirty(false);
-    apiGet('/release-points/all').then(setPoints).catch(() => {});
     if (reqId) {
       apiGet(`/requirements/${reqId}`).then(applyRow);
     } else if (code) {
@@ -232,7 +230,7 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
     } else {
       setCurrent(null);
       form.resetFields();
-      form.setFieldsValue({ status: initialStatus, is_accounting: '否', priority: '中', release_point_id: defaultReleasePointId });
+      form.setFieldsValue({ status: initialStatus, is_accounting: '否', priority: '中' });
     }
   }, [open, reqId, code, mode, initialStatus]);
 
@@ -241,6 +239,7 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
     const payload = {
       ...v,
       propose_time: v.propose_time ? v.propose_time.format('YYYY-MM-DD') : null,
+      expected_release_date: v.expected_release_date ? v.expected_release_date.format('YYYY-MM-DD') : null,
     };
     if (isEdit) {
       await Promise.all([extensionPanelRef, extensionRightPanelRef, extensionFullPanelRef].map((panel) => panel.current?.save()));
@@ -276,10 +275,9 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
 
   /** 点击「生成编号」按钮 */
   const generateCode = async () => {
-    const releasePointId = form.getFieldValue('release_point_id');
     setGenLoading(true);
     try {
-      const res = await apiGet('/requirements/gen-code', releasePointId ? { releasePointId } : {});
+      const res = await apiGet('/requirements/gen-code');
       form.setFieldValue('req_code', res.req_code);
       // 触发校验以更新状态
       form.validateFields(['req_code']);
@@ -410,7 +408,7 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
                         readOnly={readonly || codeLocked}
                         style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', letterSpacing: '0.3px' }}
                         suffix={(codeLocked || readonly) ? null : (
-                          <Tooltip title="根据当前编号规则预览编号；规则包含投产点时需先选择计划投产点，保存成功后才正式占用">
+                          <Tooltip title="根据当前编号规则预览编号；保存成功后才正式占用编号">
                             <Button
                               type="link"
                               size="small"
@@ -436,18 +434,9 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
                     <Select size="small" options={[{ value: '高', label: '高' }, { value: '中', label: '中' }, { value: '低', label: '低' }]} style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} />
                   </Form.Item>
                 </StageBuiltinField>
-                {/* 计划投产点 + 提出时间 */}
-                <StageBuiltinField fieldKey="release_point_id" defaultSection="basic">
-                    <Form.Item name="release_point_id" label="计划投产点" rules={required.rules('release_point_id', '计划投产点', { action: '请选择' })} style={{ marginBottom: 8 }}>
-                      <Select
-                        placeholder="选择计划投产点"
-                        size="small"
-                        style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }}
-                        tabIndex={readonly ? -1 : undefined}
-                        showSearch
-                        optionFilterProp="searchLabel"
-                        options={makeReleasePointOptions(points, { includeVersionType: true })}
-                      />
+                <StageBuiltinField fieldKey="expected_release_date" defaultSection="basic">
+                    <Form.Item name="expected_release_date" label="期望投产时间" rules={required.rules('expected_release_date', '期望投产时间')} style={{ marginBottom: 8 }}>
+                      <DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" />
                     </Form.Item>
                 </StageBuiltinField>
                 <StageBuiltinField fieldKey="propose_time" defaultSection="basic">
@@ -483,7 +472,7 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
                 </Form.Item>
               </StageBuiltinField>
               <StageBuiltinField fieldKey="workload" defaultSection="basic">
-                <Form.Item name="workload" label="工作量" rules={required.rules('workload', '工作量', { extraRules: [{ max: 255, message: '不超过 255 字' }] })} style={{ marginBottom: 8 }}><Input placeholder="请输入工作量，如 3 人日" size="small" readOnly={readonly} /></Form.Item>
+                <Form.Item name="workload" label="工作量(人天)" rules={required.rules('workload', '工作量(人天)', { extraRules: [{ pattern: /^\d+(?:\.\d{1,2})?$/, message: '仅支持非负数字，最多 2 位小数' }] })} style={{ marginBottom: 8 }}><InputNumber stringMode min="0" precision={2} controls={false} placeholder="如 3 或 3.5" size="small" readOnly={readonly} style={{ width: '100%' }} /></Form.Item>
               </StageBuiltinField>
 
               <StageBuiltinField fieldKey="implementation_org" defaultSection="systems" defaultColumnSpan={24}>

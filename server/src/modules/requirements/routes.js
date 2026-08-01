@@ -8,7 +8,7 @@
 
 import { get, run, tx, all, dialect } from '../../platform/persistence/index.js';
 import { listQuery } from '../../platform/persistence/index.js';
-import { claimRequirementCode, previewRequirementCode, requirementCodeRequiresReleasePoint } from './index.js';
+import { claimRequirementCode, previewRequirementCode, requirementCodesInReleasePoints, requirementAppliedReleasePoints } from './index.js';
 import {
   buildExtensionListFilter, defaultProcessStatus, isTerminalStatus,
 } from '../settings/process-configuration/index.js';
@@ -24,7 +24,7 @@ import {
 import { auditCreate, auditUpdate, auditDelete } from '../../platform/audit/index.js';
 import { listByEntity } from '../../platform/attachments/index.js';
 import { exportXlsx, parseXlsx } from '../../platform/import-export/index.js';
-import { windowIds, inClause, resolveDictAttr, resolveOrganizationValues, resolveSystemCodes, resolveReleasePoint, formatAttachments } from '../settings/reference-data/index.js';
+import { windowIds, inClause, resolveDictAttr, resolveOrganizationValues, resolveSystemCodes, formatAttachments } from '../settings/reference-data/index.js';
 import { ok, notFound, badRequest, forbidden, parseJsonArray, parseJsonObject } from '../../platform/runtime/index.js';
 import { assertStatusChangePermission } from '../settings/process-configuration/index.js';
 import { resolveCurrentTaskStatuses } from '../overview/index.js';
@@ -45,40 +45,51 @@ const IO_COLUMNS = [
   { key: 'yn_owner', title: '云南农信业务负责人' },
   { key: 'jk_owner', title: '建信金科业务负责人' },
   { key: 'propose_time', title: '提出时间' },
-  { key: 'release_date', title: '计划投产点' },
+  { key: 'apply_release_points', title: '申请投产点' },
+  { key: 'expected_release_date', title: '期望投产时间' },
   { key: 'main_systems', title: '主责系统' },
   { key: 'collab_dev_systems', title: '协同改造系统' },
   { key: 'collab_test_systems', title: '协同测试系统' },
   { key: 'issue_no', title: 'OA编号/工单编号' },
   { key: 'implementation_org', title: '实施机构' },
   { key: 'receiver', title: '需求接收人' },
-  { key: 'workload', title: '工作量' },
+  { key: 'workload', title: '工作量(人天)' },
 ];
 
 const COLUMNS = [
   'id', 'req_code', 'title', 'summary', 'status', 'req_type', 'propose_dept', 'proposer',
-  'yn_owner', 'jk_owner', 'propose_time', 'release_point_id', 'registrar', 'register_time', 'created_at',
+  'yn_owner', 'jk_owner', 'propose_time', 'expected_release_date', 'registrar', 'register_time', 'created_at',
   'issue_no', 'is_accounting', 'priority', 'implementation_org', 'receiver', 'workload',
 ];
 const SEARCH = ['req_code', 'title', 'summary', 'proposer', 'issue_no'];
 const JSON_FIELDS = ['main_systems', 'collab_dev_systems', 'collab_test_systems', 'proposer'];
 const WRITABLE = [
   'req_code', 'title', 'summary', 'status', 'req_type', 'propose_dept', 'proposer', 'yn_owner', 'jk_owner',
-  'propose_time', 'main_systems', 'collab_dev_systems', 'collab_test_systems', 'release_point_id',
+  'propose_time', 'expected_release_date', 'main_systems', 'collab_dev_systems', 'collab_test_systems',
   'issue_no', 'is_accounting', 'priority', 'implementation_org', 'receiver', 'workload',
 ];
 const LABELS = {
   req_code: '需求编号', title: '需求标题', summary: '需求概述', status: '需求状态', req_type: '需求类型',
   is_accounting: '是否涉账', priority: '优先级',
   propose_dept: '提出部门', proposer: '提出人', yn_owner: '云南农信业务负责人',
-  jk_owner: '建信金科业务负责人', propose_time: '提出时间', main_systems: '主责系统',
-  collab_dev_systems: '协同改造系统', collab_test_systems: '协同测试系统', release_point_id: '计划投产点',
-  issue_no: 'OA编号/工单编号', implementation_org: '实施机构', receiver: '需求接收人', workload: '工作量',
+  jk_owner: '建信金科业务负责人', propose_time: '提出时间', expected_release_date: '期望投产时间', main_systems: '主责系统',
+  collab_dev_systems: '协同改造系统', collab_test_systems: '协同测试系统',
+  issue_no: 'OA编号/工单编号', implementation_org: '实施机构', receiver: '需求接收人', workload: '工作量(人天)',
 };
 
 function formatRegistrationTime(date = new Date()) {
   const pad = (value) => String(value).padStart(2, '0');
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function normalizeExpectedReleaseDate(value) {
+  if (value === undefined) return undefined;
+  const text = String(value || '').trim();
+  if (!text) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text) || new Date(`${text}T00:00:00Z`).toISOString().slice(0, 10) !== text) {
+    throw badRequest('期望投产时间必须为合法日期（YYYY-MM-DD）');
+  }
+  return text;
 }
 
 /** 把 JSON 字符串字段解析为数组返回给前端 */
@@ -107,6 +118,7 @@ function pick(body) {
 
 async function normalizeAnalysisFields(data) {
   const out = { ...data };
+  if (out.expected_release_date !== undefined) out.expected_release_date = normalizeExpectedReleaseDate(out.expected_release_date);
   if (out.implementation_org !== undefined) {
     const value = String(out.implementation_org || '').trim();
     if (!value) out.implementation_org = null;
@@ -123,8 +135,8 @@ async function normalizeAnalysisFields(data) {
     out.receiver = value || null;
   }
   if (out.workload !== undefined) {
-    const value = String(out.workload || '').trim();
-    if (/[\r\n]/.test(value) || value.length > 255) throw badRequest('工作量仅支持 255 字以内的单行文本');
+    const value = String(out.workload ?? '').trim();
+    if (value && !/^\d+(?:\.\d{1,2})?$/.test(value)) throw badRequest('工作量(人天)仅支持非负数字，最多 2 位小数');
     out.workload = value || null;
   }
   return out;
@@ -177,9 +189,10 @@ export default async function requirementRoutes(fastify) {
     const params = [];
     
     // 默认的投产窗口过滤
-    const win = inClause('release_point_id', windowIds(body));
-    if (win.where) {
-      wh.push(win.where);
+    const windowCodes = await requirementCodesInReleasePoints(windowIds(body));
+    if (windowCodes) {
+      const win = inClause('req_code', windowCodes);
+      wh.push(win.where || '1=0');
       params.push(...win.params);
     }
     await appendOrganizationScope(wh, params, 'requirement', request.currentUser);
@@ -250,6 +263,12 @@ export default async function requirementRoutes(fastify) {
           )`);
           params.push(...codes, ...codes);
         }
+      } else if (f.field === 'apply_release_points') {
+        const values = Array.isArray(f.value) ? f.value : [f.value];
+        const codes = await requirementCodesInReleasePoints(values);
+        const pointFilter = inClause('req_code', codes || []);
+        wh.push(pointFilter.where || '1=0');
+        params.push(...pointFilter.params);
       } else if (f.field === 'proposer') {
         const people = Array.isArray(f.value) ? f.value : [f.value];
         if (people.length) {
@@ -272,11 +291,7 @@ export default async function requirementRoutes(fastify) {
     });
 
     // 投产点与系统为主数据（量小），整表载入做编号→名称映射
-    const rps = await all('SELECT id, release_date FROM release_point');
-    const rpMap = {};
-    for (const rp of rps) {
-      rpMap[rp.id] = rp.release_date;
-    }
+    const applyPointMap = await requirementAppliedReleasePoints(result.list.map((row) => row.req_code));
 
     const systems = await all('SELECT sys_code, sys_name FROM system');
     const sysMap = {};
@@ -316,7 +331,8 @@ export default async function requirementRoutes(fastify) {
     const taskStatuses = await resolveCurrentTaskStatuses(result.list.map((row) => ({ ...row, entity_type: 'requirement' })));
     result.list = result.list.map((row) => {
       const decoded = decode(row);
-      decoded.release_date = rpMap[decoded.release_point_id] || null;
+      decoded.apply_release_points = (applyPointMap[decoded.req_code] || []).map((point) => point.release_date);
+      decoded.apply_release_point_ids = (applyPointMap[decoded.req_code] || []).map((point) => point.id);
       decoded.main_systems_names = (decoded.main_systems || []).map((code) => sysMap[code] || code);
       decoded.collab_dev_systems_names = (decoded.collab_dev_systems || []).map((code) => sysMap[code] || code);
       decoded.has_tasks = linkedCodes.has(decoded.req_code);
@@ -353,11 +369,6 @@ export default async function requirementRoutes(fastify) {
   // 新增
   fastify.post('/requirements', { preHandler: fastify.requirePerm('requirement', 'create') }, async (request) => {
     const body = request.body || {};
-    const rp = body.release_point_id ? await get('SELECT * FROM release_point WHERE id = ?', body.release_point_id) : null;
-    if (body.release_point_id && !rp) throw badRequest('投产点不存在');
-    if (!String(body.req_code || '').trim() && await requirementCodeRequiresReleasePoint() && !rp) {
-      throw badRequest('当前需求编号规则使用投产点，请先选择计划投产点');
-    }
     const initialStatus = await defaultProcessStatus('需求', 'initial', '需求登记');
 
     const picked = await normalizeAnalysisFields(pick(body));
@@ -373,7 +384,7 @@ export default async function requirementRoutes(fastify) {
     const { id, reqCode } = await tx(async () => {
       let code = (body.req_code || '').trim();
       const used = code && await get('SELECT id FROM requirement WHERE req_code = ?', code);
-      code = used ? await claimRequirementCode(rp?.release_date) : await claimRequirementCode(rp?.release_date, code);
+      code = used ? await claimRequirementCode() : await claimRequirementCode(code);
       const fields = ['req_code', 'status', 'registrar', 'register_time', ...Object.keys(data)];
       const values = [
         code,
@@ -434,16 +445,9 @@ export default async function requirementRoutes(fastify) {
 
   // 预览编号（前端点击「生成」按钮调用；不占用序列）
   fastify.get('/requirements/gen-code', { preHandler: fastify.requirePerm('requirement', 'view') }, async (request) => {
-    const releasePointId = request.query.releasePointId;
-    const requiresReleasePoint = await requirementCodeRequiresReleasePoint();
-    if (requiresReleasePoint && !releasePointId) {
-      throw badRequest('当前需求编号规则使用投产点，请先选择计划投产点');
-    }
-    const rp = releasePointId ? await get('SELECT release_date FROM release_point WHERE id = ?', releasePointId) : null;
-    if (releasePointId && !rp) throw badRequest('投产点不存在');
     return ok({
-      req_code: await previewRequirementCode(rp?.release_date),
-      requires_release_point: requiresReleasePoint,
+      req_code: await previewRequirementCode(),
+      requires_release_point: false,
     });
   });
 
@@ -473,9 +477,10 @@ export default async function requirementRoutes(fastify) {
   // 导出
   fastify.post('/requirements/export', { preHandler: fastify.requirePerm('requirement', 'export') }, async (request, reply) => {
     const body = request.body || {};
-    const { where: initialWhere, params: initialParams } = inClause('release_point_id', windowIds(body));
-    const exportWh = initialWhere ? [initialWhere] : [];
-    const exportParams = [...initialParams];
+    const exportCodes = await requirementCodesInReleasePoints(windowIds(body));
+    const exportWindow = exportCodes ? inClause('req_code', exportCodes) : { where: '', params: [] };
+    const exportWh = exportWindow.where ? [exportWindow.where] : [];
+    const exportParams = [...exportWindow.params];
     await appendOrganizationScope(exportWh, exportParams, 'requirement', request.currentUser);
     const baseWhere = exportWh.join(' AND ');
     const baseParams = exportParams;
@@ -488,9 +493,7 @@ export default async function requirementRoutes(fastify) {
     const sysMap = {};
     for (const s of systems) sysMap[s.sys_code] = s.sys_name;
 
-    const rps = await all('SELECT id, release_date FROM release_point');
-    const rpMap = {};
-    for (const rp of rps) rpMap[rp.id] = rp.release_date;
+    const applyPointMap = await requirementAppliedReleasePoints(result.list.map((row) => row.req_code));
 
     const cols = [
       { key: 'req_code', title: '需求编号' },
@@ -505,14 +508,15 @@ export default async function requirementRoutes(fastify) {
       { key: 'yn_owner', title: '云南农信业务负责人' },
       { key: 'jk_owner', title: '建信金科业务负责人' },
       { key: 'propose_time', title: '提出时间' },
-      { key: 'release_date', title: '计划投产点' },
+      { key: 'apply_release_points', title: '申请投产点' },
+      { key: 'expected_release_date', title: '期望投产时间' },
       { key: 'main_systems', title: '主责系统' },
       { key: 'collab_dev_systems', title: '协同改造系统' },
       { key: 'collab_test_systems', title: '协同测试系统' },
       { key: 'issue_no', title: 'OA编号/工单编号' },
       { key: 'implementation_org', title: '实施机构' },
       { key: 'receiver', title: '需求接收人' },
-      { key: 'workload', title: '工作量' },
+      { key: 'workload', title: '工作量(人天)' },
       { key: 'registrar', title: '录入人' },
       { key: 'register_time', title: '录入时间' },
       { key: 'attachments', title: '需求说明书' },
@@ -528,7 +532,7 @@ export default async function requirementRoutes(fastify) {
 
       return {
         ...row,
-        release_date: rpMap[row.release_point_id] || '',
+        apply_release_points: (applyPointMap[row.req_code] || []).map((point) => point.release_date).join(', '),
         proposer: proposerArray.join(', '),
         main_systems: main.map(c => sysMap[c] || c).join(', '),
         collab_dev_systems: collabDev.map(c => sysMap[c] || c).join(', '),
@@ -553,7 +557,7 @@ export default async function requirementRoutes(fastify) {
     return reply.send(buf);
   });
 
-  // 导入（按 需求编号 去重；计划投产点按日期匹配 release_point；编号留空则自动生成；支持兼容性处理与回滚）
+  // 导入（按需求编号去重；期望投产时间允许日期值；编号留空则自动生成；支持兼容性处理与回滚）
   fastify.post('/requirements/import', { preHandler: fastify.requirePerm('requirement', 'import') }, async (request) => {
     const data = await request.file();
     if (!data) throw badRequest('请上传文件');
@@ -565,11 +569,6 @@ export default async function requirementRoutes(fastify) {
     const stat = { inserted: 0, updated: 0, skipped: 0, failed: 0 };
     const details = [];
 
-    // 载入投产点和系统映射用于变化展示及解析
-    const rps = await all('SELECT id, release_date FROM release_point');
-    const rpMap = {};
-    for (const rp of rps) rpMap[rp.id] = rp.release_date;
-
     const systems = await all('SELECT sys_code, sys_name FROM system');
     const sysMap = {};
     for (const s of systems) sysMap[s.sys_code] = s.sys_name;
@@ -579,12 +578,6 @@ export default async function requirementRoutes(fastify) {
         const rowNum = r.__rowNum__;
         try {
           if (!r.title) throw new Error('需求标题不能为空');
-          if (!r.release_date) throw new Error('计划投产点不能为空');
-
-          // 解析计划投产点
-          const rpId = await resolveReleasePoint(r.release_date);
-          if (!rpId) throw new Error(`计划投产点投产日期 [${r.release_date}] 不存在`);
-
           // 兼容性字典转换
           const status = await resolveDictAttr('process_status', r.status) || await defaultProcessStatus('需求', 'initial', '需求登记');
           const reqType = await resolveDictAttr('req_type', r.req_type);
@@ -604,6 +597,7 @@ export default async function requirementRoutes(fastify) {
             : [];
           const proposerJson = JSON.stringify(proposerArray);
           const analysisFields = await normalizeAnalysisFields({
+            expected_release_date: r.expected_release_date,
             implementation_org: r.implementation_org,
             receiver: r.receiver,
             workload: r.workload,
@@ -656,12 +650,9 @@ export default async function requirementRoutes(fastify) {
             compareAndPush('issue_no', 'OA编号/工单编号', exists.issue_no || '', r.issue_no || '');
             compareAndPush('implementation_org', '实施机构', exists.implementation_org || '', analysisFields.implementation_org || '');
             compareAndPush('receiver', '需求接收人', exists.receiver || '', analysisFields.receiver || '');
-            compareAndPush('workload', '工作量', exists.workload || '', analysisFields.workload || '');
+            compareAndPush('workload', '工作量(人天)', exists.workload || '', analysisFields.workload || '');
             
-            // 计划投产点比较
-            const oldRpDate = rpMap[exists.release_point_id] || '';
-            const newRpDate = rpMap[rpId] || '';
-            compareAndPush('release_point_id', '计划投产点', oldRpDate, newRpDate);
+            compareAndPush('expected_release_date', '期望投产时间', exists.expected_release_date || '', analysisFields.expected_release_date || '');
 
             // 系统比较
             const decodeSystems = (jsonStr) => parseJsonArray(jsonStr).map(c => sysMap[c] || c).join(', ');
@@ -673,19 +664,19 @@ export default async function requirementRoutes(fastify) {
               await run(
                 `UPDATE requirement SET 
                    title=?, summary=?, status=?, req_type=?, is_accounting=?, priority=?, propose_dept=?, proposer=?, yn_owner=?, jk_owner=?,
-                   propose_time=?, release_point_id=?, main_systems=?, collab_dev_systems=?, collab_test_systems=?, 
+                   propose_time=?, expected_release_date=?, main_systems=?, collab_dev_systems=?, collab_test_systems=?,
                    issue_no=?, implementation_org=?, receiver=?, workload=?,
                    updated_at=datetime('now','localtime') 
                  WHERE id=?`,
                 r.title, r.summary || null, status, reqType || null, isAccounting, priority, proposeDept || null, proposerJson,
-                r.yn_owner || null, r.jk_owner || null, r.propose_time || null, rpId,
+                r.yn_owner || null, r.jk_owner || null, r.propose_time || null, analysisFields.expected_release_date,
                 mainSystems, collabDevSystems, collabTestSystems, r.issue_no || null,
                 analysisFields.implementation_org, analysisFields.receiver, analysisFields.workload, exists.id
               );
               await auditUpdate('requirement', exists.id, code, request.currentUser?.name, exists, {
                 title: r.title, summary: r.summary || null, status, req_type: reqType || null, is_accounting: isAccounting, priority,
                 propose_dept: proposeDept || null, proposer: proposerJson, yn_owner: r.yn_owner || null,
-                jk_owner: r.jk_owner || null, propose_time: r.propose_time || null, release_point_id: rpId,
+                jk_owner: r.jk_owner || null, propose_time: r.propose_time || null, expected_release_date: analysisFields.expected_release_date,
                 main_systems: mainSystems, collab_dev_systems: collabDevSystems, collab_test_systems: collabTestSystems,
                 issue_no: r.issue_no || null, ...analysisFields
               }, LABELS);
@@ -705,14 +696,14 @@ export default async function requirementRoutes(fastify) {
           } else {
             // insert 新建
             // 导入自动补号同样在真正插入前确认，保持与详情页生成规则一致。
-            if (!code) code = await claimRequirementCode(rpMap[rpId]);
+            if (!code) code = await claimRequirementCode();
             const res = await run(
               `INSERT INTO requirement 
                  (req_code, title, summary, status, req_type, is_accounting, priority, propose_dept, proposer, yn_owner, jk_owner,
-                  propose_time, release_point_id, main_systems, collab_dev_systems, collab_test_systems, registrar, register_time, issue_no, implementation_org, receiver, workload)
+                  propose_time, expected_release_date, main_systems, collab_dev_systems, collab_test_systems, registrar, register_time, issue_no, implementation_org, receiver, workload)
                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
               code, r.title, r.summary || null, status, reqType || null, isAccounting, priority, proposeDept || null, proposerJson,
-              r.yn_owner || null, r.jk_owner || null, r.propose_time || null, rpId,
+              r.yn_owner || null, r.jk_owner || null, r.propose_time || null, analysisFields.expected_release_date,
               mainSystems, collabDevSystems, collabTestSystems, request.currentUser?.name, formatRegistrationTime(),
               r.issue_no || null, analysisFields.implementation_org, analysisFields.receiver, analysisFields.workload
             );

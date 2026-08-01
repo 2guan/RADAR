@@ -235,7 +235,7 @@ async function releaseTaskByCodePoint(code, releasePointId) {
   );
 }
 
-/** 未显式传申请投产点时，按投产申请、工作项计划投产点依次推断，兼容旧入口。 */
+/** 未显式传申请投产点时，只按申请引用推断；无申请工作项统一归入待定投产点。 */
 async function resolveReleasePointId(code, explicitValue) {
   const explicit = numberOrNull(explicitValue);
   if (explicit !== null) return explicit;
@@ -246,9 +246,7 @@ async function resolveReleasePointId(code, explicitValue) {
     code,
   );
   if (ap?.release_point_id) return Number(ap.release_point_id);
-  const item = await getWorkItem(code);
-  if (item?.release_point_id) return Number(item.release_point_id);
-  return null;
+  return numberOrNull((await get("SELECT id FROM release_point WHERE release_date = '投产点待定'"))?.id);
 }
 
 // 手动设置后不被自动逻辑覆盖的评审状态
@@ -933,8 +931,6 @@ export default async function releaseRoutes(fastify) {
         status: req?.status || null,
         yn_owner: req?.yn_owner || null,
         jk_owner: req?.jk_owner || null,
-        plan_release_date: rpMap[req?.release_point_id] || null,
-        release_date: rpMap[req?.release_point_id] || null,
         apply_release_point_id: releasePointId,
         apply_release_date: rpMap[releasePointId] || null,
       };
@@ -1126,8 +1122,6 @@ export default async function releaseRoutes(fastify) {
         status: req?.status || null,
         yn_owner: req?.yn_owner || null,
         jk_owner: req?.jk_owner || null,
-        plan_release_date: rpMap[req?.release_point_id] || null,
-        release_date: rpMap[req?.release_point_id] || null,
         apply_release_point_id: releasePointId,
         apply_release_date: rpMap[releasePointId] || null,
       };
@@ -1178,7 +1172,7 @@ export default async function releaseRoutes(fastify) {
       { key: 'change_codes_text', title: '变更编号' },
       { key: 'code', title: '需求/问题/工单编号' },
       { key: 'entity_label', title: '类型' },
-      { key: 'title', title: '需求标题/工单概述/问题概述' },
+      { key: 'title', title: '需求标题/工单标题/问题概述' },
       { key: 'release_date', title: '申请投产点' },
       { key: 'release_status', title: '投产状态' },
       { key: 'review_status', title: '评审状态' },

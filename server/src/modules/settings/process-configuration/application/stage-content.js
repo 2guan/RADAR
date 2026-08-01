@@ -38,8 +38,8 @@ export const STAGE_SCOPE_DEFAULTS = [
 const NATIVE_FIELD_DEFAULTS = {
   requirement: [
     ['req_code', '需求编号', 'text'], ['status', '需求状态', 'select'], ['req_type', '需求类型', 'select', 'dict:req_type'],
-    ['release_point_id', '计划投产点', 'release_point', 'release_point'], ['propose_time', '提出时间', 'datetime'],
-    ['issue_no', 'OA编号/工单编号', 'text'], ['is_accounting', '是否涉账', 'select'], ['priority', '优先级', 'select', 'priority'], ['title', '需求标题', 'text'], ['workload', '工作量', 'text'],
+    ['apply_release_points', '申请投产点', 'release_point', 'release_point', 1], ['expected_release_date', '期望投产时间', 'date'], ['propose_time', '提出时间', 'datetime'],
+    ['issue_no', 'OA编号/工单编号', 'text'], ['is_accounting', '是否涉账', 'select'], ['priority', '优先级', 'select', 'priority'], ['title', '需求标题', 'text'], ['workload', '工作量(人天)', 'text'],
     ['summary', '需求概述', 'textarea'], ['implementation_org', '实施机构', 'select', 'dict:org'], ['main_systems', '主责系统', 'select', 'system', 1],
     ['collab_dev_systems', '协同改造系统', 'select', 'system', 1], ['collab_test_systems', '协同测试系统', 'select', 'system', 1],
     ['propose_dept', '提出部门', 'select', 'dict:req_dept'], ['proposer', '提出人', 'person', 'person', 1],
@@ -47,8 +47,8 @@ const NATIVE_FIELD_DEFAULTS = {
   ],
   ticket: [
     ['ticket_code', '工单编号', 'text'], ['status', '工单状态', 'select'], ['ticket_type', '工单类型', 'select', 'dict:ticket_type'],
-    ['release_point_id', '计划投产点', 'release_point', 'release_point'], ['propose_time', '提出时间', 'datetime'],
-    ['issue_no', 'OA编号/工单编号', 'text'], ['is_accounting', '是否涉账', 'select'], ['priority', '优先级', 'select', 'priority'], ['title', '工单概述', 'text'], ['workload', '工作量', 'text'],
+    ['apply_release_points', '申请投产点', 'release_point', 'release_point', 1], ['expected_release_date', '期望投产时间', 'date'], ['propose_time', '提出时间', 'datetime'],
+    ['issue_no', 'OA编号/工单编号', 'text'], ['is_accounting', '是否涉账', 'select'], ['priority', '优先级', 'select', 'priority'], ['title', '工单标题', 'text'], ['workload', '工作量(人天)', 'text'],
     ['summary', '工单详情', 'textarea'], ['implementation_org', '实施机构', 'select', 'dict:org'], ['main_systems', '主责系统', 'select', 'system', 1],
     ['collab_dev_systems', '协同改造系统', 'select', 'system', 1], ['collab_test_systems', '协同测试系统', 'select', 'system', 1],
     ['propose_dept', '提出部门', 'select', 'dict:req_dept'], ['proposer', '提出人', 'person', 'person', 1],
@@ -67,7 +67,7 @@ const NATIVE_FIELD_DEFAULTS = {
     ['coverage_analysis', '测试覆盖性分析', 'component', '', 0, 'coverage_analysis'],
   ],
   release_apply: [
-    ['change_code', '变更编号', 'text'], ['ref_codes', '关联需求/工单', 'text'], ['release_point_id', '计划投产点', 'release_point', 'release_point'],
+    ['change_code', '变更编号', 'text'], ['ref_codes', '关联需求/工单', 'text'], ['release_point_id', '申请投产点', 'release_point', 'release_point'],
     ['change_system', '变更系统', 'select', 'system'], ['change_content', '变更内容', 'textarea'], ['impact_scope', '影响范围', 'textarea'],
     ['impl_org', '实施机构', 'select', 'dict:org'], ['out_dept', '变更负责部门（输出口径）', 'select', 'dict:org'], ['deploy_dept', '变更负责部门（部署口径）', 'select', 'dict:org'],
     // 交付制品由多行结构化数据组成，按业务组件维护，不能退化为可自由拼接的普通字段。
@@ -89,7 +89,7 @@ const NATIVE_FIELD_DEFAULTS = {
  * 内置配置目录是字段语义的唯一代码基线：数据库只保存管理员可调整的布局、可见性和状态规则。
  * `renderer` 明确区分可由公共控件呈现的普通字段和必须由业务 JSX 声明的复杂控件。
  */
-export const BUILTIN_CONFIGURATION_UPGRADE_ID = 'settings.builtin-configuration.v5';
+export const BUILTIN_CONFIGURATION_UPGRADE_ID = 'settings.builtin-configuration.v6';
 export const PRIORITY_OPTIONS = [
   { value: '高', label: '高' },
   { value: '中', label: '中' },
@@ -113,7 +113,9 @@ export function resolveBuiltinConfiguration(scopeKey, fieldKey) {
     renderer: priority ? 'standard' : (inputType === 'component' ? 'adapter' : 'declaration'),
     default_value: priority ? '中' : null,
     options: priority ? PRIORITY_OPTIONS : [],
-    capabilities: priority ? { list: true, filter: true, dashboard: true, import: true, export: true } : {},
+    capabilities: priority ? { list: true, filter: true, dashboard: true, import: true, export: true }
+      : key === 'apply_release_points' ? { list: true, filter: true }
+        : key === 'expected_release_date' ? { import: true, export: true } : {},
   };
 }
 
@@ -909,7 +911,7 @@ export async function seedStageContentDefaults({ builtinMetadata = {}, sectionDe
       const sectionKey = definition.key;
       let section = await get('SELECT id FROM stage_section WHERE scope_key = ? AND section_key = ?', scopeKey, sectionKey);
       if (!section) {
-        const res = await run('INSERT INTO stage_section (scope_key, section_key, title, sort, collapsed, is_builtin, layout_mode, show_title) VALUES (?,?,?,?,?,1,?,?)', scopeKey, sectionKey, definition.title, index * 10, definition.collapsed ? 1 : 0, definition.layout || 'left', definition.show_title === false ? 0 : 1);
+        const res = await run('INSERT INTO stage_section (scope_key, section_key, title, sort, collapsed, is_builtin, layout_mode, show_title) VALUES (?,?,?,?,?,1,?,?)', scopeKey, sectionKey, definition.title, (index + 1) * 10, definition.collapsed ? 1 : 0, definition.layout || 'left', definition.show_title === false ? 0 : 1);
         section = { id: res.lastInsertRowid };
       }
       sectionIds.set(sectionKey, section.id);

@@ -11,4 +11,7 @@ export {
   claimReleaseApplyCode, generateReleaseApplyCode, previewReleaseApplyCode,
 } from './applications/release-apply/index.js';
 export { listReleaseTaskStatuses } from './application/task-statuses.js';
+export {
+  appliedReleasePointsForWorkItems, pendingAppliedReleasePoint, workItemCodesForAppliedReleasePoints,
+} from './application/work-item-release-points.js';
 export { MODULE_CONTRACT as releaseContract } from './contracts/index.js';
