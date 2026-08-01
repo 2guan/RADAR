@@ -1202,29 +1202,6 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           }
         },
         {
-          "field_key": "release_point_id",
-          "label": "计划投产点",
-          "field_kind": "native",
-          "input_type": "release_point",
-          "source_key": "release_point",
-          "multiple": 0,
-          "native_column": "release_point_id",
-          "component_key": "",
-          "section_key": "basic",
-          "column_span": 12,
-          "visible": 1,
-          "list_visible": 1,
-          "filterable": 1,
-          "dashboard_dimension": 1,
-          "sort": 30,
-          "is_builtin": 1,
-          "rules": {
-            "需求登记": 1,
-            "需求分析": 1,
-            "分析完成": 1
-          }
-        },
-        {
           "field_key": "collab_dev_systems",
           "label": "协同改造系统",
           "field_kind": "native",
@@ -2970,29 +2947,6 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "filterable": 1,
           "dashboard_dimension": 0,
           "sort": 20,
-          "is_builtin": 1,
-          "rules": {
-            "工单登记": 1,
-            "工单分析": 1,
-            "分析完成": 1
-          }
-        },
-        {
-          "field_key": "release_point_id",
-          "label": "计划投产点",
-          "field_kind": "native",
-          "input_type": "release_point",
-          "source_key": "release_point",
-          "multiple": 0,
-          "native_column": "release_point_id",
-          "component_key": "",
-          "section_key": "basic",
-          "column_span": 12,
-          "visible": 1,
-          "list_visible": 1,
-          "filterable": 1,
-          "dashboard_dimension": 1,
-          "sort": 30,
           "is_builtin": 1,
           "rules": {
             "工单登记": 1,
