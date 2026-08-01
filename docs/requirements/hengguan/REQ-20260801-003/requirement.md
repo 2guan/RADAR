@@ -8,7 +8,7 @@ status: "ready"
 priority: "P1"
 requester: "业务用户"
 developer: "hengguan"
-module: "identity-access"
+module: "governance"
 module_owner: "hengguan"
 contains_confidential_information: false
 external_access_required: false
@@ -142,7 +142,7 @@ last_updated: "2026-08-01"
 
 ## 8. 研发上下文
 
-- 主模块：`identity-access`；受影响模块：`shared/contracts`、`requirements`、`tickets`、`development`、`testing`、`release`、`settings`、`platform/persistence`。Owner 均为 `hengguan`，需求发起人已授权本次跨模块改造，合并前仍需 Owner 复核。
+- 主模块：`governance`（本需求同时新增平台持久化迁移和跨模块共享能力，按治理规约由治理模块登记）；受影响模块：`platform/persistence`、`identity-access`、`shared/contracts`、`requirements`、`tickets`、`development`、`testing`、`release`、`settings`。Owner 均为 `hengguan`，需求发起人已授权本次跨模块改造，合并前仍需 Owner 复核。
 - 必须复用：`DataTable`、`ResizableTitle`、现有认证上下文、`requirePerm`、统一审计公开入口、`settings/process-configuration` 的阶段字段 schema 与缓存失效能力。
 - 接口：`GET /user-list-preferences/:listKey`、`PUT /user-list-preferences/:listKey`、`DELETE /user-list-preferences/:listKey`；均要求登录，响应维持 `{ code, data, message }`，仅访问当前用户数据。
 - 数据库：新增双端迁移与唯一索引。回退时可保留偏好表而回退应用；如需彻底回退再在后续独立迁移删除表，避免破坏已保存用户配置。

@@ -10,7 +10,7 @@
   },
   "assignment": {
     "developer": "hengguan",
-    "module": "identity-access",
+    "module": "governance",
     "module_owner": "hengguan",
     "branch": "hengguan/REQ-20260801-003-list-personalization",
     "base_branch": "origin/main",
@@ -31,6 +31,7 @@
       "server/src/platform/persistence/migrations/tdsql/0025_user_list_preferences.sql",
       "server/src/modules/identity-access/**",
       "server/src/modules/settings/process-configuration/**",
+      "web/src/modules/settings/process-configuration/**",
       "server/src/bootstrap/seed.js",
       "server/scripts/mock-data.js",
       "server/src/modules/requirements/**",
@@ -48,7 +49,7 @@
     ],
     "read_only_paths": [
       "AGENTS.md", "DESIGN.md", "docs/governance/**", "docs/architecture/**", ".agents/skills/radar-delivery-engineer/**",
-      "server/src/platform/auth/**", "server/src/platform/audit/**", "server/src/platform/persistence/**", "web/src/platform/**"
+      "server/src/platform/auth/**", "server/src/platform/audit/**", "web/src/platform/**"
     ],
     "forbidden_paths": [
       ".github/**", "docs/reports/**", ".env", "**/.env", "**/*secret*", "**/*credential*", "attachments/**"
@@ -57,7 +58,7 @@
   "public_capability_change": {
     "required": true,
     "shared_change_issue": "hengguan/REQ-20260801-003",
-    "target_modules": ["identity-access", "shared/contracts", "requirements", "tickets", "development", "testing", "release", "settings"],
+    "target_modules": ["governance", "platform/persistence", "identity-access", "shared/contracts", "requirements", "tickets", "development", "testing", "release", "settings"],
     "new_methods": ["identity-access 用户级列表偏好读取、覆盖保存与恢复默认公开接口", "shared DataTable 列布局元数据与个人偏好接入"],
     "existing_method_changed": true,
     "semantic_name_confirmed": true,
