@@ -9,6 +9,7 @@
 export {
   getWorkItem, replaceWorkItemDevelopmentSystemRoles, workItemCodesInReleasePoints, releaseDateMapForCodes,
 } from './application/work-items.js';
+export { listDevelopmentImplementationOrgs } from './application/release-apply-defaults.js';
 export {
   validateChangeItem, decodeChangeItem, validateCoverageRow,
   formatImpactItemsText, formatCoverageText, impactItemExportLines, coverageItemExportLines,

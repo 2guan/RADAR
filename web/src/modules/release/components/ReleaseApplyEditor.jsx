@@ -3,7 +3,7 @@
  * 说明：评审状态由所关联需求的投产审批评审状态派生（后端计算，前端只读展示）。
  * 用途：投产申请（版本变更申请）新增/编辑弹窗。新增时上方 TAB 选择需求/工单（可多选），
  *       已选逐条列出；下方填写变更编号（可自动生成）、变更系统（按所选需求/工单推荐）、
- *       变更内容、影响范围、实施机构（按系统所属机构返显，可编辑）、制品类型、新版本号等。
+ *       变更内容、影响范围、实施机构（按对应开发任务的开发实施方自动填入，可编辑）、制品类型、新版本号等。
  * 作者：hengguan
  */
 
@@ -60,8 +60,10 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
   const [selReqs, setSelReqs] = useState([]); // 已选需求编号
   const [selTickets, setSelTickets] = useState([]); // 已选工单编号
   const [isDirty, setIsDirty] = useState(false);
+  const [implOrgHint, setImplOrgHint] = useState('');
 
   const debounceRef = useRef(null);
+  const implOrgRequestRef = useRef(0);
 
   useEffect(() => {
     if (mode !== 'page' && !open) return;
@@ -83,6 +85,8 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
       setCurrent(null);
       setSelReqs(Array.isArray(defaultReqCodes) ? [...defaultReqCodes] : []);
       setSelTickets(Array.isArray(defaultTicketCodes) ? [...defaultTicketCodes] : []);
+      implOrgRequestRef.current += 1;
+      setImplOrgHint('');
       form.resetFields();
       form.setFieldsValue({
         delivery_units: [{ artifact_type: undefined, delivery_unit: undefined, new_version: undefined }],
@@ -148,31 +152,64 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
     if (!readonly) setIsDirty(true);
   };
 
+  /** 新增态按当前关联工作项及开发实施系统取得唯一开发实施方，过期响应不得覆盖新选择。 */
+  const loadImplementationOrgDefault = async (systemCode, refCodes = [...selReqs, ...selTickets]) => {
+    if (isEdit) return;
+    const requestId = ++implOrgRequestRef.current;
+    form.setFieldValue('impl_org', undefined);
+    if (!systemCode) {
+      setImplOrgHint('');
+      return;
+    }
+    if (!refCodes.length) {
+      setImplOrgHint('请先关联需求或工单后自动获取开发实施方');
+      return;
+    }
+    setImplOrgHint('正在读取对应开发任务的开发实施方…');
+    try {
+      const result = await apiPost('/release-apply/implementation-org-default', { refCodes, systemCode });
+      if (requestId !== implOrgRequestRef.current || form.getFieldValue('change_system') !== systemCode) return;
+      if (result.implOrg) {
+        form.setFieldValue('impl_org', result.implOrg);
+        setImplOrgHint('已按对应开发任务的开发实施方自动填入，可手工调整');
+      } else if (result.reason === 'conflict') {
+        setImplOrgHint('对应开发任务存在多个开发实施方，请手工选择实施机构');
+      } else {
+        setImplOrgHint('未找到对应开发任务的开发实施方，请手工选择实施机构');
+      }
+    } catch {
+      if (requestId !== implOrgRequestRef.current || form.getFieldValue('change_system') !== systemCode) return;
+      setImplOrgHint('无法自动获取开发实施方，请手工选择实施机构');
+    }
+  };
+
   const onWorkItemsChange = (values) => {
     const reqCodes = values.filter((value) => value.startsWith('requirement:')).map((value) => value.slice('requirement:'.length));
     const ticketCodes = values.filter((value) => value.startsWith('ticket:')).map((value) => value.slice('ticket:'.length));
     setSelReqs(reqCodes);
     setSelTickets(ticketCodes);
+    loadImplementationOrgDefault(form.getFieldValue('change_system'), [...reqCodes, ...ticketCodes]);
     if (!readonly) setIsDirty(true);
   };
 
-  /** 选择变更系统后按系统所属机构返显实施机构（可再编辑） */
+  /** 选择变更系统后回填系统维护的部门字段，并在新增态加载开发实施方。 */
   const applySystem = (val) => {
     form.setFieldValue('change_system', val);
     const sys = sysMap[val];
-    if (sys?.org) form.setFieldValue('impl_org', sys.org);
     form.setFieldValue('out_dept', sys?.out_dept || null);
     form.setFieldValue('deploy_dept', sys?.deploy_dept || null);
+    loadImplementationOrgDefault(val);
+    if (!readonly) setIsDirty(true);
   };
 
-  /** 表单值变化：变更系统改变时返显实施机构，同时标记脏状态 */
+  /** 表单值变化：新增态变更系统时刷新开发实施方默认值，同时标记脏状态。 */
   const onValuesChange = (changed) => {
     if (!readonly) setIsDirty(true);
     if (Object.prototype.hasOwnProperty.call(changed, 'change_system')) {
       const sys = sysMap[changed.change_system];
-      if (sys?.org) form.setFieldValue('impl_org', sys.org);
       form.setFieldValue('out_dept', sys?.out_dept || null);
       form.setFieldValue('deploy_dept', sys?.deploy_dept || null);
+      loadImplementationOrgDefault(changed.change_system);
     }
     if (Object.prototype.hasOwnProperty.call(changed, 'release_point_id')) {
       if (changed.release_point_id) {
@@ -238,8 +275,11 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
 
   /** 移除一个已选需求/工单 */
   const removeRef = (code, type) => {
-    if (type === 'req') setSelReqs((p) => p.filter((x) => x !== code));
-    else setSelTickets((p) => p.filter((x) => x !== code));
+    const nextReqs = type === 'req' ? selReqs.filter((item) => item !== code) : selReqs;
+    const nextTickets = type === 'ticket' ? selTickets.filter((item) => item !== code) : selTickets;
+    setSelReqs(nextReqs);
+    setSelTickets(nextTickets);
+    loadImplementationOrgDefault(form.getFieldValue('change_system'), [...nextReqs, ...nextTickets]);
     if (!readonly) setIsDirty(true);
   };
 
@@ -401,7 +441,7 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
               )}
 
               {visible('impl_org') && (
-                <Form.Item name="impl_org" label="实施机构" rules={required.rules('impl_org', '实施机构', { action: '请选择' })} style={{ marginBottom: 8 }}>
+                <Form.Item name="impl_org" label="实施机构" extra={!isEdit ? implOrgHint || null : null} rules={required.rules('impl_org', '实施机构', { action: '请选择' })} style={{ marginBottom: 8 }}>
                   <DictSelect category="org" size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} />
                 </Form.Item>
               )}

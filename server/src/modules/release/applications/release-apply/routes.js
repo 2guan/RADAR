@@ -15,7 +15,7 @@ import { ok, notFound, badRequest, forbidden, parseJsonArray, parseJsonObject } 
 import {
   buildExtensionListFilter, defaultDictAttr,
 } from '../../../settings/process-configuration/index.js';
-import { getWorkItem } from '../../../development/index.js';
+import { getWorkItem, listDevelopmentImplementationOrgs } from '../../../development/index.js';
 import { isOrganizationRestricted, organizationMatches, workItemMatchesOrganization } from '../../../../shared/utils/organization-scope.js';
 import {
   appendStageExcelValues,
@@ -175,6 +175,21 @@ async function assertWorkItemReferencesOrganizationAccess(refCodes, user) {
 }
 
 export default async function releaseApplyRoutes(fastify) {
+  // 新增态默认值：实施机构必须来自对应开发任务，不以系统主数据所属机构猜测回退。
+  fastify.post('/release-apply/implementation-org-default', { preHandler: fastify.requirePerm('release_apply', 'create') }, async (request) => {
+    const body = request.body || {};
+    const refCodes = normalizeRefCodes(body.refCodes);
+    const systemCode = String(body.systemCode || '').trim();
+    if (!systemCode) throw badRequest('请选择变更系统');
+
+    await assertReleaseApplyOrganizationAccess({ change_system: systemCode }, request.currentUser);
+    await assertWorkItemReferencesOrganizationAccess(refCodes, request.currentUser);
+    const implementationOrgs = await listDevelopmentImplementationOrgs({ workItemCodes: refCodes, systemCode });
+    if (implementationOrgs.length === 1) return ok({ implOrg: implementationOrgs[0], reason: 'resolved' });
+    if (implementationOrgs.length > 1) return ok({ implOrg: null, reason: 'conflict' });
+    return ok({ implOrg: null, reason: 'no_match' });
+  });
+
   // 列表（默认按当前投产窗口过滤）
   fastify.post('/release-apply/list', { preHandler: fastify.requirePerm('release_apply', 'view') }, async (request) => {
     const body = request.body || {};
