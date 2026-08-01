@@ -13,7 +13,7 @@ import { exportXlsx, parseXlsx } from '../../../../platform/import-export/index.
 import { windowIds, inClause, resolveOrganizationValues } from '../../../settings/reference-data/index.js';
 import { ok, notFound, badRequest, forbidden, parseJsonArray, parseJsonObject } from '../../../../platform/runtime/index.js';
 import {
-  buildExtensionListFilter, statusTypeForReleaseApply, validateRequiredFields, defaultDictAttr,
+  buildExtensionListFilter, defaultDictAttr,
 } from '../../../settings/process-configuration/index.js';
 import { getWorkItem } from '../../../development/index.js';
 import { isOrganizationRestricted, organizationMatches, workItemMatchesOrganization } from '../../../../shared/utils/organization-scope.js';
@@ -277,11 +277,6 @@ export default async function releaseApplyRoutes(fastify) {
     await assertReleaseApplyOrganizationAccess({ change_system: body.change_system }, request.currentUser);
     await assertWorkItemReferencesOrganizationAccess(refCodes, request.currentUser);
     const reviewStatus = await deriveReviewStatus(refCodes, body.release_point_id ?? null);
-    await validateRequiredFields('release_apply', statusTypeForReleaseApply(reviewStatus), {
-      ...picked,
-      change_code: body.change_code || '__AUTO__',
-      ref_codes: refCodes,
-    });
     await validateStageContent('release_apply', { ...picked, ref_codes: refCodes, review_status: reviewStatus });
     const data = encodeField(picked);
 
@@ -340,11 +335,6 @@ export default async function releaseApplyRoutes(fastify) {
     await assertWorkItemReferencesOrganizationAccess(newRefs, request.currentUser);
     const nextReleasePointId = picked.release_point_id !== undefined ? picked.release_point_id : old.release_point_id;
     data.review_status = await deriveReviewStatus(newRefs, nextReleasePointId ?? null);
-    await validateRequiredFields('release_apply', statusTypeForReleaseApply(data.review_status), {
-      ...decode(old),
-      ...picked,
-      ref_codes: newRefs,
-    });
     await validateStageContent('release_apply', { ...decode(old), ...picked, ref_codes: newRefs, review_status: data.review_status });
 
     const keys = Object.keys(data);

@@ -207,7 +207,7 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
   const isEdit = !!reqId || !!code || mode === 'page';
   const readonly = isEdit ? !can('requirement', 'edit') : !can('requirement', 'create');
   const statusEditable = can('requirement', 'status.edit');
-  const required = useRequiredFields('requirement', getStatusType(statusValue), readonly);
+  const required = useRequiredFields('requirement', statusValue, readonly);
   const visible = (fieldKey) => required.isVisible(fieldKey);
   const initialStatus = useDefaultProcessStatus('需求', 'initial', '需求登记');
   // 已关联开发/测试任务时，需求编号锁定不可改
@@ -540,9 +540,9 @@ export default function RequirementEditor({ open, mode = 'modal', code, reqId, d
               </StageBuiltinField>}
           </StageBuiltinFields>
           {/* 交付件与扩展信息均由公共配置渲染，移动交付件布局后立即跟随生效。 */}
-          <StageContentPanel ref={extensionPanelRef} scopeKey="requirement" entityType="requirement" entityId={current?.id} readOnly={readonly} onDirtyChange={() => setIsDirty(true)} />
-          <StageContentPanel ref={extensionRightPanelRef} scopeKey="requirement" entityType="requirement" entityId={current?.id} readOnly={readonly} position="right" onDirtyChange={() => setIsDirty(true)} />
-          <StageContentPanel ref={extensionFullPanelRef} scopeKey="requirement" entityType="requirement" entityId={current?.id} readOnly={readonly} position="full" onDirtyChange={() => setIsDirty(true)} />
+          <StageContentPanel ref={extensionPanelRef} scopeKey="requirement" entityType="requirement" entityId={current?.id} readOnly={readonly} statusValue={statusValue} onDirtyChange={() => setIsDirty(true)} />
+          <StageContentPanel ref={extensionRightPanelRef} scopeKey="requirement" entityType="requirement" entityId={current?.id} readOnly={readonly} statusValue={statusValue} position="right" onDirtyChange={() => setIsDirty(true)} />
+          <StageContentPanel ref={extensionFullPanelRef} scopeKey="requirement" entityType="requirement" entityId={current?.id} readOnly={readonly} statusValue={statusValue} position="full" onDirtyChange={() => setIsDirty(true)} />
         </Row>
       </Form>
 

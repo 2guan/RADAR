@@ -206,7 +206,7 @@ export default function TicketEditor({ open, mode = 'modal', code, reqId, defaul
   const isEdit = !!reqId || !!code || mode === 'page';
   const readonly = isEdit ? !can('ticket', 'edit') : !can('ticket', 'create');
   const statusEditable = can('ticket', 'status.edit');
-  const required = useRequiredFields('ticket', getStatusType(statusValue), readonly);
+  const required = useRequiredFields('ticket', statusValue, readonly);
   const visible = (fieldKey) => required.isVisible(fieldKey);
   const initialStatus = useDefaultProcessStatus('工单', 'initial', '工单登记');
   // 已关联开发/测试任务时，工单编号锁定不可改
@@ -588,9 +588,9 @@ export default function TicketEditor({ open, mode = 'modal', code, reqId, defaul
                 </div>
               </StageBuiltinField>}
           </StageBuiltinFields>
-          <StageContentPanel ref={extensionPanelRef} scopeKey="ticket" entityType="ticket" entityId={current?.id} readOnly={readonly} onDirtyChange={() => setIsDirty(true)} />
-          <StageContentPanel ref={extensionRightPanelRef} scopeKey="ticket" entityType="ticket" entityId={current?.id} readOnly={readonly} position="right" onDirtyChange={() => setIsDirty(true)} />
-          <StageContentPanel ref={extensionFullPanelRef} scopeKey="ticket" entityType="ticket" entityId={current?.id} readOnly={readonly} position="full" onDirtyChange={() => setIsDirty(true)} />
+          <StageContentPanel ref={extensionPanelRef} scopeKey="ticket" entityType="ticket" entityId={current?.id} readOnly={readonly} statusValue={statusValue} onDirtyChange={() => setIsDirty(true)} />
+          <StageContentPanel ref={extensionRightPanelRef} scopeKey="ticket" entityType="ticket" entityId={current?.id} readOnly={readonly} statusValue={statusValue} position="right" onDirtyChange={() => setIsDirty(true)} />
+          <StageContentPanel ref={extensionFullPanelRef} scopeKey="ticket" entityType="ticket" entityId={current?.id} readOnly={readonly} statusValue={statusValue} position="full" onDirtyChange={() => setIsDirty(true)} />
         </Row>
       </Form>
 

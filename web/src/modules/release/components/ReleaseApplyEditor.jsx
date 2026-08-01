@@ -376,7 +376,7 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
             )}
 
             {/* 扩展信息作为左侧业务内容的延续显示，不单独占用整宽区域。 */}
-            <StageContentPanel ref={extensionPanelRef} scopeKey="release_apply" entityType="release_apply" entityId={current?.id} readOnly={readonly} onDirtyChange={() => setIsDirty(true)} />
+            <StageContentPanel ref={extensionPanelRef} scopeKey="release_apply" entityType="release_apply" entityId={current?.id} readOnly={readonly} statusValue={current?.review_status} onDirtyChange={() => setIsDirty(true)} />
           </Col>
 
           {/* ── 右栏：变更明细 ── */}
@@ -466,9 +466,9 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
               </Row>
             </div>
             )}
-            <StageContentPanel ref={extensionRightPanelRef} scopeKey="release_apply" entityType="release_apply" entityId={current?.id} readOnly={readonly} position="right" onDirtyChange={() => setIsDirty(true)} />
+            <StageContentPanel ref={extensionRightPanelRef} scopeKey="release_apply" entityType="release_apply" entityId={current?.id} readOnly={readonly} statusValue={current?.review_status} position="right" onDirtyChange={() => setIsDirty(true)} />
           </Col>
-          <StageContentPanel ref={extensionFullPanelRef} scopeKey="release_apply" entityType="release_apply" entityId={current?.id} readOnly={readonly} position="full" onDirtyChange={() => setIsDirty(true)} />
+          <StageContentPanel ref={extensionFullPanelRef} scopeKey="release_apply" entityType="release_apply" entityId={current?.id} readOnly={readonly} statusValue={current?.review_status} position="full" onDirtyChange={() => setIsDirty(true)} />
 
         {/* ── 交付制品（独立整宽模块，PC 端一组一行，可添加多组） ── */}
         {hasDeliveryUnitVisible && (

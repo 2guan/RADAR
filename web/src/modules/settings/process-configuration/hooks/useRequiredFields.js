@@ -1,100 +1,38 @@
 /**
  * 文件：web/src/modules/settings/process-configuration/hooks/useRequiredFields.js
- * 说明：遵循项目研发规约；跨模块能力仅可经公开契约访问。
- * 用途：读取并缓存字段必填配置，为表单生成统一校验规则。
+ * 说明：遵循项目研发规约；详情页的必填性只能来自流程输入项配置。
+ * 用途：兼容既有业务编辑器的 Hook 名称，同时将必填标记和表单规则统一映射到
+ * stage-content schema，避免旧 required.fields 配置与系统设置出现两套事实源。
  * 作者：hengguan
  */
 
-import { useEffect, useMemo, useState } from 'react';
-import { apiGet } from '../../../../platform/api.js';
-import { subscribeStageContentConfigUpdated } from '../api/stageContentDataCache.js';
+import { useMemo } from 'react';
+import { useStageFormConfig } from './useStageFormConfig.js';
 
-let cache = null;
-let pending = null;
-
-// 多个表单并发挂载时复用同一请求，避免重复读取检查内容配置。
-function stateKeyFromType(type) {
-  if (type === 'final') return 'final';
-  if (type === 'initial' || type === 'not-started') return 'initial';
-  return 'inProgress';
+function resolveScopeKey(moduleKey, scopeKey) {
+  if (moduleKey !== 'test' || !scopeKey) return moduleKey;
+  return String(scopeKey).startsWith('test.') ? scopeKey : `test.${scopeKey}`;
 }
 
-function loadRequiredFields() {
-  if (cache) return Promise.resolve(cache);
-  if (!pending) {
-    pending = apiGet('/settings/required-fields')
-      .then((res) => {
-        cache = res;
-        return res;
-      })
-      .finally(() => { pending = null; });
-  }
-  return pending;
-}
-
-export function resetRequiredFieldsCache() {
-  cache = null;
-}
-
-function moduleConfigKey(moduleKey, scopeKey) {
-  if (moduleKey === 'test' && scopeKey) return `test.${scopeKey}`;
-  return moduleKey;
-}
-
-function moduleMeta(payload, moduleKey, scopeKey) {
-  const key = moduleConfigKey(moduleKey, scopeKey);
-  return payload?.modules?.find((mod) => mod.key === key)
-    || payload?.modules?.find((mod) => mod.key === moduleKey);
-}
-
-function cellVisible(cell, stateKey) {
-  if (typeof cell?.visible === 'boolean') return cell.visible;
-  return cell?.visible?.[stateKey] !== false;
-}
-
-function cellRequired(cell, stateKey) {
-  if (!cellVisible(cell, stateKey)) return false;
-  if (cell?.required) return !!cell.required[stateKey];
-  return !!cell?.[stateKey];
-}
-
-export function useRequiredFields(moduleKey, statusType, readonly, scopeKey) {
-  const [payload, setPayload] = useState(cache);
-
-  useEffect(() => {
-    let alive = true;
-    const load = () => loadRequiredFields().then((res) => { if (alive) setPayload(res); }).catch(() => {});
-    load();
-    // 投产申请、投产审批等业务适配器以该 Hook 决定展示；配置保存后必须失效旧快照。
-    const scope = moduleConfigKey(moduleKey, scopeKey);
-    const unsubscribe = subscribeStageContentConfigUpdated(scope, () => {
-      cache = null;
-      load();
-    });
-    return () => { alive = false; unsubscribe(); };
-  }, [moduleKey, scopeKey]);
-
-  const stateKey = stateKeyFromType(statusType);
+/**
+ * @param {string} moduleKey 兼容既有调用方的模块键。
+ * @param {string} statusValue 当前真实状态值，而非粗粒度状态类型。
+ */
+export function useRequiredFields(moduleKey, statusValue, readonly, scopeKey) {
+  const resolvedScopeKey = resolveScopeKey(moduleKey, scopeKey);
+  const formConfig = useStageFormConfig(resolvedScopeKey, statusValue, readonly);
 
   return useMemo(() => {
-    // 先按测试子类型选择配置，再回退模块级配置以兼容历史数据。
-    const configKey = moduleConfigKey(moduleKey, scopeKey);
-    const moduleConfig = payload?.config?.[configKey] || payload?.config?.[moduleKey] || {};
-    const meta = moduleMeta(payload, moduleKey, scopeKey);
-    const attachmentFields = meta?.attachmentFields || [];
-    const isVisible = (fieldKey) => cellVisible(moduleConfig[fieldKey], stateKey);
-    const isRequired = (fieldKey) => !readonly && cellRequired(moduleConfig[fieldKey], stateKey);
-    const attachmentMode = (fieldKey) => moduleConfig[`attachment:${fieldKey}`]?.mode?.[stateKey] || 'both';
-    const rules = (fieldKey, label, options = {}) => {
-      if (!isRequired(fieldKey)) return options.extraRules || [];
-      const requiredRule = {
-        required: true,
-        message: options.message || `${options.action || '请填写'}${label}`,
-      };
-      if (options.type) requiredRule.type = options.type;
-      if (options.min !== undefined) requiredRule.min = options.min;
-      return [requiredRule, ...(options.extraRules || [])];
+    const attachmentFields = (formConfig.schema?.deliverables || [])
+      .filter((item) => item.visible)
+      .map((item) => item.label);
+    const attachmentMode = (fieldKey) => {
+      const item = (formConfig.schema?.deliverables || []).find((candidate) => candidate.label === fieldKey);
+      return item?.input_mode || 'both';
     };
-    return { isVisible, isRequired, attachmentMode, rules, stateKey, attachmentFields };
-  }, [moduleKey, payload, readonly, scopeKey, stateKey]);
+    return { ...formConfig, attachmentFields, attachmentMode };
+  }, [formConfig]);
 }
+
+// 旧调用方可能在保存配置后显式调用该函数；schema 缓存由配置更新事件统一失效，保留空实现以兼容。
+export function resetRequiredFieldsCache() {}

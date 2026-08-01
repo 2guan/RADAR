@@ -228,7 +228,7 @@ function DetailCard({ status, code, title, onEdit, lg, children }) {
 /** 需求/工单详情卡片（完整字段） */
 function ReqDetailCard({ req, entityType = 'requirement', onEdit }) {
   const isTicket = entityType === 'ticket';
-  const required = useRequiredFields('requirement', getStatusType(req.status), true);
+  const required = useRequiredFields('requirement', req.status, true);
   const attachFields = required.attachmentFields.filter((f) => required.isVisible(`attachment:${f}`));
   return (
     <DetailCard status={req.status} code={req.req_code} title={req.title} onEdit={onEdit} lg>
@@ -295,7 +295,7 @@ function ReqDetailCard({ req, entityType = 'requirement', onEdit }) {
 /** 开发 / 测试任务卡片（支持折叠/展开） */
 function TaskDetailCard({ t, moduleKey, scopeKey, onEdit }) {
   const [expanded, setExpanded] = useState(false);
-  const required = useRequiredFields(moduleKey, getStatusType(t.status), true, scopeKey || t.test_type);
+  const required = useRequiredFields(moduleKey, t.status, true, scopeKey || t.test_type);
   const attachFields = required.attachmentFields.filter((f) => required.isVisible(`attachment:${f}`));
 
   return (

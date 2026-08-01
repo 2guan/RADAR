@@ -48,7 +48,7 @@ function sameTargets(left, right) {
  * 扩展输入项独立保存，避免侵入各业务主表保存逻辑；交付件复用统一附件组件。
  * 内置字段和业务组件仍由原业务编辑器渲染，以保持既有专业交互与布局。
  */
-const StageContentPanel = forwardRef(function StageContentPanel({ scopeKey, entityId, readOnly, entityType, position = 'left', showDeliverables = true, showBuiltinDeliverables = true, renderDeliverableAction, onDirtyChange }, ref) {
+const StageContentPanel = forwardRef(function StageContentPanel({ scopeKey, entityId, readOnly, entityType, statusValue, position = 'left', showDeliverables = true, showBuiltinDeliverables = true, renderDeliverableAction, onDirtyChange }, ref) {
   const { message } = App.useApp();
   const [schema, setSchema] = useState(null);
   const [values, setValues] = useState({});
@@ -74,6 +74,10 @@ const StageContentPanel = forwardRef(function StageContentPanel({ scopeKey, enti
     return subscribeStageContentConfigUpdated(scopeKey, refresh);
   }, [scopeKey, entityId]);
   const fields = useMemo(() => (schema?.fields || []).filter((field) => field.field_kind === 'extension' && field.visible), [schema]);
+  const statusId = useMemo(() => (schema?.statuses || []).find((status) => (
+    status.value === statusValue || status.label === statusValue
+  ))?.id, [schema, statusValue]);
+  const isRequired = (item) => !readOnly && !!statusId && !!item?.rules?.[statusId];
   useLayoutEffect(() => {
     const updateTargets = () => {
       const next = {};
@@ -148,7 +152,7 @@ const StageContentPanel = forwardRef(function StageContentPanel({ scopeKey, enti
   return <Form component={false} layout="vertical" requiredMark={false} className={`editor-form stage-content-panel stage-content-panel-${position} stage-content-panel-scope-${String(scopeKey || '').replace(/[^a-zA-Z0-9_-]/g, '-')}`}>
     {builtinExtensionFields.map(({ field, target }) => createPortal(
       <div className={`stage-builtin-field${field.column_span === 24 ? ' stage-builtin-field-full' : ''}`} style={{ order: Number(field.sort || 0) }}>
-        <Form.Item label={field.label} style={{ marginBottom: 8 }}>
+          <Form.Item label={field.label} required={isRequired(field)} style={{ marginBottom: 8 }}>
           <DynamicInput field={field} value={values[field.field_key]} disabled={readOnly || !entityId} onChange={(value) => {
             setValues((old) => ({ ...old, [field.field_key]: value }));
             changedKeysRef.current.add(field.field_key);
@@ -173,7 +177,7 @@ const StageContentPanel = forwardRef(function StageContentPanel({ scopeKey, enti
         {section?.show_title !== 0 && <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>{section?.title || '扩展信息'}</div>}
         {!section?.collapsed && <><Row gutter={[12, 8]}>
           {sectionFields.map((field) => <Col key={field.id} span={field.column_span === 24 ? 24 : 12} xs={24}>
-            <Form.Item label={field.label} style={{ marginBottom: 8 }}>
+            <Form.Item label={field.label} required={isRequired(field)} style={{ marginBottom: 8 }}>
               <DynamicInput field={field} value={values[field.field_key]} disabled={readOnly || !entityId} onChange={(value) => {
                 setValues((old) => ({ ...old, [field.field_key]: value }));
                 changedKeysRef.current.add(field.field_key);
@@ -194,7 +198,7 @@ const StageContentPanel = forwardRef(function StageContentPanel({ scopeKey, enti
       {deliverableSection?.show_title !== 0 && <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>{deliverableSection?.title || '交付件'}</div>}
       {!deliverableSection?.collapsed && deliverables.map((item) => <div key={item.id} style={{ padding: '8px 0', borderBottom: '1px solid var(--radar-border-light)' }}>
         <div className="form-section-title" style={{ margin: '0 0 6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-          <span>{item.label}</span>
+          <span>{item.label}{isRequired(item) && <span aria-label="必填" style={{ color: '#ff4d4f', marginLeft: 2 }}>*</span>}</span>
           <Space size={2}>
             {item.template?.template_mode === 'upload' && <Tooltip title="下载模板"><Button type="text" size="small" icon={<DownloadOutlined style={{ fontSize: 12 }} />} onClick={() => downloadTemplate(item)} aria-label={`下载${item.label}模板`} /></Tooltip>}
             {renderDeliverableAction?.(item)}

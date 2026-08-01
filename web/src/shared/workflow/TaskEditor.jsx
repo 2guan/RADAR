@@ -56,7 +56,7 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
   const permissionModule = kind === 'test' && current?.test_type ? `test.${current.test_type}` : cfg.entity;
   const readonly = !can(permissionModule, 'edit');
   const statusEditable = can(permissionModule, 'status.edit');
-  const required = useRequiredFields(cfg.entity, getStatusType(statusValue), readonly, kind === 'test' ? current?.test_type : undefined);
+  const required = useRequiredFields(cfg.entity, statusValue, readonly, kind === 'test' ? current?.test_type : undefined);
   const visible = (fieldKey) => required.isVisible(fieldKey);
   const linkStyle = { color: 'var(--radar-primary)', cursor: 'pointer' };
   const workItemLabel = current?.entity_label || (current?.entity_type === 'ticket' ? '工单' : (current?.entity_type === 'requirement' ? '需求' : '需求/工单'));
@@ -332,9 +332,9 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
             </StageBuiltinField>}
           </StageBuiltinFields>
           {/* 公共扩展信息仍由配置渲染，且作为布局 Row 的直接子项参与分区排序。 */}
-          <StageContentPanel ref={extensionPanelRef} scopeKey={kind === 'test' ? `test.${current?.test_type || cfg.testType || 'SIT'}` : 'dev'} entityType={cfg.entity} entityId={current?.id} readOnly={readonly} renderDeliverableAction={renderDeliverableAction} onDirtyChange={() => setIsDirty(true)} />
-          <StageContentPanel ref={extensionRightPanelRef} scopeKey={kind === 'test' ? `test.${current?.test_type || cfg.testType || 'SIT'}` : 'dev'} entityType={cfg.entity} entityId={current?.id} readOnly={readonly} position="right" renderDeliverableAction={renderDeliverableAction} onDirtyChange={() => setIsDirty(true)} />
-          <StageContentPanel ref={extensionFullPanelRef} scopeKey={kind === 'test' ? `test.${current?.test_type || cfg.testType || 'SIT'}` : 'dev'} entityType={cfg.entity} entityId={current?.id} readOnly={readonly} position="full" renderDeliverableAction={renderDeliverableAction} onDirtyChange={() => setIsDirty(true)} />
+          <StageContentPanel ref={extensionPanelRef} scopeKey={kind === 'test' ? `test.${current?.test_type || cfg.testType || 'SIT'}` : 'dev'} entityType={cfg.entity} entityId={current?.id} readOnly={readonly} statusValue={statusValue} renderDeliverableAction={renderDeliverableAction} onDirtyChange={() => setIsDirty(true)} />
+          <StageContentPanel ref={extensionRightPanelRef} scopeKey={kind === 'test' ? `test.${current?.test_type || cfg.testType || 'SIT'}` : 'dev'} entityType={cfg.entity} entityId={current?.id} readOnly={readonly} statusValue={statusValue} position="right" renderDeliverableAction={renderDeliverableAction} onDirtyChange={() => setIsDirty(true)} />
+          <StageContentPanel ref={extensionFullPanelRef} scopeKey={kind === 'test' ? `test.${current?.test_type || cfg.testType || 'SIT'}` : 'dev'} entityType={cfg.entity} entityId={current?.id} readOnly={readonly} statusValue={statusValue} position="full" renderDeliverableAction={renderDeliverableAction} onDirtyChange={() => setIsDirty(true)} />
         </Row>
       </Form>
 

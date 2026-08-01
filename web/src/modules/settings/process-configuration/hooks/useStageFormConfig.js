@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { invalidateStageContentData, loadStageContentSchema } from '../api/stageContentDataCache.js';
+import { invalidateStageContentData, loadStageContentSchema, subscribeStageContentConfigUpdated } from '../api/stageContentDataCache.js';
 
 /** 根据当前状态值匹配参数配置中的真实状态 ID，规则始终绑定状态 ID。 */
 function activeStatusId(statuses, statusValue) {
@@ -28,10 +28,10 @@ export function useStageFormConfig(scopeKey, statusValue, readOnly = false) {
       invalidateStageContentData(scopeKey);
       load().catch(() => {});
     };
-    window.addEventListener('stage-content-config-updated', refresh);
+    const unsubscribe = subscribeStageContentConfigUpdated(scopeKey, refresh);
     return () => {
       alive = false;
-      window.removeEventListener('stage-content-config-updated', refresh);
+      unsubscribe();
     };
   }, [scopeKey]);
 
