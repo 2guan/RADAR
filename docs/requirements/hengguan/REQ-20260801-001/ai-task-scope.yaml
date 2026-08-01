@@ -1,0 +1,170 @@
+requirement:
+  id: REQ-20260801-001
+  ref: hengguan/REQ-20260801-001
+  title: 开发测试承接确认系统角色与实施方
+  status: ready
+assignment:
+  developer: hengguan
+  module: development
+  module_owner: hengguan
+  branch: hengguan/REQ-20260801-001-intake-system-roles
+  base_branch: origin/main
+  worktree: /Volumes/GuanMac/Code/RADAR
+scope:
+  writable_paths:
+    - docs/requirements/hengguan/REQ-20260801-001/**
+    - server/src/modules/development/api/routes.js
+    - server/src/modules/development/application/**
+    - server/src/modules/development/index.js
+    - server/src/modules/testing/api/routes.js
+    - server/src/modules/requirements/index.js
+    - server/src/modules/requirements/application/development-system-roles.js
+    - server/src/modules/tickets/index.js
+    - server/src/modules/tickets/application/development-system-roles.js
+    - server/src/modules/settings/reference-data/application/resolver.js
+    - server/src/modules/settings/reference-data/application/development-intake-overrides.js
+    - server/src/modules/settings/reference-data/index.js
+    - server/src/modules/settings/api/settings-routes.js
+    - server/src/bootstrap/seed.js
+    - web/src/modules/development/pages/DevTasksPage.jsx
+    - web/src/modules/testing/pages/TestTasksPage.jsx
+    - web/src/modules/settings/components/AppConfigForm.jsx
+    - web/src/modules/settings/pages/SettingsPage.jsx
+    - server/test/api-rbac.test.js
+  read_only_paths:
+    - AGENTS.md
+    - DESIGN.md
+    - governance/modules.yaml
+    - docs/governance/**
+    - docs/architecture/**
+    - .agents/skills/radar-delivery-engineer/**
+    - server/src/platform/**
+    - server/src/modules/identity-access/**
+    - server/src/modules/requirements/**
+    - server/src/modules/tickets/**
+    - web/src/platform/**
+    - web/src/shared/**
+  forbidden_paths:
+    - server/src/platform/auth/**
+    - server/src/platform/persistence/**
+    - server/src/platform/audit/**
+    - server/migrations/**
+    - server/scripts/mock-data.js
+    - .github/**
+    - docs/reports/**
+impact_analysis:
+  affected_modules:
+    - module: development
+      owner: hengguan
+      change: 开发承接确认角色编辑、按本行系统预填实施方、来源角色编排和 API 校验。
+      direct_write_reason: 登记主模块拥有 dev_task 并编排开发承接。
+    - module: testing
+      owner: hengguan
+      change: 测试承接确认按主责系统预填实施方和 API 校验。
+      direct_write_reason: testing 拥有 test_task。
+    - module: requirements
+      owner: hengguan
+      change: 新增来源需求开发系统角色替换公开契约与审计。
+      direct_write_reason: requirements 独占 requirement 表写入权。
+    - module: tickets
+      owner: hengguan
+      change: 新增来源工单开发系统角色替换公开契约与审计。
+      direct_write_reason: tickets 独占 ticket 表写入权。
+    - module: settings
+      owner: hengguan
+      change: 新增已存在机构字典解析、开发承接临时预填名单读取/规范化公开契约，以及系统设置维护入口、默认种子和缺失机构字典项。
+      direct_write_reason: settings 独占机构参考数据、app_config、配置维护入口及其公开契约。
+  dependencies:
+    - development -> requirements/index.js public role replacement contract
+    - development -> tickets/index.js public role replacement contract
+    - development/testing -> settings/reference-data public organization validation contract
+    - development -> settings/reference-data public development intake override configuration contract
+  public_capability_change:
+    applicable: true
+    target_modules:
+      - requirements
+      - tickets
+      - development
+      - settings
+    change: 需求与工单分别提供替换开发主责/协同系统的语义化公开契约；settings 提供临时开发实施方预填名单的语义化读取/规范化契约；开发承接 API 兼容扩展请求 DTO。
+    compatibility: 既有读取契约和 HTTP 响应保持不变；新请求字段只在承接提交时必填，旧调用缺少字段将得到明确校验错误。
+    owner_approval: hengguan（requirements、tickets、development、testing、settings Owner）
+configuration_and_deliverables:
+  input_configuration:
+    applicable: false
+    reason: 不新增字段或流程配置；只在承接确认弹窗使用既有 impl_org。
+  field_four_positions:
+    applicable: false
+    reason: impl_org 既有四位置不变；本需求仅修改其承接创建值来源。
+  deliverable_configuration:
+    applicable: false
+    reason: 不涉及交付件。
+  seed_and_mock:
+    applicable: true
+    key: development.intake.implementation_org_override_orgs
+    default: '["开发一部","开发二部","开发三部"]'
+    existing_environment: 提高种子版本后仅插入缺失 app_config 和机构字典项，不覆盖管理员已维护的名单或字典项。
+data_and_security:
+  database:
+    applicable: true
+    reason: 无 schema 或历史补数；通过既有 app_config 和 dict_item 幂等补齐默认值，历史任务不改写。
+  permissions_and_audit:
+    applicable: true
+    controls:
+      - 承接接口继续执行 dev.create 或对应测试 create、工作项机构范围和实体校验。
+      - 服务端校验角色集合、唯一主责、活跃负责人和机构参考数据。
+      - 开发任务/测试任务创建与需求/工单来源角色更新均写现有审计；失败事务不得残留写入。
+  attachments:
+    applicable: false
+    reason: 不处理附件。
+  external_access:
+    applicable: false
+    reason: 不新增外网能力。
+  confidential_information: false
+  internet_ai_coding_allowed: true
+acceptance_and_tests:
+  - id: AC-001
+    evidence: server/test/api-rbac.test.js；开发承接角色更换后来源需求/工单值与任务一致。
+  - id: AC-002
+    evidence: server/test/api-rbac.test.js；零/多主责、重复/漏传/伪造系统拒绝且事务回滚。
+  - id: AC-003
+    evidence: server/test/api-rbac.test.js；开发预览返回本行系统所属机构、测试预览返回主责系统所属机构，实施方精确写入、空/非法值拒绝。
+  - id: AC-004
+    evidence: 现有及新增 API 权限/机构范围测试命中预览和提交。
+  - id: AC-005
+    evidence: web lint/build 与浏览器桌面/窄屏人工验收记录。
+  - id: AC-006
+    evidence: server/test/api-rbac.test.js；名单内来源实施机构覆盖所有开发系统默认值，名单外或空名单恢复逐系统默认，测试承接保持不变。
+  - id: AC-007
+    evidence: server/test/api-rbac.test.js；保存非数组 JSON、未知机构和超量名单被拒绝，无 settings.edit 权限为 403。
+verification:
+  required_commands:
+    - npm run lint
+    - npm run build
+    - npm test -- --runInBand
+    - git diff --check
+  browser_acceptance:
+    required: true
+    scenarios:
+    - 开发承接桌面确认行中实施方位于负责人前，且默认本行系统所属机构。
+    - 在系统设置配置临时名单后，名单内来源的开发承接所有系统预填来源实施机构；清空名单后恢复逐系统预填。
+    - 测试承接桌面确认行中实施方位于负责人前，且默认主责系统所属机构。
+    - 窄屏确认弹窗字段无裁切且可操作。
+delivery:
+  commit_message: "feat(intake): 确认系统角色与实施方"
+  pr_required: true
+  pr_title: "[hengguan/REQ-20260801-001] 开发测试承接确认系统角色与实施方"
+  rollback:
+    - 回退应用代码即可停止新承接写入；既有字段兼容旧代码。
+    - 已成功承接的来源角色和任务实施方按既有详情编辑权限人工恢复，并以审计记录核对。
+completion_record:
+  status: implemented_pending_user_browser_acceptance
+  modified_files:
+    - 开发/测试承接 API 与页面、需求/工单角色替换公开契约、settings 配置契约/路由/页面、种子和 API 回归测试。
+  tests:
+    - npm test --prefix server（32 通过，1 个 opt-in API 用例跳过）
+    - npm run test:api --prefix server（23 通过）
+    - npm run test:rbac --prefix server（23 通过）
+    - npm run build --prefix web、运行时验证、代码注释、UI 数据源、模块边界、治理、迁移、依赖审计基线和许可证检查均通过。
+  risks:
+    - 临时名单只影响后续开发承接预填；用户需完成桌面与窄屏真实浏览器验收。

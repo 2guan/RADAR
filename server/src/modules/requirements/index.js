@@ -12,6 +12,7 @@ import { REQUIREMENT_WORK_ITEM_TYPE } from './contracts/work-item.js';
 export {
   claimRequirementCode, generateRequirementCode, previewRequirementCode, requirementCodeRequiresReleasePoint,
 } from './application/numbering.js';
+export { replaceRequirementDevelopmentSystemRoles } from './application/development-system-roles.js';
 
 /** Public read contract. Other modules must not query the requirement table directly. */
 export async function findRequirementWorkItem(workItemCode) {

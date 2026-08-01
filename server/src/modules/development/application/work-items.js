@@ -6,9 +6,11 @@
  */
 import {
   findRequirementWorkItem, requirementCodesInReleasePoints, requirementReleaseDates,
+  replaceRequirementDevelopmentSystemRoles,
 } from '../../requirements/index.js';
 import {
   findTicketWorkItem, ticketCodesInReleasePoints, ticketReleaseDates,
+  replaceTicketDevelopmentSystemRoles,
 } from '../../tickets/index.js';
 import { parseJsonArray } from '../../../platform/runtime/index.js';
 
@@ -30,6 +32,19 @@ function decode(row) {
 
 export async function getWorkItem(workItemCode) {
   return decode(await findRequirementWorkItem(workItemCode)) || decode(await findTicketWorkItem(workItemCode));
+}
+
+/** Public orchestration contract: source modules retain their own table write ownership. */
+export async function replaceWorkItemDevelopmentSystemRoles({ workItemCode, mainSystem, collabSystems, actor }) {
+  const requirement = await findRequirementWorkItem(workItemCode);
+  if (requirement) {
+    return replaceRequirementDevelopmentSystemRoles({ workItemCode, mainSystem, collabSystems, actor });
+  }
+  const ticket = await findTicketWorkItem(workItemCode);
+  if (ticket) {
+    return replaceTicketDevelopmentSystemRoles({ workItemCode, mainSystem, collabSystems, actor });
+  }
+  return null;
 }
 
 export async function workItemCodesInReleasePoints(ids) {

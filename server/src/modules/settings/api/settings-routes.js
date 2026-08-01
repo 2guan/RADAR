@@ -14,7 +14,11 @@ import {
   normalizeRequiredFieldConfig,
   requiredFieldCatalogPayload,
 } from '../process-configuration/index.js';
-import { validateCodeRuleTemplate } from '../reference-data/index.js';
+import {
+  DEVELOPMENT_INTAKE_IMPLEMENTATION_ORG_OVERRIDE_CONFIG_KEY,
+  normalizeDevelopmentIntakeImplementationOrgOverrideOrgs,
+  validateCodeRuleTemplate,
+} from '../reference-data/index.js';
 
 // 允许写入的配置键白名单
 const WRITABLE_KEYS = new Set([
@@ -22,6 +26,7 @@ const WRITABLE_KEYS = new Set([
   'code.requirement', 'code.ticket', 'code.dev', 'code.test.SIT', 'code.test.UAT', 'code.test.NFT', 'code.test.SEC',
   'code.release_apply',
   'release.signoffRoles', 'appearance.preset',
+  DEVELOPMENT_INTAKE_IMPLEMENTATION_ORG_OVERRIDE_CONFIG_KEY,
   REQUIRED_FIELDS_CONFIG_KEY,
   'security.password.complexity', 'security.password.minLength', 'security.password.expireDays',
   'security.lockout.enabled', 'security.lockout.maxAttempts', 'security.lockout.durationMinutes',
@@ -123,7 +128,11 @@ export default async function settingsRoutes(fastify) {
 
   // 批量保存配置
   fastify.put('/settings/app-config', { preHandler: fastify.requirePerm('settings', 'edit') }, async (request) => {
-    const items = request.body?.items || {};
+    const items = { ...(request.body?.items || {}) };
+    if (Object.hasOwn(items, DEVELOPMENT_INTAKE_IMPLEMENTATION_ORG_OVERRIDE_CONFIG_KEY)) {
+      items[DEVELOPMENT_INTAKE_IMPLEMENTATION_ORG_OVERRIDE_CONFIG_KEY]
+        = await normalizeDevelopmentIntakeImplementationOrgOverrideOrgs(items[DEVELOPMENT_INTAKE_IMPLEMENTATION_ORG_OVERRIDE_CONFIG_KEY]);
+    }
     validateIssueSyncSettings(items);
     for (const [key, value] of Object.entries(items)) {
       const error = validateCodeRuleTemplate(key, value);

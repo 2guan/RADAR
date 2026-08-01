@@ -35,6 +35,7 @@ export default function DevTasks() {
   const [previewList, setPreviewList] = useState([]);
   const [selectedNewSystems, setSelectedNewSystems] = useState([]);
   const [selectedOwners, setSelectedOwners] = useState({});
+  const [selectedImplOrgs, setSelectedImplOrgs] = useState({});
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [saving, setSaving] = useState(false);
   const [reqColWidths, setReqColWidths] = useState({});
@@ -128,6 +129,7 @@ export default function DevTasks() {
     setPreviewList([]);
     setSelectedNewSystems([]);
     setSelectedOwners({});
+    setSelectedImplOrgs({});
     setIntakeOpen(true);
   };
 
@@ -147,6 +149,9 @@ export default function DevTasks() {
           .map((t) => t.sysCode);
         setSelectedNewSystems(checkable);
         setSelectedOwners({});
+        setSelectedImplOrgs(Object.fromEntries((res || [])
+          .filter((t) => !t.exists && t.defaultImplOrg)
+          .map((t) => [t.sysCode, t.defaultImplOrg])));
       } catch (err) {
         message.error(err.message || '加载预览失败');
       } finally {
@@ -156,6 +161,7 @@ export default function DevTasks() {
       setPreviewList([]);
       setSelectedNewSystems([]);
       setSelectedOwners({});
+      setSelectedImplOrgs({});
     }
   };
 
@@ -176,11 +182,22 @@ export default function DevTasks() {
       message.warning('请为每个勾选的开发任务选择开发负责人');
       return;
     }
+    if (selectedNewSystems.some((sysCode) => !selectedImplOrgs[sysCode])) {
+      message.warning('请为每个勾选的开发任务选择开发实施方');
+      return;
+    }
+    if (previewList.filter((item) => item.role === '主责').length !== 1) {
+      message.warning('开发系统角色必须且只能选择一个主责系统');
+      return;
+    }
     setSaving(true);
     try {
       const res = await apiPost('/dev-tasks/intake', {
         reqCode: selectedReq.req_code,
-        assignments: selectedNewSystems.map((sysCode) => ({ sysCode, owner: selectedOwners[sysCode] })),
+        systemRoles: previewList.map((item) => ({ sysCode: item.sysCode, role: item.role })),
+        assignments: selectedNewSystems.map((sysCode) => ({
+          sysCode, owner: selectedOwners[sysCode], implOrg: selectedImplOrgs[sysCode],
+        })),
       });
       message.success(`已成功承接 ${res.length} 个开发任务`);
       setIntakeOpen(false);
@@ -190,6 +207,13 @@ export default function DevTasks() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const updateSystemRole = (sysCode, role) => {
+    setPreviewList((current) => current.map((item) => {
+      if (role === '主责') return { ...item, role: item.sysCode === sysCode ? '主责' : '协同' };
+      return item.sysCode === sysCode ? { ...item, role } : item;
+    }));
   };
 
   const columns = [
@@ -320,17 +344,17 @@ export default function DevTasks() {
       title: '角色',
       dataIndex: 'role',
       key: 'role',
-      width: 80,
+      width: 108,
       align: 'center',
-      render: (val) => (
-        <Tag className="status-tag" style={{
-          borderColor: val === '主责' ? 'var(--radar-primary)' : 'var(--radar-accent)',
-          color: val === '主责' ? 'var(--radar-primary)' : 'var(--radar-accent)',
-          background: val === '主责' ? 'var(--radar-primary-soft)' : 'var(--radar-accent-soft)',
-          margin: 0
-        }}>
-          {val}
-        </Tag>
+      render: (val, record) => (
+        <Select
+          value={val}
+          options={[{ value: '主责', label: '主责' }, { value: '协同', label: '协同' }]}
+          size="small"
+          style={{ width: '100%' }}
+          onClick={(event) => event.stopPropagation()}
+          onChange={(role) => updateSystemRole(record.sysCode, role)}
+        />
       ),
     },
     {
@@ -348,6 +372,22 @@ export default function DevTasks() {
       dataIndex: 'taskName',
       key: 'taskName',
       ellipsis: true,
+    },
+    {
+      title: '开发实施方', key: 'impl_org', width: 170,
+      render: (_, record) => record.exists ? <span>—</span> : (
+        <Select
+          value={selectedImplOrgs[record.sysCode]}
+          options={orgOptions}
+          placeholder="选择开发实施方"
+          size="small"
+          showSearch
+          optionFilterProp="label"
+          style={{ width: '100%' }}
+          onClick={(event) => event.stopPropagation()}
+          onChange={(implOrg) => setSelectedImplOrgs((current) => ({ ...current, [record.sysCode]: implOrg }))}
+        />
+      ),
     },
     {
       title: '开发负责人', key: 'intake_owner', width: 180,
@@ -458,7 +498,7 @@ export default function DevTasks() {
       <Modal
         open={intakeOpen}
         title="开发承接"
-        width={920}
+        width={isMobile ? 'calc(100vw - 24px)' : 1180}
         onCancel={() => setIntakeOpen(false)}
         onOk={doIntake}
         confirmLoading={saving}
@@ -591,25 +631,33 @@ export default function DevTasks() {
                                 {item.status}
                               </Tag>
                             </Space>
-                            <div style={{ fontSize: 11, color: 'var(--radar-text-secondary)', marginTop: 4 }}>
-                              角色：
-                              <Tag className="status-tag" style={{
-                                borderColor: item.role === '主责' ? 'var(--radar-primary)' : 'var(--radar-accent)',
-                                color: item.role === '主责' ? 'var(--radar-primary)' : 'var(--radar-accent)',
-                                background: item.role === '主责' ? 'var(--radar-primary-soft)' : 'var(--radar-accent-soft)',
-                                margin: 0,
-                                fontSize: 10,
-                                lineHeight: '14px'
-                              }}>
-                                {item.role}
-                              </Tag>
-                            </div>
+                            <Select
+                              value={item.role}
+                              options={[{ value: '主责', label: '主责' }, { value: '协同', label: '协同' }]}
+                              size="small"
+                              style={{ width: '100%' }}
+                              onClick={(event) => event.stopPropagation()}
+                              onChange={(role) => updateSystemRole(item.sysCode, role)}
+                            />
                             <div style={{ fontSize: 11, color: 'var(--radar-text-secondary)' }}>
                               计划生成任务编号：<span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace' }}>{item.taskCode}</span>
                             </div>
                             <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--radar-ink)' }}>
                               任务名称：{item.taskName}
                             </div>
+                            {!item.exists && (
+                              <Select
+                                value={selectedImplOrgs[item.sysCode]}
+                                options={orgOptions}
+                                placeholder="选择开发实施方（必填）"
+                                size="small"
+                                showSearch
+                                optionFilterProp="label"
+                                style={{ width: '100%' }}
+                                onClick={(event) => event.stopPropagation()}
+                                onChange={(implOrg) => setSelectedImplOrgs((current) => ({ ...current, [item.sysCode]: implOrg }))}
+                              />
+                            )}
                             <Select
                               value={selectedOwners[item.sysCode]}
                               options={userOptions}

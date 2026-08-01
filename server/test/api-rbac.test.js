@@ -220,13 +220,17 @@ if (!process.env.RADAR_RUN_API_TESTS) {
     const preview = await app.inject({ method: 'POST', url: '/api/dev-tasks/intake-preview', headers: mappedHeaders, payload: { reqCode: 'ORG-SCOPE-REQ-XM-MANUAL' } });
     assert.equal(preview.statusCode, 200);
     assert.ok(preview.json().data.some((item) => item.sysCode === 'ORG-SCOPE-XM-EXTERNAL'));
+    assert.equal(preview.json().data.find((item) => item.sysCode === 'ORG-SCOPE-XM-EXTERNAL').defaultImplOrg, '成都事业群');
     const intake = await app.inject({ method: 'POST', url: '/api/dev-tasks/intake', headers: mappedHeaders, payload: {
-      reqCode: 'ORG-SCOPE-REQ-XM-MANUAL', assignments: [{ sysCode: 'ORG-SCOPE-XM-EXTERNAL', owner: '厦门显示值用户' }],
+      reqCode: 'ORG-SCOPE-REQ-XM-MANUAL',
+      systemRoles: [{ sysCode: 'ORG-SCOPE-XM-EXTERNAL', role: '主责' }],
+      assignments: [{ sysCode: 'ORG-SCOPE-XM-EXTERNAL', owner: '厦门显示值用户', implOrg: '厦门事业群' }],
     } });
     assert.equal(intake.statusCode, 200);
-    const acceptedTask = await get('SELECT owner, intake_owner FROM dev_task WHERE req_code = ?', 'ORG-SCOPE-REQ-XM-MANUAL');
+    const acceptedTask = await get('SELECT owner, intake_owner, impl_org FROM dev_task WHERE req_code = ?', 'ORG-SCOPE-REQ-XM-MANUAL');
     assert.equal(acceptedTask.owner, '厦门显示值用户');
     assert.equal(acceptedTask.intake_owner, '厦门显示值用户');
+    assert.equal(acceptedTask.impl_org, '厦门事业群');
     const completedCandidates = await app.inject({ method: 'POST', url: '/api/dev-tasks/intake-pending-codes', headers: mappedHeaders, payload: { reqCodes: ['ORG-SCOPE-REQ-XM-MANUAL'] } });
     assert.deepEqual(completedCandidates.json().data, []);
     await run('DELETE FROM dev_task WHERE req_code = ?', 'ORG-SCOPE-REQ-XM-MANUAL');
@@ -242,18 +246,169 @@ if (!process.env.RADAR_RUN_API_TESTS) {
     );
     const pendingTest = await app.inject({ method: 'POST', url: '/api/test-tasks/intake-pending-codes', headers: adminHeaders, payload: { testType: 'SIT', reqCodes: ['INTAKE-TEST-REQ'] } });
     assert.deepEqual(pendingTest.json().data, ['INTAKE-TEST-REQ']);
+    const testPreview = await app.inject({ method: 'POST', url: '/api/test-tasks/intake-preview', headers: adminHeaders, payload: { reqCode: 'INTAKE-TEST-REQ', testType: 'SIT' } });
+    assert.equal(testPreview.statusCode, 200);
+    assert.equal(testPreview.json().data.overall[0].defaultImplOrg, '厦门事业群');
+    assert.equal(testPreview.json().data.split[0].defaultImplOrg, '厦门事业群');
     const acceptedTest = await app.inject({ method: 'POST', url: '/api/test-tasks/intake', headers: adminHeaders, payload: {
-      reqCode: 'INTAKE-TEST-REQ', testType: 'SIT', splitMode: 'split', assignments: [{ sysCode: 'INTAKE-TEST-SYS', owner: administrator.name }],
+      reqCode: 'INTAKE-TEST-REQ', testType: 'SIT', splitMode: 'split', assignments: [{ sysCode: 'INTAKE-TEST-SYS', owner: administrator.name, implOrg: '厦门事业群' }],
     } });
     assert.equal(acceptedTest.statusCode, 200);
-    const acceptedTestTask = await get('SELECT owner, intake_owner FROM test_task WHERE req_code = ?', 'INTAKE-TEST-REQ');
+    const acceptedTestTask = await get('SELECT owner, intake_owner, impl_org FROM test_task WHERE req_code = ?', 'INTAKE-TEST-REQ');
     assert.equal(acceptedTestTask.owner, administrator.name);
     assert.equal(acceptedTestTask.intake_owner, administrator.name);
+    assert.equal(acceptedTestTask.impl_org, '厦门事业群');
     const completedTestCandidates = await app.inject({ method: 'POST', url: '/api/test-tasks/intake-pending-codes', headers: adminHeaders, payload: { testType: 'SIT', reqCodes: ['INTAKE-TEST-REQ'] } });
     assert.deepEqual(completedTestCandidates.json().data, []);
     await run('DELETE FROM test_task WHERE req_code = ?', 'INTAKE-TEST-REQ');
     const restoredTestCandidates = await app.inject({ method: 'POST', url: '/api/test-tasks/intake-pending-codes', headers: adminHeaders, payload: { testType: 'SIT', reqCodes: ['INTAKE-TEST-REQ'] } });
     assert.deepEqual(restoredTestCandidates.json().data, ['INTAKE-TEST-REQ']);
+  });
+
+  test('开发承接临时实施方统一预填规则可配置、可停用且拒绝非法名单', async () => {
+    const administrator = await get('SELECT id, phone FROM user WHERE is_super = 1 LIMIT 1');
+    const headers = { authorization: `Bearer ${await app.jwt.sign({ id: administrator.id, phone: administrator.phone })}`, 'x-requested-by': 'RADAR' };
+    const configKey = 'development.intake.implementation_org_override_orgs';
+    const originalConfig = await get('SELECT value FROM app_config WHERE key = ?', configKey);
+    await run('INSERT INTO system (sys_code, sys_name, org) VALUES (?,?,?)', 'INTAKE-OVERRIDE-SYS-A', '统一预填系统A', '厦门事业群');
+    await run('INSERT INTO system (sys_code, sys_name, org) VALUES (?,?,?)', 'INTAKE-OVERRIDE-SYS-B', '统一预填系统B', '武汉事业群');
+    await run(
+      'INSERT INTO requirement (req_code, title, status, implementation_org, main_systems, collab_dev_systems) VALUES (?,?,?,?,?,?)',
+      'INTAKE-OVERRIDE-REQ', '开发实施方统一预填', '需求登记', '开发一部', JSON.stringify(['INTAKE-OVERRIDE-SYS-A']), JSON.stringify(['INTAKE-OVERRIDE-SYS-B']),
+    );
+
+    try {
+      const initialPreview = await app.inject({ method: 'POST', url: '/api/dev-tasks/intake-preview', headers, payload: { reqCode: 'INTAKE-OVERRIDE-REQ' } });
+      assert.equal(initialPreview.statusCode, 200);
+      assert.deepEqual(initialPreview.json().data.map((item) => item.defaultImplOrg), ['开发一部', '开发一部']);
+
+      const disabled = await app.inject({
+        method: 'PUT', url: '/api/settings/app-config', headers,
+        payload: { items: { [configKey]: '[]' } },
+      });
+      assert.equal(disabled.statusCode, 200);
+      const disabledPreview = await app.inject({ method: 'POST', url: '/api/dev-tasks/intake-preview', headers, payload: { reqCode: 'INTAKE-OVERRIDE-REQ' } });
+      assert.equal(disabledPreview.statusCode, 200);
+      assert.deepEqual(disabledPreview.json().data.map((item) => item.defaultImplOrg), ['厦门事业群', '武汉事业群']);
+
+      const invalidJson = await app.inject({
+        method: 'PUT', url: '/api/settings/app-config', headers,
+        payload: { items: { [configKey]: '{"开发一部":true}' } },
+      });
+      assert.equal(invalidJson.statusCode, 400);
+      assert.match(invalidJson.json().message, /JSON 数组/);
+
+      const unknownOrg = await app.inject({
+        method: 'PUT', url: '/api/settings/app-config', headers,
+        payload: { items: { [configKey]: '["不存在的机构"]' } },
+      });
+      assert.equal(unknownOrg.statusCode, 400);
+      assert.match(unknownOrg.json().message, /不存在/);
+
+      const tooManyOrgs = await app.inject({
+        method: 'PUT', url: '/api/settings/app-config', headers,
+        payload: { items: { [configKey]: JSON.stringify(Array.from({ length: 21 }, () => '开发一部')) } },
+      });
+      assert.equal(tooManyOrgs.statusCode, 400);
+      assert.match(tooManyOrgs.json().message, /最多 20 项/);
+
+      const readonlyUser = await run(
+        "INSERT INTO user (phone, name, org, password_hash, status, password_changed_at) VALUES (?,?,?,?,?,datetime('now','localtime'))",
+        'intake-override-readonly', '临时规则只读用户', '开发一部', 'not-used', '启用',
+      );
+      const readonlyHeaders = {
+        authorization: `Bearer ${await app.jwt.sign({ id: readonlyUser.lastInsertRowid, phone: 'intake-override-readonly' })}`,
+        'x-requested-by': 'RADAR',
+      };
+      const forbiddenSave = await app.inject({
+        method: 'PUT', url: '/api/settings/app-config', headers: readonlyHeaders,
+        payload: { items: { [configKey]: '["开发一部"]' } },
+      });
+      assert.equal(forbiddenSave.statusCode, 403);
+    } finally {
+      if (originalConfig) {
+        await run('UPDATE app_config SET value = ? WHERE key = ?', originalConfig.value, configKey);
+      } else {
+        await run('DELETE FROM app_config WHERE key = ?', configKey);
+      }
+    }
+  });
+
+  test('开发承接确认角色回写需求/工单，且角色和实施方错误整体回滚', async () => {
+    const administrator = await get('SELECT id, phone, name FROM user WHERE is_super = 1 LIMIT 1');
+    const headers = { authorization: `Bearer ${await app.jwt.sign({ id: administrator.id, phone: administrator.phone })}`, 'x-requested-by': 'RADAR' };
+    await run('INSERT INTO system (sys_code, sys_name, org) VALUES (?,?,?)', 'INTAKE-ROLE-SYS-A', '角色确认系统A', '厦门事业群');
+    await run('INSERT INTO system (sys_code, sys_name, org) VALUES (?,?,?)', 'INTAKE-ROLE-SYS-B', '角色确认系统B', '武汉事业群');
+    await run(
+      'INSERT INTO requirement (req_code, title, status, main_systems, collab_dev_systems) VALUES (?,?,?,?,?)',
+      'INTAKE-ROLE-REQ', '需求角色回写', '需求登记', JSON.stringify(['INTAKE-ROLE-SYS-A']), JSON.stringify(['INTAKE-ROLE-SYS-B']),
+    );
+    const requirementIntake = await app.inject({ method: 'POST', url: '/api/dev-tasks/intake', headers, payload: {
+      reqCode: 'INTAKE-ROLE-REQ',
+      systemRoles: [
+        { sysCode: 'INTAKE-ROLE-SYS-A', role: '协同' },
+        { sysCode: 'INTAKE-ROLE-SYS-B', role: '主责' },
+      ],
+      assignments: [
+        { sysCode: 'INTAKE-ROLE-SYS-A', owner: administrator.name, implOrg: '厦门事业群' },
+        { sysCode: 'INTAKE-ROLE-SYS-B', owner: administrator.name, implOrg: '厦门事业群' },
+      ],
+    } });
+    assert.equal(requirementIntake.statusCode, 200);
+    const requirement = await get('SELECT main_systems, collab_dev_systems FROM requirement WHERE req_code = ?', 'INTAKE-ROLE-REQ');
+    assert.deepEqual(JSON.parse(requirement.main_systems), ['INTAKE-ROLE-SYS-B']);
+    assert.deepEqual(JSON.parse(requirement.collab_dev_systems), ['INTAKE-ROLE-SYS-A']);
+    const requirementTasks = await all('SELECT impl_system, impl_org FROM dev_task WHERE req_code = ? ORDER BY impl_system', 'INTAKE-ROLE-REQ');
+    assert.deepEqual(requirementTasks.map((task) => ({ ...task })), [
+      { impl_system: 'INTAKE-ROLE-SYS-A', impl_org: '厦门事业群' },
+      { impl_system: 'INTAKE-ROLE-SYS-B', impl_org: '厦门事业群' },
+    ]);
+
+    await run(
+      'INSERT INTO ticket (ticket_code, title, status, main_systems, collab_dev_systems) VALUES (?,?,?,?,?)',
+      'INTAKE-ROLE-TICKET', '工单角色回写', '工单登记', JSON.stringify(['INTAKE-ROLE-SYS-A']), JSON.stringify(['INTAKE-ROLE-SYS-B']),
+    );
+    const ticketIntake = await app.inject({ method: 'POST', url: '/api/dev-tasks/intake', headers, payload: {
+      reqCode: 'INTAKE-ROLE-TICKET',
+      systemRoles: [
+        { sysCode: 'INTAKE-ROLE-SYS-A', role: '协同' },
+        { sysCode: 'INTAKE-ROLE-SYS-B', role: '主责' },
+      ],
+      assignments: [{ sysCode: 'INTAKE-ROLE-SYS-B', owner: administrator.name, implOrg: '武汉事业群' }],
+    } });
+    assert.equal(ticketIntake.statusCode, 200);
+    const ticket = await get('SELECT main_systems, collab_dev_systems FROM ticket WHERE ticket_code = ?', 'INTAKE-ROLE-TICKET');
+    assert.deepEqual(JSON.parse(ticket.main_systems), ['INTAKE-ROLE-SYS-B']);
+    assert.deepEqual(JSON.parse(ticket.collab_dev_systems), ['INTAKE-ROLE-SYS-A']);
+
+    await run(
+      'INSERT INTO requirement (req_code, title, status, main_systems, collab_dev_systems) VALUES (?,?,?,?,?)',
+      'INTAKE-ROLE-INVALID', '角色确认回滚', '需求登记', JSON.stringify(['INTAKE-ROLE-SYS-A']), JSON.stringify(['INTAKE-ROLE-SYS-B']),
+    );
+    const invalidRole = await app.inject({ method: 'POST', url: '/api/dev-tasks/intake', headers, payload: {
+      reqCode: 'INTAKE-ROLE-INVALID',
+      systemRoles: [
+        { sysCode: 'INTAKE-ROLE-SYS-A', role: '主责' },
+        { sysCode: 'INTAKE-ROLE-SYS-B', role: '主责' },
+      ],
+      assignments: [{ sysCode: 'INTAKE-ROLE-SYS-A', owner: administrator.name, implOrg: '不存在的机构' }],
+    } });
+    assert.equal(invalidRole.statusCode, 400);
+    assert.equal((await get('SELECT COUNT(*) AS c FROM dev_task WHERE req_code = ?', 'INTAKE-ROLE-INVALID')).c, 0);
+    const invalidRequirement = await get('SELECT main_systems, collab_dev_systems FROM requirement WHERE req_code = ?', 'INTAKE-ROLE-INVALID');
+    assert.deepEqual(JSON.parse(invalidRequirement.main_systems), ['INTAKE-ROLE-SYS-A']);
+    assert.deepEqual(JSON.parse(invalidRequirement.collab_dev_systems), ['INTAKE-ROLE-SYS-B']);
+
+    await run(
+      'INSERT INTO requirement (req_code, title, status, main_systems, collab_test_systems) VALUES (?,?,?,?,?)',
+      'INTAKE-TEST-INVALID-ORG', '测试实施方校验', '需求登记', JSON.stringify(['INTAKE-ROLE-SYS-A']), JSON.stringify([]),
+    );
+    const invalidTestOrg = await app.inject({ method: 'POST', url: '/api/test-tasks/intake', headers, payload: {
+      reqCode: 'INTAKE-TEST-INVALID-ORG', testType: 'SIT', splitMode: 'split',
+      assignments: [{ sysCode: 'INTAKE-ROLE-SYS-A', owner: administrator.name, implOrg: '不存在的机构' }],
+    } });
+    assert.equal(invalidTestOrg.statusCode, 400);
+    assert.equal((await get('SELECT COUNT(*) AS c FROM test_task WHERE req_code = ?', 'INTAKE-TEST-INVALID-ORG')).c, 0);
   });
 
   test('task-status：四类任务列表返回统一的全链路任务状态，且保留各自状态字段', async () => {

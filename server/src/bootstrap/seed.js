@@ -15,7 +15,7 @@ import { parseJsonObject, logger } from '../platform/runtime/index.js';
 
 // 种子版本是“内置默认配置”而非业务数据版本；仅在首次初始化或显式升级版本时执行全量校准。
 const SEED_VERSION_KEY = 'runtime.seed.version';
-const SEED_VERSION = '20260731.1';
+const SEED_VERSION = '20260801.1';
 
 // 角色定义（角色标识、名称、是否内置、是否会签角色）
 // 会签角色（signoff:1）：投产评审会签由以下 9 个角色完成。
@@ -261,6 +261,7 @@ const ORGS = [
   ['厦门事业群', '厦门', 7], ['武汉事业群', '武汉', 8], ['基础技术中心', '基础', 9],
   ['大数据中心', '大数据', 10], ['交付事业部', '交付', 11], ['实施调度中心', '实调', 12],
   ['云南农信', '农信', 13], ['建信金科', '金科', 14],
+  ['开发一部', '开发一部', 15], ['开发二部', '开发二部', 16], ['开发三部', '开发三部', 17],
 ];
 
 // 业务板块
@@ -361,6 +362,7 @@ const APP_CONFIG = [
   ['code.release_apply', '{版本年月}-10bg{序号[3]}', '投产申请变更编号规则'],
   ['release.signoffRoles', DEFAULT_SIGNOFF_ROLES_CONFIG, '投产评审会签角色（JSON 数组）'],
   ['appearance.preset', 'sky', '外观主题预设（默认清新蓝）'],
+  ['development.intake.implementation_org_override_orgs', '["开发一部","开发二部","开发三部"]', '开发承接实施方统一预填机构（JSON 数组，清空即停用）'],
   [REQUIRED_FIELDS_CONFIG_KEY, JSON.stringify(DEFAULT_REQUIRED_FIELD_CONFIG), '检查内容配置（JSON）'],
   ['security.password.complexity', 'true', '启用密码复杂度校验'],
   ['security.password.minLength', '8', '密码最小长度'],

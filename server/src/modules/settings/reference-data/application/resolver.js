@@ -25,6 +25,21 @@ export async function resolveDictAttr(category, text) {
 }
 
 /**
+ * 仅解析已存在的字典项。适用于不能接受历史兼容透传值的受保护写入入口。
+ * @returns {string|null} 匹配到的属性值；空值和未知值均返回 null。
+ */
+export async function resolveExistingDictAttr(category, text) {
+  if (!text) return null;
+  const val = String(text).trim();
+  if (!val) return null;
+  const row = await get(
+    'SELECT attr_value FROM dict_item WHERE category = ? AND (LOWER(attr_value) = LOWER(?) OR LOWER(display_value) = LOWER(?))',
+    category, val, val,
+  );
+  return row?.attr_value || null;
+}
+
+/**
  * 返回同一机构字典项可兼容比较的全部值。
  * 历史人员数据可能保存显示值（如“厦门”），而系统/业务数据保存属性值（如“厦门事业群”）。
  */

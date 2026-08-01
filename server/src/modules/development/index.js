@@ -7,7 +7,7 @@
 
 /** Public delivery contract for downstream lifecycle consumers. */
 export {
-  getWorkItem, workItemCodesInReleasePoints, releaseDateMapForCodes,
+  getWorkItem, replaceWorkItemDevelopmentSystemRoles, workItemCodesInReleasePoints, releaseDateMapForCodes,
 } from './application/work-items.js';
 export {
   validateChangeItem, decodeChangeItem, validateCoverageRow,
