@@ -1,142 +1,145 @@
-schema_version: "1.0"
-requirement:
-  id: "REQ-20260802-002"
-  ref: "hengguan/REQ-20260802-002"
-  title: "交付件在线预览与版本留痕"
-  status: "ready"
-  document: "docs/requirements/hengguan/REQ-20260802-002/requirement.md"
-  internet_ai_coding_allowed: true
-assignment:
-  developer: "hengguan"
-  module: "platform/attachments"
-  module_owner: "hengguan"
-  branch: "hengguan/REQ-20260802-002-deliverable-preview-versioning"
-  base_branch: "origin/main"
-  worktree: "to-be-created-after-approval"
-ai:
-  enabled: true
-  approved_service: "Codex desktop"
-  model: "approved-by-user"
-  contains_confidential_information: false
-  context_sanitized: true
-  production_access: false
-scope:
-  writable_paths:
-    - "docs/requirements/hengguan/REQ-20260802-002/**"
-    - "docs/architecture/decisions/**"
-    - "docs/deployment/**"
-    - "tools/kkfileview-demo/**"
-    - "server/src/platform/attachments/**"
-    - "server/src/platform/runtime/config.js"
-    - "server/src/app.js"
-    - "web/src/platform/attachments/**"
-    - "server/src/platform/persistence/migrations/0046_attachment_versioning.sql"
-    - "server/src/platform/persistence/migrations/tdsql/0026_attachment_versioning.sql"
-    - "server/src/bootstrap/seed.js"
-    - "server/test/platform/attachments/**"
-    - "server/test/**"
-    - "server/scripts/mock-data.js"
-    - "server/src/modules/settings/**"
-    - "web/src/modules/settings/**"
-  read_only_paths:
-    - "AGENTS.md"
-    - "DESIGN.md"
-    - "docs/governance/**"
-    - "docs/architecture/**"
-    - ".agents/skills/radar-delivery-engineer/**"
-    - "server/src/modules/requirements/**"
-    - "server/src/modules/tickets/**"
-    - "server/src/modules/development/**"
-    - "server/src/modules/testing/**"
-    - "server/src/modules/release/**"
-    - "server/src/platform/auth/**"
-    - "server/src/platform/audit/**"
-  forbidden_paths:
-    - ".github/**"
-    - "docs/reports/**"
-    - ".env"
-    - "**/.env"
-    - "**/*secret*"
-    - "**/*credential*"
-    - "attachments/**"
-    - "data/**"
-public_capability_change:
-  required: true
-  shared_change_issue: "hengguan/REQ-20260802-002"
-  target_modules:
-    - "governance"
-    - "platform/attachments"
-    - "platform/persistence"
-    - "platform/runtime"
-    - "settings"
-  new_methods:
-    - "附件平台按逻辑交付项读取当前版本与版本历史的公开契约"
-    - "附件平台受实体授权保护的新版本上传与路径版本更新接口"
-    - "附件平台为 kkFileView 生成短时只读预览会话及受签名文件读取入口"
-    - "系统设置提供交付件预览开关和 kkFileView 地址的受权限保护配置写入与审计能力"
-  existing_method_changed: true
-  semantic_name_confirmed: true
-  old_behavior_preserved: true
-  compatibility_note: "既有附件查询继续返回当前可见版本；历史附件迁移为版本 1。下载、实体授权、交付件配置和业务流程语义保持兼容。"
-  owner_approved: true
-  owner_review_required_before_merge: true
-database:
-  changed: true
-  migration_paths:
-    - "server/src/platform/persistence/migrations/0046_attachment_versioning.sql"
-    - "server/src/platform/persistence/migrations/tdsql/0026_attachment_versioning.sql"
-  mysql8_compatible: true
-  historical_data_impact: "所有历史附件以原记录作为独立逻辑交付项的版本 1；保留既有上传人姓名、手机号（如已有）和 upload_time，不为历史记录猜测或补填手机号。"
-  rollback_or_compensation: "回退应用版本不删除版本记录；若需恢复旧模型，先备份再以独立双端补偿迁移导出当前版本，不执行物理删除。"
-external_access:
-  changed: false
-  api_paths: []
-  readable_field_whitelist: []
-  writable_field_whitelist: []
-  action_whitelist: []
-  audit_required: true
-deployment_configuration:
-  changed: true
-  server_environment_only:
-    - name: "DELIVERABLE_PREVIEW_ENABLED"
-      default: "false"
-      purpose: "控制交付件 Word、Excel、PDF 在线预览入口和会话接口"
-    - name: "KKFILEVIEW_BASE_URL"
-      purpose: "内部 kkFileView 根地址；仅在预览开关启用时需要"
-    - name: "KKFILEVIEW_ALLOWED_ORIGINS"
-      purpose: "kkFileView 服务地址的精确 Origin/CSP frame-src 白名单；为空时预览保持禁用"
-    - name: "ATTACHMENT_PREVIEW_SOURCE_BASE_URL"
-      purpose: "kkFileView 访问 RADAR 短签名文件读取接口的内部根地址；为空时预览保持禁用"
-  constraints:
-    - "实际 .env、密钥和生产配置不在本任务写入范围内"
-    - "系统设置以 app_config.deliverable.preview.enabled 与 app_config.deliverable.preview.kkFileViewBaseUrl 保存有效配置，环境变量仅为回退值"
-    - "插件地址仅由服务端读取，必须经过内部主机白名单校验，且不能由业务客户端覆盖"
-required_tests:
-  - name: "build"
-    command: "npm run build --prefix web"
-  - name: "unit"
-    command: "npm test --prefix server"
-  - name: "api"
-    command: "npm run test:api --prefix server"
-  - name: "permission"
-    command: "npm run test:rbac --prefix server"
-  - name: "migration_parity"
-    command: "node scripts/check-migration-parity.mjs && node scripts/check-mysql8-migrations.mjs"
-  - name: "module_boundaries"
-    command: "node scripts/check-module-boundaries.mjs"
-  - name: "runtime"
-    command: "node scripts/verify-app-runtime.mjs"
-risk:
-  level: "high"
-  reasons:
-    - "附件历史数据迁移、版本并发与软删除"
-    - "通用附件平台和全部交付件页面回归"
-    - "自托管 kkFileView 的内网部署、SSRF 防护与短时签名文件访问安全"
-  required_approvals:
-    - "hengguan"
-completion:
-  changed_files_report_required: true
-  test_result_report_required: true
-  known_risks_report_required: true
-  rollback_report_required: true
-  requirement_acceptance_required: true
+{
+  "schema_version": "1.0",
+  "requirement": {
+    "id": "REQ-20260802-002",
+    "ref": "hengguan/REQ-20260802-002",
+    "title": "交付件在线预览与版本留痕",
+    "status": "ready",
+    "document": "docs/requirements/hengguan/REQ-20260802-002/requirement.md",
+    "internet_ai_coding_allowed": true
+  },
+  "assignment": {
+    "developer": "hengguan",
+    "module": "governance",
+    "module_owner": "hengguan",
+    "branch": "hengguan/REQ-20260802-002-deliverable-preview-versioning",
+    "base_branch": "origin/main",
+    "worktree": "to-be-created-after-approval"
+  },
+  "ai": {
+    "enabled": true,
+    "approved_service": "Codex desktop",
+    "model": "approved-by-user",
+    "contains_confidential_information": false,
+    "context_sanitized": true,
+    "production_access": false
+  },
+  "scope": {
+    "writable_paths": [
+      "docs/requirements/hengguan/REQ-20260802-002/**",
+      "docs/architecture/decisions/**",
+      "docs/deployment/**",
+      "tools/kkfileview-demo/**",
+      "server/src/platform/attachments/**",
+      "server/src/platform/runtime/config.js",
+      "server/src/app.js",
+      "web/src/platform/attachments/**",
+      "server/src/platform/persistence/migrations/0046_attachment_versioning.sql",
+      "server/src/platform/persistence/migrations/tdsql/0026_attachment_versioning.sql",
+      "server/src/bootstrap/seed.js",
+      "server/test/platform/attachments/**",
+      "server/test/**",
+      "server/scripts/mock-data.js",
+      "server/src/modules/settings/**",
+      "web/src/modules/settings/**"
+    ],
+    "read_only_paths": [
+      "AGENTS.md",
+      "DESIGN.md",
+      "docs/governance/**",
+      "docs/architecture/**",
+      ".agents/skills/radar-delivery-engineer/**",
+      "server/src/modules/requirements/**",
+      "server/src/modules/tickets/**",
+      "server/src/modules/development/**",
+      "server/src/modules/testing/**",
+      "server/src/modules/release/**",
+      "server/src/platform/auth/**",
+      "server/src/platform/audit/**"
+    ],
+    "forbidden_paths": [
+      ".github/**",
+      "docs/reports/**",
+      ".env",
+      "**/.env",
+      "**/*secret*",
+      "**/*credential*",
+      "attachments/**",
+      "data/**"
+    ]
+  },
+  "public_capability_change": {
+    "required": true,
+    "shared_change_issue": "hengguan/REQ-20260802-002",
+    "target_modules": ["governance", "platform/attachments", "platform/persistence", "platform/runtime", "settings"],
+    "new_methods": [
+      "附件平台按逻辑交付项读取当前版本与版本历史的公开契约",
+      "附件平台受实体授权保护的新版本上传与路径版本更新接口",
+      "附件平台为 kkFileView 生成短时只读预览会话及受签名文件读取入口",
+      "系统设置提供交付件预览开关和 kkFileView 地址的受权限保护配置写入与审计能力"
+    ],
+    "existing_method_changed": true,
+    "semantic_name_confirmed": true,
+    "old_behavior_preserved": true,
+    "compatibility_note": "既有附件查询继续返回当前可见版本；历史附件迁移为版本 1。下载、实体授权、交付件配置和业务流程语义保持兼容。",
+    "owner_approved": true,
+    "owner_review_required_before_merge": true
+  },
+  "database": {
+    "changed": true,
+    "migration_paths": [
+      "server/src/platform/persistence/migrations/0046_attachment_versioning.sql",
+      "server/src/platform/persistence/migrations/tdsql/0026_attachment_versioning.sql"
+    ],
+    "mysql8_compatible": true,
+    "historical_data_impact": "所有历史附件以原记录作为独立逻辑交付项的版本 1；保留既有上传人姓名、手机号（如已有）和 upload_time，不为历史记录猜测或补填手机号。",
+    "rollback_or_compensation": "回退应用版本不删除版本记录；若需恢复旧模型，先备份再以独立双端补偿迁移导出当前版本，不执行物理删除。"
+  },
+  "external_access": {
+    "changed": false,
+    "api_paths": [],
+    "readable_field_whitelist": [],
+    "writable_field_whitelist": [],
+    "action_whitelist": [],
+    "audit_required": true
+  },
+  "deployment_configuration": {
+    "changed": true,
+    "server_environment_only": [
+      {"name": "DELIVERABLE_PREVIEW_ENABLED", "default": "false", "purpose": "控制交付件 Word、Excel、PDF 在线预览入口和会话接口"},
+      {"name": "KKFILEVIEW_BASE_URL", "purpose": "内部 kkFileView 根地址；仅在预览开关启用时需要"},
+      {"name": "KKFILEVIEW_ALLOWED_ORIGINS", "purpose": "kkFileView 服务地址的精确 Origin/CSP frame-src 白名单；为空时预览保持禁用"},
+      {"name": "ATTACHMENT_PREVIEW_SOURCE_BASE_URL", "purpose": "kkFileView 访问 RADAR 短签名文件读取接口的内部根地址；为空时预览保持禁用"}
+    ],
+    "constraints": [
+      "实际 .env、密钥和生产配置不在本任务写入范围内",
+      "系统设置以 app_config.deliverable.preview.enabled 与 app_config.deliverable.preview.kkFileViewBaseUrl 保存有效配置，环境变量仅为回退值",
+      "插件地址仅由服务端读取，必须经过内部主机白名单校验，且不能由业务客户端覆盖"
+    ]
+  },
+  "required_tests": [
+    {"name": "build", "command": "npm run build --prefix web"},
+    {"name": "unit", "command": "npm test --prefix server"},
+    {"name": "api", "command": "npm run test:api --prefix server"},
+    {"name": "permission", "command": "npm run test:rbac --prefix server"},
+    {"name": "migration_parity", "command": "node scripts/check-migration-parity.mjs && node scripts/check-mysql8-migrations.mjs"},
+    {"name": "module_boundaries", "command": "node scripts/check-module-boundaries.mjs"},
+    {"name": "runtime", "command": "node scripts/verify-app-runtime.mjs"}
+  ],
+  "risk": {
+    "level": "high",
+    "reasons": [
+      "附件历史数据迁移、版本并发与软删除",
+      "通用附件平台和全部交付件页面回归",
+      "自托管 kkFileView 的内网部署、SSRF 防护与短时签名文件访问安全"
+    ],
+    "required_approvals": ["hengguan"]
+  },
+  "completion": {
+    "changed_files_report_required": true,
+    "test_result_report_required": true,
+    "known_risks_report_required": true,
+    "rollback_report_required": true,
+    "requirement_acceptance_required": true
+  }
+}

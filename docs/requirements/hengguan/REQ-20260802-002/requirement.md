@@ -8,7 +8,7 @@ status: "ready"
 priority: "P1"
 requester: "hengguan"
 developer: "hengguan"
-module: "platform/attachments"
+module: "governance"
 module_owner: "hengguan"
 contains_confidential_information: false
 external_access_required: false
@@ -167,7 +167,7 @@ last_updated: "2026-08-02"
 
 ## 8. 研发上下文
 
-- 目标模块 / Owner / 基准分支：主模块为 `platform/attachments`，Owner 为 `hengguan`，基准分支 `origin/main`；实施分支为 `hengguan/REQ-20260802-002-deliverable-preview-versioning`。
+- 目标模块 / Owner / 基准分支：跨模块变更按仓库约定以 `governance` 作为任务范围登记主模块，Owner 为 `hengguan`；实际功能主模块为 `platform/attachments`，并涉及 `platform/persistence`、`platform/runtime` 与 `settings`。基准分支 `origin/main`；实施分支为 `hengguan/REQ-20260802-002-deliverable-preview-versioning`。
 - 多模块协作：直接修改的模块为 `platform/attachments`（附件版本、授权、预览会话、统一 UI）、`platform/persistence`（双端迁移）、`platform/runtime`（部署环境配置）、`settings`（交付件预览开关与地址参数、权限、审计及公开读取契约）、`governance`（需求与部署说明）。业务模块通过既有 `StageContentPanel` 复用，不修改其业务规则。所有 Owner 均为 `hengguan`，合并前复核平台附件、持久化、运行时和设置模块边界。
 - 允许与禁止修改路径：见 `ai-task-scope.yaml`；不得修改附件目录、生产配置、密钥、业务实体私有表或 `.github`。
 - 必须复用的能力与公开契约：`platform/attachments/index.js`、`authorizeEntity`、`auditEvidenceChange`、`StageContentPanel`、现有附件扩展名/大小校验、存储路径解析保护和统一 API 响应信封；系统设置仅通过既有受权限保护的 `app_config` 接口维护两个稳定键，附件平台不导入 `settings` 内部实现。
