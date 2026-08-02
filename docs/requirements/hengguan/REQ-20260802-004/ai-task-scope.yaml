@@ -1,0 +1,99 @@
+{
+  "schema_version": "1.0",
+  "requirement": {
+    "id": "REQ-20260802-004",
+    "ref": "hengguan/REQ-20260802-004",
+    "title": "概览详情历史人员对象兼容修复",
+    "status": "ready",
+    "document": "docs/requirements/hengguan/REQ-20260802-004/requirement.md",
+    "internet_ai_coding_allowed": true
+  },
+  "assignment": {
+    "developer": "hengguan",
+    "module": "governance",
+    "module_owner": "hengguan",
+    "branch": "hengguan/REQ-20260802-004-overview-person-resolver",
+    "base_branch": "origin/main",
+    "worktree": "codex-desktop-current-worktree"
+  },
+  "ai": {
+    "enabled": true,
+    "approved_service": "Codex desktop",
+    "model": "approved-by-user",
+    "contains_confidential_information": false,
+    "context_sanitized": true,
+    "production_access": false
+  },
+  "scope": {
+    "writable_paths": [
+      "docs/requirements/hengguan/REQ-20260802-004/**",
+      "server/src/modules/overview/api/routes.js",
+      "server/test/api-rbac.test.js"
+    ],
+    "read_only_paths": [
+      "AGENTS.md",
+      "docs/governance/**",
+      "governance/modules.yaml",
+      ".agents/skills/radar-delivery-engineer/**",
+      "server/src/platform/persistence/**",
+      "server/src/modules/identity-access/**"
+    ],
+    "forbidden_paths": [
+      ".github/**",
+      "docs/reports/**",
+      ".env",
+      "**/.env",
+      "**/*secret*",
+      "**/*credential*",
+      "attachments/**",
+      "data/**"
+    ]
+  },
+  "public_capability_change": {
+    "required": true,
+    "shared_change_issue": "hengguan/REQ-20260802-004",
+    "target_modules": ["governance", "overview"],
+    "new_methods": [],
+    "existing_method_changed": true,
+    "semantic_name_confirmed": true,
+    "old_behavior_preserved": true,
+    "compatibility_note": "既有详情接口、权限和响应 envelope 不变；仅在概览模块内部人员解析前兼容历史对象值。",
+    "owner_approved": true,
+    "owner_review_required_before_merge": true
+  },
+  "database": {
+    "changed": false,
+    "migration_paths": [],
+    "mysql8_compatible": true,
+    "historical_data_impact": "只读兼容历史 proposer JSON 对象，不迁移、不回写。",
+    "rollback_or_compensation": "回退本次解析逻辑即可，无数据补偿。"
+  },
+  "external_access": {
+    "changed": false,
+    "api_paths": [],
+    "readable_field_whitelist": [],
+    "writable_field_whitelist": [],
+    "action_whitelist": [],
+    "audit_required": false
+  },
+  "required_tests": [
+    {"name": "api", "command": "npm run test:api --prefix server"},
+    {"name": "permission", "command": "npm run test:rbac --prefix server"},
+    {"name": "module_boundaries", "command": "node scripts/check-module-boundaries.mjs"},
+    {"name": "build", "command": "npm run build --prefix web"},
+    {"name": "runtime", "command": "node scripts/verify-app-runtime.mjs"},
+    {"name": "browser", "command": "本地隔离应用以具备 overview:view 的脱敏管理员访问概览详情，确认接口成功且无控制台请求错误"}
+  ],
+  "risk": {
+    "level": "normal",
+    "reasons": ["概览详情为跨生命周期只读聚合，需保持历史人员值与既有字符串兼容"],
+    "required_approvals": ["hengguan"]
+  },
+  "completion": {
+    "changed_files_report_required": true,
+    "test_result_report_required": true,
+    "known_risks_report_required": true,
+    "rollback_report_required": true,
+    "requirement_acceptance_required": true
+  }
+}

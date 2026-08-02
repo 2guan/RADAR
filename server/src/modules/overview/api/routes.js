@@ -68,11 +68,20 @@ function sysNames(codes, sysMap) {
   return (codes || []).map((c) => sysMap[c]?.name || c);
 }
 
-/** 按姓名解析人员（姓名 + 所属机构 + 手机号），找不到则仅返回姓名 */
-async function resolvePerson(name) {
+/** 按姓名解析人员（姓名 + 所属机构 + 手机号），兼容历史对象值。 */
+async function resolvePerson(person) {
+  const historicalPerson = person && typeof person === 'object' && !Array.isArray(person) ? person : null;
+  const name = typeof person === 'string'
+    ? person.trim()
+    : (typeof historicalPerson?.name === 'string' ? historicalPerson.name.trim() : '');
   if (!name) return null;
+
   const u = await get('SELECT name, org, phone FROM user WHERE name = ? LIMIT 1', name);
-  return u || { name, org: null, phone: null };
+  return u || {
+    name,
+    org: typeof historicalPerson?.org === 'string' ? historicalPerson.org : null,
+    phone: typeof historicalPerson?.phone === 'string' ? historicalPerson.phone : null,
+  };
 }
 
 /** 按编号解析系统（编号 + 名称 + 所属机构 + 业务板块） */

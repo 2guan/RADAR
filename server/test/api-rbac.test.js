@@ -54,6 +54,26 @@ if (!process.env.RADAR_RUN_API_TESTS) {
     assert.equal(response.json().data.status, 'ok');
   });
 
+  test('概览详情兼容历史提交人对象，且跳过没有姓名的无效对象', async () => {
+    const administrator = await get('SELECT id, phone, name, org FROM user WHERE is_super = 1 LIMIT 1');
+    const headers = { authorization: `Bearer ${await app.jwt.sign({ id: administrator.id, phone: administrator.phone })}`, 'x-requested-by': 'RADAR' };
+    const reqCode = 'OVERVIEW-PERSON-OBJECT-001';
+    await run(
+      'INSERT INTO requirement (req_code, title, status, proposer) VALUES (?,?,?,?)',
+      reqCode,
+      '概览历史人员对象回归',
+      '需求登记',
+      JSON.stringify(['历史姓名提交人', { name: administrator.name, org: '历史机构', phone: '13800000000' }, { org: '没有姓名的历史对象' }]),
+    );
+
+    const response = await app.inject({ method: 'GET', url: `/api/overview/${reqCode}/detail`, headers });
+    assert.equal(response.statusCode, 200, response.body);
+    assert.deepEqual(response.json().data.requirement.proposerInfo, [
+      { name: '历史姓名提交人', org: null, phone: null },
+      { name: administrator.name, org: administrator.org, phone: administrator.phone },
+    ]);
+  });
+
   test('申请投产点公共契约支持多点命中，并将未申请工作项归入待定', async () => {
     const first = await run("INSERT INTO release_point (release_date, version_type) VALUES (?,?)", '20990115', '常规版本');
     const second = await run("INSERT INTO release_point (release_date, version_type) VALUES (?,?)", '20990130', '常规版本');
