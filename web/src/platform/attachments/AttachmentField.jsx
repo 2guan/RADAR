@@ -83,7 +83,7 @@ function CompactAttachmentTitle({ item, actions }) {
   );
 }
 
-function VersionHistoryItem({ item, onDownload, onPreview }) {
+function VersionHistoryItem({ item, onDownload, onPreview, previewEnabled }) {
   const name = attachmentName(item);
   return (
     <List.Item style={{ padding: '4px 0', alignItems: 'stretch' }}>
@@ -96,7 +96,7 @@ function VersionHistoryItem({ item, onDownload, onPreview }) {
           <span title={name} style={{ minWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', fontSize: 12, lineHeight: '20px' }}>{name}</span>
           {item.kind === 'file' && item.is_deleted === 0 && (
             <Space size={0} style={{ flexShrink: 0 }}>
-              {previewable(item.filename) && <Tooltip title="在线预览"><Button type="link" size="small" icon={<EyeOutlined />} onClick={() => onPreview(item)} aria-label="在线预览" style={{ padding: '0 4px', height: 20 }} /></Tooltip>}
+              {previewEnabled && previewable(item.filename) && <Tooltip title="在线预览"><Button type="link" size="small" icon={<EyeOutlined />} onClick={() => onPreview(item)} aria-label="在线预览" style={{ padding: '0 4px', height: 20 }} /></Tooltip>}
               <Tooltip title="下载此版本"><Button type="link" size="small" icon={<DownloadOutlined />} onClick={() => onDownload(item)} aria-label="下载此版本" style={{ padding: '0 4px', height: 20 }} /></Tooltip>
             </Space>
           )}
@@ -229,6 +229,7 @@ export default function AttachmentField({ entityType, entityId, fieldKey, delive
   };
 
   const openHistoricalPreview = async (item) => {
+    if (!previewEnabled) return;
     setVersionItem(null);
     await openPreview(item);
   };
@@ -333,7 +334,7 @@ export default function AttachmentField({ entityType, entityId, fieldKey, delive
         destroyOnHidden
         styles={{ body: { maxHeight: '56vh', overflowY: 'auto', paddingTop: 4 } }}
       >
-        <List loading={versionsLoading} dataSource={versions} locale={{ emptyText: '暂无版本历史' }} renderItem={(item) => <VersionHistoryItem item={item} onDownload={download} onPreview={openHistoricalPreview} />} />
+        <List loading={versionsLoading} dataSource={versions} locale={{ emptyText: '暂无版本历史' }} renderItem={(item) => <VersionHistoryItem item={item} onDownload={download} onPreview={openHistoricalPreview} previewEnabled={previewEnabled} />} />
       </Modal>
 
       <Modal open={Boolean(preview)} title={`预览：${preview?.filename || ''}`} onCancel={() => setPreview(null)} footer={null} width="min(1120px, 94vw)" destroyOnHidden>
