@@ -891,8 +891,10 @@ export async function assertDeliverableRemovable(attachment) {
   const legacySql = String(deliverable?.deliverable_key || '').startsWith('builtin_') ? ' OR (deliverable_id IS NULL AND field_key = ?)' : '';
   const params = [attachment.entity_type, attachment.entity_id, deliverableId];
   if (legacySql) params.push(deliverable.label);
-  params.push(attachment.id);
-  const remaining = await get(`SELECT COUNT(*) AS c FROM attachment WHERE entity_type = ? AND entity_id = ? AND (deliverable_id = ?${legacySql}) AND id <> ?`, ...params);
+  params.push(attachment.logical_item_id);
+  const remaining = await get(`SELECT COUNT(*) AS c FROM attachment
+    WHERE entity_type = ? AND entity_id = ? AND (deliverable_id = ?${legacySql})
+      AND is_current = 1 AND is_deleted = 0 AND logical_item_id <> ?`, ...params);
   if (!remaining?.c) throw badRequest('当前状态下该交付件为必填，不能删除最后一份有效凭证');
 }
 

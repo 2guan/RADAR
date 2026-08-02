@@ -14,7 +14,7 @@ import { parseJsonObject, logger } from '../platform/runtime/index.js';
 
 // 种子版本是“内置默认配置”而非业务数据版本；仅在首次初始化或显式升级版本时执行全量校准。
 const SEED_VERSION_KEY = 'runtime.seed.version';
-const SEED_VERSION = '20260801.3';
+const SEED_VERSION = '20260802.2';
 
 // 角色定义（角色标识、名称、是否内置、是否会签角色）
 // 会签角色（signoff:1）：投产评审会签由以下 9 个角色完成。
@@ -378,6 +378,8 @@ const APP_CONFIG = [
   ['issue.sync.dailyTime', '02:00', '问题详情每日同步时间（HH:mm）'],
   ['issue.sync.interval', '1', '问题详情按小时或分钟同步的间隔'],
   ['issue.sync.overview.enabled', 'false', '是否启用问题概述定时同步'],
+  ['deliverable.preview.enabled', '', '交付件在线预览开关（留空时使用部署环境回退值）'],
+  ['deliverable.preview.kkFileViewBaseUrl', '', 'kkFileView 服务地址（留空时使用部署环境回退值）'],
   ['issue.sync.overview.scheduleMode', 'daily', '问题概述定时同步周期：daily / hours / minutes'],
   ['issue.sync.overview.dailyTime', '01:30', '问题概述每日同步时间（HH:mm）'],
   ['issue.sync.overview.interval', '1', '问题概述按小时或分钟同步的间隔'],

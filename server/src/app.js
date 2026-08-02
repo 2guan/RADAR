@@ -66,6 +66,7 @@ export async function buildApp() {
         styleSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", "data:", "blob:"],
         connectSrc: config.security.cspConnectSrc,
+        frameSrc: config.security.cspFrameSrc,
         fontSrc: ["'self'", "data:"],
         objectSrc: ["'none'"],
         frameAncestors: ["'self'"],

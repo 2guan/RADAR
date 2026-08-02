@@ -10,6 +10,12 @@ import { all, get, run, tx } from '../../../platform/persistence/index.js';
 import { ok, badRequest } from '../../../platform/runtime/index.js';
 import { getIssueSyncEnvironmentDefaults, triggerIssueSyncSchedule } from '../../issues/index.js';
 import {
+  DELIVERABLE_PREVIEW_CONFIG_KEYS,
+  validateDeliverablePreviewSettings,
+  withEffectiveDeliverablePreviewConfig,
+} from '../index.js';
+import { auditEvidenceChange } from '../../../platform/audit/index.js';
+import {
   REQUIRED_FIELDS_CONFIG_KEY,
   normalizeRequiredFieldConfig,
   requiredFieldCatalogPayload,
@@ -32,6 +38,7 @@ const WRITABLE_KEYS = new Set([
   'security.lockout.enabled', 'security.lockout.maxAttempts', 'security.lockout.durationMinutes',
   'issue.sync.baseUrl', 'issue.sync.apiKey', 'issue.sync.overviewApi', 'issue.sync.detailApi',
   'issue.sync.enabled', 'issue.sync.scheduleMode', 'issue.sync.dailyTime', 'issue.sync.interval',
+  ...DELIVERABLE_PREVIEW_CONFIG_KEYS,
 ]);
 
 // 公开可读的键（无需登录）
@@ -107,7 +114,7 @@ export default async function settingsRoutes(fastify) {
   // 全部配置
   fastify.get('/settings/app-config', { preHandler: fastify.requirePerm('settings', 'view') }, async () => {
     const rows = await all('SELECT key, value, remark FROM app_config ORDER BY key');
-    return ok(withEffectiveIssueToolConfig(rows));
+    return ok(withEffectiveDeliverablePreviewConfig(withEffectiveIssueToolConfig(rows)));
   });
 
   // 检查内容配置：业务表单也需要读取，因此只要求登录，不要求系统设置权限
@@ -134,10 +141,12 @@ export default async function settingsRoutes(fastify) {
         = await normalizeDevelopmentIntakeImplementationOrgOverrideOrgs(items[DEVELOPMENT_INTAKE_IMPLEMENTATION_ORG_OVERRIDE_CONFIG_KEY]);
     }
     validateIssueSyncSettings(items);
+    validateDeliverablePreviewSettings(items);
     for (const [key, value] of Object.entries(items)) {
       const error = validateCodeRuleTemplate(key, value);
       if (error) throw badRequest(error);
     }
+    const previewConfigChanged = Object.keys(items).some((key) => DELIVERABLE_PREVIEW_CONFIG_KEYS.includes(key));
     await tx(async () => {
       for (const [key, value] of Object.entries(items)) {
         if (!WRITABLE_KEYS.has(key)) continue;
@@ -146,6 +155,13 @@ export default async function settingsRoutes(fastify) {
            ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=datetime('now','localtime')`,
           key, value,
         );
+      }
+      if (previewConfigChanged) {
+        await auditEvidenceChange({
+          entityType: 'settings', entityId: 0, entityCode: 'deliverable-preview',
+          fieldKey: '交付件预览设置', operator: request.currentUser?.name,
+          oldValue: '配置已更新', newValue: '交付件在线预览配置已保存',
+        });
       }
     });
     if (Object.keys(items).some((key) => key.startsWith('issue.sync.'))) {

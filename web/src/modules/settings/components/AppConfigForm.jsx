@@ -100,6 +100,9 @@ export default function AppConfigForm({ mode, items }) {
     try {
       await apiPut('/settings/app-config', { items: payload });
       message.success('配置已保存');
+      if (mode === 'deliverable-preview') {
+        window.dispatchEvent(new Event('radar:deliverable-preview-config-updated'));
+      }
       await loadPlatform(); // 即时生效
     } finally {
       setLoading(false);
