@@ -484,6 +484,20 @@ export default function Settings() {
           { key: 'issue.sync.interval', label: '问题详情同步间隔', type: 'number', min: 1, max: 10080, placeholder: '如 2', extra: '仅“每 N 小时 / 每 N 分钟”模式生效' },
         ]} />,
       },
+      {
+        key: 'deliverable-preview', label: '交付件预览',
+        children: <AppConfigForm mode="deliverable-preview" items={[
+          {
+            key: 'deliverable.preview.enabled', label: '启用交付件在线预览', type: 'switch',
+            extra: '默认关闭。启用后，当前及未删除历史的 Word、Excel、PDF 交付件可通过内网 kkFileView 只读预览。',
+          },
+          {
+            key: 'deliverable.preview.kkFileViewBaseUrl', label: 'kkFileView 服务地址',
+            placeholder: '如 https://radar.example.internal/kkfileview', autoComplete: 'off',
+            extra: '仅可填写部署白名单中的内网 HTTP(S) 地址；留空时使用部署环境回退地址。',
+          },
+        ]} />,
+      },
     ]} />
   );
 

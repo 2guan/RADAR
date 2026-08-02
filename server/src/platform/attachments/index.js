@@ -7,11 +7,13 @@
 
 /** Public attachment and signature platform contract. */
 export {
-  saveFile, savePath, listByEntity, countByFields, removeAttachment,
+  saveFile, savePath, saveFileVersion, savePathVersion,
+  listByEntity, listAttachmentVersions, getCurrentAttachment, getViewableAttachment, countByFields, removeAttachment, attachmentView,
 } from './attachment.js';
 export {
   decodeSignatureDataUrl, saveSignatureFile, removeSignatureFile, signatureDataUrl,
 } from './signature.js';
 export { authorizeEntity, resolveEntityAccess } from '../auth/index.js';
 export { resolveAttachmentPath } from './storage.js';
+export { createPreviewSession, isPreviewableAttachment, previewAvailability, verifyPreviewSignature } from './preview.js';
 export { MODULE_CONTRACT as attachmentsContract } from './contracts/index.js';

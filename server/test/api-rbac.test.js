@@ -24,6 +24,8 @@ if (!process.env.RADAR_RUN_API_TESTS) {
   process.env.WEB_DIST = staticDirectory;
   process.env.ADMIN_PASSWORD = 'Radar@Test2026!';
   process.env.NODE_ENV = 'test';
+  process.env.KKFILEVIEW_ALLOWED_ORIGINS = 'http://127.0.0.1:8012';
+  process.env.ATTACHMENT_PREVIEW_SOURCE_BASE_URL = 'http://127.0.0.1:3100';
 
   const { runMigrations } = await import('../src/platform/persistence/migrate.js');
   const { runSeed } = await import('../src/bootstrap/seed.js');
@@ -1266,5 +1268,128 @@ if (!process.env.RADAR_RUN_API_TESTS) {
     });
     assert.equal(devChart.statusCode, 200);
     assert.ok(devChart.json().data.data.some((row) => row.name === '云南农信'));
+  });
+
+  test('交付件版本由服务端递增、手机号脱敏、软删除且预览配置严格受控', async () => {
+    const administrator = await get('SELECT id, phone, name FROM user WHERE is_super = 1 LIMIT 1');
+    const headers = { authorization: `Bearer ${await app.jwt.sign({ id: administrator.id, phone: administrator.phone })}`, 'x-requested-by': 'RADAR' };
+    const deliverable = await get("SELECT id FROM deliverable_definition WHERE scope_key = 'requirement' AND input_mode IN ('both', 'path') ORDER BY id LIMIT 1");
+    assert.ok(deliverable?.id);
+    const requirement = await run('INSERT INTO requirement (req_code, title, status) VALUES (?,?,?)', 'ATTACHMENT-VERSION-001', '附件版本回归', '需求登记');
+
+    const first = await app.inject({
+      method: 'POST', url: '/api/attachments/path', headers,
+      payload: { entityType: 'requirement', entityId: requirement.lastInsertRowid, deliverableId: deliverable.id, pathText: '//demo/share/v1' },
+    });
+    assert.equal(first.statusCode, 200, first.body);
+    assert.equal(first.json().data.version_no, 1);
+    assert.equal(first.json().data.uploader_phone, undefined);
+    assert.ok(first.json().data.uploader_phone_masked);
+
+    const rejectedVersionInput = await app.inject({
+      method: 'POST', url: `/api/attachments/${first.json().data.id}/path-versions`, headers,
+      payload: { pathText: '//demo/share/invalid', version_no: 99 },
+    });
+    assert.equal(rejectedVersionInput.statusCode, 400);
+
+    const second = await app.inject({
+      method: 'POST', url: `/api/attachments/${first.json().data.id}/path-versions`, headers,
+      payload: { pathText: '//demo/share/v2' },
+    });
+    assert.equal(second.statusCode, 200, second.body);
+    assert.equal(second.json().data.version_no, 2);
+    assert.equal(second.json().data.logical_item_id, first.json().data.logical_item_id);
+
+    const current = await app.inject({ method: 'GET', url: `/api/attachments?entityType=requirement&entityId=${requirement.lastInsertRowid}`, headers });
+    assert.equal(current.statusCode, 200);
+    assert.deepEqual(current.json().data.filter((item) => item.deliverable_id === deliverable.id).map((item) => item.version_no), [2]);
+
+    const history = await app.inject({ method: 'GET', url: `/api/attachments/${second.json().data.id}/versions`, headers });
+    assert.equal(history.statusCode, 200, history.body);
+    assert.deepEqual(history.json().data.map((item) => item.version_no), [2, 1]);
+    assert.ok(history.json().data.every((item) => item.uploader_phone === undefined));
+
+    const unavailablePreview = await app.inject({ method: 'POST', url: `/api/attachments/${second.json().data.id}/preview-session`, headers, payload: {} });
+    assert.equal(unavailablePreview.statusCode, 400); // 路径型交付件不能预览
+
+    const deleted = await app.inject({ method: 'DELETE', url: `/api/attachments/${second.json().data.id}`, headers });
+    assert.equal(deleted.statusCode, 200, deleted.body);
+    const afterDelete = await app.inject({ method: 'GET', url: `/api/attachments?entityType=requirement&entityId=${requirement.lastInsertRowid}`, headers });
+    assert.equal(afterDelete.json().data.filter((item) => item.deliverable_id === deliverable.id).length, 0);
+    const deletedHistory = await app.inject({ method: 'GET', url: `/api/attachments/${second.json().data.id}/versions`, headers });
+    assert.equal(deletedHistory.statusCode, 200);
+    assert.ok(deletedHistory.json().data.every((item) => item.is_deleted === 1));
+
+    const savedSettings = await app.inject({
+      method: 'PUT', url: '/api/settings/app-config', headers,
+      payload: { items: { 'deliverable.preview.enabled': 'false', 'deliverable.preview.kkFileViewBaseUrl': '' } },
+    });
+    assert.equal(savedSettings.statusCode, 200, savedSettings.body);
+    assert.ok(await get("SELECT id FROM audit_log WHERE entity_type = 'settings' AND entity_code = 'deliverable-preview'"));
+
+    const invalidSettings = await app.inject({
+      method: 'PUT', url: '/api/settings/app-config', headers,
+      payload: { items: { 'deliverable.preview.enabled': 'true', 'deliverable.preview.kkFileViewBaseUrl': 'https://not-allowlisted.example' } },
+    });
+    assert.equal(invalidSettings.statusCode, 400);
+    assert.equal((await get("SELECT value FROM app_config WHERE key = 'deliverable.preview.enabled'"))?.value, 'false');
+    const csp = await app.inject({ method: 'GET', url: '/api/health' });
+    assert.match(csp.headers['content-security-policy'], /frame-src 'self'/);
+  });
+
+  test('预览会话可签发给未删除历史 PDF，kkFileView 拉取端点不依赖用户 Cookie', async () => {
+    const administrator = await get('SELECT id, phone FROM user WHERE is_super = 1 LIMIT 1');
+    const headers = { authorization: `Bearer ${await app.jwt.sign({ id: administrator.id, phone: administrator.phone })}`, 'x-requested-by': 'RADAR' };
+    const requirement = await run('INSERT INTO requirement (req_code, title, status) VALUES (?,?,?)', 'ATTACHMENT-PREVIEW-001', '附件预览回归', '需求登记');
+    const logicalItemId = 'attgrp_preview_api_test';
+    const historicalPath = path.join('requirement', 'preview-api-test-v1.pdf');
+    const currentPath = path.join('requirement', 'preview-api-test-v2.pdf');
+    const absoluteDir = path.dirname(path.join(process.env.ATTACHMENT_DIR, historicalPath));
+    fs.mkdirSync(absoluteDir, { recursive: true });
+    fs.writeFileSync(path.join(process.env.ATTACHMENT_DIR, historicalPath), '%PDF-1.4\nhistorical preview fixture');
+    fs.writeFileSync(path.join(process.env.ATTACHMENT_DIR, currentPath), '%PDF-1.4\ncurrent preview fixture');
+    const historical = await run(
+      `INSERT INTO attachment
+        (entity_type, entity_id, field_key, kind, filename, stored_path, size, uploader, uploader_name,
+         uploader_phone, logical_item_id, version_no, is_current, is_deleted)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      'requirement', requirement.lastInsertRowid, '预览测试', 'file', '预览测试-v1.pdf', historicalPath, 33,
+      '测试管理员', '测试管理员', '13912345678', logicalItemId, 1, 0, 0,
+    );
+    const attachment = await run(
+      `INSERT INTO attachment
+        (entity_type, entity_id, field_key, kind, filename, stored_path, size, uploader, uploader_name,
+         uploader_phone, logical_item_id, version_no, is_current, is_deleted)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      'requirement', requirement.lastInsertRowid, '预览测试', 'file', '预览测试-v2.pdf', currentPath, 30,
+      '测试管理员', '测试管理员', '13912345678', logicalItemId, 2, 1, 0,
+    );
+    const configured = await app.inject({
+      method: 'PUT', url: '/api/settings/app-config', headers,
+      payload: { items: { 'deliverable.preview.enabled': 'true', 'deliverable.preview.kkFileViewBaseUrl': 'http://127.0.0.1:8012' } },
+    });
+    assert.equal(configured.statusCode, 200, configured.body);
+
+    const session = await app.inject({ method: 'POST', url: `/api/attachments/${historical.lastInsertRowid}/preview-session`, headers, payload: {} });
+    assert.equal(session.statusCode, 200, session.body);
+    const previewUrl = new URL(session.json().data.previewUrl);
+    assert.equal(previewUrl.origin, 'http://127.0.0.1:8012');
+    const sourceUrl = new URL(Buffer.from(previewUrl.searchParams.get('url'), 'base64').toString('utf8'));
+    const streamed = await app.inject({ method: 'GET', url: `${sourceUrl.pathname}${sourceUrl.search}` });
+    assert.equal(streamed.statusCode, 200, streamed.body);
+    assert.match(streamed.headers['content-disposition'], /filename\*=UTF-8''/);
+    assert.match(streamed.body, /historical preview fixture/);
+
+    const historicalDownload = await app.inject({ method: 'GET', url: `/api/attachments/${historical.lastInsertRowid}/download`, headers });
+    assert.equal(historicalDownload.statusCode, 200, historicalDownload.body);
+    assert.match(historicalDownload.body, /historical preview fixture/);
+
+    const currentSession = await app.inject({ method: 'POST', url: `/api/attachments/${attachment.lastInsertRowid}/preview-session`, headers, payload: {} });
+    assert.equal(currentSession.statusCode, 200, currentSession.body);
+
+    const tampered = new URL(sourceUrl);
+    tampered.searchParams.set('signature', 'tampered');
+    const rejected = await app.inject({ method: 'GET', url: `${tampered.pathname}${tampered.search}` });
+    assert.equal(rejected.statusCode, 404);
   });
 }

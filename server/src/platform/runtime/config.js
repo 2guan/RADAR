@@ -66,8 +66,22 @@ function originOf(url) {
   }
 }
 
+/** 将部署声明的 iframe Origin 规范化；非法值不进入允许集，避免宽松回退。 */
+function originListEnv(name) {
+  return listEnv(name, []).flatMap((item) => {
+    try {
+      const url = new URL(item);
+      if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.pathname !== '/' || url.search || url.hash) return [];
+      return [url.origin];
+    } catch {
+      return [];
+    }
+  });
+}
+
 const pamsBaseUrl = strEnv('PAMS_BASE_URL');
 const pamsOrigin = originOf(pamsBaseUrl);
+const kkFileViewAllowedOrigins = originListEnv('KKFILEVIEW_ALLOWED_ORIGINS');
 
 export const config = {
   port: intEnv('PORT', 3000),
@@ -111,6 +125,14 @@ export const config = {
     timeout: intEnv('PAMS_TIMEOUT', 20000),
   },
 
+  preview: {
+    enabledFallback: boolEnv('DELIVERABLE_PREVIEW_ENABLED', false),
+    kkFileViewBaseUrlFallback: strEnv('KKFILEVIEW_BASE_URL'),
+    kkFileViewAllowedOrigins,
+    attachmentSourceBaseUrl: strEnv('ATTACHMENT_PREVIEW_SOURCE_BASE_URL'),
+    sessionTtlSeconds: intEnv('ATTACHMENT_PREVIEW_SESSION_TTL_SECONDS', 300),
+  },
+
   superAdmin: {
     phone: strEnv('ADMIN_PHONE', 'admin'),
     name: strEnv('ADMIN_NAME', '超级管理员'),
@@ -135,6 +157,7 @@ export const config = {
     rateLimitWindow: strEnv('RATE_LIMIT_WINDOW', '1 minute'),
     compressionThreshold: intEnv('COMPRESSION_THRESHOLD', 1024),
     cspConnectSrc: cspListEnv('CSP_CONNECT_SRC', pamsOrigin ? ["'self'", pamsOrigin] : ["'self'"]),
+    cspFrameSrc: ["'self'", ...kkFileViewAllowedOrigins],
   },
 
   logging: {

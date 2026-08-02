@@ -1,0 +1,30 @@
+services:
+  demo:
+    build: .
+    ports:
+      - "127.0.0.1:8091:8091"
+    networks:
+      - preview-demo
+
+  kkfileview:
+    # Docker Hub currently exposes this historical image only. It is isolated
+    # to this local PoC network; production integration must use v5.0.1+.
+    image: keking/kkfileview:4.1.0
+    platform: linux/amd64
+    environment:
+      # 同时支持隔离演示上传服务和本机 RADAR 通过 Docker Desktop 回连。
+      KK_TRUST_HOST: demo,host.docker.internal
+      KK_NOT_TRUST_HOST: default
+      KK_OFFICE_PREVIEW_TYPE: pdf
+    ports:
+      - "127.0.0.1:8012:8012"
+    networks:
+      - preview-demo
+    depends_on:
+      - demo
+
+networks:
+  preview-demo:
+    # Ports remain loopback-only. `internal: true` prevents Docker Desktop
+    # from forwarding those loopback ports on this host, so the local browser
+    # cannot reach the demo.
