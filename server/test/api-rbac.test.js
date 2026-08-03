@@ -351,7 +351,9 @@ if (!process.env.RADAR_RUN_API_TESTS) {
     const role = await get("SELECT id FROM role WHERE code = '金科开发'");
     const businessRole = await get("SELECT id FROM role WHERE code = '金科业务'");
     await run('INSERT INTO system (sys_code, sys_name, org) VALUES (?,?,?)', 'ORG-SCOPE-A', '机构A系统', '机构A');
-    await run('INSERT INTO system (sys_code, sys_name, org) VALUES (?,?,?)', 'ORG-SCOPE-B', '机构B系统', '机构B');
+    await run('INSERT INTO system (sys_code, sys_name, org) VALUES (?,?,?)', 'ORG-SCOPE-B', '机构B系统', '厦门事业群');
+    await run('INSERT INTO system (sys_code, sys_name, org) VALUES (?,?,?)', 'ORG-SCOPE-C', '机构C系统', '机构A');
+    await run('INSERT INTO system (sys_code, sys_name, org) VALUES (?,?,?)', 'ORG-SCOPE-D', '机构D系统', '机构A');
     const visibleBySystem = await run(
       'INSERT INTO requirement (req_code, title, status, main_systems, collab_dev_systems) VALUES (?,?,?,?,?)',
       'ORG-SCOPE-REQ-A', '主责系统命中', '需求登记', JSON.stringify(['ORG-SCOPE-A']), JSON.stringify([]),
@@ -366,11 +368,11 @@ if (!process.env.RADAR_RUN_API_TESTS) {
     );
     const visibleByTestCollaboration = await run(
       'INSERT INTO requirement (req_code, title, status, main_systems, collab_test_systems) VALUES (?,?,?,?,?)',
-      'ORG-SCOPE-REQ-TEST-ONLY', '仅协同测试系统需求', '需求登记', JSON.stringify([]), JSON.stringify(['ORG-SCOPE-A']),
+      'ORG-SCOPE-REQ-TEST-ONLY', '仅协同测试系统需求', '需求登记', JSON.stringify([]), JSON.stringify(['ORG-SCOPE-A', 'ORG-SCOPE-B', 'ORG-SCOPE-C', 'ORG-SCOPE-D']),
     );
     await run(
       'INSERT INTO ticket (ticket_code, title, status, main_systems, collab_test_systems) VALUES (?,?,?,?,?)',
-      'ORG-SCOPE-TICKET-TEST-ONLY', '仅协同测试系统工单', '工单登记', JSON.stringify([]), JSON.stringify(['ORG-SCOPE-A']),
+      'ORG-SCOPE-TICKET-TEST-ONLY', '仅协同测试系统工单', '工单登记', JSON.stringify([]), JSON.stringify(['ORG-SCOPE-A', 'ORG-SCOPE-B', 'ORG-SCOPE-C', 'ORG-SCOPE-D']),
     );
     const user = await run(
       "INSERT INTO user (phone, name, org, password_hash, status, password_changed_at) VALUES (?,?,?,?,?,datetime('now','localtime'))",
@@ -387,10 +389,32 @@ if (!process.env.RADAR_RUN_API_TESTS) {
     assert.ok(codes.includes('ORG-SCOPE-REQ-MANUAL'));
     assert.ok(codes.includes('ORG-SCOPE-REQ-TEST-ONLY'));
     assert.ok(!codes.includes('ORG-SCOPE-REQ-B'));
+    assert.deepEqual(list.json().data.list.find((row) => row.req_code === 'ORG-SCOPE-REQ-TEST-ONLY').collab_test_systems_names, ['机构A系统', '机构B系统', '机构C系统', '机构D系统']);
 
     const ticketList = await app.inject({ method: 'POST', url: '/api/tickets/list', headers, payload: { pageSize: 100 } });
     assert.equal(ticketList.statusCode, 200);
     assert.ok(ticketList.json().data.list.some((row) => row.ticket_code === 'ORG-SCOPE-TICKET-TEST-ONLY'));
+    assert.deepEqual(ticketList.json().data.list.find((row) => row.ticket_code === 'ORG-SCOPE-TICKET-TEST-ONLY').collab_test_systems_names, ['机构A系统', '机构B系统', '机构C系统', '机构D系统']);
+
+    // 工作项已按机构范围准入后，测试拆分不再按操作人机构删除主责或协同系统。
+    const testRole = await get("SELECT id FROM role WHERE code = '金科测试'");
+    await run('UPDATE role SET all_org_access = 0 WHERE id = ?', testRole.id);
+    const testUser = await run(
+      "INSERT INTO user (phone, name, org, password_hash, status, password_changed_at) VALUES (?,?,?,?,?,datetime('now','localtime'))",
+      'org-scope-test-intake', '机构范围测试测试人员', '机构A', 'not-used', '启用',
+    );
+    await run('INSERT INTO user_role (user_id, role_id) VALUES (?,?)', testUser.lastInsertRowid, testRole.id);
+    const testHeaders = { authorization: `Bearer ${await app.jwt.sign({ id: testUser.lastInsertRowid, phone: 'org-scope-test-intake' })}`, 'x-requested-by': 'RADAR' };
+    const completePreview = await app.inject({ method: 'POST', url: '/api/test-tasks/intake-preview', headers: testHeaders, payload: {
+      reqCode: 'ORG-SCOPE-REQ-TEST-ONLY', testType: 'SIT',
+    } });
+    assert.equal(completePreview.statusCode, 200);
+    assert.deepEqual(completePreview.json().data.split.map((row) => row.sysCode), ['ORG-SCOPE-A', 'ORG-SCOPE-B', 'ORG-SCOPE-C', 'ORG-SCOPE-D']);
+    const crossOrganizationIntake = await app.inject({ method: 'POST', url: '/api/test-tasks/intake', headers: testHeaders, payload: {
+      reqCode: 'ORG-SCOPE-REQ-TEST-ONLY', testType: 'SIT', splitMode: 'split',
+      assignments: [{ sysCode: 'ORG-SCOPE-B', owner: '机构范围测试测试人员', implOrg: '厦门事业群' }],
+    } });
+    assert.equal(crossOrganizationIntake.statusCode, 200);
 
     const matchedDetail = await app.inject({ method: 'GET', url: `/api/requirements/${visibleBySystem.lastInsertRowid}`, headers });
     const testCollaborationDetail = await app.inject({ method: 'GET', url: `/api/requirements/${visibleByTestCollaboration.lastInsertRowid}`, headers });

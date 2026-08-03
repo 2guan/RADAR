@@ -337,6 +337,7 @@ export default async function requirementRoutes(fastify) {
       decoded.apply_release_point_ids = (applyPointMap[decoded.req_code] || []).map((point) => point.id);
       decoded.main_systems_names = (decoded.main_systems || []).map((code) => sysMap[code] || code);
       decoded.collab_dev_systems_names = (decoded.collab_dev_systems || []).map((code) => sysMap[code] || code);
+      decoded.collab_test_systems_names = (decoded.collab_test_systems || []).map((code) => sysMap[code] || code);
       decoded.implementation_org_display = orgDisplayMap[decoded.implementation_org] || decoded.implementation_org || null;
       decoded.has_tasks = linkedCodes.has(decoded.req_code);
 

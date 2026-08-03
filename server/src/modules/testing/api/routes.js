@@ -30,7 +30,7 @@ import {
 } from '../../development/index.js';
 import { codePrefix, codeTemplateValues, formatCode } from '../../../shared/utils/code-template.js';
 import { resolveCurrentTaskStatuses } from '../../overview/index.js';
-import { isOrganizationRestricted, organizationMatches, workItemMatchesOrganization } from '../../../shared/utils/organization-scope.js';
+import { isOrganizationRestricted, workItemMatchesOrganization } from '../../../shared/utils/organization-scope.js';
 import { isActivePersonName } from '../../identity-access/index.js';
 import { beijingDateString } from '../../../shared/utils/time.js';
 
@@ -123,15 +123,9 @@ async function assertWorkItemOrganizationAccess(reqCode, user) {
   if (codes !== null && !codes.includes(reqCode)) throw forbidden('无该机构数据权限');
 }
 
-async function visibleTestingSystemCodes(req, systemRoles, user) {
-  if (!isOrganizationRestricted(user)) return new Set(systemRoles.map((item) => item.sysCode));
-  const organizations = await resolveOrganizationValues(user?.org);
-  const implementationOrgMatched = organizationMatches(req.implementation_org, organizations);
-  const systems = await all('SELECT sys_code, org FROM system');
-  const orgBySystem = new Map(systems.map((system) => [system.sys_code, system.org]));
-  return new Set(systemRoles
-    .filter((item) => implementationOrgMatched || organizationMatches(orgBySystem.get(item.sysCode), organizations))
-    .map((item) => item.sysCode));
+function visibleTestingSystemCodes(systemRoles) {
+  // 工作项已通过机构数据范围准入后，测试拆分必须完整保留分析阶段配置的主责和协同系统。
+  return new Set(systemRoles.map((item) => item.sysCode));
 }
 export default async function testTaskRoutes(fastify) {
   const requireTestPerm = async (request, action, testType) => {
@@ -384,7 +378,7 @@ export default async function testTaskRoutes(fastify) {
     // 2. Split mode rows
     const splitRows = [];
     const allSystems = configuredTestingSystemRoles(main, collab);
-    const visibleSystems = await visibleTestingSystemCodes(req, allSystems, request.currentUser);
+    const visibleSystems = visibleTestingSystemCodes(allSystems);
 
     let splitMax = max;
     for (const item of allSystems) {
@@ -453,10 +447,10 @@ export default async function testTaskRoutes(fastify) {
       // 角色由工作项分析结果决定，仅用于只读展示；测试承接不接收或改写角色。
       const configuredRoles = configuredTestingSystemRoles(main, req.collab_test_systems || []);
       const configuredSystems = new Set(configuredRoles.map((item) => item.sysCode));
-      const visibleSystems = await visibleTestingSystemCodes(req, configuredRoles, request.currentUser);
+      const visibleSystems = visibleTestingSystemCodes(configuredRoles);
       const sysCodes = [...assignmentBySystem.keys()];
       if (sysCodes.some((sysCode) => !configuredSystems.has(sysCode))) throw badRequest('存在不属于该需求/工单的测试系统');
-      if (sysCodes.some((sysCode) => !visibleSystems.has(sysCode))) throw forbidden('仅可承接本人机构实施系统');
+      if (sysCodes.some((sysCode) => !visibleSystems.has(sysCode))) throw forbidden('仅可承接关联工作项的测试系统');
       for (const sysCode of sysCodes) {
         const sysName = sysMap.get(sysCode) || sysCode;
         targets.push({ sysCode, assignmentKey: sysCode, taskName: `${testType}-${req.title}-${sysName}`, isSplit: true });
