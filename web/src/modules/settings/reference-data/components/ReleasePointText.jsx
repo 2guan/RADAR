@@ -1,5 +1,3 @@
-import { formatBeijingDate } from '../../../../shared/utils/index.js';
-
 /**
  * 文件：web/src/modules/settings/reference-data/components/ReleasePointText.jsx
  * 说明：遵循项目研发规约；跨模块能力仅可经公开契约访问。
@@ -7,6 +5,7 @@ import { formatBeijingDate } from '../../../../shared/utils/index.js';
  * 作者：hengguan
  */
 
+import { formatBeijingDate } from '../../../../shared/utils/index.js';
 
 export const PENDING_RELEASE_POINT = '投产点待定';
 
