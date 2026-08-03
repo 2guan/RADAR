@@ -164,7 +164,7 @@ last_updated: "2026-08-03"
 
 - 修改文件与范围一致性：已落实 settings/reference-data、process-configuration、shared、identity-access、requirements、tickets、development、testing、release、overview 的显示/存储契约，以及双端迁移、种子、mock、测试与移动端页面；所有已暂存候选文件均在 `ai-task-scope.yaml` 的允许路径内，未纳入未受任务范围授权的 `docs/reports/`。
 - 配置与交付影响落实：本地已确认的输入项、交付件及分区配置已导出为 `local-stage-content-seed.js`，新库初始化与 mock 灌入共用该快照；需求分析、工单分析中已移除仅属于投产申请阶段的“申请投产点”。
-- 测试证据：`npm test --prefix server`（38 通过，1 跳过）、`npm run test:api --prefix server`（28 通过，5 跳过）、`npm run test:rbac --prefix server`（28 通过，5 跳过）、`npm run build --prefix web`、UI 数据源、模块边界、治理、代码注释、运行时与 `git diff --check` 均通过；SQLite 内存库执行 `0047` 两次，12 个机构字段均转换为属性值，验证幂等。
+- 测试证据：`npm test --prefix server`（38 通过，1 跳过）、`npm run test:api --prefix server`（28 通过，5 跳过）、`npm run test:rbac --prefix server`（28 通过，5 跳过）、`npm run build --prefix web`、UI 数据源、模块边界、治理、代码注释、运行时与 `git diff --check` 均通过；SQLite 内存库执行 `0047` 两次，12 个机构字段均转换为属性值，验证幂等。补充回归：以临时 SQLite 数据库执行 `node scripts/mock-data.js`，生成 421 条附件，均存在唯一 `logical_item_id`，且均为当前首版。
 - 已知风险：显示值存在重复或历史非标准值时，迁移保持原值而不猜测；TDSQL 迁移与 SQLite 迁移保持等价 SQL 语义，但本地没有连接生产或 TDSQL 实例。移动端交互仍应在投产前以真实 390px 终端完成业务验收。
 - 发布验证与回退：先备份数据库并在预发布执行迁移，确认列表、详情、导入导出均存属性值、显显示值；若需回退代码可回退本提交，数据回退应从迁移前备份恢复，避免把属性值反向猜测为显示值。
 

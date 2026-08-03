@@ -53,6 +53,13 @@ function shift(base, days) {
 /** YYYYMMDD -> YYYY-MM-DD */
 const ymd = (s) => `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
 
+// Mock 直接写附件元数据时，也要满足附件平台的逻辑项/版本契约。
+let mockAttachmentSequence = 0;
+function mockAttachmentLogicalItemId(entityType, entityId) {
+  mockAttachmentSequence += 1;
+  return `attgrp_mock_${entityType}_${entityId}_${mockAttachmentSequence}`;
+}
+
 // ---------------------------------------------------------------------------
 // 演示人员清单：[手机号, 姓名, 所属机构属性值, 角色标识数组]。
 // 角色数组与用户角色关系一一对应；含「超级管理员」的账号以 is_super=1 建号。
@@ -531,11 +538,17 @@ async function seedStageDeliverableDemo() {
   const builtinApplyProof = await get(`SELECT id, label FROM deliverable_definition
     WHERE scope_key = ? AND deliverable_key = ? AND deleted_at IS NULL`, 'release_apply', 'builtin_1');
   const demoDev = await get('SELECT id FROM dev_task WHERE status <> ? ORDER BY id LIMIT 1', '开发完成');
-  if (demoDev && designDocument) await run(`INSERT INTO attachment (entity_type, entity_id, field_key, kind, path_text, deliverable_id, uploader)
-    VALUES (?,?,?,?,?,?,?)`, 'dev', demoDev.id, designDocument.label, 'path', '/mock/design-document.md', designDocument.id, reviewer?.name || '系统初始化');
+  if (demoDev && designDocument) await run(`INSERT INTO attachment
+    (entity_type, entity_id, field_key, kind, path_text, deliverable_id, uploader, logical_item_id, version_no, is_current, is_deleted)
+    VALUES (?,?,?,?,?,?,?,?,1,1,0)`,
+    'dev', demoDev.id, designDocument.label, 'path', '/mock/design-document.md', designDocument.id,
+    reviewer?.name || '系统初始化', mockAttachmentLogicalItemId('dev', demoDev.id));
   const demoApply = applies[0];
-  if (demoApply && builtinApplyProof) await run(`INSERT INTO attachment (entity_type, entity_id, field_key, kind, filename, stored_path, size, deliverable_id, uploader)
-    VALUES (?,?,?,?,?,?,?,?,?)`, 'release_apply', demoApply.id, builtinApplyProof.label, 'file', 'mock-ferry-proof.txt', 'mock/ferry-proof.txt', 128, builtinApplyProof.id, reviewer?.name || '系统初始化');
+  if (demoApply && builtinApplyProof) await run(`INSERT INTO attachment
+    (entity_type, entity_id, field_key, kind, filename, stored_path, size, deliverable_id, uploader, logical_item_id, version_no, is_current, is_deleted)
+    VALUES (?,?,?,?,?,?,?,?,?,?,1,1,0)`,
+    'release_apply', demoApply.id, builtinApplyProof.label, 'file', 'mock-ferry-proof.txt', 'mock/ferry-proof.txt', 128,
+    builtinApplyProof.id, reviewer?.name || '系统初始化', mockAttachmentLogicalItemId('release_apply', demoApply.id));
 }
 
 export async function runMock() {
@@ -683,9 +696,11 @@ export async function runMock() {
       await auditCreate('requirement', reqId, code, '系统初始化');
       // 终态需求：需求说明书附件（路径）
       if (reqStatus === '分析完成') {
-        await run(`INSERT INTO attachment (entity_type, entity_id, field_key, kind, path_text, uploader)
-             VALUES ('requirement', ?, '需求说明书', 'path', ?, ?)`,
-          reqId, `\\\\nas\\需求\\${code}\\需求说明书.docx`, pickUser('农信业务'));
+        await run(`INSERT INTO attachment
+             (entity_type, entity_id, field_key, kind, path_text, uploader, logical_item_id, version_no, is_current, is_deleted)
+             VALUES ('requirement', ?, '需求说明书', 'path', ?, ?, ?, 1, 1, 0)`,
+          reqId, `\\\\nas\\需求\\${code}\\需求说明书.docx`, pickUser('农信业务'),
+          mockAttachmentLogicalItemId('requirement', reqId));
       }
       reqs.push({ id: reqId, code, spec, main, rp: spec.rp });
     }
@@ -720,10 +735,11 @@ export async function runMock() {
       const devId = res.lastInsertRowid;
       await auditCreate('dev', devId, code, '系统初始化');
       if (isDone) {
-        await run(`INSERT INTO attachment (entity_type, entity_id, field_key, kind, path_text, uploader)
-             VALUES ('dev', ?, ?, 'path', ?, ?)`,
+        await run(`INSERT INTO attachment
+             (entity_type, entity_id, field_key, kind, path_text, uploader, logical_item_id, version_no, is_current, is_deleted)
+             VALUES ('dev', ?, ?, 'path', ?, ?, ?, 1, 1, 0)`,
           devId, pick(['概要设计', '详细设计', '代码走查', '单元测试报告']),
-          `\\\\nas\\开发\\${code}\\设计文档.docx`, pickUser('金科开发'));
+          `\\\\nas\\开发\\${code}\\设计文档.docx`, pickUser('金科开发'), mockAttachmentLogicalItemId('dev', devId));
       }
       devCount++;
     }
@@ -774,9 +790,11 @@ export async function runMock() {
       const testId = res.lastInsertRowid;
       await auditCreate('test', testId, code, '系统初始化');
       if (isDone) {
-        await run(`INSERT INTO attachment (entity_type, entity_id, field_key, kind, path_text, uploader)
-             VALUES ('test', ?, ?, 'path', ?, ?)`,
-          testId, pick(['测试方案', '测试报告']), `\\\\nas\\测试\\${code}\\测试报告.docx`, pickUser('金科测试'));
+        await run(`INSERT INTO attachment
+             (entity_type, entity_id, field_key, kind, path_text, uploader, logical_item_id, version_no, is_current, is_deleted)
+             VALUES ('test', ?, ?, 'path', ?, ?, ?, 1, 1, 0)`,
+          testId, pick(['测试方案', '测试报告']), `\\\\nas\\测试\\${code}\\测试报告.docx`, pickUser('金科测试'),
+          mockAttachmentLogicalItemId('test', testId));
       }
       testCount++;
     }
