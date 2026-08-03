@@ -30,7 +30,7 @@ import {
 } from '../../development/index.js';
 import { codePrefix, codeTemplateValues, formatCode } from '../../../shared/utils/code-template.js';
 import { resolveCurrentTaskStatuses } from '../../overview/index.js';
-import { isOrganizationRestricted, workItemMatchesOrganization } from '../../../shared/utils/organization-scope.js';
+import { isOrganizationRestricted, organizationMatches, workItemMatchesOrganization } from '../../../shared/utils/organization-scope.js';
 import { isActivePersonName } from '../../identity-access/index.js';
 import { beijingDateString } from '../../../shared/utils/time.js';
 
@@ -65,6 +65,24 @@ function intakeAssignmentMap(assignments) {
   return result;
 }
 
+function configuredTestingSystemRoles(main, collab) {
+  const rows = [];
+  const seen = new Set();
+  for (const sysCode of main || []) {
+    if (sysCode && !seen.has(sysCode)) {
+      seen.add(sysCode);
+      rows.push({ sysCode, role: '主责' });
+    }
+  }
+  for (const sysCode of collab || []) {
+    if (sysCode && !seen.has(sysCode)) {
+      seen.add(sysCode);
+      rows.push({ sysCode, role: '协同' });
+    }
+  }
+  return rows;
+}
+
 const TYPE_NAME = { SIT: '应用组装测试', UAT: '用户测试', NFT: '非功能测试', SEC: '安全测试' };
 const COLUMNS = [
   'id', 'req_code', 'task_code', 'task_name', 'test_type', 'status', 'owner', 'intake_owner', 'impl_system', 'impl_org',
@@ -83,8 +101,8 @@ async function organizationWorkItemCodes(user) {
   if (!isOrganizationRestricted(user)) return null;
   if (!user?.org) return [];
   const [items, systems] = await Promise.all([
-    all(`SELECT req_code AS work_item_code, implementation_org, main_systems, collab_dev_systems FROM requirement
-         UNION ALL SELECT ticket_code AS work_item_code, implementation_org, main_systems, collab_dev_systems FROM ticket`),
+    all(`SELECT req_code AS work_item_code, implementation_org, main_systems, collab_test_systems FROM requirement
+         UNION ALL SELECT ticket_code AS work_item_code, implementation_org, main_systems, collab_test_systems FROM ticket`),
     all('SELECT sys_code, org FROM system'),
   ]);
   const orgByCode = Object.fromEntries(systems.map((system) => [system.sys_code, system.org]));
@@ -103,6 +121,17 @@ async function appendOrganizationScope(wh, params, field, user) {
 async function assertWorkItemOrganizationAccess(reqCode, user) {
   const codes = await organizationWorkItemCodes(user);
   if (codes !== null && !codes.includes(reqCode)) throw forbidden('无该机构数据权限');
+}
+
+async function visibleTestingSystemCodes(req, systemRoles, user) {
+  if (!isOrganizationRestricted(user)) return new Set(systemRoles.map((item) => item.sysCode));
+  const organizations = await resolveOrganizationValues(user?.org);
+  const implementationOrgMatched = organizationMatches(req.implementation_org, organizations);
+  const systems = await all('SELECT sys_code, org FROM system');
+  const orgBySystem = new Map(systems.map((system) => [system.sys_code, system.org]));
+  return new Set(systemRoles
+    .filter((item) => implementationOrgMatched || organizationMatches(orgBySystem.get(item.sysCode), organizations))
+    .map((item) => item.sysCode));
 }
 export default async function testTaskRoutes(fastify) {
   const requireTestPerm = async (request, action, testType) => {
@@ -354,23 +383,12 @@ export default async function testTaskRoutes(fastify) {
 
     // 2. Split mode rows
     const splitRows = [];
-    const allSystems = [];
-    const seen = new Set();
-    for (const sysCode of main) {
-      if (!seen.has(sysCode)) {
-        seen.add(sysCode);
-        allSystems.push({ sysCode, role: '主责' });
-      }
-    }
-    for (const sysCode of collab) {
-      if (!seen.has(sysCode)) {
-        seen.add(sysCode);
-        allSystems.push({ sysCode, role: '协同' });
-      }
-    }
+    const allSystems = configuredTestingSystemRoles(main, collab);
+    const visibleSystems = await visibleTestingSystemCodes(req, allSystems, request.currentUser);
 
     let splitMax = max;
     for (const item of allSystems) {
+      if (!visibleSystems.has(item.sysCode)) continue;
       const sysName = sysMap.get(item.sysCode) || item.sysCode;
       const exist = existingTasks.find(t => t.impl_system === item.sysCode && t.task_name === `${testType}-${req.title}-${sysName}`);
       if (exist) {
@@ -382,7 +400,7 @@ export default async function testTaskRoutes(fastify) {
           taskCode: exist.task_code,
           taskName: exist.task_name,
           owner: exist.owner,
-          defaultImplOrg: mainSystemOrg,
+          defaultImplOrg: sysOrgMap.get(item.sysCode) || mainSystemOrg,
           status: '已建任务',
         });
       } else {
@@ -396,7 +414,7 @@ export default async function testTaskRoutes(fastify) {
           exists: false,
           taskCode,
           taskName,
-          defaultImplOrg: mainSystemOrg,
+          defaultImplOrg: sysOrgMap.get(item.sysCode) || mainSystemOrg,
           status: '新建任务',
         });
       }
@@ -425,21 +443,26 @@ export default async function testTaskRoutes(fastify) {
     const systemsList = await all('SELECT sys_code, sys_name FROM system');
     const sysMap = new Map(systemsList.map(s => [s.sys_code, s.sys_name]));
 
+    if (!['overall', 'split'].includes(splitMode)) throw badRequest('测试承接方式非法');
     const assignmentBySystem = intakeAssignmentMap(assignments);
     let targets = [];
     if (splitMode === 'overall') {
       const overallKey = firstMainSysCode || 'overall';
       targets = [{ sysCode: firstMainSysCode, assignmentKey: overallKey, taskName: `${testType}-${req.title}`, isSplit: false }];
     } else {
+      // 角色由工作项分析结果决定，仅用于只读展示；测试承接不接收或改写角色。
+      const configuredRoles = configuredTestingSystemRoles(main, req.collab_test_systems || []);
+      const configuredSystems = new Set(configuredRoles.map((item) => item.sysCode));
+      const visibleSystems = await visibleTestingSystemCodes(req, configuredRoles, request.currentUser);
       const sysCodes = [...assignmentBySystem.keys()];
+      if (sysCodes.some((sysCode) => !configuredSystems.has(sysCode))) throw badRequest('存在不属于该需求/工单的测试系统');
+      if (sysCodes.some((sysCode) => !visibleSystems.has(sysCode))) throw forbidden('仅可承接本人机构实施系统');
       for (const sysCode of sysCodes) {
         const sysName = sysMap.get(sysCode) || sysCode;
         targets.push({ sysCode, assignmentKey: sysCode, taskName: `${testType}-${req.title}-${sysName}`, isSplit: true });
       }
     }
     if (!targets.length) throw badRequest('请至少选择一个测试任务');
-    const configuredSystems = new Set([...main, ...(req.collab_test_systems || [])]);
-    if (splitMode !== 'overall' && targets.some((target) => !configuredSystems.has(target.sysCode))) throw badRequest('存在不属于该需求/工单的测试系统');
     for (const target of targets) {
       const assignment = assignmentBySystem.get(target.assignmentKey);
       if (!assignment?.owner) throw badRequest('请为每个测试任务选择测试负责人');

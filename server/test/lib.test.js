@@ -34,6 +34,7 @@ import {
   beijingCompactDateString, beijingDateString, beijingDateTimeString, isValidDateOnly,
 } from '../src/shared/utils/time.js';
 import { isDue as isIssueSyncScheduleDue } from '../src/modules/issues/application/issue-sync-scheduler.js';
+import { workItemMatchesOrganization } from '../src/shared/utils/organization-scope.js';
 
 test('运行时路径：平台配置从仓库根目录解析静态资源与持久化默认目录', () => {
   const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -78,6 +79,13 @@ test('工作项公共契约：需求和工单保持独立且类型受控', () =>
 
 test('工作项投产点筛选：空集合代表全部投产点，不追加空编号条件', async () => {
   assert.equal(await workItemCodesInReleasePoints([]), null);
+});
+
+test('机构范围：协同测试系统所属机构可使工作项可见', () => {
+  assert.equal(workItemMatchesOrganization({
+    main_systems: JSON.stringify(['SYS-OTHER']),
+    collab_test_systems: JSON.stringify(['SYS-TEST']),
+  }, ['测试机构'], { 'SYS-OTHER': '其他机构', 'SYS-TEST': '测试机构' }), true);
 });
 
 test('编号模板：需求/工单编号为标准占位符，并兼容历史需求编号占位符', () => {
