@@ -24,7 +24,14 @@ export function shortTaskStatusStage(stage, workItem = {}) {
     const type = workItem.entity_type || workItem.entityType || workItem.workItemType;
     return type === 'ticket' || workItem.ticket_code ? '工单' : '需求';
   }
+  if (stage === '需求分析') return '需求';
+  if (stage === '工单分析') return '工单';
   return SHORT_STAGE_LABEL[stage] || stage;
+}
+
+/** 概览首阶段按工作项实体类型使用明确的展示文案，统计阶段名保持不变。 */
+function analysisStageLabel(workItem = {}) {
+  return shortTaskStatusStage('需求/工单分析', workItem) === '工单' ? '工单分析' : '需求分析';
 }
 
 /** 计算一个阶段的流程状态及其稳定代表状态。 */
@@ -40,12 +47,13 @@ export function taskStatusNode(tasks = []) {
  * 构建一个工作项的全链路节点。
  * 可选测试只在实际存在任务时参与链路；SIT/UAT/投产节点始终保留以表达未开始状态。
  */
-export function buildTaskStatusChain(workItem, devMap = {}, testMap = {}, releaseMap = {}) {
+export function buildTaskStatusChain(workItem, devMap = {}, testMap = {}, releaseMap = {}, options = {}) {
   const code = workItem?.req_code || workItem?.ticket_code || workItem?.code;
   const tests = testMap[code] || {};
   const releaseTask = releaseMap[code];
+  const analysisLabel = options.analysisLabel === 'entity' ? analysisStageLabel(workItem) : '需求/工单分析';
   const nodes = [
-    { key: 'analysis', label: '需求/工单分析', ...taskStatusNode(workItem ? [{ status: workItem.status }] : []) },
+    { key: 'analysis', label: analysisLabel, ...taskStatusNode(workItem ? [{ status: workItem.status }] : []) },
     { key: 'dev', label: '开发', ...taskStatusNode(devMap[code] || []) },
     { key: 'SIT', label: '应用组装测试', ...taskStatusNode(tests.SIT || []) },
     { key: 'UAT', label: '用户测试', ...taskStatusNode(tests.UAT || []) },

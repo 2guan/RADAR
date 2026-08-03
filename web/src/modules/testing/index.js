@@ -6,3 +6,4 @@
  */
 
 export { default as CoverageAnalysisModal } from './components/CoverageAnalysisModal.jsx';
+export { default as TestIntakeModal } from './components/TestIntakeModal.jsx';

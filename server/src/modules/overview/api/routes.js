@@ -118,7 +118,7 @@ async function entityArtifacts(code) {
 
 /** 构建单需求/工单链路概要，复用公开任务状态契约保持所有入口口径一致。 */
 function buildChain(req, devMap, testMap, rtMap) {
-  const chain = buildTaskStatusChain(req, devMap, testMap, rtMap);
+  const chain = buildTaskStatusChain(req, devMap, testMap, rtMap, { analysisLabel: 'entity' });
   return {
     nodes: chain.nodes,
     currentStage: chain.shortDisplay,

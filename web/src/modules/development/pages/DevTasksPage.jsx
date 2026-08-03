@@ -5,41 +5,28 @@
  * 作者：hengguan
  */
 
-import { useRef, useState, useMemo, useEffect } from 'react';
-import { Card, Button, Space, Modal, Tag, Popconfirm, message, Table, Input, Spin, List, Radio, Checkbox, Select } from 'antd';
+import { useRef, useState, useEffect } from 'react';
+import { Card, Button, Space, Tag, Popconfirm, message } from 'antd';
 import { ToolOutlined, EditOutlined, DeleteOutlined, ImportOutlined, ExportOutlined } from '@ant-design/icons';
-import { DataTable, FilterPanel, ResizableTitle } from '../../../shared/ui/index.js';
+import { DataTable, FilterPanel } from '../../../shared/ui/index.js';
 import { StatusBadge, TaskEditor, TaskStatusBadge } from '../../../shared/workflow/index.js';
-import { SystemSelect } from '../../settings/reference-data/index.js';
 import { HistoryDrawer } from '../../../platform/audit/index.js';
 import Can from '../../../platform/auth/Can.jsx';
 import { apiPost, apiDelete, apiGet } from '../api/index.js';
 import { useAppStore } from '../../../platform/state/app.js';
-import { useResponsive } from '../../../platform/ui/useResponsive.js';
 import { exportXlsx } from '../../../platform/import-export/io.js';
 import { ImportModal } from '../../../platform/import-export/index.js';
 import { useStageListFields } from '../../settings/process-configuration/index.js';
+import DevIntakeModal from '../components/DevIntakeModal.jsx';
 
 export default function DevTasks() {
   const stageList = useStageListFields('dev');
   const tableRef = useRef();
-  const { isMobile } = useResponsive();
   const releasePointIds = useAppStore((s) => s.releasePointIds);
   const [editId, setEditId] = useState(null);
   const [historyId, setHistoryId] = useState(null);
   const [intakeOpen, setIntakeOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
-  const [reqList, setReqList] = useState([]);
-  const [searchText, setSearchText] = useState('');
-  const [selectedReq, setSelectedReq] = useState(null);
-  const [previewList, setPreviewList] = useState([]);
-  const [selectedNewSystems, setSelectedNewSystems] = useState([]);
-  const [selectedOwners, setSelectedOwners] = useState({});
-  const [selectedImplOrgs, setSelectedImplOrgs] = useState({});
-  const [loadingPreview, setLoadingPreview] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [reqColWidths, setReqColWidths] = useState({});
-  const [prevColWidths, setPrevColWidths] = useState({});
 
   const [filterQuery, setFilterQuery] = useState([]);
   
@@ -102,115 +89,7 @@ export default function DevTasks() {
    * 打开“开发承接”弹窗
    * 拉取所有当前投产点关联的且未开始或未终态的需求/工单，用以按系统进行任务拆分
    */
-  const openIntake = async () => {
-    const [reqRes, ticketRes] = await Promise.all([
-      apiPost('/requirements/list', { releasePointIds, pageSize: 0 }),
-      apiPost('/tickets/list', { releasePointIds, pageSize: 0 }),
-    ]);
-    const reqs = (reqRes.list || []).map((r) => ({ ...r, entity_type: 'requirement', entity_label: '需求' }));
-    const tickets = (ticketRes.list || []).map((t) => ({
-      ...t,
-      req_code: t.ticket_code,
-      entity_type: 'ticket',
-      entity_label: '工单',
-      main_systems_names: t.main_systems_names || [],
-    }));
-    const list = [...reqs, ...tickets].filter(
-      (r) => !r.release_stage_type || (r.release_stage_type !== 'in-progress' && r.release_stage_type !== 'final')
-    );
-    const pendingCodes = await apiPost('/dev-tasks/intake-pending-codes', { reqCodes: list.map((item) => item.req_code) });
-    setReqList(list.filter((item) => (pendingCodes || []).includes(item.req_code)));
-    setSearchText('');
-    setSelectedReq(null);
-    setPreviewList([]);
-    setSelectedNewSystems([]);
-    setSelectedOwners({});
-    setSelectedImplOrgs({});
-    setIntakeOpen(true);
-  };
-
-  /**
-   * 选中某个需求/工单时，请求后端获取该工作项下各个涉及系统对应的开发任务生成预览
-   * 默认勾选尚未建立任务（exists 为 false）的涉及系统
-   */
-  const handleSelectReq = async (record) => {
-    setSelectedReq(record);
-    if (record) {
-      setLoadingPreview(true);
-      try {
-        const res = await apiPost('/dev-tasks/intake-preview', { reqCode: record.req_code });
-        setPreviewList(res || []);
-        const checkable = (res || [])
-          .filter((t) => !t.exists)
-          .map((t) => t.sysCode);
-        setSelectedNewSystems(checkable);
-        setSelectedOwners({});
-        setSelectedImplOrgs(Object.fromEntries((res || [])
-          .filter((t) => !t.exists && t.defaultImplOrg)
-          .map((t) => [t.sysCode, t.defaultImplOrg])));
-      } catch (err) {
-        message.error(err.message || '加载预览失败');
-      } finally {
-        setLoadingPreview(false);
-      }
-    } else {
-      setPreviewList([]);
-      setSelectedNewSystems([]);
-      setSelectedOwners({});
-      setSelectedImplOrgs({});
-    }
-  };
-
-  /**
-   * 执行开发任务承接逻辑
-   * 将选中的系统列表发送给后端，按主责/配合等不同角色为选定需求拆分并新建开发任务
-   */
-  const doIntake = async () => {
-    if (!selectedReq) {
-      message.warning('请先选择需求/工单');
-      return;
-    }
-    if (!selectedNewSystems.length) {
-      message.warning('请至少勾选一个需要新建的任务');
-      return;
-    }
-    if (selectedNewSystems.some((sysCode) => !selectedOwners[sysCode])) {
-      message.warning('请为每个勾选的开发任务选择开发负责人');
-      return;
-    }
-    if (selectedNewSystems.some((sysCode) => !selectedImplOrgs[sysCode])) {
-      message.warning('请为每个勾选的开发任务选择开发实施方');
-      return;
-    }
-    if (previewList.filter((item) => item.role === '主责').length !== 1) {
-      message.warning('开发系统角色必须且只能选择一个主责系统');
-      return;
-    }
-    setSaving(true);
-    try {
-      const res = await apiPost('/dev-tasks/intake', {
-        reqCode: selectedReq.req_code,
-        systemRoles: previewList.map((item) => ({ sysCode: item.sysCode, role: item.role })),
-        assignments: selectedNewSystems.map((sysCode) => ({
-          sysCode, owner: selectedOwners[sysCode], implOrg: selectedImplOrgs[sysCode],
-        })),
-      });
-      message.success(`已成功承接 ${res.length} 个开发任务`);
-      setIntakeOpen(false);
-      tableRef.current?.reload();
-    } catch (err) {
-      message.error(err.message || '承接失败');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const updateSystemRole = (sysCode, role) => {
-    setPreviewList((current) => current.map((item) => {
-      if (role === '主责') return { ...item, role: item.sysCode === sysCode ? '主责' : '协同' };
-      return item.sysCode === sysCode ? { ...item, role } : item;
-    }));
-  };
+  const openIntake = () => setIntakeOpen(true);
 
   const columns = [
     { title: '任务状态', dataIndex: 'task_status_short', key: 'task_status', sortKey: 'status', align: 'center', width: 120, render: (_, row) => <TaskStatusBadge shortStatus={row.task_status_short} status={row.task_status_value} fullStatus={row.task_status} /> },
@@ -259,173 +138,6 @@ export default function DevTasks() {
       ),
     },
   ];
-  const reqColumns = [
-    {
-      title: '类型',
-      dataIndex: 'entity_label',
-      key: 'entity_label',
-      width: 70,
-      render: (val) => val ? <Tag className="status-tag" style={{ margin: 0 }}>{val}</Tag> : '—',
-    },
-    {
-      title: '需求/工单编号',
-      dataIndex: 'req_code',
-      key: 'req_code',
-      width: 130,
-      render: (val) => (
-        <span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', fontWeight: 500 }}>
-          {val}
-        </span>
-      ),
-    },
-    {
-      title: '标题/概述',
-      dataIndex: 'title',
-      key: 'title',
-      ellipsis: true,
-    },
-    {
-      title: '主责系统',
-      dataIndex: 'main_systems_names',
-      key: 'main_systems_names',
-      render: (arr) => (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-          {(arr || []).map((name) => (
-            <Tag key={name} className="status-tag tag-system" style={{ borderRadius: 2, margin: 0, fontSize: 10, lineHeight: '16px' }}>{name}</Tag>
-          ))}
-        </div>
-      ),
-    },
-  ];
-
-  const previewColumns = [
-    {
-      title: '建立状态',
-      dataIndex: 'status',
-      key: 'status',
-      width: 100,
-      align: 'center',
-      render: (val, record) => {
-        const isExist = record.exists;
-        return (
-          <Tag className={isExist ? 'status-tag status-tag-final' : 'status-tag status-tag-in-progress'} style={{ margin: 0 }}>
-            {val}
-          </Tag>
-        );
-      },
-    },
-    {
-      title: '实施系统',
-      dataIndex: 'sysName',
-      key: 'sysName',
-      render: (val, record) => (
-        <span style={{ fontWeight: 500 }}>
-          {val} <span style={{ color: 'var(--radar-text-secondary)', fontSize: 11, fontWeight: 400 }}>({record.sysCode})</span>
-        </span>
-      ),
-    },
-    {
-      title: '角色',
-      dataIndex: 'role',
-      key: 'role',
-      width: 108,
-      align: 'center',
-      render: (val, record) => (
-        <Select
-          value={val}
-          options={[{ value: '主责', label: '主责' }, { value: '协同', label: '协同' }]}
-          size="small"
-          style={{ width: '100%' }}
-          onClick={(event) => event.stopPropagation()}
-          onChange={(role) => updateSystemRole(record.sysCode, role)}
-        />
-      ),
-    },
-    {
-      title: '计划生成任务编号',
-      dataIndex: 'taskCode',
-      key: 'taskCode',
-      render: (val) => (
-        <span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace' }}>
-          {val}
-        </span>
-      ),
-    },
-    {
-      title: '开发任务名称',
-      dataIndex: 'taskName',
-      key: 'taskName',
-      ellipsis: true,
-    },
-    {
-      title: '开发实施方', key: 'impl_org', width: 170,
-      render: (_, record) => record.exists ? <span>—</span> : (
-        <Select
-          value={selectedImplOrgs[record.sysCode]}
-          options={orgOptions}
-          placeholder="选择开发实施方"
-          size="small"
-          showSearch
-          optionFilterProp="label"
-          style={{ width: '100%' }}
-          onClick={(event) => event.stopPropagation()}
-          onChange={(implOrg) => setSelectedImplOrgs((current) => ({ ...current, [record.sysCode]: implOrg }))}
-        />
-      ),
-    },
-    {
-      title: '开发负责人', key: 'intake_owner', width: 180,
-      render: (_, record) => record.exists ? <span>{record.owner || '—'}</span> : (
-        <Select
-          value={selectedOwners[record.sysCode]}
-          options={userOptions}
-          placeholder="选择开发负责人"
-          size="small"
-          showSearch
-          optionFilterProp="label"
-          style={{ width: '100%' }}
-          onClick={(event) => event.stopPropagation()}
-          onChange={(owner) => setSelectedOwners((current) => ({ ...current, [record.sysCode]: owner }))}
-        />
-      ),
-    },
-  ];
-
-  // 列宽拖拽支持
-  const handleReqResize = (key) => (w) => setReqColWidths((prev) => ({ ...prev, [key]: w }));
-  const resizableReqColumns = useMemo(() => reqColumns.map((c) => {
-    const width = reqColWidths[c.dataIndex || c.key] || c.width;
-    return {
-      ...c,
-      width,
-      onHeaderCell: (col) => ({
-        width: col.width,
-        onResize: handleReqResize(c.dataIndex || c.key),
-      }),
-    };
-  }), [reqColumns, reqColWidths]);
-
-  const handlePrevResize = (key) => (w) => setPrevColWidths((prev) => ({ ...prev, [key]: w }));
-  const resizablePreviewColumns = useMemo(() => previewColumns.map((c) => {
-    const width = prevColWidths[c.dataIndex || c.key] || c.width;
-    return {
-      ...c,
-      width,
-      onHeaderCell: (col) => ({
-        width: col.width,
-        onResize: handlePrevResize(c.dataIndex || c.key),
-      }),
-    };
-  }), [previewColumns, prevColWidths]);
-
-  const filteredReqs = reqList.filter((r) => {
-    if (!searchText) return true;
-    const txt = searchText.toLowerCase();
-    const code = (r.req_code || '').toLowerCase();
-    const title = (r.title || '').toLowerCase();
-    const systems = (r.main_systems_names || []).join(',').toLowerCase();
-    return code.includes(txt) || title.includes(txt) || systems.includes(txt);
-  });
 
   return (
     <Card 
@@ -475,208 +187,12 @@ export default function DevTasks() {
         )}
       />
 
-      <Modal
-        open={intakeOpen}
-        title="开发承接"
-        width={isMobile ? 'calc(100vw - 24px)' : 1180}
-        onCancel={() => setIntakeOpen(false)}
-        onOk={doIntake}
-        confirmLoading={saving}
-        okText="承接"
-        styles={{ body: { padding: '12px 0 0 0' } }}
-        destroyOnHidden
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* 1. 选择需求 */}
-          <div className="form-section-card" style={{ marginBottom: 0 }}>
-            <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>1. 选择需求/工单</div>
-            <div style={{ marginBottom: 8 }}>
-              <Input.Search
-                placeholder="需求/工单编号、标题/概述、主责系统检索..."
-                value={searchText}
-                onChange={(e) => setSearchText(e.target.value)}
-                size="small"
-                style={{ width: isMobile ? '100%' : 320 }}
-                allowClear
-                className="super-compact-table-search"
-              />
-            </div>
-            {isMobile ? (
-              <List
-                dataSource={filteredReqs}
-                rowKey="req_code"
-                size="small"
-                pagination={{ pageSize: 5, size: 'small', showSizeChanger: false }}
-                renderItem={(r) => {
-                  const isSelected = selectedReq?.req_code === r.req_code;
-                  return (
-                    <Card
-                      size="small"
-                      style={{
-                        marginBottom: 8,
-                        cursor: 'pointer',
-                        borderColor: isSelected ? 'var(--radar-primary)' : 'var(--radar-border)',
-                        background: isSelected ? 'var(--radar-primary-soft)' : 'var(--radar-surface)',
-                      }}
-                      onClick={() => handleSelectReq(r)}
-                    >
-                      <Space direction="vertical" size={4} style={{ width: '100%' }}>
-                        <Space style={{ justifyContent: 'space-between', width: '100%' }}>
-                          <span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', fontWeight: 600 }}>
-                            {r.req_code}
-                          </span>
-                          <Tag className="status-tag" style={{ margin: 0 }}>{r.entity_label || '需求'}</Tag>
-                          <Radio checked={isSelected} />
-                        </Space>
-                        <div style={{ fontWeight: 600, fontSize: 13 }}>{r.title}</div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
-                          {(r.main_systems_names || []).map((name) => (
-                            <Tag key={name} className="status-tag tag-system" style={{ borderRadius: 2, margin: 0, fontSize: 10 }}>{name}</Tag>
-                          ))}
-                        </div>
-                      </Space>
-                    </Card>
-                  );
-                }}
-              />
-            ) : (
-              <Table
-                dataSource={filteredReqs}
-                columns={resizableReqColumns}
-                components={{ header: { cell: ResizableTitle } }}
-                rowKey="req_code"
-                size="small"
-                className="super-compact-table"
-                pagination={{ pageSize: 5, size: 'small', showSizeChanger: false }}
-                rowSelection={{
-                  type: 'radio',
-                  selectedRowKeys: selectedReq ? [selectedReq.req_code] : [],
-                  onChange: (_, rows) => {
-                    if (rows.length) handleSelectReq(rows[0]);
-                  },
-                }}
-                onRow={(record) => ({
-                  onClick: () => handleSelectReq(record),
-                  style: { cursor: 'pointer' },
-                })}
-              />
-            )}
-          </div>
 
-          {/* 2. 确认拆分开发任务 */}
-          <div className="form-section-card" style={{ marginBottom: 0 }}>
-            <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>2. 确认拆分开发任务</div>
-            {selectedReq ? (
-              <Spin spinning={loadingPreview}>
-                {isMobile ? (
-                  <List
-                    dataSource={previewList}
-                    rowKey="sysCode"
-                    size="small"
-                    renderItem={(item) => {
-                      const isChecked = selectedNewSystems.includes(item.sysCode);
-                      const toggleCheck = () => {
-                        if (item.exists) return;
-                        if (isChecked) {
-                          setSelectedNewSystems(selectedNewSystems.filter(c => c !== item.sysCode));
-                        } else {
-                          setSelectedNewSystems([...selectedNewSystems, item.sysCode]);
-                        }
-                      };
-                      return (
-                        <Card
-                          size="small"
-                          style={{
-                            marginBottom: 8,
-                            borderColor: isChecked ? 'var(--radar-primary)' : 'var(--radar-border)',
-                          }}
-                          onClick={toggleCheck}
-                        >
-                          <Space direction="vertical" size={4} style={{ width: '100%' }}>
-                            <Space style={{ justifyContent: 'space-between', width: '100%' }}>
-                              <Space>
-                                <Checkbox
-                                  checked={item.exists ? false : isChecked}
-                                  disabled={item.exists}
-                                  onClick={(e) => e.stopPropagation()}
-                                  onChange={toggleCheck}
-                                />
-                                <strong style={{ fontSize: 13 }}>{item.sysName}</strong>
-                                <span style={{ color: 'var(--radar-text-secondary)', fontSize: 11 }}>({item.sysCode})</span>
-                              </Space>
-                              <Tag className={item.exists ? 'status-tag status-tag-final' : 'status-tag status-tag-in-progress'} style={{ margin: 0 }}>
-                                {item.status}
-                              </Tag>
-                            </Space>
-                            <Select
-                              value={item.role}
-                              options={[{ value: '主责', label: '主责' }, { value: '协同', label: '协同' }]}
-                              size="small"
-                              style={{ width: '100%' }}
-                              onClick={(event) => event.stopPropagation()}
-                              onChange={(role) => updateSystemRole(item.sysCode, role)}
-                            />
-                            <div style={{ fontSize: 11, color: 'var(--radar-text-secondary)' }}>
-                              计划生成任务编号：<span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace' }}>{item.taskCode}</span>
-                            </div>
-                            <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--radar-ink)' }}>
-                              任务名称：{item.taskName}
-                            </div>
-                            {!item.exists && (
-                              <Select
-                                value={selectedImplOrgs[item.sysCode]}
-                                options={orgOptions}
-                                placeholder="选择开发实施方（必填）"
-                                size="small"
-                                showSearch
-                                optionFilterProp="label"
-                                style={{ width: '100%' }}
-                                onClick={(event) => event.stopPropagation()}
-                                onChange={(implOrg) => setSelectedImplOrgs((current) => ({ ...current, [item.sysCode]: implOrg }))}
-                              />
-                            )}
-                            <Select
-                              value={selectedOwners[item.sysCode]}
-                              options={userOptions}
-                              placeholder="选择开发负责人（必填）"
-                              size="small"
-                              showSearch
-                              optionFilterProp="label"
-                              disabled={item.exists}
-                              style={{ width: '100%' }}
-                              onClick={(event) => event.stopPropagation()}
-                              onChange={(owner) => setSelectedOwners((current) => ({ ...current, [item.sysCode]: owner }))}
-                            />
-                          </Space>
-                        </Card>
-                      );
-                    }}
-                  />
-                ) : (
-                  <Table
-                    dataSource={previewList}
-                    columns={resizablePreviewColumns}
-                    components={{ header: { cell: ResizableTitle } }}
-                    rowKey="sysCode"
-                    size="small"
-                    className="super-compact-table"
-                    pagination={false}
-                    rowSelection={{
-                      selectedRowKeys: selectedNewSystems,
-                      onChange: (keys) => setSelectedNewSystems(keys),
-                      getCheckboxProps: (record) => ({
-                        disabled: record.exists,
-                      }),
-                    }}
-                  />
-                )}
-              </Spin>
-            ) : (
-              <div className="lc-empty" style={{ padding: '24px 0' }}>请在上方选择一条需求/工单进行承接</div>
-            )}
-          </div>
-        </div>
-      </Modal>
+      <DevIntakeModal
+        open={intakeOpen}
+        onClose={() => setIntakeOpen(false)}
+        onSaved={() => tableRef.current?.reload()}
+      />
 
       <TaskEditor open={!!editId} kind="dev" taskId={editId} onClose={() => setEditId(null)} onSaved={() => tableRef.current?.reload()} />
       <ImportModal
