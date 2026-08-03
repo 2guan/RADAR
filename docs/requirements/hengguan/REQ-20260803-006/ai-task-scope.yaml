@@ -1,0 +1,75 @@
+{
+  "schema_version": "1.0",
+  "requirement": {
+    "id": "REQ-20260803-006",
+    "ref": "hengguan/REQ-20260803-006",
+    "title": "交付件上传、预览文件类型及 kkFileView 部署配置",
+    "status": "ready",
+    "document": "docs/requirements/hengguan/REQ-20260803-006/requirement.md",
+    "internet_ai_coding_allowed": true
+  },
+  "assignment": {
+    "developer": "hengguan",
+    "module": "governance",
+    "module_owner": "hengguan",
+    "branch": "hengguan/REQ-20260803-006-deliverable-file-types",
+    "base_branch": "origin/main",
+    "worktree": "codex-desktop-current-worktree"
+  },
+  "ai": {
+    "enabled": true,
+    "approved_service": "Codex desktop",
+    "model": "approved-by-user",
+    "contains_confidential_information": false,
+    "context_sanitized": true,
+    "production_access": false
+  },
+  "scope": {
+    "writable_paths": [
+      "docs/requirements/hengguan/REQ-20260803-006/**",
+      "server/src/platform/runtime/config.js",
+      "server/src/platform/attachments/index.js",
+      "server/src/platform/attachments/api/routes.js",
+      "server/src/platform/attachments/preview.js",
+      "web/src/platform/attachments/AttachmentField.jsx",
+      "server/test/lib.test.js",
+      ".env",
+      ".env.example"
+    ],
+    "read_only_paths": [
+      "AGENTS.md",
+      "docs/governance/**",
+      "governance/modules.yaml",
+      ".agents/skills/radar-delivery-engineer/**",
+      "server/src/platform/attachments/attachment.js",
+      "server/test/api-rbac.test.js"
+    ],
+    "forbidden_paths": [".github/**", "docs/reports/**", "**/*secret*", "**/*credential*", "attachments/**", "data/**"]
+  },
+  "public_capability_change": {
+    "required": true,
+    "shared_change_issue": "hengguan/REQ-20260803-006",
+    "target_modules": ["governance", "platform/attachments", "platform/runtime"],
+    "new_methods": [],
+    "existing_method_changed": true,
+    "semantic_name_confirmed": true,
+    "old_behavior_preserved": true,
+    "compatibility_note": "附件授权、下载、版本、审计和预览会话接口结构保持不变；仅收紧默认允许上传与可显示预览的扩展名集合，并补齐部署环境模板。RADAR 读取预览回退变量；kkFileView 容器变量必须由部署编排显式传入，不经接口返回。",
+    "owner_approved": true,
+    "owner_review_required_before_merge": true
+  },
+  "database": {"changed": false, "migration_paths": [], "mysql8_compatible": true, "historical_data_impact": "不迁移或修改历史附件。", "rollback_or_compensation": "回退白名单代码即可，无数据补偿。"},
+  "external_access": {"changed": false, "api_paths": [], "readable_field_whitelist": [], "writable_field_whitelist": [], "action_whitelist": [], "audit_required": true},
+  "required_tests": [
+    {"name": "unit", "command": "npm test --prefix server"},
+    {"name": "api", "command": "npm run test:api --prefix server"},
+    {"name": "permission", "command": "npm run test:rbac --prefix server"},
+    {"name": "ui_data_sources", "command": "node scripts/check-ui-data-sources.mjs"},
+    {"name": "module_boundaries", "command": "node scripts/check-module-boundaries.mjs"},
+    {"name": "build", "command": "npm run build --prefix web"},
+    {"name": "runtime", "command": "node scripts/verify-app-runtime.mjs"},
+    {"name": "browser", "command": "本地脱敏管理员在交付件上传允许/拒绝后缀，验证预览开关、历史版本按钮与控制台无错误"}
+  ],
+  "risk": {"level": "important", "reasons": ["附件上传白名单是服务端安全边界。", "修改附件平台公开前端展示与预览可用类型。", "环境变量含内网预览服务的网络边界，不能下发到前端或误传入非预览容器。"], "required_approvals": ["hengguan"]},
+  "completion": {"changed_files_report_required": true, "test_result_report_required": true, "known_risks_report_required": true, "rollback_report_required": true, "requirement_acceptance_required": true}
+}

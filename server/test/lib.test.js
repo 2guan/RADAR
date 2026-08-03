@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { hashPassword, verifyPassword, validatePasswordComplexity } from '../src/platform/auth/index.js';
-import { config } from '../src/platform/runtime/config.js';
+import { config, DEFAULT_DELIVERABLE_UPLOAD_EXTENSIONS } from '../src/platform/runtime/config.js';
 import { exportXlsx } from '../src/platform/import-export/index.js';
 import { calcDeviation, formatCoverageText, formatImpactItemsText } from '../src/modules/development/index.js';
 import { buildReleaseWordDoc, formatWordDateTime } from '../src/modules/release/index.js';
@@ -29,6 +29,7 @@ import {
 } from '../src/shared/utils/code-template.js';
 import { validateCodeRuleTemplate } from '../src/modules/settings/reference-data/index.js';
 import { MOCK_ISSUE_SNAPSHOT } from '../scripts/mock-data.js';
+import { checkExt, isPreviewableAttachment, previewAllowedExtensions } from '../src/platform/attachments/index.js';
 
 test('运行时路径：平台配置从仓库根目录解析静态资源与持久化默认目录', () => {
   const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -40,6 +41,25 @@ test('运行时路径：平台配置从仓库根目录解析静态资源与持�
   assert.equal(config.webDist, resolveFromProjectRoot(process.env.WEB_DIST, 'web/dist'));
   assert.equal(config.dbFile, resolveFromProjectRoot(process.env.DB_FILE, 'data/radar.db'));
   assert.equal(config.attachmentDir, resolveFromProjectRoot(process.env.ATTACHMENT_DIR, 'attachments'));
+});
+
+test('交付件文件类型：默认 kkFileView 清单可由环境配置覆盖并同步预览', () => {
+  const allowed = [
+    '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+    '.jpg', '.jpeg', '.png', '.gif', '.tif', '.tiff',
+    '.pdf', '.ofd', '.txt', '.html', '.htm', '.xml', '.json', '.properties', '.md', '.log', '.py', '.sql', '.zip', '.rar',
+  ];
+  assert.deepEqual(DEFAULT_DELIVERABLE_UPLOAD_EXTENSIONS, allowed);
+  assert.deepEqual(previewAllowedExtensions(), config.upload.allowedExt);
+  for (const ext of config.upload.allowedExt) {
+    assert.equal(checkExt(`交付件${ext.toUpperCase()}`), ext);
+    assert.equal(isPreviewableAttachment({ kind: 'file', filename: `交付件${ext}` }), true);
+  }
+  for (const ext of ['.7z', '.csv', '.bmp', '.svg', '.exe'].filter((item) => !config.upload.allowedExt.includes(item))) {
+    assert.throws(() => checkExt(`不允许${ext}`), /不支持的文件类型/);
+    assert.equal(isPreviewableAttachment({ kind: 'file', filename: `不允许${ext}` }), false);
+  }
+  assert.throws(() => checkExt('无后缀'), /不支持的文件类型/);
 });
 
 test('工作项公共契约：需求和工单保持独立且类型受控', () => {

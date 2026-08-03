@@ -10,7 +10,7 @@ import { get, tx } from '../../persistence/index.js';
 import {
   attachmentView, createPreviewSession, getCurrentAttachment, getViewableAttachment, isPreviewableAttachment,
   listAttachmentVersions, listByEntity, removeAttachment, resolveAttachmentPath,
-  previewAvailability, saveFile, saveFileVersion, savePath, savePathVersion, verifyPreviewSignature,
+  previewAllowedExtensions, previewAvailability, saveFile, saveFileVersion, savePath, savePathVersion, verifyPreviewSignature,
 } from '../index.js';
 import {
   assertAttachmentInputAllowed, assertDeliverableInputAllowed, assertDeliverableRemovable,
@@ -69,7 +69,7 @@ export default async function attachmentRoutes(fastify) {
 
   /** 前端仅获得布尔可用性，不获取 kkFileView 地址或内部来源地址。 */
   fastify.get('/attachments/preview-availability', { preHandler: fastify.authenticate }, async () => {
-    return ok({ enabled: await previewAvailability() });
+    return ok({ enabled: await previewAvailability(), extensions: previewAllowedExtensions() });
   });
 
   fastify.post('/attachments/upload', { preHandler: fastify.authenticate }, async (request) => {
