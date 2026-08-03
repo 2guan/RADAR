@@ -167,6 +167,7 @@ async function appendOrganizationScope(wh, params, table, user) {
      WHERE scope_system.org IN (${placeholders}) AND (
        ${dialect.jsonArrayContains(`${table}.main_systems`, 'scope_system.sys_code')}
        OR ${dialect.jsonArrayContains(`${table}.collab_dev_systems`, 'scope_system.sys_code')}
+       OR ${dialect.jsonArrayContains(`${table}.collab_test_systems`, 'scope_system.sys_code')}
      )
   ))`);
   params.push(...organizations, ...organizations);
