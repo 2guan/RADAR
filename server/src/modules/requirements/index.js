@@ -20,6 +20,16 @@ export async function findRequirementWorkItem(workItemCode) {
   return row ? { ...row, workItemType: REQUIREMENT_WORK_ITEM_TYPE, workItemCode: row.req_code } : null;
 }
 
+/** Minimal public read DTO for downstream test-intake candidate aggregation. */
+export async function listRequirementWorkItemsForTestIntake() {
+  const rows = await all('SELECT req_code, title, main_systems, collab_test_systems FROM requirement');
+  return rows.map((row) => ({
+    ...row,
+    workItemType: REQUIREMENT_WORK_ITEM_TYPE,
+    workItemCode: row.req_code,
+  }));
+}
+
 export async function requirementCodesInReleasePoints(ids) {
   if (!ids?.length) return null;
   const rows = await all('SELECT req_code AS code FROM requirement');

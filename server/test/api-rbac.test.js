@@ -74,6 +74,38 @@ if (!process.env.RADAR_RUN_API_TESTS) {
     ]);
   });
 
+  test('版本概览优先按需求工单填写的实施机构分组，缺失时回退主责系统机构', async () => {
+    const administrator = await get('SELECT id, phone FROM user WHERE is_super = 1 LIMIT 1');
+    const headers = { authorization: `Bearer ${await app.jwt.sign({ id: administrator.id, phone: administrator.phone })}`, 'x-requested-by': 'RADAR' };
+    await run('INSERT INTO system (sys_code, sys_name, org) VALUES (?,?,?)', 'OVERVIEW-GROUP-SYS-MANUAL', '概览手填机构系统', '主责系统机构');
+    await run('INSERT INTO system (sys_code, sys_name, org) VALUES (?,?,?)', 'OVERVIEW-GROUP-SYS-FALLBACK', '概览回退机构系统', '主责系统回退机构');
+    await run(
+      'INSERT INTO requirement (req_code, title, status, implementation_org, main_systems) VALUES (?,?,?,?,?)',
+      'OVERVIEW-GROUP-MANUAL', '概览手填实施机构', '需求登记', '需求填写实施机构', JSON.stringify(['OVERVIEW-GROUP-SYS-MANUAL']),
+    );
+    await run(
+      'INSERT INTO requirement (req_code, title, status, main_systems) VALUES (?,?,?,?)',
+      'OVERVIEW-GROUP-FALLBACK', '概览系统机构回退', '需求登记', JSON.stringify(['OVERVIEW-GROUP-SYS-FALLBACK']),
+    );
+    await run(
+      'INSERT INTO dev_task (req_code, task_code, status, impl_system, impl_org) VALUES (?,?,?,?,?)',
+      'OVERVIEW-GROUP-MANUAL', 'DEV-OVERVIEW-GROUP-MANUAL', '开发承接', 'OVERVIEW-GROUP-SYS-MANUAL', '开发任务实施机构',
+    );
+
+    const overview = await app.inject({ method: 'POST', url: '/api/overview/list', headers, payload: { pageSize: 200 } });
+    assert.equal(overview.statusCode, 200, overview.body);
+    const groups = new Map(overview.json().data.list.map((group) => [group.org, group.cards.map((card) => card.code)]));
+    assert.ok(groups.get('需求填写实施机构')?.includes('OVERVIEW-GROUP-MANUAL'));
+    assert.ok(groups.get('主责系统回退机构')?.includes('OVERVIEW-GROUP-FALLBACK'));
+    assert.ok(!groups.get('开发任务实施机构')?.includes('OVERVIEW-GROUP-MANUAL'));
+
+    const filtered = await app.inject({ method: 'POST', url: '/api/overview/list', headers, payload: {
+      pageSize: 200, filters: [{ field: 'org', op: 'in', value: ['需求填写实施机构'] }],
+    } });
+    assert.equal(filtered.statusCode, 200, filtered.body);
+    assert.deepEqual(filtered.json().data.list.flatMap((group) => group.cards).map((card) => card.code), ['OVERVIEW-GROUP-MANUAL']);
+  });
+
   test('申请投产点公共契约支持多点命中，并将未申请工作项归入待定', async () => {
     const first = await run("INSERT INTO release_point (release_date, version_type) VALUES (?,?)", '20990115', '常规版本');
     const second = await run("INSERT INTO release_point (release_date, version_type) VALUES (?,?)", '20990130', '常规版本');
@@ -450,6 +482,121 @@ if (!process.env.RADAR_RUN_API_TESTS) {
     await run('DELETE FROM test_task WHERE req_code = ?', 'INTAKE-TEST-REQ');
     const restoredTestCandidates = await app.inject({ method: 'POST', url: '/api/test-tasks/intake-pending-codes', headers: adminHeaders, payload: { testType: 'SIT', reqCodes: ['INTAKE-TEST-REQ'] } });
     assert.deepEqual(restoredTestCandidates.json().data, ['INTAKE-TEST-REQ']);
+  });
+
+  test('测试承接跨机构列出全部主责和协同系统，并允许无主责拆分', async () => {
+    const testRole = await get("SELECT id FROM role WHERE code = '金科测试'");
+    const restrictedTester = await run(
+      "INSERT INTO user (phone, name, org, all_org_access_override, password_hash, status, password_changed_at) VALUES (?,?,?,?,?,?,datetime('now','localtime'))",
+      'test-intake-cross-org', '跨机构测试承接人', '厦门事业群', 0, 'not-used', '启用',
+    );
+    await run('INSERT INTO user_role (user_id, role_id) VALUES (?,?)', restrictedTester.lastInsertRowid, testRole.id);
+    const headers = {
+      authorization: `Bearer ${await app.jwt.sign({ id: restrictedTester.lastInsertRowid, phone: 'test-intake-cross-org' })}`,
+      'x-requested-by': 'RADAR',
+    };
+    const outsider = await run(
+      "INSERT INTO user (phone, name, org, password_hash, status, password_changed_at) VALUES (?,?,?,?,?,datetime('now','localtime'))",
+      'test-intake-no-permission', '无测试承接权限用户', '厦门事业群', 'not-used', '启用',
+    );
+    const outsiderHeaders = {
+      authorization: `Bearer ${await app.jwt.sign({ id: outsider.lastInsertRowid, phone: 'test-intake-no-permission' })}`,
+      'x-requested-by': 'RADAR',
+    };
+    for (const [code, name] of [
+      ['TEST-INTAKE-MAIN-A', '测试承接主责系统A'],
+      ['TEST-INTAKE-MAIN-B', '测试承接主责系统B'],
+      ['TEST-INTAKE-COLLAB-A', '测试承接协同系统A'],
+      ['TEST-INTAKE-COLLAB-B', '测试承接协同系统B'],
+    ]) {
+      await run('INSERT INTO system (sys_code, sys_name, org) VALUES (?,?,?)', code, name, '武汉事业群');
+    }
+    await run(
+      'INSERT INTO requirement (req_code, title, status, main_systems, collab_dev_systems, collab_test_systems) VALUES (?,?,?,?,?,?)',
+      'TEST-INTAKE-ALL-SYSTEMS', '跨机构全量测试承接', '需求登记',
+      JSON.stringify(['TEST-INTAKE-MAIN-A', 'TEST-INTAKE-MAIN-B']),
+      JSON.stringify(['TEST-INTAKE-COLLAB-A']),
+      JSON.stringify(['TEST-INTAKE-COLLAB-B']),
+    );
+    await run(
+      'INSERT INTO requirement (req_code, title, status, main_systems, collab_dev_systems, collab_test_systems) VALUES (?,?,?,?,?,?)',
+      'TEST-INTAKE-COLLAB-ONLY', '仅协同测试承接', '需求登记', JSON.stringify([]), JSON.stringify(['TEST-INTAKE-COLLAB-A']), JSON.stringify(['TEST-INTAKE-COLLAB-B']),
+    );
+    await run(
+      'INSERT INTO requirement (req_code, title, status, main_systems) VALUES (?,?,?,?)',
+      'TEST-INTAKE-OVERALL', '整体测试承接', '需求登记', JSON.stringify(['TEST-INTAKE-MAIN-A']),
+    );
+
+    const ordinaryList = await app.inject({ method: 'POST', url: '/api/requirements/list', headers, payload: { pageSize: 100 } });
+    assert.equal(ordinaryList.statusCode, 200);
+    assert.ok(!ordinaryList.json().data.list.some((item) => item.req_code === 'TEST-INTAKE-ALL-SYSTEMS'));
+
+    const candidates = await app.inject({ method: 'POST', url: '/api/test-tasks/intake-candidates', headers, payload: { testType: 'SIT', releasePointIds: [] } });
+    assert.equal(candidates.statusCode, 200, candidates.body);
+    assert.ok(candidates.json().data.some((item) => item.req_code === 'TEST-INTAKE-ALL-SYSTEMS'));
+    assert.ok(candidates.json().data.some((item) => item.req_code === 'TEST-INTAKE-COLLAB-ONLY'));
+    assert.ok(candidates.json().data.some((item) => item.req_code === 'TEST-INTAKE-OVERALL'));
+
+    const allSystemsPreview = await app.inject({ method: 'POST', url: '/api/test-tasks/intake-preview', headers, payload: { reqCode: 'TEST-INTAKE-ALL-SYSTEMS', testType: 'SIT' } });
+    assert.equal(allSystemsPreview.statusCode, 200, allSystemsPreview.body);
+    assert.deepEqual(allSystemsPreview.json().data.split.map((item) => ({ sysCode: item.sysCode, role: item.role })), [
+      { sysCode: 'TEST-INTAKE-MAIN-A', role: '主责' },
+      { sysCode: 'TEST-INTAKE-MAIN-B', role: '主责' },
+      { sysCode: 'TEST-INTAKE-COLLAB-A', role: '协同' },
+    ]);
+
+    const allSystemsIntake = await app.inject({ method: 'POST', url: '/api/test-tasks/intake', headers, payload: {
+      reqCode: 'TEST-INTAKE-ALL-SYSTEMS', testType: 'SIT', splitMode: 'split',
+      assignments: ['TEST-INTAKE-MAIN-A', 'TEST-INTAKE-MAIN-B', 'TEST-INTAKE-COLLAB-A'].map((sysCode) => ({
+        sysCode, owner: '跨机构测试承接人', implOrg: '厦门事业群',
+      })),
+    } });
+    assert.equal(allSystemsIntake.statusCode, 200, allSystemsIntake.body);
+    assert.equal((await get('SELECT COUNT(*) AS c FROM test_task WHERE req_code = ?', 'TEST-INTAKE-ALL-SYSTEMS')).c, 3);
+
+    const collabOnlyPreview = await app.inject({ method: 'POST', url: '/api/test-tasks/intake-preview', headers, payload: { reqCode: 'TEST-INTAKE-COLLAB-ONLY', testType: 'SIT' } });
+    assert.equal(collabOnlyPreview.statusCode, 200, collabOnlyPreview.body);
+    assert.deepEqual(collabOnlyPreview.json().data.split.map((item) => ({ sysCode: item.sysCode, role: item.role })), [
+      { sysCode: 'TEST-INTAKE-COLLAB-A', role: '协同' },
+    ]);
+    const collabOnlyIntake = await app.inject({ method: 'POST', url: '/api/test-tasks/intake', headers, payload: {
+      reqCode: 'TEST-INTAKE-COLLAB-ONLY', testType: 'SIT', splitMode: 'split',
+      assignments: ['TEST-INTAKE-COLLAB-A'].map((sysCode) => ({
+        sysCode, owner: '跨机构测试承接人', implOrg: '厦门事业群',
+      })),
+    } });
+    assert.equal(collabOnlyIntake.statusCode, 200, collabOnlyIntake.body);
+    assert.equal((await get('SELECT COUNT(*) AS c FROM test_task WHERE req_code = ?', 'TEST-INTAKE-COLLAB-ONLY')).c, 1);
+
+    const overallIntake = await app.inject({ method: 'POST', url: '/api/test-tasks/intake', headers, payload: {
+      reqCode: 'TEST-INTAKE-OVERALL', testType: 'SIT', splitMode: 'overall',
+      assignments: [{ sysCode: 'TEST-INTAKE-MAIN-A', owner: '跨机构测试承接人', implOrg: '厦门事业群' }],
+    } });
+    assert.equal(overallIntake.statusCode, 200, overallIntake.body);
+
+    await run("UPDATE test_task SET task_name = '历史拆分任务名称' WHERE req_code IN (?, ?)", 'TEST-INTAKE-ALL-SYSTEMS', 'TEST-INTAKE-COLLAB-ONLY');
+    const completedCandidates = await app.inject({ method: 'POST', url: '/api/test-tasks/intake-candidates', headers, payload: { testType: 'SIT', releasePointIds: [] } });
+    assert.equal(completedCandidates.statusCode, 200, completedCandidates.body);
+    const completedCodes = new Set(completedCandidates.json().data.map((item) => item.req_code));
+    assert.ok(!completedCodes.has('TEST-INTAKE-ALL-SYSTEMS'));
+    assert.ok(!completedCodes.has('TEST-INTAKE-COLLAB-ONLY'));
+    assert.ok(!completedCodes.has('TEST-INTAKE-OVERALL'));
+
+    const forgedSystem = await app.inject({ method: 'POST', url: '/api/test-tasks/intake', headers, payload: {
+      reqCode: 'TEST-INTAKE-COLLAB-ONLY', testType: 'UAT', splitMode: 'split',
+      assignments: [{ sysCode: 'TEST-INTAKE-COLLAB-B', owner: '跨机构测试承接人', implOrg: '厦门事业群' }],
+    } });
+    assert.equal(forgedSystem.statusCode, 400);
+    assert.equal((await get('SELECT COUNT(*) AS c FROM test_task WHERE req_code = ? AND test_type = ?', 'TEST-INTAKE-COLLAB-ONLY', 'UAT')).c, 0);
+
+    const noPermissionCandidate = await app.inject({ method: 'POST', url: '/api/test-tasks/intake-candidates', headers: outsiderHeaders, payload: { testType: 'SIT', releasePointIds: [] } });
+    const noPermissionPreview = await app.inject({ method: 'POST', url: '/api/test-tasks/intake-preview', headers: outsiderHeaders, payload: { reqCode: 'TEST-INTAKE-COLLAB-ONLY', testType: 'SIT' } });
+    const noPermissionIntake = await app.inject({ method: 'POST', url: '/api/test-tasks/intake', headers: outsiderHeaders, payload: {
+      reqCode: 'TEST-INTAKE-COLLAB-ONLY', testType: 'UAT', splitMode: 'split', assignments: [],
+    } });
+    assert.equal(noPermissionCandidate.statusCode, 403);
+    assert.equal(noPermissionPreview.statusCode, 403);
+    assert.equal(noPermissionIntake.statusCode, 403);
   });
 
   test('开发承接临时实施方统一预填规则可配置、可停用且拒绝非法名单', async () => {

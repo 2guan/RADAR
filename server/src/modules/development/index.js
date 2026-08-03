@@ -7,7 +7,7 @@
 
 /** Public delivery contract for downstream lifecycle consumers. */
 export {
-  getWorkItem, replaceWorkItemDevelopmentSystemRoles, workItemCodesInReleasePoints, releaseDateMapForCodes,
+  getWorkItem, listWorkItemsForTestIntake, replaceWorkItemDevelopmentSystemRoles, workItemCodesInReleasePoints, releaseDateMapForCodes,
 } from './application/work-items.js';
 export { listDevelopmentImplementationOrgs } from './application/release-apply-defaults.js';
 export {

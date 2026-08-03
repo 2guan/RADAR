@@ -21,16 +21,8 @@ function normalizeWorkItem(item) {
 }
 
 async function loadCandidates(releasePointIds, testType) {
-  const [requirementResponse, ticketResponse] = await Promise.all([
-    apiPost('/requirements/list', { releasePointIds, pageSize: 0 }),
-    apiPost('/tickets/list', { releasePointIds, pageSize: 0 }),
-  ]);
-  const candidates = [
-    ...(requirementResponse.list || []).map((item) => normalizeWorkItem({ ...item, entity_type: 'requirement', entity_label: '需求' })),
-    ...(ticketResponse.list || []).map((item) => normalizeWorkItem({ ...item, req_code: item.ticket_code, entity_type: 'ticket', entity_label: '工单' })),
-  ].filter((item) => !item.release_stage_type || (item.release_stage_type !== 'in-progress' && item.release_stage_type !== 'final'));
-  const pendingCodes = await apiPost('/test-tasks/intake-pending-codes', { testType, reqCodes: candidates.map((item) => item.req_code) });
-  return candidates.filter((item) => (pendingCodes || []).includes(item.req_code));
+  const candidates = await apiPost('/test-tasks/intake-candidates', { releasePointIds, testType });
+  return (candidates || []).map(normalizeWorkItem);
 }
 
 export default function TestIntakeModal({ open, onClose, onSaved, initialWorkItem = null, testType }) {
@@ -46,6 +38,7 @@ export default function TestIntakeModal({ open, onClose, onSaved, initialWorkIte
   const [orgOptions, setOrgOptions] = useState([]);
   const [userOptions, setUserOptions] = useState([]);
   const [searchText, setSearchText] = useState('');
+  const [candidatePage, setCandidatePage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -77,6 +70,7 @@ export default function TestIntakeModal({ open, onClose, onSaved, initialWorkIte
     let active = true;
     // 弹窗重新打开时重置承接方式及行级填写，防止不同测试类型之间复用过期选择。
     setSearchText('');
+    setCandidatePage(1);
     setCandidates([]);
     setSelectedWorkItem(null);
     setPreviewData({ overall: [], split: [] });
@@ -96,7 +90,7 @@ export default function TestIntakeModal({ open, onClose, onSaved, initialWorkIte
     } else {
       setLoading(true);
       loadCandidates(releasePointIds, testType)
-        .then((items) => { if (active) setCandidates(items); })
+        .then((items) => { if (active) { setCandidates(items); setCandidatePage(1); } })
         .catch((error) => { if (active) message.error(error.message || '加载可承接需求/工单失败'); })
         .finally(() => { if (active) setLoading(false); });
     }
@@ -164,7 +158,7 @@ export default function TestIntakeModal({ open, onClose, onSaved, initialWorkIte
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <div className="form-section-card" style={{ marginBottom: 0 }}>
           <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>1. 选择需求/工单</div>
-          {initialWorkItem ? selectedCard : <><Input.Search placeholder="需求/工单编号、标题/概述、主责系统检索..." value={searchText} onChange={(event) => setSearchText(event.target.value)} size="small" style={{ width: isMobile ? '100%' : 320, marginBottom: 8 }} allowClear />{isMobile ? <List loading={loading} dataSource={filteredCandidates} rowKey="req_code" renderItem={(item) => <List.Item onClick={() => selectWorkItem(item)} style={{ cursor: 'pointer' }}><Radio checked={selectedWorkItem?.req_code === item.req_code} />&nbsp;<strong>{item.req_code}</strong>&nbsp;{item.title}</List.Item>} /> : <Table loading={loading} dataSource={filteredCandidates} columns={workItemColumns} rowKey="req_code" size="small" className="super-compact-table" pagination={{ pageSize: 5, size: 'small', showSizeChanger: false }} rowSelection={{ type: 'radio', selectedRowKeys: selectedWorkItem ? [selectedWorkItem.req_code] : [], onChange: (_, rows) => rows[0] && selectWorkItem(rows[0]) }} onRow={(item) => ({ onClick: () => selectWorkItem(item), style: { cursor: 'pointer' } })} />}</>}
+          {initialWorkItem ? selectedCard : <><Input.Search placeholder="需求/工单编号、标题/概述、主责系统检索..." value={searchText} onChange={(event) => { setSearchText(event.target.value); setCandidatePage(1); }} size="small" style={{ width: isMobile ? '100%' : 320, marginBottom: 8 }} allowClear />{isMobile ? <List loading={loading} dataSource={filteredCandidates} rowKey="req_code" pagination={filteredCandidates.length > 5 ? { current: candidatePage, pageSize: 5, total: filteredCandidates.length, size: 'small', showSizeChanger: false, onChange: setCandidatePage } : false} renderItem={(item) => <List.Item onClick={() => selectWorkItem(item)} style={{ cursor: 'pointer' }}><Radio checked={selectedWorkItem?.req_code === item.req_code} />&nbsp;<strong>{item.req_code}</strong>&nbsp;{item.title}</List.Item>} /> : <Table loading={loading} dataSource={filteredCandidates} columns={workItemColumns} rowKey="req_code" size="small" className="super-compact-table" pagination={{ pageSize: 5, size: 'small', showSizeChanger: false }} rowSelection={{ type: 'radio', selectedRowKeys: selectedWorkItem ? [selectedWorkItem.req_code] : [], onChange: (_, rows) => rows[0] && selectWorkItem(rows[0]) }} onRow={(item) => ({ onClick: () => selectWorkItem(item), style: { cursor: 'pointer' } })} />}</>}
         </div>
         {selectedWorkItem && <div className="form-section-card" style={{ marginBottom: 0 }}><div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>2. 选择承接方式</div><Radio.Group value={splitMode} onChange={(event) => changeSplitMode(event.target.value)} size="small"><Radio value="overall">合并承接</Radio><Radio value="split">拆分承接</Radio></Radio.Group></div>}
         <div className="form-section-card" style={{ marginBottom: 0 }}>
