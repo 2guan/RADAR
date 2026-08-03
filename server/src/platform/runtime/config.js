@@ -83,6 +83,13 @@ const pamsBaseUrl = strEnv('PAMS_BASE_URL');
 const pamsOrigin = originOf(pamsBaseUrl);
 const kkFileViewAllowedOrigins = originListEnv('KKFILEVIEW_ALLOWED_ORIGINS');
 
+// 交付件可上传且由 kkFileView 4.1.0 预览的默认白名单；部署可通过环境变量按需覆盖。
+export const DEFAULT_DELIVERABLE_UPLOAD_EXTENSIONS = Object.freeze([
+  '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+  '.jpg', '.jpeg', '.png', '.gif', '.tif', '.tiff',
+  '.pdf', '.ofd', '.txt', '.html', '.htm', '.xml', '.json', '.properties', '.md', '.log', '.py', '.sql', '.zip', '.rar',
+]);
+
 export const config = {
   port: intEnv('PORT', 3000),
   host: strEnv('HOST', '0.0.0.0'),
@@ -113,10 +120,8 @@ export const config = {
 
   upload: {
     maxFileSize: intEnv('MAX_FILE_SIZE', 50 * 1024 * 1024),
-    allowedExt: listEnv('UPLOAD_ALLOWED_EXTENSIONS', [
-      '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.md',
-      '.csv', '.zip', '.rar', '.7z', '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg',
-    ]).map((ext) => ext.startsWith('.') ? ext.toLowerCase() : `.${ext.toLowerCase()}`),
+    allowedExt: [...new Set(listEnv('UPLOAD_ALLOWED_EXTENSIONS', DEFAULT_DELIVERABLE_UPLOAD_EXTENSIONS)
+      .map((ext) => ext.startsWith('.') ? ext.toLowerCase() : `.${ext.toLowerCase()}`))],
   },
 
   pams: {

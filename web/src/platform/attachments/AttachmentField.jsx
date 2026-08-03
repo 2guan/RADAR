@@ -17,17 +17,21 @@ const attachmentRequests = new Map();
 let previewAvailability;
 let previewAvailabilityRequest;
 const attachmentCacheKey = (entityType, entityId) => `${entityType || ''}:${entityId || ''}`;
-const previewable = (filename) => /\.(doc|docx|xls|xlsx|pdf)$/i.test(filename || '');
+const fileExtension = (filename) => `.${String(filename || '').split('.').pop()?.toLowerCase()}`;
+const previewable = (filename, extensions) => extensions.includes(fileExtension(filename));
 
 async function loadPreviewAvailability() {
   if (previewAvailability !== undefined) return previewAvailability;
   if (!previewAvailabilityRequest) {
     previewAvailabilityRequest = apiGet('/attachments/preview-availability')
       .then((value) => {
-        previewAvailability = Boolean(value?.enabled);
+        previewAvailability = {
+          enabled: Boolean(value?.enabled),
+          extensions: Array.isArray(value?.extensions) ? value.extensions.map((ext) => String(ext).toLowerCase()) : [],
+        };
         return previewAvailability;
       })
-      .catch(() => false)
+      .catch(() => ({ enabled: false, extensions: [] }))
       .finally(() => { previewAvailabilityRequest = null; });
   }
   return previewAvailabilityRequest;
@@ -83,7 +87,7 @@ function CompactAttachmentTitle({ item, actions }) {
   );
 }
 
-function VersionHistoryItem({ item, onDownload, onPreview, previewEnabled }) {
+function VersionHistoryItem({ item, onDownload, onPreview, previewEnabled, previewExtensions }) {
   const name = attachmentName(item);
   return (
     <List.Item style={{ padding: '4px 0', alignItems: 'stretch' }}>
@@ -96,7 +100,7 @@ function VersionHistoryItem({ item, onDownload, onPreview, previewEnabled }) {
           <span title={name} style={{ minWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', fontSize: 12, lineHeight: '20px' }}>{name}</span>
           {item.kind === 'file' && item.is_deleted === 0 && (
             <Space size={0} style={{ flexShrink: 0 }}>
-              {previewEnabled && previewable(item.filename) && <Tooltip title="在线预览"><Button type="link" size="small" icon={<EyeOutlined />} onClick={() => onPreview(item)} aria-label="在线预览" style={{ padding: '0 4px', height: 20 }} /></Tooltip>}
+              {previewEnabled && previewable(item.filename, previewExtensions) && <Tooltip title="在线预览"><Button type="link" size="small" icon={<EyeOutlined />} onClick={() => onPreview(item)} aria-label="在线预览" style={{ padding: '0 4px', height: 20 }} /></Tooltip>}
               <Tooltip title="下载此版本"><Button type="link" size="small" icon={<DownloadOutlined />} onClick={() => onDownload(item)} aria-label="下载此版本" style={{ padding: '0 4px', height: 20 }} /></Tooltip>
             </Space>
           )}
@@ -118,6 +122,7 @@ export default function AttachmentField({ entityType, entityId, fieldKey, delive
   const [loading, setLoading] = useState(!!entityId);
   const [pathText, setPathText] = useState('');
   const [previewEnabled, setPreviewEnabled] = useState(false);
+  const [previewExtensions, setPreviewExtensions] = useState([]);
   const [editingItem, setEditingItem] = useState(null);
   const [editText, setEditText] = useState('');
   const [versionItem, setVersionItem] = useState(null);
@@ -127,6 +132,11 @@ export default function AttachmentField({ entityType, entityId, fieldKey, delive
   const [previewLoading, setPreviewLoading] = useState(false);
   const allowFile = inputMode !== 'path';
   const allowPath = inputMode !== 'file';
+  const validateUploadFile = (file) => {
+    if (!previewExtensions.length || previewable(file?.name, previewExtensions)) return true;
+    message.error('不支持的文件类型，请上传系统允许的交付件文件');
+    return Upload.LIST_IGNORE;
+  };
 
   const reload = useCallback(async ({ force = false } = {}) => {
     if (!entityId) { setList([]); setLoading(false); return; }
@@ -145,11 +155,15 @@ export default function AttachmentField({ entityType, entityId, fieldKey, delive
 
   useEffect(() => { reload().catch(() => setLoading(false)); }, [reload]);
   useEffect(() => {
+    const applyPreviewConfiguration = (settings) => {
+      setPreviewEnabled(Boolean(settings?.enabled));
+      setPreviewExtensions(settings?.extensions || []);
+    };
     const refreshPreviewAvailability = () => {
       previewAvailability = undefined;
-      loadPreviewAvailability().then(setPreviewEnabled);
+      loadPreviewAvailability().then(applyPreviewConfiguration);
     };
-    loadPreviewAvailability().then(setPreviewEnabled);
+    loadPreviewAvailability().then(applyPreviewConfiguration);
     window.addEventListener('radar:deliverable-preview-config-updated', refreshPreviewAvailability);
     return () => window.removeEventListener('radar:deliverable-preview-config-updated', refreshPreviewAvailability);
   }, []);
@@ -264,7 +278,7 @@ export default function AttachmentField({ entityType, entityId, fieldKey, delive
                 <CompactAttachmentTitle
                   item={item}
                   actions={[
-                    previewEnabled && item.kind === 'file' && previewable(item.filename) ? (
+                    previewEnabled && item.kind === 'file' && previewable(item.filename, previewExtensions) ? (
                       <Tooltip title="在线预览" key="preview"><Button type="link" size="small" icon={<EyeOutlined />} onClick={() => openPreview(item)} loading={previewLoading} aria-label="在线预览" style={{ padding: '0 4px', height: 20 }} /></Tooltip>
                     ) : null,
                     item.kind === 'file' ? (
@@ -283,7 +297,7 @@ export default function AttachmentField({ entityType, entityId, fieldKey, delive
                   <Space size={0} style={{ marginLeft: 'auto', flexShrink: 0 }}>
                     {!readOnly && (
                       item.kind === 'file' ? (
-                        <Upload customRequest={uploadNewVersion(item)} showUploadList={false}>
+                        <Upload accept={previewExtensions.join(',') || undefined} beforeUpload={validateUploadFile} customRequest={uploadNewVersion(item)} showUploadList={false}>
                           <Tooltip title="上传新版本"><Button type="link" size="small" icon={<SyncOutlined style={{ fontSize: 14 }} />} aria-label="上传新版本" style={{ padding: '0 4px', height: 20, fontSize: 12 }}>更新文件</Button></Tooltip>
                         </Upload>
                       ) : (
@@ -302,7 +316,7 @@ export default function AttachmentField({ entityType, entityId, fieldKey, delive
       {!readOnly && (
         <div style={{ display: 'flex', width: '100%', marginTop: 8 }}>
           {allowFile && (
-            <Upload customRequest={customUpload} showUploadList={false} style={{ flexShrink: 0 }}>
+            <Upload accept={previewExtensions.join(',') || undefined} beforeUpload={validateUploadFile} customRequest={customUpload} showUploadList={false} style={{ flexShrink: 0 }}>
               <Button size="small" icon={<UploadOutlined />} style={{ fontSize: 11, borderTopRightRadius: allowPath ? 0 : 2, borderBottomRightRadius: allowPath ? 0 : 2, height: 24 }}>上传文件</Button>
             </Upload>
           )}
@@ -334,7 +348,7 @@ export default function AttachmentField({ entityType, entityId, fieldKey, delive
         destroyOnHidden
         styles={{ body: { maxHeight: '56vh', overflowY: 'auto', paddingTop: 4 } }}
       >
-        <List loading={versionsLoading} dataSource={versions} locale={{ emptyText: '暂无版本历史' }} renderItem={(item) => <VersionHistoryItem item={item} onDownload={download} onPreview={openHistoricalPreview} previewEnabled={previewEnabled} />} />
+        <List loading={versionsLoading} dataSource={versions} locale={{ emptyText: '暂无版本历史' }} renderItem={(item) => <VersionHistoryItem item={item} onDownload={download} onPreview={openHistoricalPreview} previewEnabled={previewEnabled} previewExtensions={previewExtensions} />} />
       </Modal>
 
       <Modal open={Boolean(preview)} title={`预览：${preview?.filename || ''}`} onCancel={() => setPreview(null)} footer={null} width="min(1120px, 94vw)" destroyOnHidden>

@@ -10,12 +10,16 @@ import path from 'node:path';
 import { all, config } from '../persistence/index.js';
 import { badRequest, forbidden, notFound } from '../runtime/index.js';
 
-const PREVIEW_EXTENSIONS = new Set(['.doc', '.docx', '.xls', '.xlsx', '.pdf']);
 const PREVIEW_ENABLED_KEY = 'deliverable.preview.enabled';
 const PREVIEW_BASE_URL_KEY = 'deliverable.preview.kkFileViewBaseUrl';
 
+/** 有效上传后缀同时决定附件的受控 kkFileView 预览范围。 */
+export function previewAllowedExtensions() {
+  return [...config.upload.allowedExt];
+}
+
 export function isPreviewableAttachment(attachment) {
-  return attachment?.kind === 'file' && PREVIEW_EXTENSIONS.has(path.extname(attachment.filename || '').toLowerCase());
+  return attachment?.kind === 'file' && previewAllowedExtensions().includes(path.extname(attachment.filename || '').toLowerCase());
 }
 
 function signatureFor(attachmentId, expiresAt) {
