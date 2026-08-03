@@ -104,6 +104,16 @@ function controlledSourceUrl(sourceBaseUrl, attachment, expiresAt, signature) {
   return endpoint.toString();
 }
 
+/**
+ * 预览 iframe 使用同源绝对路径，兼容内网 IP/HTTP 与外网域名/HTTPS 的同一反向代理路径。
+ * 服务地址只提供受校验的路径基线，不能将其 Origin 回传给浏览器。
+ */
+function controlledPreviewPath(baseUrl, encodedSourceUrl) {
+  const configuredPath = new URL(baseUrl).pathname.replace(/\/+$/, '');
+  const previewPath = configuredPath ? `${configuredPath}/onlinePreview` : '/onlinePreview';
+  return `${previewPath}?url=${encodeURIComponent(encodedSourceUrl)}`;
+}
+
 /** 创建仅供未删除 Office/PDF 文件版本使用的预览会话。 */
 export async function createPreviewSession(attachment) {
   if (!attachment || attachment.is_deleted !== 0) throw notFound('交付件版本不存在');
@@ -115,6 +125,6 @@ export async function createPreviewSession(attachment) {
   const signature = signatureFor(attachment.id, expiresAt);
   const sourceUrl = controlledSourceUrl(settings.sourceBaseUrl, attachment, expiresAt, signature);
   const encodedSourceUrl = Buffer.from(sourceUrl, 'utf8').toString('base64');
-  const previewUrl = `${settings.baseUrl}/onlinePreview?url=${encodeURIComponent(encodedSourceUrl)}`;
+  const previewUrl = controlledPreviewPath(settings.baseUrl, encodedSourceUrl);
   return { previewUrl, expiresAt };
 }
