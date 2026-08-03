@@ -7,4 +7,5 @@
 
 export { default as ImpactAnalysisModal } from './components/ImpactAnalysisModal.jsx';
 export { default as AnalysisHeader } from './components/AnalysisHeader.jsx';
+export { default as DevIntakeModal } from './components/DevIntakeModal.jsx';
 export { COVERAGE_RESULTS, FIELD_DEFS, visibleFieldsOf, valueTagClass } from './components/impactSchema.js';

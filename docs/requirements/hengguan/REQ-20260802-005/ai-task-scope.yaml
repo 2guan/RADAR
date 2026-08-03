@@ -1,0 +1,116 @@
+{
+  "schema_version": "1.0",
+  "requirement": {
+    "id": "REQ-20260802-005",
+    "ref": "hengguan/REQ-20260802-005",
+    "title": "版本概览承接复用与移动端可用性优化",
+    "status": "ready",
+    "document": "docs/requirements/hengguan/REQ-20260802-005/requirement.md",
+    "internet_ai_coding_allowed": true
+  },
+  "assignment": {
+    "developer": "hengguan",
+    "module": "governance",
+    "module_owner": "hengguan",
+    "branch": "hengguan/REQ-20260802-005-overview-intake-reuse",
+    "base_branch": "origin/main",
+    "worktree": "codex-desktop-current-worktree"
+  },
+  "ai": {
+    "enabled": true,
+    "approved_service": "Codex desktop",
+    "model": "approved-by-user",
+    "contains_confidential_information": false,
+    "context_sanitized": true,
+    "production_access": false
+  },
+  "scope": {
+    "writable_paths": [
+      "docs/requirements/hengguan/REQ-20260802-005/**",
+      "web/src/modules/overview/pages/OverviewPage.jsx",
+      "web/src/styles.css",
+      "web/src/modules/development/index.js",
+      "web/src/modules/development/pages/DevTasksPage.jsx",
+      "web/src/modules/development/components/DevIntakeModal.jsx",
+      "web/src/modules/testing/index.js",
+      "web/src/modules/testing/pages/TestTasksPage.jsx",
+      "web/src/modules/testing/components/TestIntakeModal.jsx",
+      "web/scripts/check-overview-intake-reuse.mjs",
+      "server/src/modules/overview/application/task-status.js",
+      "server/src/modules/overview/api/routes.js",
+      "server/test/lib.test.js"
+    ],
+    "read_only_paths": [
+      "AGENTS.md",
+      "docs/governance/**",
+      "governance/modules.yaml",
+      ".agents/skills/radar-delivery-engineer/**",
+      "server/src/modules/development/**",
+      "server/src/modules/testing/**",
+      "server/test/api-rbac.test.js"
+    ],
+    "forbidden_paths": [
+      ".github/**",
+      "docs/reports/**",
+      ".env",
+      "**/.env",
+      "**/*secret*",
+      "**/*credential*",
+      "attachments/**",
+      "data/**"
+    ]
+  },
+  "public_capability_change": {
+    "required": true,
+    "shared_change_issue": "hengguan/REQ-20260802-005",
+    "target_modules": ["governance", "overview", "development", "testing"],
+    "new_methods": ["DevIntakeModal", "TestIntakeModal"],
+    "existing_method_changed": true,
+    "semantic_name_confirmed": true,
+    "old_behavior_preserved": true,
+    "compatibility_note": "开发、测试管理页的入口与既有服务端 API 保持不变；概览改为经模块公开前端入口调用同一承接组件，不发生页面跳转。概览节点 label 按需求/工单精确化，字段结构与仪表盘内部统计口径保持不变。",
+    "owner_approved": true,
+    "owner_review_required_before_merge": true
+  },
+  "database": {
+    "changed": false,
+    "migration_paths": [],
+    "mysql8_compatible": true,
+    "historical_data_impact": "无数据库或历史数据变更。",
+    "rollback_or_compensation": "回退前端组件复用改动即可，无数据补偿。"
+  },
+  "external_access": {
+    "changed": false,
+    "api_paths": [],
+    "readable_field_whitelist": [],
+    "writable_field_whitelist": [],
+    "action_whitelist": [],
+    "audit_required": true
+  },
+  "required_tests": [
+    {"name": "reuse_contract", "command": "node web/scripts/check-overview-intake-reuse.mjs"},
+    {"name": "unit", "command": "npm test --prefix server"},
+    {"name": "api", "command": "npm run test:api --prefix server"},
+    {"name": "permission", "command": "npm run test:rbac --prefix server"},
+    {"name": "ui_data_sources", "command": "node scripts/check-ui-data-sources.mjs"},
+    {"name": "module_boundaries", "command": "node scripts/check-module-boundaries.mjs"},
+    {"name": "build", "command": "npm run build --prefix web"},
+    {"name": "runtime", "command": "node scripts/verify-app-runtime.mjs"},
+    {"name": "browser", "command": "本地隔离应用以脱敏管理员打开概览详情，验证开发与测试承接不跳转、成功刷新；以 375px 宽度验证分组卡片和全流程进度条无横向滚动，需求/工单首节点标签准确且无控制台错误"}
+  ],
+  "risk": {
+    "level": "important",
+    "reasons": [
+      "承接为受权限保护的写入流程，概览需复用完整校验而不能复制简化逻辑。",
+      "新增开发、测试模块公开前端能力并由概览跨模块调用。"
+    ],
+    "required_approvals": ["hengguan"]
+  },
+  "completion": {
+    "changed_files_report_required": true,
+    "test_result_report_required": true,
+    "known_risks_report_required": true,
+    "rollback_report_required": true,
+    "requirement_acceptance_required": true
+  }
+}

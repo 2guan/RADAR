@@ -483,3 +483,17 @@ test('task-status：无下游任务时回退到已完成的需求/工单分析�
   assert.equal(chain.display, '需求/工单分析-需求分析完成');
   assert.equal(chain.shortDisplay, '需求 · 需求分析完成');
 });
+
+test('task-status：版本概览按实体类型显示需求分析或工单分析，默认统计口径不变', () => {
+  const requirement = buildTaskStatusChain(
+    { req_code: 'REQ-DEMO-003', status: '需求分析中' }, {}, {}, {}, { analysisLabel: 'entity' },
+  );
+  const ticket = buildTaskStatusChain(
+    { ticket_code: 'TICKET-DEMO-001', entity_type: 'ticket', status: '工单分析中' }, {}, {}, {}, { analysisLabel: 'entity' },
+  );
+
+  assert.equal(requirement.nodes[0].label, '需求分析');
+  assert.equal(ticket.nodes[0].label, '工单分析');
+  assert.equal(ticket.display, '工单分析-工单分析中');
+  assert.equal(buildTaskStatusChain({ req_code: 'REQ-DEMO-004', status: '需求分析中' }).nodes[0].label, '需求/工单分析');
+});

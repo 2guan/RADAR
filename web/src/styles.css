@@ -983,6 +983,7 @@ body {
   border: 1px solid var(--radar-border); background: var(--radar-surface); padding: 14px; height: 100%;
 }
 .ov-req-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+.ov-chain-wrap { overflow-x: auto; padding-bottom: 2px; }
 
 /* 需求/任务编号 主色胶囊 */
 .code-pill {
@@ -1317,9 +1318,26 @@ body {
   .stage-config-editor-modal .ant-modal-footer { display: flex; justify-content: flex-end; }
   .stage-config-editor-modal .form-section-card { padding: 10px 12px; }
 
-  /* 全流程时间轴：手机端更紧凑——缩小节点基宽与字号，
-     使无「非功能/安全测试」时（5 节点）能铺满容器、无横向滚动条；
-     含 NFT/SEC（≥6 节点）仍超出容器、保留横向滚动。 */
+  /* 版本概览的卡片不需要保留桌面端的双层留白。 */
+  .ov-page-card > .ant-card-head { min-height: 42px; padding-inline: 10px; }
+  .ov-page-card > .ant-card-head .ant-card-head-title { padding-block: 10px; }
+  .ov-page-card > .ant-card-body { padding: 10px !important; }
+  .ov-group-card .ant-card-head { min-height: 40px; padding-inline: 10px; }
+  .ov-group-card .ant-card-head-title { padding-block: 9px; }
+  .ov-group-card .ant-card-body { padding: 10px !important; }
+  .ov-group-card .ant-row { row-gap: 10px !important; }
+  .ov-req-card { padding: 10px; }
+
+  /* 概览的流程节点始终压缩到卡片宽度内。标签允许换行，避免任一阶段把整行撑出横向滚动条。 */
+  .ov-chain-wrap { overflow: hidden; padding-bottom: 0; }
+  .ov-chain-wrap .chain-bar { min-width: 0; }
+  .ov-chain-wrap .chain-step { flex: 1 1 0; min-width: 0; padding: 0; }
+  .ov-chain-wrap .chain-label {
+    min-height: 28px; margin-bottom: 3px; overflow-wrap: anywhere; text-align: center;
+    white-space: normal;
+  }
+
+  /* 其他页面的流程时间轴仍可横向查看全部阶段。 */
   .chain-step { flex-basis: 46px; padding: 0; }
   .chain-label { font-size: 10px; line-height: 14px; margin-bottom: 3px; }
   .chain-dot { width: 8px; height: 8px; }

@@ -6,16 +6,18 @@
  *       点击任一阶段卡片打开对应阶段的编辑弹窗（可编辑、保存留痕、回写概览）。
  * 作者：hengguan
  */
-import { useEffect, useState, useMemo, useLayoutEffect, useRef } from 'react';
+import { useEffect, useState, useLayoutEffect, useRef } from 'react';
 import {
-  Card, Row, Col, Tag, Typography, Empty, Modal, Space, Spin, Tabs, Button, Table, Radio, message, Timeline, Tooltip, List, Checkbox,
+  Card, Row, Col, Tag, Typography, Empty, Modal, Space, Spin, Tabs, Button, message, Timeline, Tooltip,
 } from 'antd';
 import { SafetyCertificateOutlined, DeploymentUnitOutlined, DownloadOutlined, DownOutlined, UpOutlined, HistoryOutlined, ExportOutlined } from '@ant-design/icons';
 import { useResponsive } from '../../../platform/ui/useResponsive.js';
-import { ChainBar, FilterPanel, ResizableTitle } from '../../../shared/ui/index.js';
+import { ChainBar, FilterPanel } from '../../../shared/ui/index.js';
 import { StatusBadge, TaskEditor, TaskStatusBadge, getStatusType } from '../../../shared/workflow/index.js';
 import { RequirementEditor } from '../../requirements/index.js';
 import { TicketEditor } from '../../tickets/index.js';
+import { DevIntakeModal as SharedDevIntakeModal } from '../../development/index.js';
+import { TestIntakeModal as SharedTestIntakeModal } from '../../testing/index.js';
 import { ReleaseDetail, ReleaseApplyEditor } from '../../release/index.js';
 import { IssueDetail } from '../../issues/index.js';
 import { apiPost, apiGet, rawClient } from '../api/index.js';
@@ -404,605 +406,6 @@ function IssueDetailCard({ issue, onEdit }) {
   );
 }
 
-const TEST_TYPE_LABEL = { SIT: '应用组装测试', UAT: '用户测试', NFT: '非功能测试', SEC: '安全测试' };
-
-function workItemLabel(item) {
-  if (item?.entity_label) return item.entity_label;
-  if (item?.entity_type === 'ticket' || item?.entityType === 'ticket') return '工单';
-  if (item?.entity_type === 'requirement' || item?.entityType === 'requirement') return '需求';
-  return '需求/工单';
-}
-
-function workItemTitleLabel(item) {
-  const label = workItemLabel(item);
-  if (label === '工单') return '工单标题';
-  if (label === '需求') return '需求标题';
-  return '标题/概述';
-}
-
-/** 承接弹窗·移动端：已选需求/工单卡片（单条、预选、不可改） */
-function IntakeReqCard({ requirement }) {
-  const r = requirement || {};
-  const label = workItemLabel(r);
-  return (
-    <Card size="small" style={{ borderColor: 'var(--radar-primary)', background: 'var(--radar-primary-soft)' }}>
-      <Space direction="vertical" size={4} style={{ width: '100%' }}>
-        <Space style={{ justifyContent: 'space-between', width: '100%' }}>
-          <Space size={6}>
-            <span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', fontWeight: 600 }}>{r.req_code}</span>
-            <Tag className="status-tag" style={{ margin: 0 }}>{label}</Tag>
-          </Space>
-          <Radio checked />
-        </Space>
-        <div style={{ fontWeight: 600, fontSize: 13 }}>{r.title}</div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
-          {(r.mainSystemsInfo || []).map((sys) => (
-            <Tag key={sys.sys_code} className="status-tag tag-system" style={{ borderRadius: 2, margin: 0, fontSize: 10 }}>{sys.sys_name || sys.sys_code}</Tag>
-          ))}
-        </div>
-      </Space>
-    </Card>
-  );
-}
-
-/** 承接弹窗·移动端：拆分任务预览卡片（可勾选，已存在则禁用） */
-function IntakePreviewCard({ item, isChecked, onToggle }) {
-  return (
-    <Card
-      size="small"
-      style={{ marginBottom: 8, borderColor: isChecked ? 'var(--radar-primary)' : 'var(--radar-border)' }}
-      onClick={onToggle}
-    >
-      <Space direction="vertical" size={4} style={{ width: '100%' }}>
-        <Space style={{ justifyContent: 'space-between', width: '100%' }}>
-          <Space>
-            <Checkbox checked={item.exists ? false : isChecked} disabled={item.exists} onClick={(e) => e.stopPropagation()} onChange={onToggle} />
-            <strong style={{ fontSize: 13 }}>{item.sysName}</strong>
-            {item.sysCode !== 'overall' && <span style={{ color: 'var(--radar-text-secondary)', fontSize: 11 }}>({item.sysCode})</span>}
-          </Space>
-          <Tag className={item.exists ? 'status-tag status-tag-final' : 'status-tag status-tag-in-progress'} style={{ margin: 0 }}>{item.status}</Tag>
-        </Space>
-        <div style={{ fontSize: 11, color: 'var(--radar-text-secondary)', marginTop: 4 }}>
-          角色：
-          <Tag className="status-tag" style={{
-            borderColor: item.role === '主责' ? 'var(--radar-primary)' : (item.role === '整体' ? 'var(--radar-ink)' : 'var(--radar-accent)'),
-            color: item.role === '主责' ? 'var(--radar-primary)' : (item.role === '整体' ? 'var(--radar-ink)' : 'var(--radar-accent)'),
-            background: item.role === '主责' ? 'var(--radar-primary-soft)' : (item.role === '整体' ? 'var(--radar-bg)' : 'var(--radar-accent-soft)'),
-            margin: 0, fontSize: 10, lineHeight: '14px',
-          }}>{item.role}</Tag>
-        </div>
-        <div style={{ fontSize: 11, color: 'var(--radar-text-secondary)' }}>
-          计划生成任务编号：<span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace' }}>{item.taskCode}</span>
-        </div>
-        <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--radar-ink)' }}>任务名称：{item.taskName}</div>
-      </Space>
-    </Card>
-  );
-}
-
-/** 承接弹窗·移动端：预览列表（卡片版），勾选逻辑与表格 rowSelection 等价 */
-function IntakePreviewList({ list, selected, setSelected }) {
-  return (
-    <List
-      dataSource={list}
-      rowKey="sysCode"
-      size="small"
-      renderItem={(item) => {
-        const isChecked = selected.includes(item.sysCode);
-        const toggle = () => {
-          if (item.exists) return;
-          setSelected(isChecked ? selected.filter((c) => c !== item.sysCode) : [...selected, item.sysCode]);
-        };
-        return <IntakePreviewCard item={item} isChecked={isChecked} onToggle={toggle} />;
-      }}
-    />
-  );
-}
-
-export function DevIntakeModal({ open, requirement, onClose, onSaved }) {
-  const { isMobile } = useResponsive();
-  const [loadingPreview, setLoadingPreview] = useState(false);
-  const [previewList, setPreviewList] = useState([]);
-  const [selectedNewSystems, setSelectedNewSystems] = useState([]);
-  const [saving, setSaving] = useState(false);
-
-  const [reqColWidths, setReqColWidths] = useState({});
-  const [prevColWidths, setPrevColWidths] = useState({});
-  const label = workItemLabel(requirement);
-
-  useEffect(() => {
-    if (open && requirement) {
-      setLoadingPreview(true);
-      apiPost('/dev-tasks/intake-preview', { reqCode: requirement.req_code })
-        .then((res) => {
-          setPreviewList(res || []);
-          const checkable = (res || [])
-            .filter((t) => !t.exists)
-            .map((t) => t.sysCode);
-          setSelectedNewSystems(checkable);
-        })
-        .catch((err) => {
-          message.error(err.message || '加载预览失败');
-        })
-        .finally(() => {
-          setLoadingPreview(false);
-        });
-    } else {
-      setPreviewList([]);
-      setSelectedNewSystems([]);
-    }
-  }, [open, requirement]);
-
-  const doIntake = async () => {
-    if (!selectedNewSystems.length) {
-      message.warning('请至少勾选一个需要新建的任务');
-      return;
-    }
-    setSaving(true);
-    try {
-      const res = await apiPost('/dev-tasks/intake', {
-        reqCode: requirement.req_code,
-        systems: selectedNewSystems,
-      });
-      message.success(`已成功承接 ${res.length} 个开发任务`);
-      onSaved();
-      onClose();
-    } catch (err) {
-      message.error(err.message || '承接失败');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const reqColumns = [
-    {
-      title: `${label}编号`,
-      dataIndex: 'req_code',
-      key: 'req_code',
-      width: 140,
-      render: (val) => (
-        <span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', fontWeight: 600 }}>
-          {val}
-        </span>
-      ),
-    },
-    { title: workItemTitleLabel(requirement), dataIndex: 'title', key: 'title', width: 280, ellipsis: true },
-    {
-      title: '主责系统',
-      dataIndex: 'mainSystemsInfo',
-      key: 'mainSystemsInfo',
-      width: 200,
-      render: (val) => {
-        const list = val || [];
-        if (!list.length) return '—';
-        return list.map((sys) => (
-          <Tag key={sys.sys_code} className="status-tag tag-system" style={{ borderRadius: 2 }}>
-            {sys.sys_name || sys.sys_code}
-          </Tag>
-        ));
-      },
-    },
-  ];
-
-  const previewColumns = [
-    {
-      title: '建立状态',
-      dataIndex: 'status',
-      key: 'status',
-      width: 100,
-      align: 'center',
-      render: (val, record) => {
-        const isExist = record.exists;
-        return (
-          <Tag className={isExist ? 'status-tag status-tag-final' : 'status-tag status-tag-in-progress'} style={{ margin: 0 }}>
-            {val}
-          </Tag>
-        );
-      },
-    },
-    {
-      title: '实施系统',
-      dataIndex: 'sysName',
-      key: 'sysName',
-      width: 180,
-      render: (val, record) => (
-        <span style={{ fontWeight: 500 }}>
-          {val} <span style={{ color: 'var(--radar-text-secondary)', fontSize: 11, fontWeight: 400 }}>({record.sysCode})</span>
-        </span>
-      ),
-    },
-    {
-      title: '角色',
-      dataIndex: 'role',
-      key: 'role',
-      width: 80,
-      align: 'center',
-      render: (val) => (
-        <Tag className="status-tag" style={{
-          borderColor: val === '主责' ? 'var(--radar-primary)' : 'var(--radar-accent)',
-          color: val === '主责' ? 'var(--radar-primary)' : 'var(--radar-accent)',
-          background: val === '主责' ? 'var(--radar-primary-soft)' : 'var(--radar-accent-soft)',
-          margin: 0
-        }}>
-          {val}
-        </Tag>
-      ),
-    },
-    {
-      title: '计划生成任务编号',
-      dataIndex: 'taskCode',
-      key: 'taskCode',
-      width: 180,
-      render: (val) => (
-        <span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace' }}>
-          {val}
-        </span>
-      ),
-    },
-    {
-      title: '开发任务名称',
-      dataIndex: 'taskName',
-      key: 'taskName',
-      width: 280,
-      ellipsis: true,
-    },
-  ];
-
-  const handleReqResize = (key) => (w) => setReqColWidths((prev) => ({ ...prev, [key]: w }));
-  const resizableReqColumns = useMemo(() => reqColumns.map((c) => {
-    const width = reqColWidths[c.dataIndex || c.key] || c.width;
-    return {
-      ...c,
-      width,
-      onHeaderCell: (col) => ({
-        width: col.width,
-        onResize: handleReqResize(c.dataIndex || c.key),
-      }),
-    };
-  }), [reqColumns, reqColWidths]);
-
-  const handlePrevResize = (key) => (w) => setPrevColWidths((prev) => ({ ...prev, [key]: w }));
-  const resizablePreviewColumns = useMemo(() => previewColumns.map((c) => {
-    const width = prevColWidths[c.dataIndex || c.key] || c.width;
-    return {
-      ...c,
-      width,
-      onHeaderCell: (col) => ({
-        width: col.width,
-        onResize: handlePrevResize(c.dataIndex || c.key),
-      }),
-    };
-  }), [previewColumns, prevColWidths]);
-
-  return (
-    <Modal
-      open={open}
-      title="开发承接"
-      width={920}
-      onCancel={onClose}
-      onOk={doIntake}
-      confirmLoading={saving}
-      okText="承接"
-      styles={{ body: { padding: '12px 0 0 0' } }}
-      destroyOnHidden
-    >
-      {requirement && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div className="form-section-card" style={{ marginBottom: 0 }}>
-            <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>1. 选择{label}</div>
-            {isMobile ? (
-              <IntakeReqCard requirement={requirement} />
-            ) : (
-              <Table
-                dataSource={[requirement]}
-                rowKey="req_code"
-                size="small"
-                className="super-compact-table"
-                pagination={false}
-                components={{ header: { cell: ResizableTitle } }}
-                columns={resizableReqColumns}
-                rowSelection={{
-                  type: 'radio',
-                  selectedRowKeys: [requirement.req_code],
-                  getCheckboxProps: () => ({ disabled: true }),
-                }}
-              />
-            )}
-          </div>
-
-          <div className="form-section-card" style={{ marginBottom: 0 }}>
-            <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>2. 确认拆分开发任务</div>
-            <Spin spinning={loadingPreview}>
-              {isMobile ? (
-                <IntakePreviewList list={previewList} selected={selectedNewSystems} setSelected={setSelectedNewSystems} />
-              ) : (
-                <Table
-                  dataSource={previewList}
-                  columns={resizablePreviewColumns}
-                  components={{ header: { cell: ResizableTitle } }}
-                  rowKey="sysCode"
-                  size="small"
-                  className="super-compact-table"
-                  pagination={false}
-                  rowSelection={{
-                    selectedRowKeys: selectedNewSystems,
-                    onChange: (keys) => setSelectedNewSystems(keys),
-                    getCheckboxProps: (record) => ({
-                      disabled: record.exists,
-                    }),
-                  }}
-                />
-              )}
-            </Spin>
-          </div>
-        </div>
-      )}
-    </Modal>
-  );
-}
-
-export function TestIntakeModal({ open, requirement, testType, onClose, onSaved }) {
-  const { isMobile } = useResponsive();
-  const [loadingPreview, setLoadingPreview] = useState(false);
-  const [previewData, setPreviewData] = useState({ overall: [], split: [] });
-  const [splitMode, setSplitMode] = useState('overall');
-  const [selectedNewSystems, setSelectedNewSystems] = useState([]);
-  const [saving, setSaving] = useState(false);
-
-  const [reqColWidths, setReqColWidths] = useState({});
-  const [prevColWidths, setPrevColWidths] = useState({});
-  const label = workItemLabel(requirement);
-
-  useEffect(() => {
-    if (open && requirement && testType) {
-      setLoadingPreview(true);
-      apiPost('/test-tasks/intake-preview', { reqCode: requirement.req_code, testType })
-        .then((res) => {
-          setPreviewData(res || { overall: [], split: [] });
-          const currentList = res ? (splitMode === 'overall' ? res.overall : res.split) : [];
-          const checkable = (currentList || []).filter(t => !t.exists).map(t => t.sysCode);
-          setSelectedNewSystems(checkable);
-        })
-        .catch((err) => {
-          message.error(err.message || '加载预览失败');
-        })
-        .finally(() => {
-          setLoadingPreview(false);
-        });
-    } else {
-      setPreviewData({ overall: [], split: [] });
-      setSelectedNewSystems([]);
-      setSplitMode('overall');
-    }
-  }, [open, requirement, testType]);
-
-  const handleSplitModeChange = (mode) => {
-    setSplitMode(mode);
-    const currentList = mode === 'overall' ? previewData.overall : previewData.split;
-    const checkable = (currentList || []).filter(t => !t.exists).map(t => t.sysCode);
-    setSelectedNewSystems(checkable);
-  };
-
-  const doIntake = async () => {
-    if (!selectedNewSystems.length) {
-      message.warning('请至少勾选一个需要新建的任务');
-      return;
-    }
-    setSaving(true);
-    try {
-      const res = await apiPost('/test-tasks/intake', {
-        reqCode: requirement.req_code,
-        testType,
-        systems: selectedNewSystems,
-        splitMode,
-      });
-      message.success(`已成功承接 ${res.length} 个${TEST_TYPE_LABEL[testType]}任务`);
-      onSaved();
-      onClose();
-    } catch (err) {
-      message.error(err.message || '承接失败');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const reqColumns = [
-    {
-      title: `${label}编号`,
-      dataIndex: 'req_code',
-      key: 'req_code',
-      width: 140,
-      render: (val) => (
-        <span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', fontWeight: 600 }}>
-          {val}
-        </span>
-      ),
-    },
-    { title: workItemTitleLabel(requirement), dataIndex: 'title', key: 'title', width: 280, ellipsis: true },
-    {
-      title: '主责系统',
-      dataIndex: 'mainSystemsInfo',
-      key: 'mainSystemsInfo',
-      width: 200,
-      render: (val) => {
-        const list = val || [];
-        if (!list.length) return '—';
-        return list.map((sys) => (
-          <Tag key={sys.sys_code} className="status-tag tag-system" style={{ borderRadius: 2 }}>
-            {sys.sys_name || sys.sys_code}
-          </Tag>
-        ));
-      },
-    },
-  ];
-
-  const previewColumns = [
-    {
-      title: '建立状态',
-      dataIndex: 'status',
-      key: 'status',
-      width: 100,
-      align: 'center',
-      render: (val, record) => {
-        const isExist = record.exists;
-        return (
-          <Tag className={isExist ? 'status-tag status-tag-final' : 'status-tag status-tag-in-progress'} style={{ margin: 0 }}>
-            {val}
-          </Tag>
-        );
-      },
-    },
-    {
-      title: '实施系统',
-      dataIndex: 'sysName',
-      key: 'sysName',
-      width: 180,
-      render: (val, record) => (
-        <span style={{ fontWeight: 500 }}>
-          {val} {record.sysCode !== 'overall' && <span style={{ color: 'var(--radar-text-secondary)', fontSize: 11, fontWeight: 400 }}>({record.sysCode})</span>}
-        </span>
-      ),
-    },
-    {
-      title: '角色',
-      dataIndex: 'role',
-      key: 'role',
-      width: 80,
-      align: 'center',
-      render: (val) => (
-        <Tag className="status-tag" style={{
-          borderColor: val === '主责' ? 'var(--radar-primary)' : (val === '整体' ? 'var(--radar-ink)' : 'var(--radar-accent)'),
-          color: val === '主责' ? 'var(--radar-primary)' : (val === '整体' ? 'var(--radar-ink)' : 'var(--radar-accent)'),
-          background: val === '主责' ? 'var(--radar-primary-soft)' : (val === '整体' ? 'var(--radar-bg)' : 'var(--radar-accent-soft)'),
-          margin: 0
-        }}>
-          {val}
-        </Tag>
-      ),
-    },
-    {
-      title: '计划生成任务编号',
-      dataIndex: 'taskCode',
-      key: 'taskCode',
-      width: 180,
-      render: (val) => (
-        <span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace' }}>
-          {val}
-        </span>
-      ),
-    },
-    {
-      title: '测试任务名称',
-      dataIndex: 'taskName',
-      key: 'taskName',
-      width: 280,
-      ellipsis: true,
-    },
-  ];
-
-  const handleReqResize = (key) => (w) => setReqColWidths((prev) => ({ ...prev, [key]: w }));
-  const resizableReqColumns = useMemo(() => reqColumns.map((c) => {
-    const width = reqColWidths[c.dataIndex || c.key] || c.width;
-    return {
-      ...c,
-      width,
-      onHeaderCell: (col) => ({
-        width: col.width,
-        onResize: handleReqResize(c.dataIndex || c.key),
-      }),
-    };
-  }), [reqColumns, reqColWidths]);
-
-  const handlePrevResize = (key) => (w) => setPrevColWidths((prev) => ({ ...prev, [key]: w }));
-  const resizablePreviewColumns = useMemo(() => previewColumns.map((c) => {
-    const width = prevColWidths[c.dataIndex || c.key] || c.width;
-    return {
-      ...c,
-      width,
-      onHeaderCell: (col) => ({
-        width: col.width,
-        onResize: handlePrevResize(c.dataIndex || c.key),
-      }),
-    };
-  }), [previewColumns, prevColWidths]);
-
-  const currentPreviewList = splitMode === 'overall' ? previewData.overall : previewData.split;
-
-  return (
-    <Modal
-      open={open}
-      title={`${TEST_TYPE_LABEL[testType] || ''}承接`}
-      width={920}
-      onCancel={onClose}
-      onOk={doIntake}
-      confirmLoading={saving}
-      okText="承接"
-      styles={{ body: { padding: '12px 0 0 0' } }}
-      destroyOnHidden
-    >
-      {requirement && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div className="form-section-card" style={{ marginBottom: 0 }}>
-            <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>1. 选择{label}</div>
-            {isMobile ? (
-              <IntakeReqCard requirement={requirement} />
-            ) : (
-              <Table
-                dataSource={[requirement]}
-                rowKey="req_code"
-                size="small"
-                className="super-compact-table"
-                pagination={false}
-                components={{ header: { cell: ResizableTitle } }}
-                columns={resizableReqColumns}
-                rowSelection={{
-                  type: 'radio',
-                  selectedRowKeys: [requirement.req_code],
-                  getCheckboxProps: () => ({ disabled: true }),
-                }}
-              />
-            )}
-          </div>
-
-          <div className="form-section-card" style={{ marginBottom: 0 }}>
-            <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>2. 选择承接方式</div>
-            <Radio.Group value={splitMode} onChange={(e) => handleSplitModeChange(e.target.value)}>
-              <Radio value="overall">合并承接</Radio>
-              <Radio value="split">拆分承接</Radio>
-            </Radio.Group>
-          </div>
-
-          <div className="form-section-card" style={{ marginBottom: 0 }}>
-            <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>3. 确认承接测试任务</div>
-            <Spin spinning={loadingPreview}>
-              {isMobile ? (
-                <IntakePreviewList list={currentPreviewList} selected={selectedNewSystems} setSelected={setSelectedNewSystems} />
-              ) : (
-                <Table
-                  dataSource={currentPreviewList}
-                  columns={resizablePreviewColumns}
-                  components={{ header: { cell: ResizableTitle } }}
-                  rowKey="sysCode"
-                  size="small"
-                  className="super-compact-table"
-                  pagination={false}
-                  rowSelection={{
-                    selectedRowKeys: selectedNewSystems,
-                    onChange: (keys) => setSelectedNewSystems(keys),
-                    getCheckboxProps: (record) => ({
-                      disabled: record.exists,
-                    }),
-                  }}
-                />
-              )}
-            </Spin>
-          </div>
-        </div>
-      )}
-    </Modal>
-  );
-}
-
 function RequirementHistoryModal({ open, onClose, reqCode }) {
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -1322,6 +725,7 @@ export default function Overview() {
 
   return (
     <Card
+      className="ov-page-card"
       title="版本概览"
       variant="borderless"
     >
@@ -1349,6 +753,7 @@ export default function Overview() {
         return (
           <Card
             key={g.org}
+            className="ov-group-card"
             variant="borderless"
             style={{ marginBottom: collapsed ? 10 : 20 }}
             styles={{ body: collapsed ? { padding: 0, display: 'none' } : { padding: 16 } }}
@@ -1395,7 +800,7 @@ export default function Overview() {
                       </Space>
 
                       {/* 进度条 + 各阶段状态标签 */}
-                      <div style={{ overflowX: 'auto', paddingBottom: 2 }}>
+                      <div className="ov-chain-wrap">
                         <ChainBar nodes={c.nodes} />
                       </div>
                     </div>
@@ -1469,8 +874,8 @@ export default function Overview() {
             can={can}
             onEditRequirement={() => setEditor({ type: detail.entityType === 'ticket' ? 'ticket' : 'requirement', id: detail.requirement.id })}
             onEditTask={(type, task) => setEditor({ type, id: task.id })}
-            onDevIntake={() => setDevIntakeReq(detail.requirement)}
-            onTestIntake={(testType) => setTestIntakeReq({ req: detail.requirement, testType })}
+            onDevIntake={() => setDevIntakeReq({ ...detail.requirement, entity_type: detail.entityType })}
+            onTestIntake={(testType) => setTestIntakeReq({ req: { ...detail.requirement, entity_type: detail.entityType }, testType })}
             onRelease={openReleaseCard}
           />
         )}
@@ -1502,8 +907,8 @@ export default function Overview() {
         onSaved={() => { setApplyEditor(null); onEditorSaved(); }}
       />
 
-      <DevIntakeModal open={!!devIntakeReq} requirement={devIntakeReq} onClose={() => setDevIntakeReq(null)} onSaved={onEditorSaved} />
-      <TestIntakeModal open={!!testIntakeReq} requirement={testIntakeReq?.req} testType={testIntakeReq?.testType} onClose={() => setTestIntakeReq(null)} onSaved={onEditorSaved} />
+      <SharedDevIntakeModal open={!!devIntakeReq} initialWorkItem={devIntakeReq} onClose={() => setDevIntakeReq(null)} onSaved={onEditorSaved} />
+      <SharedTestIntakeModal open={!!testIntakeReq} initialWorkItem={testIntakeReq?.req} testType={testIntakeReq?.testType} onClose={() => setTestIntakeReq(null)} onSaved={onEditorSaved} />
       <RequirementHistoryModal open={showHistory} reqCode={detail?.requirement?.req_code} onClose={() => setShowHistory(false)} />
     </Card>
   );
