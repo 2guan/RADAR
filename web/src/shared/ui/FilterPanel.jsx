@@ -91,6 +91,7 @@ export default function FilterPanel({ configs, onChange, actions }) {
           placeholder={c.placeholder || c.label}
           value={val ? dayjs(val) : null}
           onChange={(date, dateStr) => handleValueChange(c.field, dateStr, 'date')}
+          format="YYYY-M-D"
           style={{ width: '100%' }}
         />
       );

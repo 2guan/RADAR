@@ -17,6 +17,7 @@ import IssueDetail from '../components/IssueDetail.jsx';
 import { ImportModal } from '../../../platform/import-export/index.js';
 import { getScopedPopupContainer } from '../../../platform/ui/scopedPopup.js';
 import { apiDelete, apiGet, apiPost } from '../api/index.js';
+import { formatBeijingDateTime } from '../../../shared/utils/index.js';
 
 export default function Issues() {
   const tableRef = useRef();
@@ -216,7 +217,7 @@ export default function Issues() {
         <CheckCircleOutlined style={{ marginRight: 4, color: '#52c41a' }} />
         已完成 {bgStatus.done}/{bgStatus.total}
         {bgStatus.failed > 0 && <span style={{ color: '#cf1322', marginLeft: 4 }}>失败 {bgStatus.failed}</span>}
-        {bgStatus.lastFinishTime && <span style={{ marginLeft: 6 }}>最后同步：{bgStatus.lastFinishTime}</span>}
+        {bgStatus.lastFinishTime && <span style={{ marginLeft: 6 }}>最后同步：{formatBeijingDateTime(bgStatus.lastFinishTime)}</span>}
       </span>
     );
   })();

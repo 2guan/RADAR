@@ -20,16 +20,14 @@ import { getStatusType, statusSelectWidth } from '../../../shared/workflow/index
 import { apiGet, apiPost, apiPut } from '../api/index.js';
 import { useAppStore } from '../../../platform/state/app.js';
 import { useResponsive } from '../../../platform/ui/useResponsive.js';
+import { formatBeijingShortDateTime } from '../../../shared/utils/index.js';
 
 // ─── 模块级系统列表缓存（与 SystemSelect 共用同一接口，但单独维护以供下方组件使用） ───
 let _sysCache = null;
 
 function formatRegisterTime(value, fallbackValue) {
-  const valueMatch = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{1,2}))?/.exec(String(value || ''));
-  const source = valueMatch?.[4] ? value : (fallbackValue || value);
-  if (!source) return '—';
-  const match = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{1,2}))?/.exec(String(source));
-  return match ? `${Number(match[2])}-${Number(match[3])} ${Number(match[4] || 0)}:${String(match[5] || '0').padStart(2, '0')}` : value;
+  const source = /[T ]\d{1,2}:\d{2}/.test(String(value || '')) ? value : (fallbackValue || value);
+  return formatBeijingShortDateTime(source);
 }
 
 /**
@@ -486,12 +484,12 @@ export default function TicketEditor({ open, mode = 'modal', code, reqId, onClos
                 </StageBuiltinField>
                 <StageBuiltinField fieldKey="expected_release_date" defaultSection="basic">
                     <Form.Item name="expected_release_date" label="期望投产时间" rules={required.rules('expected_release_date', '期望投产时间')} style={{ marginBottom: 8 }}>
-                      <DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" />
+                      <DatePicker size="small" format="YYYY-M-D" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" />
                     </Form.Item>
                 </StageBuiltinField>
                 <StageBuiltinField fieldKey="propose_time" defaultSection="basic">
                     <Form.Item name="propose_time" label="提出时间" rules={required.rules('propose_time', '提出时间', { action: '请选择' })} style={{ marginBottom: 8 }}>
-                      <DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" />
+                      <DatePicker size="small" format="YYYY-M-D" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" />
                     </Form.Item>
                 </StageBuiltinField>
                 {/* OA编号/工单编号 + 是否涉账 */}

@@ -5,4 +5,4 @@
  * 作者：hengguan
  */
 
-export { formatBeijingDateTime } from './time.js';
+export { formatBeijingDate, formatBeijingDateTime, formatBeijingShortDate, formatBeijingShortDateTime } from './time.js';

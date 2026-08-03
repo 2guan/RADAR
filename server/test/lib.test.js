@@ -30,6 +30,10 @@ import {
 import { validateCodeRuleTemplate } from '../src/modules/settings/reference-data/index.js';
 import { MOCK_ISSUE_SNAPSHOT } from '../scripts/mock-data.js';
 import { checkExt, isPreviewableAttachment, previewAllowedExtensions } from '../src/platform/attachments/index.js';
+import {
+  beijingCompactDateString, beijingDateString, beijingDateTimeString, isValidDateOnly,
+} from '../src/shared/utils/time.js';
+import { isDue as isIssueSyncScheduleDue } from '../src/modules/issues/application/issue-sync-scheduler.js';
 
 test('运行时路径：平台配置从仓库根目录解析静态资源与持久化默认目录', () => {
   const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -41,6 +45,7 @@ test('运行时路径：平台配置从仓库根目录解析静态资源与持�
   assert.equal(config.webDist, resolveFromProjectRoot(process.env.WEB_DIST, 'web/dist'));
   assert.equal(config.dbFile, resolveFromProjectRoot(process.env.DB_FILE, 'data/radar.db'));
   assert.equal(config.attachmentDir, resolveFromProjectRoot(process.env.ATTACHMENT_DIR, 'attachments'));
+  assert.equal(process.env.TZ, 'Asia/Shanghai');
 });
 
 test('交付件文件类型：默认 kkFileView 清单可由环境配置覆盖并同步预览', () => {
@@ -100,6 +105,23 @@ test('编号模板：公共占位符提供投产点、当前日期与关联工�
   assert.equal(validateCodeRuleTemplate('code.dev', '{需求/工单编号}_{序号}'), null);
 });
 
+test('北京时间工具：瞬时时间、业务日期和无时区日期时间采用不同且稳定的语义', () => {
+  const instant = new Date('2026-05-24T16:25:59.000Z');
+  assert.equal(beijingDateString(instant), '2026-05-25');
+  assert.equal(beijingCompactDateString(instant), '20260525');
+  assert.equal(beijingDateTimeString(instant), '2026-05-25 00:25:59');
+  assert.equal(isValidDateOnly('2026-02-29'), false);
+  assert.equal(isValidDateOnly('2028-02-29'), true);
+});
+
+test('问题每日同步：按北京时间日期与 HH:mm 判断，跨日后只触发一次', () => {
+  const schedule = { enabled: true, mode: 'daily', dailyTime: '00:20', interval: 1 };
+  const now = new Date('2026-05-24T16:25:00.000Z'); // 北京时间 2026-5-25 00:25
+  assert.equal(isIssueSyncScheduleDue({ ...schedule, lastRunAt: '' }, now), true);
+  assert.equal(isIssueSyncScheduleDue({ ...schedule, lastRunAt: '2026-05-24T16:21:00.000Z' }, now), false);
+  assert.equal(isIssueSyncScheduleDue({ ...schedule, lastRunAt: '2026-05-23T16:21:00.000Z' }, now), true);
+});
+
 test('密码哈希：正确密码校验通过、错误密码失败', () => {
   const h = hashPassword('admin2026');
   assert.ok(h.startsWith('scrypt$'));
@@ -117,10 +139,10 @@ test('排期偏差率：延期为正、提前为负、信息不全为 null', () 
   assert.equal(calcDeviation('2026-07-01', '2026-07-10', null), null);
 });
 
-test('投产评审 Word 日期时间格式：兼容数据库字符串与 Date 对象', () => {
-  assert.equal(formatWordDateTime('2026-05-05 08:15:00'), '2026-5-5 8:15');
-  assert.equal(formatWordDateTime('2026-05-05T08:15:30.000Z'), '2026-5-5 8:15');
-  assert.equal(formatWordDateTime(new Date(2026, 4, 5, 8, 15, 0)), '2026-5-5 8:15');
+test('投产评审 Word 日期时间格式：使用北京时间且时间补零到分钟', () => {
+  assert.equal(formatWordDateTime('2026-05-05 08:15:00'), '2026-5-5 08:15');
+  assert.equal(formatWordDateTime('2026-05-05T08:15:30.000Z'), '2026-5-5 16:15');
+  assert.equal(formatWordDateTime(new Date('2026-05-05T00:15:00.000Z')), '2026-5-5 08:15');
   assert.equal(formatWordDateTime(null), '—');
 });
 

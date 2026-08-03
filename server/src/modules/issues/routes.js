@@ -11,6 +11,7 @@
 import { get, run, tx, isSqlite } from '../../platform/persistence/index.js';
 import { listQuery } from '../../platform/persistence/index.js';
 import { ok, notFound, badRequest, parseJsonArray } from '../../platform/runtime/index.js';
+import { beijingDateTimeString } from '../../shared/utils/time.js';
 import { exportXlsx, parseXlsx } from '../../platform/import-export/index.js';
 import {
   getIssueSyncState,
@@ -90,8 +91,7 @@ const IMPORT_TITLE_BY_KEY = Object.fromEntries(IMPORT_COLUMNS.map((column) => [c
 function importText(value) {
   if (value === null || value === undefined) return '';
   if (value instanceof Date) {
-    const pad = (n) => String(n).padStart(2, '0');
-    return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}${value.getHours() || value.getMinutes() || value.getSeconds() ? ` ${pad(value.getHours())}:${pad(value.getMinutes())}:${pad(value.getSeconds())}` : ''}`;
+    return beijingDateTimeString(value);
   }
   return String(value).trim();
 }

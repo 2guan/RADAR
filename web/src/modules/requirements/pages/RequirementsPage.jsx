@@ -22,12 +22,11 @@ import { useAppStore } from '../../../platform/state/app.js';
 import { ImportModal } from '../../../platform/import-export/index.js';
 import { makeReleasePointOptions, ReleasePointText } from '../../settings/reference-data/index.js';
 import { useStageListFields } from '../../settings/process-configuration/index.js';
+import { formatBeijingDate, formatBeijingShortDateTime } from '../../../shared/utils/index.js';
 
 function formatRegistrationTime(value, fallbackValue) {
-  const valueMatch = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{1,2}))?/.exec(String(value || ''));
-  const source = valueMatch?.[4] ? value : (fallbackValue || value);
-  const match = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{1,2}))?/.exec(String(source || ''));
-  return match ? `${Number(match[2])}-${Number(match[3])} ${Number(match[4] || 0)}:${String(match[5] || '0').padStart(2, '0')}` : '—';
+  const source = /[T ]\d{1,2}:\d{2}/.test(String(value || '')) ? value : (fallbackValue || value);
+  return formatBeijingShortDateTime(source);
 }
 
 export default function Requirements() {
@@ -198,7 +197,7 @@ export default function Requirements() {
       sorter: true,
       render: (val) => (
         <span style={{ fontFamily: 'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace' }}>
-          {val || '—'}
+          {formatBeijingDate(val)}
         </span>
       ),
     },

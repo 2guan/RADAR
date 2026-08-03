@@ -15,6 +15,7 @@ import {
   ImageRun, VerticalAlign, TableLayoutType, convertInchesToTwip,
 } from 'docx';
 import { coverageItemExportLines, decodeChangeItem, impactItemExportLines } from '../../development/index.js';
+import { beijingDateTimeString } from '../../../shared/utils/time.js';
 
 // ── 基础常量 ──────────────────────────────────────────────────────────────
 const FONT = '微软雅黑';
@@ -114,29 +115,28 @@ function dataUrlToBuffer(dataUrl) {
   try { return Buffer.from(m[2], 'base64'); } catch { return null; }
 }
 
-/** Word 中显示的日期时间：2026-5-5 8:15。 */
+/** Word 中显示的日期时间：2026-5-5 08:15。 */
 export function formatWordDateTime(value) {
   if (!value) return '—';
 
   const fromParts = (y, mo, d, h, mi) => {
     const date = `${Number(y)}-${Number(mo)}-${Number(d)}`;
     if (h === undefined || mi === undefined) return date;
-    return `${date} ${Number(h)}:${String(Number(mi)).padStart(2, '0')}`;
+    return `${date} ${String(Number(h)).padStart(2, '0')}:${String(Number(mi)).padStart(2, '0')}`;
   };
 
   if (value instanceof Date) {
-    if (Number.isNaN(value.getTime())) return '—';
-    return fromParts(
-      value.getFullYear(),
-      value.getMonth() + 1,
-      value.getDate(),
-      value.getHours(),
-      value.getMinutes(),
-    );
+    const formatted = beijingDateTimeString(value);
+    return formatted ? fromParts(.../^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/.exec(formatted).slice(1)) : '—';
   }
 
   const text = String(value).trim();
   if (!text) return '—';
+
+  if (/(?:Z|[+-]\d{2}:?\d{2})$/i.test(text)) {
+    const parsed = new Date(text.replace(' ', 'T'));
+    return Number.isNaN(parsed.getTime()) ? '—' : formatWordDateTime(parsed);
+  }
 
   const m = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[ T](\d{1,2}):(\d{1,2}))?/.exec(text);
   if (m) return fromParts(m[1], m[2], m[3], m[4], m[5]);

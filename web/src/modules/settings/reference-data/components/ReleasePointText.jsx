@@ -5,6 +5,7 @@
  * 作者：hengguan
  */
 
+import { formatBeijingDate } from '../../../../shared/utils/index.js';
 
 export const PENDING_RELEASE_POINT = '投产点待定';
 
@@ -16,16 +17,20 @@ export function isNumericReleasePoint(value) {
   return NUMERIC_RELEASE_POINT_RE.test(String(value || ''));
 }
 
+export function formatReleasePointDate(value) {
+  return isNumericReleasePoint(value) && String(value).length === 8 ? formatBeijingDate(value) : String(value || '');
+}
+
 // 投产点标签可按场景附带版本类型，供列表、筛选与搜索复用。
 export function releasePointLabelText(point, { includeVersionType = false, separator = ' · ' } = {}) {
-  const releaseDate = String(point?.release_date || '');
+  const releaseDate = formatReleasePointDate(point?.release_date);
   if (!releaseDate) return '';
   return includeVersionType && point?.version_type ? `${releaseDate}${separator}${point.version_type}` : releaseDate;
 }
 
 export function ReleasePointText({ value, placeholder = '—', style, className }) {
   const hasValue = value !== undefined && value !== null && value !== '';
-  const text = hasValue ? String(value) : placeholder;
+  const text = hasValue ? formatReleasePointDate(value) : placeholder;
   const numericStyle = hasValue && isNumericReleasePoint(value)
     ? { fontFamily: RELEASE_POINT_NUMBER_FONT, fontVariantNumeric: 'tabular-nums' }
     : null;

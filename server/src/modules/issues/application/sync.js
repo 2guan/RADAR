@@ -6,6 +6,7 @@
  */
 import { all, get, run, tx } from '../../../platform/persistence/index.js';
 import { fetchIssueOverview, fetchIssueDetail } from './pams.js';
+import { beijingDateTimeString } from '../../../shared/utils/time.js';
 
 const OVERVIEW_MAP = {
   status: 'status', detailed_classification: 'detailed_classification', system: 'system',
@@ -36,7 +37,7 @@ async function saveDetail(code, detail) {
   data.linked_cases = toJson(detail.linked_cases);
   data.is_major = toBit(detail.is_major);
   data.is_common = toBit(detail.is_common);
-  data.synced_at = new Date().toISOString().slice(0, 19).replace('T', ' ');
+  data.synced_at = beijingDateTimeString().slice(0, 16);
   const keys = Object.keys(data);
   // 以问题编号幂等写入：已有快照更新，不存在时再创建。
   const existing = await get('SELECT id FROM issue WHERE issue_code = ?', code);
@@ -59,8 +60,7 @@ async function runDetailSync(codes) {
     await new Promise((resolve) => setTimeout(resolve, 200));
   }
   state.running = false;
-  const now = new Date();
-  state.lastFinishTime = `${now.getMonth() + 1}-${now.getDate()} ${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
+  state.lastFinishTime = new Date().toISOString();
 }
 
 export function getIssueSyncState() { return { ...state }; }

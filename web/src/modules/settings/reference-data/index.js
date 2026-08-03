@@ -9,4 +9,4 @@ export { default as DictSelect } from './components/DictSelect.jsx';
 export { default as PersonPicker } from './components/PersonPicker.jsx';
 export { default as SystemNameInput, SystemNamesSelect } from './components/SystemNameInput.jsx';
 export { default as SystemSelect } from './components/SystemSelect.jsx';
-export { ReleasePointText, ReleasePointOptionLabel, makeReleasePointOptions, releasePointFilter } from './components/ReleasePointText.jsx';
+export { ReleasePointText, ReleasePointOptionLabel, formatReleasePointDate, makeReleasePointOptions, releasePointFilter } from './components/ReleasePointText.jsx';

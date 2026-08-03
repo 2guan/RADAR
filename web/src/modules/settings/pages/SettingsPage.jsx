@@ -208,7 +208,7 @@ function ReleasePointManager() {
             </Form.Item>
           ) : (
             <Form.Item name="release_date" label="投产日期" rules={[{ required: true, message: '请选择投产日期' }]} extra="存储格式 YYYYMMDD">
-              <DatePicker style={{ width: '100%' }} format="YYYYMMDD" placeholder="选择投产日期" />
+              <DatePicker style={{ width: '100%' }} format="YYYY-M-D" placeholder="选择投产日期" />
             </Form.Item>
           )}
           <Form.Item name="version_type" label="投产版本类型">

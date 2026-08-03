@@ -9,6 +9,7 @@
 import { useEffect, useState } from 'react';
 import { apiGet } from '../api/index.js';
 import { subscribeStageContentConfigUpdated } from '../../settings/process-configuration/index.js';
+import { formatReleasePointDate } from '../../settings/reference-data/index.js';
 
 // 需要预载的字典分类（覆盖所有 dict:* optionSource）
 const DICT_CATS = ['process_status', 'req_type', 'ticket_type', 'org', 'sector'];
@@ -47,7 +48,7 @@ async function fetchMeta() {
 
   const rpLabel = {};
   const rpList = rps.map((p) => {
-    const label = `${p.release_date}${p.version_type ? ' ' + p.version_type : ''}`;
+    const label = `${formatReleasePointDate(p.release_date)}${p.version_type ? ' ' + p.version_type : ''}`;
     rpLabel[String(p.id)] = label;
     return { value: String(p.id), label, searchLabel: label, releaseDate: p.release_date, versionType: p.version_type };
   });

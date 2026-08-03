@@ -25,7 +25,7 @@ import { useAppStore } from '../../../platform/state/app.js';
 import { exportXlsx } from '../../../platform/import-export/io.js';
 import Can from '../../../platform/auth/Can.jsx';
 import { makeReleasePointOptions, ReleasePointText } from '../../settings/reference-data/index.js';
-import { formatBeijingDateTime } from '../../../shared/utils/index.js';
+import { formatBeijingDate, formatBeijingDateTime, formatBeijingShortDate } from '../../../shared/utils/index.js';
 import { logger } from '../../../platform/observability/logger.js';
 import { useRequiredFields } from '../../settings/process-configuration/index.js';
 
@@ -68,18 +68,10 @@ function SystemCard({ s }) {
   );
 }
 
-/** 计划/实际时间段格式化 (如 "08.22-08.30") */
+/** 计划/实际时间段在紧凑概览中使用已定义的 M-D 格式。 */
 function formatPeriod(start, end) {
   if (!start && !end) return '—';
-  const fmt = (d) => {
-    if (!d) return '—';
-    const parts = d.split('-');
-    if (parts.length >= 3) {
-      return `${parts[1]}.${parts[2]}`;
-    }
-    return d;
-  };
-  return `${fmt(start)}-${fmt(end)}`;
+  return `${formatBeijingShortDate(start)}-${formatBeijingShortDate(end)}`;
 }
 
 /** 统一的附件展示组件：按传入的 fields 列表渲染所有条带 */
@@ -236,7 +228,7 @@ function ReqDetailCard({ req, entityType = 'requirement', onEdit }) {
     <DetailCard status={req.status} code={req.req_code} title={req.title} onEdit={onEdit} lg>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6, fontSize: 11 }}>
         <Tag className="tag-type" style={{ borderRadius: 2, margin: 0, fontSize: 10 }}>{req.req_type || '—'}</Tag>
-        <span style={{ color: 'var(--radar-text-secondary)' }}>{req.propose_time || '—'}</span>
+        <span style={{ color: 'var(--radar-text-secondary)' }}>{formatBeijingDate(req.propose_time)}</span>
       </div>
       <div className="lc-text" style={{ marginBottom: 8, color: 'var(--radar-ink)' }}>
         {req.summary || '—'}
@@ -380,7 +372,7 @@ function IssueDetailCard({ issue, onEdit }) {
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6, fontSize: 11, flexWrap: 'wrap' }}>
         {issue.category && <Tag className="tag-type" style={{ borderRadius: 2, margin: 0, fontSize: 10 }}>{issue.category}</Tag>}
         {issue.urgency && <Tag className="tag-org" style={{ borderRadius: 2, margin: 0, fontSize: 10 }}>{issue.urgency}</Tag>}
-        {issue.create_time && <span style={{ color: 'var(--radar-text-secondary)' }}>{issue.create_time}</span>}
+        {issue.create_time && <span style={{ color: 'var(--radar-text-secondary)' }}>{formatBeijingDateTime(issue.create_time)}</span>}
       </div>
 
       {issue.details && (

@@ -7,6 +7,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { beijingCompactDateString } from '../../shared/utils/time.js';
 import { randomBytes } from 'node:crypto';
 import { all, config, get, run, tx } from '../persistence/index.js';
 import { badRequest, notFound } from '../runtime/index.js';
@@ -42,8 +43,7 @@ export function attachmentView(row) {
 
 function saveBuffer(entityType, filename, buffer) {
   checkExt(filename);
-  const d = new Date();
-  const subDir = path.join(entityType, `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}`);
+  const subDir = path.join(entityType, beijingCompactDateString().slice(0, 6));
   const absDir = path.join(config.attachmentDir, subDir);
   fs.mkdirSync(absDir, { recursive: true });
   const safeName = path.basename(filename).replace(/[/\\?%*:|"<>]/g, '_');
