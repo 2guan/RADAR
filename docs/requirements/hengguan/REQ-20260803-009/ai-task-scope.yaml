@@ -1,0 +1,71 @@
+{
+  "schema_version": "1.0",
+  "requirement": {
+    "id": "REQ-20260803-009",
+    "ref": "hengguan/REQ-20260803-009",
+    "title": "交付件预览同源代理路径",
+    "status": "ready",
+    "document": "docs/requirements/hengguan/REQ-20260803-009/requirement.md",
+    "internet_ai_coding_allowed": true
+  },
+  "assignment": {
+    "developer": "hengguan",
+    "module": "governance",
+    "module_owner": "hengguan",
+    "branch": "hengguan/REQ-20260803-009-same-origin-preview",
+    "base_branch": "origin/main",
+    "worktree": "codex-desktop-current-worktree"
+  },
+  "ai": {
+    "enabled": true,
+    "approved_service": "Codex desktop",
+    "model": "approved-by-user",
+    "contains_confidential_information": false,
+    "context_sanitized": true,
+    "production_access": false
+  },
+  "scope": {
+    "writable_paths": [
+      "docs/requirements/hengguan/REQ-20260803-009/**",
+      ".env.example",
+      "server/src/platform/attachments/preview.js",
+      "server/test/api-rbac.test.js"
+    ],
+    "read_only_paths": [
+      "AGENTS.md",
+      "docs/governance/**",
+      "governance/modules.yaml",
+      ".agents/skills/radar-delivery-engineer/**",
+      "server/src/modules/settings/application/deliverable-preview-settings.js",
+      "server/src/platform/attachments/api/routes.js",
+      "web/src/platform/attachments/AttachmentField.jsx"
+    ],
+    "forbidden_paths": [".github/**", "docs/reports/**", ".env", "**/*secret*", "**/*credential*", "attachments/**", "data/**", "tools/**"]
+  },
+  "public_capability_change": {
+    "required": true,
+    "shared_change_issue": "hengguan/REQ-20260803-009",
+    "target_modules": ["governance", "platform/attachments"],
+    "new_methods": [],
+    "existing_method_changed": true,
+    "semantic_name_confirmed": true,
+    "old_behavior_preserved": true,
+    "compatibility_note": "预览会话仍返回 previewUrl 和 expiresAt，保持签名、授权、错误和直连路径兼容；当规范地址含代理路径时 previewUrl 改为同源绝对路径，浏览器按当前入口解析。",
+    "owner_approved": true,
+    "owner_review_required_before_merge": true
+  },
+  "database": {"changed": false, "migration_paths": [], "mysql8_compatible": true, "historical_data_impact": "无历史数据修改。", "rollback_or_compensation": "回退预览路径构造代码，无数据补偿。"},
+  "external_access": {"changed": false, "api_paths": [], "readable_field_whitelist": [], "writable_field_whitelist": [], "action_whitelist": [], "audit_required": true},
+  "required_tests": [
+    {"name": "unit", "command": "npm test --prefix server"},
+    {"name": "api", "command": "npm run test:api --prefix server"},
+    {"name": "permission", "command": "npm run test:rbac --prefix server"},
+    {"name": "module_boundaries", "command": "node scripts/check-module-boundaries.mjs"},
+    {"name": "governance", "command": "node scripts/check-governance.mjs"},
+    {"name": "build", "command": "npm run build --prefix web"},
+    {"name": "runtime", "command": "node scripts/verify-app-runtime.mjs"},
+    {"name": "browser", "command": "部署人员在内网自定义端口与外网 HTTPS 域名分别验收当前/历史版本预览、下载、控制台与刷新"}
+  ],
+  "risk": {"level": "important", "reasons": ["附件预览会话是受签名与实体授权保护的公开平台能力。", "反向代理路径处理不当会造成预览资源失效或错误 Origin。"], "required_approvals": ["hengguan"]},
+  "completion": {"changed_files_report_required": true, "test_result_report_required": true, "known_risks_report_required": true, "rollback_report_required": true, "requirement_acceptance_required": true}
+}

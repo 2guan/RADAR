@@ -1386,15 +1386,18 @@ if (!process.env.RADAR_RUN_API_TESTS) {
     );
     const configured = await app.inject({
       method: 'PUT', url: '/api/settings/app-config', headers,
-      payload: { items: { 'deliverable.preview.enabled': 'true', 'deliverable.preview.kkFileViewBaseUrl': 'http://127.0.0.1:8012' } },
+      payload: { items: { 'deliverable.preview.enabled': 'true', 'deliverable.preview.kkFileViewBaseUrl': 'http://127.0.0.1:8012/preview' } },
     });
     assert.equal(configured.statusCode, 200, configured.body);
 
     const session = await app.inject({ method: 'POST', url: `/api/attachments/${historical.lastInsertRowid}/preview-session`, headers, payload: {} });
     assert.equal(session.statusCode, 200, session.body);
-    const previewUrl = new URL(session.json().data.previewUrl);
-    assert.equal(previewUrl.origin, 'http://127.0.0.1:8012');
-    const sourceUrl = new URL(Buffer.from(previewUrl.searchParams.get('url'), 'base64').toString('utf8'));
+    const previewUrl = session.json().data.previewUrl;
+    assert.match(previewUrl, /^\/preview\/onlinePreview\?url=/);
+    assert.ok(!previewUrl.includes('127.0.0.1'));
+    const previewUrlParts = new URL(previewUrl, 'http://radar.example.test');
+    assert.equal(previewUrlParts.pathname, '/preview/onlinePreview');
+    const sourceUrl = new URL(Buffer.from(previewUrlParts.searchParams.get('url'), 'base64').toString('utf8'));
     const streamed = await app.inject({ method: 'GET', url: `${sourceUrl.pathname}${sourceUrl.search}` });
     assert.equal(streamed.statusCode, 200, streamed.body);
     assert.match(streamed.headers['content-disposition'], /filename\*=UTF-8''/);
@@ -1406,6 +1409,16 @@ if (!process.env.RADAR_RUN_API_TESTS) {
 
     const currentSession = await app.inject({ method: 'POST', url: `/api/attachments/${attachment.lastInsertRowid}/preview-session`, headers, payload: {} });
     assert.equal(currentSession.statusCode, 200, currentSession.body);
+    assert.match(currentSession.json().data.previewUrl, /^\/preview\/onlinePreview\?url=/);
+
+    const rootConfigured = await app.inject({
+      method: 'PUT', url: '/api/settings/app-config', headers,
+      payload: { items: { 'deliverable.preview.kkFileViewBaseUrl': 'http://127.0.0.1:8012' } },
+    });
+    assert.equal(rootConfigured.statusCode, 200, rootConfigured.body);
+    const directSession = await app.inject({ method: 'POST', url: `/api/attachments/${attachment.lastInsertRowid}/preview-session`, headers, payload: {} });
+    assert.equal(directSession.statusCode, 200, directSession.body);
+    assert.match(directSession.json().data.previewUrl, /^\/onlinePreview\?url=/);
 
     const tampered = new URL(sourceUrl);
     tampered.searchParams.set('signature', 'tampered');
