@@ -38,7 +38,7 @@ export const STAGE_SCOPE_DEFAULTS = [
 const NATIVE_FIELD_DEFAULTS = {
   requirement: [
     ['req_code', '需求编号', 'text'], ['status', '需求状态', 'select'], ['req_type', '需求类型', 'select', 'dict:req_type'],
-    ['apply_release_points', '申请投产点', 'release_point', 'release_point', 1], ['expected_release_date', '期望投产时间', 'date'], ['propose_time', '提出时间', 'datetime'],
+    ['expected_release_date', '期望投产时间', 'date'], ['propose_time', '提出时间', 'datetime'],
     ['issue_no', 'OA编号/工单编号', 'text'], ['is_accounting', '是否涉账', 'select'], ['priority', '优先级', 'select', 'priority'], ['title', '需求标题', 'text'], ['workload', '工作量(人天)', 'text'],
     ['summary', '需求概述', 'textarea'], ['implementation_org', '实施机构', 'select', 'dict:org'], ['main_systems', '主责系统', 'select', 'system', 1],
     ['collab_dev_systems', '协同改造系统', 'select', 'system', 1], ['collab_test_systems', '协同测试系统', 'select', 'system', 1],
@@ -47,7 +47,7 @@ const NATIVE_FIELD_DEFAULTS = {
   ],
   ticket: [
     ['ticket_code', '工单编号', 'text'], ['status', '工单状态', 'select'], ['ticket_type', '工单类型', 'select', 'dict:ticket_type'],
-    ['apply_release_points', '申请投产点', 'release_point', 'release_point', 1], ['expected_release_date', '期望投产时间', 'date'], ['propose_time', '提出时间', 'datetime'],
+    ['expected_release_date', '期望投产时间', 'date'], ['propose_time', '提出时间', 'datetime'],
     ['issue_no', 'OA编号/工单编号', 'text'], ['is_accounting', '是否涉账', 'select'], ['priority', '优先级', 'select', 'priority'], ['title', '工单标题', 'text'], ['workload', '工作量(人天)', 'text'],
     ['summary', '工单详情', 'textarea'], ['implementation_org', '实施机构', 'select', 'dict:org'], ['main_systems', '主责系统', 'select', 'system', 1],
     ['collab_dev_systems', '协同改造系统', 'select', 'system', 1], ['collab_test_systems', '协同测试系统', 'select', 'system', 1],
@@ -89,7 +89,7 @@ const NATIVE_FIELD_DEFAULTS = {
  * 内置配置目录是字段语义的唯一代码基线：数据库只保存管理员可调整的布局、可见性和状态规则。
  * `renderer` 明确区分可由公共控件呈现的普通字段和必须由业务 JSX 声明的复杂控件。
  */
-export const BUILTIN_CONFIGURATION_UPGRADE_ID = 'settings.builtin-configuration.v8-retire-planned-release-point';
+export const BUILTIN_CONFIGURATION_UPGRADE_ID = 'settings.builtin-configuration.v9-retire-analysis-release-point';
 export const PRIORITY_OPTIONS = [
   { value: '高', label: '高' },
   { value: '中', label: '中' },
@@ -114,8 +114,7 @@ export function resolveBuiltinConfiguration(scopeKey, fieldKey) {
     default_value: priority ? '中' : null,
     options: priority ? PRIORITY_OPTIONS : [],
     capabilities: priority ? { list: true, filter: true, dashboard: true, import: true, export: true }
-      : key === 'apply_release_points' ? { list: true, filter: true }
-        : key === 'expected_release_date' ? { import: true, export: true } : {},
+      : key === 'expected_release_date' ? { import: true, export: true } : {},
   };
 }
 
@@ -176,6 +175,7 @@ const CUSTOM_DELIVERABLE_TEMPLATE_HANDLERS = {
 const BUILTIN_METADATA_VERSION_KEY = 'stage.content.builtin-metadata.v2';
 const REGISTRATION_INFO_VERSION_KEY = 'stage.content.registration-info.v1';
 const RETIRED_PLANNED_RELEASE_POINT_VERSION_KEY = 'stage.content.retire-planned-release-point.v1';
+const RETIRED_ANALYSIS_RELEASE_POINT_VERSION_KEY = 'stage.content.retire-analysis-release-point.v1';
 // v6：按本地详情页已确认的两列纵向顺序校准内置分区，供新库与 mock 重建共用。
 const BUILTIN_LAYOUT_VERSION_KEY = 'stage.content.builtin-layout.v7';
 const DELIVERABLE_SECTION_PRESENTATION_VERSION_KEY = 'stage.content.deliverable-section-presentation.v1';
@@ -1017,8 +1017,9 @@ export async function applyBuiltinConfigurationUpgrades({ builtinMetadata = {}, 
     return { applied: true, upgrade_id: BUILTIN_CONFIGURATION_UPGRADE_ID, added };
   });
   const retired = await retirePlannedReleasePointFields();
+  const analysisRetired = await retireAnalysisReleasePointFields();
   await synchronizeRegistrationInfoFields();
-  return retired.length ? { ...upgrade, added: [...upgrade.added, ...retired] } : upgrade;
+  return retired.length || analysisRetired.length ? { ...upgrade, added: [...upgrade.added, ...retired, ...analysisRetired] } : upgrade;
 }
 
 /**
@@ -1041,6 +1042,29 @@ async function retirePlannedReleasePointFields() {
       }
     }
     await run('INSERT INTO app_config (key, value, remark) VALUES (?,?,?)', RETIRED_PLANNED_RELEASE_POINT_VERSION_KEY, '1', '废弃需求和工单计划投产点输入项配置');
+    return retired;
+  });
+}
+
+/**
+ * 需求/工单与投产点的关系由投产申请关联表维护，不是分析阶段的填写项。
+ * 清除遗留配置及其状态规则，投产申请的 release_point_id 定义不受影响。
+ */
+async function retireAnalysisReleasePointFields() {
+  if (await get('SELECT value FROM app_config WHERE key = ?', RETIRED_ANALYSIS_RELEASE_POINT_VERSION_KEY)) return [];
+  return await tx(async () => {
+    if (await get('SELECT value FROM app_config WHERE key = ?', RETIRED_ANALYSIS_RELEASE_POINT_VERSION_KEY)) return [];
+    const retired = [];
+    for (const scopeKey of ['requirement', 'ticket']) {
+      const fields = await all(`SELECT id FROM stage_field_definition
+        WHERE scope_key=? AND field_key='apply_release_points' AND deleted_at IS NULL`, scopeKey);
+      for (const field of fields) {
+        await run('DELETE FROM stage_field_status_rule WHERE field_definition_id = ?', field.id);
+        await run(`UPDATE stage_field_definition SET deleted_at=${dialect.now}, updated_at=${dialect.now} WHERE id=?`, field.id);
+        retired.push(`retired-field:${scopeKey}.apply_release_points`);
+      }
+    }
+    await run('INSERT INTO app_config (key, value, remark) VALUES (?,?,?)', RETIRED_ANALYSIS_RELEASE_POINT_VERSION_KEY, '1', '废弃需求和工单申请投产点输入项配置');
     return retired;
   });
 }

@@ -6,7 +6,7 @@
  * 作者：hengguan
  */
 
-import { get } from '../../../../platform/persistence/index.js';
+import { get, all } from '../../../../platform/persistence/index.js';
 
 /**
  * 兼容性解析字典项的属性值（attr_value）
@@ -37,6 +37,18 @@ export async function resolveExistingDictAttr(category, text) {
     category, val, val,
   );
   return row?.attr_value || null;
+}
+
+/**
+ * 批量读取字典属性值到显示值的映射。业务读模型和导出使用此映射展示，
+ * 不改变业务表中保存的属性值。
+ */
+export async function getDictDisplayMap(category) {
+  const rows = await all(
+    'SELECT attr_value, display_value FROM dict_item WHERE category = ?',
+    category,
+  );
+  return Object.fromEntries(rows.map((row) => [row.attr_value, row.display_value]));
 }
 
 /**

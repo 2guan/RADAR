@@ -130,7 +130,7 @@ export default function ReleaseApply() {
         );
       },
     },
-    { title: '实施机构', dataIndex: 'impl_org', key: 'impl_org', width: 100, ellipsis: true, render: (v) => v || '—' },
+    { title: '实施机构', dataIndex: 'impl_org', key: 'impl_org', width: 100, ellipsis: true, render: (v, row) => row.impl_org_display || v || '—' },
     {
       title: '操作', key: 'op', width: 80,
       render: (_, row) => (
@@ -183,18 +183,15 @@ export default function ReleaseApply() {
           <Space direction="vertical" size={4} style={{ width: '100%' }}>
             <Space style={{ justifyContent: 'space-between', width: '100%' }}>
               <strong>{item.change_code}</strong>
-              <Space size={4}>
-                {item.review_status && <StatusBadge status={item.review_status} />}
-                {(item.delivery_units || []).map((u, i) => u.ferry_status && <StatusBadge key={i} status={u.ferry_status} />)}
-              </Space>
+              {item.review_status ? <StatusBadge status={item.review_status} /> : <span>—</span>}
             </Space>
-            <div>{item.change_content}</div>
-            {item.release_date && (
-              <div style={{ fontSize: '11px', color: 'var(--radar-text-secondary)' }}>申请投产点：<ReleasePointText value={item.release_date} /></div>
-            )}
-            {item.change_system_name && (
-              <div style={{ fontSize: '11px', color: 'var(--radar-text-secondary)' }}>变更系统：{item.change_system_name}</div>
-            )}
+            <div style={{ fontSize: 12, color: 'var(--radar-text-secondary)' }}>申请投产点：<ReleasePointText value={item.release_date} /></div>
+            <div>{item.change_content || '—'}</div>
+            <div style={{ fontSize: 12, color: 'var(--radar-text-secondary)' }}>实施机构：{item.impl_org_display || item.impl_org || '—'}</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center', fontSize: 12, color: 'var(--radar-text-secondary)' }}>
+              <span>变更系统：</span>
+              {item.change_system_name ? <Tag className="status-tag tag-system" style={{ borderRadius: 2, margin: 0 }}>{item.change_system_name}</Tag> : <span>—</span>}
+            </div>
           </Space>
         )}
       />

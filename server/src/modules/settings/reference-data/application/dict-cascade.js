@@ -42,8 +42,12 @@ const DICT_REFERENCES = {
   // 机构（实施方/提出部门/变更负责部门等多处共用）
   org: [
     { table: 'system', column: 'org' },
+    { table: 'system', column: 'out_dept' },
+    { table: 'system', column: 'deploy_dept' },
     { table: 'user', column: 'org' },
     { table: 'requirement', column: 'propose_dept' },
+    { table: 'requirement', column: 'implementation_org' },
+    { table: 'ticket', column: 'implementation_org' },
     { table: 'dev_task', column: 'impl_org' },
     { table: 'test_task', column: 'impl_org' },
     { table: 'release_system', column: 'impl_org' },

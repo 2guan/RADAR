@@ -1,15 +1,15 @@
 /**
  * 文件：server/src/modules/settings/process-configuration/application/local-stage-content-seed.js
- * 说明：由当前本地已确认的系统设置配置导出；历史残留文案、来源和无效跨阶段规则按已验收语义规范化。
- * 用途：为应用初始化和 Mock 重建提供同一份输入项、分区、交付件及动态模板处理器 Seed。
+ * 说明：由当前本地已确认的系统设置完整导出。
+ * 用途：为新库初始化与 Mock 重建提供同一份只补缺、不覆盖现有管理员配置的默认快照。
  * 作者：hengguan
  */
 
-const RAW_LOCAL_STAGE_CONTENT_SEED = {
+export const LOCAL_STAGE_CONTENT_SEED = Object.freeze({
   "source": "current-local-settings",
-  "captured_on": "2026-07-31",
+  "captured_on": "2026-08-03",
+  // 各范围均按分区、字段、状态规则和交付件完整保存；seed 仅补齐缺失定义。
   "scopes": [
-    // 开发与投产范围：保留当前分区、字段能力、状态规则和动态模板处理器。
     {
       "scope_key": "dev",
       "sections": [
@@ -136,21 +136,21 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           }
         },
         {
-          "field_key": "owner",
-          "label": "开发负责人",
+          "field_key": "impl_org",
+          "label": "开发实施方",
           "field_kind": "native",
-          "input_type": "person",
-          "source_key": "person",
+          "input_type": "select",
+          "source_key": "dict:org",
           "multiple": 0,
-          "native_column": "owner",
+          "native_column": "impl_org",
           "component_key": "",
           "section_key": "task",
           "column_span": 12,
           "visible": 1,
-          "list_visible": 1,
+          "list_visible": 0,
           "filterable": 1,
           "dashboard_dimension": 1,
-          "sort": 50,
+          "sort": 30,
           "is_builtin": 1,
           "rules": {
             "开发承接": 0,
@@ -172,34 +172,9 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "section_key": "task",
           "column_span": 12,
           "visible": 1,
-          "list_visible": 1,
-          "filterable": 1,
-          "dashboard_dimension": 1,
-          "sort": 30,
-          "is_builtin": 1,
-          "rules": {
-            "开发承接": 0,
-            "开发设计": 0,
-            "开发实施": 0,
-            "单元测试": 0,
-            "开发完成": 0
-          }
-        },
-        {
-          "field_key": "impl_org",
-          "label": "开发实施方",
-          "field_kind": "native",
-          "input_type": "select",
-          "source_key": "dict:org",
-          "multiple": 0,
-          "native_column": "impl_org",
-          "component_key": "",
-          "section_key": "task",
-          "column_span": 12,
-          "visible": 1,
           "list_visible": 0,
           "filterable": 1,
-          "dashboard_dimension": 1,
+          "dashboard_dimension": 0,
           "sort": 40,
           "is_builtin": 1,
           "rules": {
@@ -218,6 +193,31 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "source_key": "system",
           "multiple": 0,
           "native_column": "impl_system",
+          "component_key": "",
+          "section_key": "task",
+          "column_span": 12,
+          "visible": 1,
+          "list_visible": 1,
+          "filterable": 1,
+          "dashboard_dimension": 1,
+          "sort": 50,
+          "is_builtin": 1,
+          "rules": {
+            "开发承接": 0,
+            "开发设计": 0,
+            "开发实施": 0,
+            "单元测试": 0,
+            "开发完成": 0
+          }
+        },
+        {
+          "field_key": "owner",
+          "label": "开发负责人",
+          "field_kind": "native",
+          "input_type": "person",
+          "source_key": "person",
+          "multiple": 0,
+          "native_column": "owner",
           "component_key": "",
           "section_key": "task",
           "column_span": 12,
@@ -250,7 +250,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "list_visible": 0,
           "filterable": 0,
           "dashboard_dimension": 0,
-          "sort": 60,
+          "sort": 70,
           "is_builtin": 1,
           "rules": {
             "开发承接": 0,
@@ -275,7 +275,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "list_visible": 0,
           "filterable": 0,
           "dashboard_dimension": 1,
-          "sort": 70,
+          "sort": 80,
           "is_builtin": 1,
           "rules": {
             "开发承接": 0,
@@ -300,7 +300,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "list_visible": 0,
           "filterable": 0,
           "dashboard_dimension": 0,
-          "sort": 80,
+          "sort": 90,
           "is_builtin": 1,
           "rules": {
             "开发承接": 0,
@@ -325,7 +325,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "list_visible": 0,
           "filterable": 0,
           "dashboard_dimension": 1,
-          "sort": 90,
+          "sort": 100,
           "is_builtin": 1,
           "rules": {
             "开发承接": 0,
@@ -350,8 +350,15 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "list_visible": 0,
           "filterable": 0,
           "dashboard_dimension": 0,
-          "sort": 100,
-          "is_builtin": 1
+          "sort": 110,
+          "is_builtin": 1,
+          "rules": {
+            "开发承接": 0,
+            "开发设计": 0,
+            "开发实施": 0,
+            "单元测试": 0,
+            "开发完成": 0
+          }
         }
       ],
       "deliverables": [
@@ -361,14 +368,15 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "input_mode": "both",
           "visible": 1,
           "sort": 0,
-          "layout_mode": "left",
+          "layout_mode": "right",
           "rules": {
             "开发承接": 0,
             "开发设计": 0,
             "开发实施": 0,
             "单元测试": 0,
             "开发完成": 0
-          }
+          },
+          "templates": []
         },
         {
           "deliverable_key": "builtin_2",
@@ -376,14 +384,15 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "input_mode": "both",
           "visible": 1,
           "sort": 10,
-          "layout_mode": "left",
+          "layout_mode": "right",
           "rules": {
             "开发承接": 0,
             "开发设计": 0,
             "开发实施": 0,
             "单元测试": 0,
             "开发完成": 0
-          }
+          },
+          "templates": []
         },
         {
           "deliverable_key": "builtin_3",
@@ -391,7 +400,15 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "input_mode": "both",
           "visible": 1,
           "sort": 20,
-          "layout_mode": "left"
+          "layout_mode": "right",
+          "rules": {
+            "开发承接": 0,
+            "开发设计": 0,
+            "开发实施": 0,
+            "单元测试": 0,
+            "开发完成": 0
+          },
+          "templates": []
         },
         {
           "deliverable_key": "builtin_4",
@@ -399,7 +416,15 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "input_mode": "both",
           "visible": 1,
           "sort": 30,
-          "layout_mode": "left"
+          "layout_mode": "right",
+          "rules": {
+            "开发承接": 0,
+            "开发设计": 0,
+            "开发实施": 0,
+            "单元测试": 0,
+            "开发完成": 0
+          },
+          "templates": []
         },
         {
           "deliverable_key": "builtin_5",
@@ -407,7 +432,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "input_mode": "both",
           "visible": 1,
           "sort": 40,
-          "layout_mode": "left",
+          "layout_mode": "right",
           "rules": {
             "开发承接": 0,
             "开发设计": 0,
@@ -430,7 +455,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "input_mode": "both",
           "visible": 1,
           "sort": 50,
-          "layout_mode": "left",
+          "layout_mode": "right",
           "rules": {
             "开发承接": 0,
             "开发设计": 0,
@@ -509,30 +534,6 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
       ],
       "fields": [
         {
-          "field_key": "owner",
-          "label": "投产负责人",
-          "field_kind": "native",
-          "input_type": "person",
-          "source_key": "person",
-          "multiple": 0,
-          "native_column": "owner",
-          "component_key": "",
-          "section_key": "release_info",
-          "column_span": 12,
-          "visible": 1,
-          "list_visible": 0,
-          "filterable": 0,
-          "dashboard_dimension": 1,
-          "sort": 0,
-          "is_builtin": 1,
-          "rules": {
-            "待评审": 0,
-            "待投产": 0,
-            "已投产": 0,
-            "已取消": 0
-          }
-        },
-        {
           "field_key": "status",
           "label": "投产状态",
           "field_kind": "native",
@@ -544,58 +545,10 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "section_key": "basic",
           "column_span": 12,
           "visible": 1,
-          "list_visible": 0,
-          "filterable": 0,
-          "dashboard_dimension": 0,
+          "list_visible": 1,
+          "filterable": 1,
+          "dashboard_dimension": 1,
           "sort": 0,
-          "is_builtin": 1,
-          "rules": {
-            "待评审": 0,
-            "待投产": 0,
-            "已投产": 0,
-            "已取消": 0
-          }
-        },
-        {
-          "field_key": "review_signoff",
-          "label": "评审会签",
-          "field_kind": "component",
-          "input_type": "component",
-          "source_key": "",
-          "multiple": 0,
-          "native_column": "",
-          "component_key": "release_signoff",
-          "section_key": "signoff",
-          "column_span": 24,
-          "visible": 1,
-          "list_visible": 0,
-          "filterable": 0,
-          "dashboard_dimension": 0,
-          "sort": 10,
-          "is_builtin": 1,
-          "rules": {
-            "待评审": 0,
-            "待投产": 0,
-            "已投产": 0,
-            "已取消": 0
-          }
-        },
-        {
-          "field_key": "related_artifacts",
-          "label": "关联制品情况",
-          "field_kind": "component",
-          "input_type": "component",
-          "source_key": "",
-          "multiple": 0,
-          "native_column": "",
-          "component_key": "release_artifacts",
-          "section_key": "artifacts",
-          "column_span": 24,
-          "visible": 1,
-          "list_visible": 0,
-          "filterable": 0,
-          "dashboard_dimension": 0,
-          "sort": 20,
           "is_builtin": 1,
           "rules": {
             "待评审": 0,
@@ -619,6 +572,30 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "list_visible": 0,
           "filterable": 0,
           "dashboard_dimension": 0,
+          "sort": 10,
+          "is_builtin": 1,
+          "rules": {
+            "待评审": 0,
+            "待投产": 0,
+            "已投产": 0,
+            "已取消": 0
+          }
+        },
+        {
+          "field_key": "owner",
+          "label": "投产负责人",
+          "field_kind": "native",
+          "input_type": "person",
+          "source_key": "person",
+          "multiple": 0,
+          "native_column": "owner",
+          "component_key": "",
+          "section_key": "release_info",
+          "column_span": 24,
+          "visible": 1,
+          "list_visible": 0,
+          "filterable": 0,
+          "dashboard_dimension": 1,
           "sort": 20,
           "is_builtin": 1,
           "rules": {
@@ -651,6 +628,54 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
             "已投产": 0,
             "已取消": 0
           }
+        },
+        {
+          "field_key": "review_signoff",
+          "label": "评审会签",
+          "field_kind": "component",
+          "input_type": "component",
+          "source_key": "",
+          "multiple": 0,
+          "native_column": "",
+          "component_key": "release_signoff",
+          "section_key": "signoff",
+          "column_span": 24,
+          "visible": 1,
+          "list_visible": 0,
+          "filterable": 0,
+          "dashboard_dimension": 0,
+          "sort": 40,
+          "is_builtin": 1,
+          "rules": {
+            "待评审": 0,
+            "待投产": 0,
+            "已投产": 0,
+            "已取消": 0
+          }
+        },
+        {
+          "field_key": "related_artifacts",
+          "label": "关联制品情况",
+          "field_kind": "component",
+          "input_type": "component",
+          "source_key": "",
+          "multiple": 0,
+          "native_column": "",
+          "component_key": "release_artifacts",
+          "section_key": "artifacts",
+          "column_span": 24,
+          "visible": 1,
+          "list_visible": 0,
+          "filterable": 0,
+          "dashboard_dimension": 0,
+          "sort": 50,
+          "is_builtin": 1,
+          "rules": {
+            "待评审": 0,
+            "待投产": 0,
+            "已投产": 0,
+            "已取消": 0
+          }
         }
       ],
       "deliverables": [
@@ -660,7 +685,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "input_mode": "both",
           "visible": 1,
           "sort": 0,
-          "layout_mode": "left",
+          "layout_mode": "right",
           "rules": {
             "待评审": 0,
             "待投产": 0,
@@ -682,7 +707,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "input_mode": "both",
           "visible": 1,
           "sort": 10,
-          "layout_mode": "left",
+          "layout_mode": "right",
           "rules": {
             "待评审": 0,
             "待投产": 0,
@@ -752,7 +777,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "section_key": "artifacts",
           "title": "交付制品",
           "sort": 60,
-          "collapsed": 1,
+          "collapsed": 0,
           "is_builtin": 1,
           "layout_mode": "full",
           "show_title": 1
@@ -794,7 +819,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "native_column": "ref_codes",
           "component_key": "",
           "section_key": "references",
-          "column_span": 12,
+          "column_span": 24,
           "visible": 1,
           "list_visible": 0,
           "filterable": 0,
@@ -811,7 +836,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
         },
         {
           "field_key": "release_point_id",
-          "label": "计划投产点",
+          "label": "申请投产点",
           "field_kind": "native",
           "input_type": "release_point",
           "source_key": "release_point",
@@ -821,7 +846,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "section_key": "change",
           "column_span": 12,
           "visible": 1,
-          "list_visible": 0,
+          "list_visible": 1,
           "filterable": 0,
           "dashboard_dimension": 0,
           "sort": 20,
@@ -1012,7 +1037,6 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
       ],
       "deliverables": []
     },
-    // 需求与测试范围：状态规则只通过字典状态值关联，初始化时不复制本地数据库 ID。
     {
       "scope_key": "requirement",
       "sections": [
@@ -1087,6 +1111,52 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           }
         },
         {
+          "field_key": "status",
+          "label": "需求状态",
+          "field_kind": "native",
+          "input_type": "select",
+          "source_key": "",
+          "multiple": 0,
+          "native_column": "status",
+          "component_key": "",
+          "section_key": "basic",
+          "column_span": 12,
+          "visible": 1,
+          "list_visible": 1,
+          "filterable": 1,
+          "dashboard_dimension": 1,
+          "sort": 10,
+          "is_builtin": 1,
+          "rules": {
+            "需求登记": 0,
+            "需求分析": 0,
+            "分析完成": 0
+          }
+        },
+        {
+          "field_key": "implementation_org",
+          "label": "实施机构",
+          "field_kind": "native",
+          "input_type": "select",
+          "source_key": "dict:org",
+          "multiple": 0,
+          "native_column": "implementation_org",
+          "component_key": "",
+          "section_key": "systems",
+          "column_span": 24,
+          "visible": 1,
+          "list_visible": 1,
+          "filterable": 1,
+          "dashboard_dimension": 0,
+          "sort": 10,
+          "is_builtin": 1,
+          "rules": {
+            "需求登记": 0,
+            "需求分析": 0,
+            "分析完成": 0
+          }
+        },
+        {
           "field_key": "propose_dept",
           "label": "提出部门",
           "field_kind": "native",
@@ -1107,29 +1177,6 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
             "需求登记": 1,
             "需求分析": 1,
             "分析完成": 1
-          }
-        },
-        {
-          "field_key": "implementation_org",
-          "label": "实施机构",
-          "field_kind": "native",
-          "input_type": "select",
-          "source_key": "dict:org",
-          "multiple": 0,
-          "native_column": "implementation_org",
-          "component_key": "",
-          "section_key": "systems",
-          "column_span": 24,
-          "visible": 1,
-          "list_visible": 0,
-          "filterable": 0,
-          "dashboard_dimension": 0,
-          "sort": 10,
-          "is_builtin": 1,
-          "rules": {
-            "需求登记": 0,
-            "需求分析": 0,
-            "分析完成": 0
           }
         },
         {
@@ -1190,10 +1237,33 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "section_key": "owners",
           "column_span": 12,
           "visible": 1,
-          "list_visible": 1,
+          "list_visible": 0,
           "filterable": 1,
           "dashboard_dimension": 0,
           "sort": 20,
+          "is_builtin": 1,
+          "rules": {
+            "需求登记": 1,
+            "需求分析": 1,
+            "分析完成": 1
+          }
+        },
+        {
+          "field_key": "propose_time",
+          "label": "提出时间",
+          "field_kind": "native",
+          "input_type": "datetime",
+          "source_key": "",
+          "multiple": 0,
+          "native_column": "propose_time",
+          "component_key": "",
+          "section_key": "basic",
+          "column_span": 12,
+          "visible": 1,
+          "list_visible": 0,
+          "filterable": 0,
+          "dashboard_dimension": 1,
+          "sort": 30,
           "is_builtin": 1,
           "rules": {
             "需求登记": 1,
@@ -1248,26 +1318,26 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           }
         },
         {
-          "field_key": "propose_time",
-          "label": "提出时间",
+          "field_key": "expected_release_date",
+          "label": "期望投产时间",
           "field_kind": "native",
-          "input_type": "datetime",
+          "input_type": "date",
           "source_key": "",
           "multiple": 0,
-          "native_column": "propose_time",
+          "native_column": "expected_release_date",
           "component_key": "",
           "section_key": "basic",
           "column_span": 12,
           "visible": 1,
-          "list_visible": 1,
+          "list_visible": 0,
           "filterable": 0,
-          "dashboard_dimension": 1,
+          "dashboard_dimension": 0,
           "sort": 40,
           "is_builtin": 1,
           "rules": {
-            "需求登记": 1,
-            "需求分析": 1,
-            "分析完成": 1
+            "需求登记": 0,
+            "需求分析": 0,
+            "分析完成": 0
           }
         },
         {
@@ -1351,7 +1421,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "section_key": "owners",
           "column_span": 12,
           "visible": 1,
-          "list_visible": 1,
+          "list_visible": 0,
           "filterable": 1,
           "dashboard_dimension": 0,
           "sort": 50,
@@ -1395,10 +1465,10 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "native_column": "registrar",
           "component_key": "",
           "section_key": "owners",
-          "column_span": 24,
+          "column_span": 12,
           "visible": 1,
           "list_visible": 0,
-          "filterable": 0,
+          "filterable": 1,
           "dashboard_dimension": 0,
           "sort": 60,
           "is_builtin": 1,
@@ -1466,10 +1536,10 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "section_key": "basic",
           "column_span": 12,
           "visible": 1,
-      "list_visible": 1,
-      "filterable": 1,
+          "list_visible": 0,
+          "filterable": 1,
           "dashboard_dimension": 1,
-      "sort": 90,
+          "sort": 90,
           "is_builtin": 1,
           "rules": {
             "需求登记": 0,
@@ -1490,7 +1560,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "column_span": 12,
           "visible": 1,
           "list_visible": 0,
-          "filterable": 0,
+          "filterable": 1,
           "dashboard_dimension": 0,
           "sort": 100,
           "is_builtin": 1,
@@ -1498,29 +1568,6 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
             "需求登记": 0,
             "需求分析": 0,
             "分析完成": 0
-          }
-        },
-        {
-          "field_key": "status",
-          "label": "需求状态",
-          "field_kind": "native",
-          "input_type": "select",
-          "source_key": "",
-          "multiple": 0,
-          "native_column": "status",
-          "component_key": "",
-          "section_key": "basic",
-          "column_span": 12,
-          "visible": 1,
-          "list_visible": 1,
-          "filterable": 1,
-          "dashboard_dimension": 1,
-          "sort": 110,
-          "is_builtin": 1,
-          "rules": {
-            "需求登记": 1,
-            "需求分析": 1,
-            "分析完成": 1
           }
         }
       ],
@@ -1536,10 +1583,12 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
             "需求登记": 0,
             "需求分析": 0,
             "分析完成": 1
-          }
+          },
+          "templates": []
         }
       ]
     },
+    // 测试范围按类型独立保留，避免某类测试的字段或交付件覆盖其他类型。
     {
       "scope_key": "test.NFT",
       "sections": [
@@ -1632,6 +1681,56 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           }
         },
         {
+          "field_key": "impl_org",
+          "label": "测试实施方",
+          "field_kind": "native",
+          "input_type": "select",
+          "source_key": "dict:org",
+          "multiple": 0,
+          "native_column": "impl_org",
+          "component_key": "",
+          "section_key": "task",
+          "column_span": 12,
+          "visible": 1,
+          "list_visible": 0,
+          "filterable": 1,
+          "dashboard_dimension": 1,
+          "sort": 20,
+          "is_builtin": 1,
+          "rules": {
+            "测试承接": 0,
+            "测试方案": 0,
+            "测试实施": 0,
+            "测试报告": 0,
+            "测试完成": 0
+          }
+        },
+        {
+          "field_key": "intake_owner",
+          "label": "测试承接人",
+          "field_kind": "native",
+          "input_type": "person",
+          "source_key": "person",
+          "multiple": 0,
+          "native_column": "intake_owner",
+          "component_key": "",
+          "section_key": "task",
+          "column_span": 12,
+          "visible": 1,
+          "list_visible": 0,
+          "filterable": 1,
+          "dashboard_dimension": 0,
+          "sort": 30,
+          "is_builtin": 1,
+          "rules": {
+            "测试承接": 0,
+            "测试方案": 0,
+            "测试实施": 0,
+            "测试报告": 0,
+            "测试完成": 0
+          }
+        },
+        {
           "field_key": "impl_system",
           "label": "测试实施系统",
           "field_kind": "native",
@@ -1646,7 +1745,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "list_visible": 1,
           "filterable": 1,
           "dashboard_dimension": 1,
-          "sort": 50,
+          "sort": 40,
           "is_builtin": 1,
           "rules": {
             "测试承接": 0,
@@ -1671,57 +1770,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "list_visible": 1,
           "filterable": 1,
           "dashboard_dimension": 1,
-          "sort": 40,
-          "is_builtin": 1,
-          "rules": {
-            "测试承接": 0,
-            "测试方案": 0,
-            "测试实施": 0,
-            "测试报告": 0,
-            "测试完成": 0
-          }
-        },
-        {
-          "field_key": "intake_owner",
-          "label": "测试承接人",
-          "field_kind": "native",
-          "input_type": "person",
-          "source_key": "person",
-          "multiple": 0,
-          "native_column": "intake_owner",
-          "component_key": "",
-          "section_key": "task",
-          "column_span": 12,
-          "visible": 1,
-          "list_visible": 1,
-          "filterable": 1,
-          "dashboard_dimension": 1,
-          "sort": 20,
-          "is_builtin": 1,
-          "rules": {
-            "测试承接": 0,
-            "测试方案": 0,
-            "测试实施": 0,
-            "测试报告": 0,
-            "测试完成": 0
-          }
-        },
-        {
-          "field_key": "impl_org",
-          "label": "测试实施方",
-          "field_kind": "native",
-          "input_type": "select",
-          "source_key": "dict:org",
-          "multiple": 0,
-          "native_column": "impl_org",
-          "component_key": "",
-          "section_key": "task",
-          "column_span": 12,
-          "visible": 1,
-          "list_visible": 0,
-          "filterable": 1,
-          "dashboard_dimension": 1,
-          "sort": 30,
+          "sort": 50,
           "is_builtin": 1,
           "rules": {
             "测试承接": 0,
@@ -1746,7 +1795,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "list_visible": 0,
           "filterable": 0,
           "dashboard_dimension": 0,
-          "sort": 50,
+          "sort": 60,
           "is_builtin": 1,
           "rules": {
             "测试承接": 0,
@@ -1771,7 +1820,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "list_visible": 0,
           "filterable": 0,
           "dashboard_dimension": 1,
-          "sort": 60,
+          "sort": 70,
           "is_builtin": 1,
           "rules": {
             "测试承接": 0,
@@ -1796,7 +1845,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "list_visible": 0,
           "filterable": 0,
           "dashboard_dimension": 0,
-          "sort": 70,
+          "sort": 80,
           "is_builtin": 1,
           "rules": {
             "测试承接": 0,
@@ -1821,7 +1870,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "list_visible": 0,
           "filterable": 0,
           "dashboard_dimension": 1,
-          "sort": 80,
+          "sort": 90,
           "is_builtin": 1,
           "rules": {
             "测试承接": 0,
@@ -1839,7 +1888,15 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "input_mode": "both",
           "visible": 1,
           "sort": 0,
-          "layout_mode": "left"
+          "layout_mode": "right",
+          "rules": {
+            "测试承接": 0,
+            "测试方案": 0,
+            "测试实施": 0,
+            "测试报告": 0,
+            "测试完成": 0
+          },
+          "templates": []
         },
         {
           "deliverable_key": "builtin_2",
@@ -1847,7 +1904,15 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "input_mode": "both",
           "visible": 1,
           "sort": 10,
-          "layout_mode": "left"
+          "layout_mode": "right",
+          "rules": {
+            "测试承接": 0,
+            "测试方案": 0,
+            "测试实施": 0,
+            "测试报告": 0,
+            "测试完成": 0
+          },
+          "templates": []
         }
       ]
     },
@@ -1884,7 +1949,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
         {
           "section_key": "extension",
           "title": "扩展信息",
-          "sort": 30,
+          "sort": 40,
           "collapsed": 0,
           "is_builtin": 1,
           "layout_mode": "right",
@@ -1902,7 +1967,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "native_column": "task_name",
           "component_key": "",
           "section_key": "task",
-          "column_span": 12,
+          "column_span": 24,
           "visible": 1,
           "list_visible": 1,
           "filterable": 0,
@@ -1943,6 +2008,56 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           }
         },
         {
+          "field_key": "impl_org",
+          "label": "测试实施方",
+          "field_kind": "native",
+          "input_type": "select",
+          "source_key": "dict:org",
+          "multiple": 0,
+          "native_column": "impl_org",
+          "component_key": "",
+          "section_key": "task",
+          "column_span": 12,
+          "visible": 1,
+          "list_visible": 0,
+          "filterable": 1,
+          "dashboard_dimension": 1,
+          "sort": 20,
+          "is_builtin": 1,
+          "rules": {
+            "测试承接": 0,
+            "测试方案": 0,
+            "测试实施": 0,
+            "测试报告": 0,
+            "测试完成": 0
+          }
+        },
+        {
+          "field_key": "intake_owner",
+          "label": "测试承接人",
+          "field_kind": "native",
+          "input_type": "person",
+          "source_key": "person",
+          "multiple": 0,
+          "native_column": "intake_owner",
+          "component_key": "",
+          "section_key": "task",
+          "column_span": 12,
+          "visible": 1,
+          "list_visible": 0,
+          "filterable": 1,
+          "dashboard_dimension": 0,
+          "sort": 30,
+          "is_builtin": 1,
+          "rules": {
+            "测试承接": 0,
+            "测试方案": 0,
+            "测试实施": 0,
+            "测试报告": 0,
+            "测试完成": 0
+          }
+        },
+        {
           "field_key": "impl_system",
           "label": "测试实施系统",
           "field_kind": "native",
@@ -1957,7 +2072,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "list_visible": 1,
           "filterable": 1,
           "dashboard_dimension": 1,
-          "sort": 50,
+          "sort": 40,
           "is_builtin": 1,
           "rules": {
             "测试承接": 0,
@@ -1982,32 +2097,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "list_visible": 1,
           "filterable": 1,
           "dashboard_dimension": 1,
-          "sort": 30,
-          "is_builtin": 1,
-          "rules": {
-            "测试承接": 0,
-            "测试方案": 0,
-            "测试实施": 0,
-            "测试报告": 0,
-            "测试完成": 0
-          }
-        },
-        {
-          "field_key": "impl_org",
-          "label": "测试实施方",
-          "field_kind": "native",
-          "input_type": "select",
-          "source_key": "dict:org",
-          "multiple": 0,
-          "native_column": "impl_org",
-          "component_key": "",
-          "section_key": "task",
-          "column_span": 12,
-          "visible": 1,
-          "list_visible": 0,
-          "filterable": 1,
-          "dashboard_dimension": 1,
-          "sort": 40,
+          "sort": 50,
           "is_builtin": 1,
           "rules": {
             "测试承接": 0,
@@ -2032,7 +2122,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "list_visible": 0,
           "filterable": 0,
           "dashboard_dimension": 0,
-          "sort": 50,
+          "sort": 60,
           "is_builtin": 1,
           "rules": {
             "测试承接": 0,
@@ -2057,7 +2147,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "list_visible": 0,
           "filterable": 0,
           "dashboard_dimension": 1,
-          "sort": 60,
+          "sort": 70,
           "is_builtin": 1,
           "rules": {
             "测试承接": 0,
@@ -2082,7 +2172,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "list_visible": 0,
           "filterable": 0,
           "dashboard_dimension": 0,
-          "sort": 70,
+          "sort": 80,
           "is_builtin": 1,
           "rules": {
             "测试承接": 0,
@@ -2107,7 +2197,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "list_visible": 0,
           "filterable": 0,
           "dashboard_dimension": 1,
-          "sort": 80,
+          "sort": 90,
           "is_builtin": 1,
           "rules": {
             "测试承接": 0,
@@ -2125,7 +2215,15 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "input_mode": "both",
           "visible": 1,
           "sort": 0,
-          "layout_mode": "left"
+          "layout_mode": "right",
+          "rules": {
+            "测试承接": 0,
+            "测试方案": 0,
+            "测试实施": 0,
+            "测试报告": 0,
+            "测试完成": 0
+          },
+          "templates": []
         },
         {
           "deliverable_key": "builtin_2",
@@ -2133,7 +2231,15 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "input_mode": "both",
           "visible": 1,
           "sort": 10,
-          "layout_mode": "left"
+          "layout_mode": "right",
+          "rules": {
+            "测试承接": 0,
+            "测试方案": 0,
+            "测试实施": 0,
+            "测试报告": 0,
+            "测试完成": 0
+          },
+          "templates": []
         }
       ]
     },
@@ -2152,7 +2258,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
         {
           "section_key": "coverage",
           "title": "测试覆盖性分析",
-          "sort": 50,
+          "sort": 20,
           "collapsed": 0,
           "is_builtin": 1,
           "layout_mode": "right",
@@ -2161,7 +2267,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
         {
           "section_key": "schedule",
           "title": "排期",
-          "sort": 40,
+          "sort": 30,
           "collapsed": 0,
           "is_builtin": 1,
           "layout_mode": "left",
@@ -2197,7 +2303,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "native_column": "task_name",
           "component_key": "",
           "section_key": "task",
-          "column_span": 12,
+          "column_span": 24,
           "visible": 1,
           "list_visible": 1,
           "filterable": 0,
@@ -2238,6 +2344,56 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           }
         },
         {
+          "field_key": "impl_org",
+          "label": "测试实施方",
+          "field_kind": "native",
+          "input_type": "select",
+          "source_key": "dict:org",
+          "multiple": 0,
+          "native_column": "impl_org",
+          "component_key": "",
+          "section_key": "task",
+          "column_span": 12,
+          "visible": 1,
+          "list_visible": 0,
+          "filterable": 1,
+          "dashboard_dimension": 1,
+          "sort": 20,
+          "is_builtin": 1,
+          "rules": {
+            "测试承接": 0,
+            "测试方案": 0,
+            "测试实施": 0,
+            "测试报告": 0,
+            "测试完成": 0
+          }
+        },
+        {
+          "field_key": "intake_owner",
+          "label": "测试承接人",
+          "field_kind": "native",
+          "input_type": "person",
+          "source_key": "person",
+          "multiple": 0,
+          "native_column": "intake_owner",
+          "component_key": "",
+          "section_key": "task",
+          "column_span": 12,
+          "visible": 1,
+          "list_visible": 0,
+          "filterable": 1,
+          "dashboard_dimension": 0,
+          "sort": 30,
+          "is_builtin": 1,
+          "rules": {
+            "测试承接": 0,
+            "测试方案": 0,
+            "测试实施": 0,
+            "测试报告": 0,
+            "测试完成": 0
+          }
+        },
+        {
           "field_key": "impl_system",
           "label": "测试实施系统",
           "field_kind": "native",
@@ -2247,12 +2403,12 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "native_column": "impl_system",
           "component_key": "",
           "section_key": "task",
-          "column_span": 24,
+          "column_span": 12,
           "visible": 1,
           "list_visible": 1,
           "filterable": 1,
           "dashboard_dimension": 1,
-          "sort": 50,
+          "sort": 40,
           "is_builtin": 1,
           "rules": {
             "测试承接": 0,
@@ -2277,32 +2433,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "list_visible": 1,
           "filterable": 1,
           "dashboard_dimension": 1,
-          "sort": 30,
-          "is_builtin": 1,
-          "rules": {
-            "测试承接": 0,
-            "测试方案": 0,
-            "测试实施": 0,
-            "测试报告": 0,
-            "测试完成": 0
-          }
-        },
-        {
-          "field_key": "impl_org",
-          "label": "测试实施方",
-          "field_kind": "native",
-          "input_type": "select",
-          "source_key": "dict:org",
-          "multiple": 0,
-          "native_column": "impl_org",
-          "component_key": "",
-          "section_key": "task",
-          "column_span": 12,
-          "visible": 1,
-          "list_visible": 0,
-          "filterable": 1,
-          "dashboard_dimension": 1,
-          "sort": 40,
+          "sort": 50,
           "is_builtin": 1,
           "rules": {
             "测试承接": 0,
@@ -2327,7 +2458,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "list_visible": 0,
           "filterable": 0,
           "dashboard_dimension": 0,
-          "sort": 50,
+          "sort": 60,
           "is_builtin": 1,
           "rules": {
             "测试承接": 0,
@@ -2352,7 +2483,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "list_visible": 0,
           "filterable": 0,
           "dashboard_dimension": 1,
-          "sort": 60,
+          "sort": 70,
           "is_builtin": 1,
           "rules": {
             "测试承接": 0,
@@ -2377,7 +2508,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "list_visible": 0,
           "filterable": 0,
           "dashboard_dimension": 0,
-          "sort": 70,
+          "sort": 80,
           "is_builtin": 1,
           "rules": {
             "测试承接": 0,
@@ -2402,7 +2533,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "list_visible": 0,
           "filterable": 0,
           "dashboard_dimension": 1,
-          "sort": 80,
+          "sort": 90,
           "is_builtin": 1,
           "rules": {
             "测试承接": 0,
@@ -2427,8 +2558,15 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "list_visible": 0,
           "filterable": 0,
           "dashboard_dimension": 0,
-          "sort": 90,
-          "is_builtin": 1
+          "sort": 100,
+          "is_builtin": 1,
+          "rules": {
+            "测试承接": 0,
+            "测试方案": 0,
+            "测试实施": 0,
+            "测试报告": 0,
+            "测试完成": 0
+          }
         }
       ],
       "deliverables": [
@@ -2438,7 +2576,15 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "input_mode": "both",
           "visible": 1,
           "sort": 0,
-          "layout_mode": "left"
+          "layout_mode": "right",
+          "rules": {
+            "测试承接": 0,
+            "测试方案": 0,
+            "测试实施": 0,
+            "测试报告": 0,
+            "测试完成": 0
+          },
+          "templates": []
         },
         {
           "deliverable_key": "builtin_2",
@@ -2446,7 +2592,15 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "input_mode": "both",
           "visible": 1,
           "sort": 10,
-          "layout_mode": "left"
+          "layout_mode": "right",
+          "rules": {
+            "测试承接": 0,
+            "测试方案": 0,
+            "测试实施": 0,
+            "测试报告": 0,
+            "测试完成": 0
+          },
+          "templates": []
         }
       ]
     },
@@ -2542,6 +2696,56 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           }
         },
         {
+          "field_key": "impl_org",
+          "label": "测试实施方",
+          "field_kind": "native",
+          "input_type": "select",
+          "source_key": "dict:org",
+          "multiple": 0,
+          "native_column": "impl_org",
+          "component_key": "",
+          "section_key": "task",
+          "column_span": 12,
+          "visible": 1,
+          "list_visible": 0,
+          "filterable": 1,
+          "dashboard_dimension": 1,
+          "sort": 20,
+          "is_builtin": 1,
+          "rules": {
+            "测试承接": 0,
+            "测试方案": 0,
+            "测试实施": 0,
+            "测试报告": 0,
+            "测试完成": 0
+          }
+        },
+        {
+          "field_key": "intake_owner",
+          "label": "测试承接人",
+          "field_kind": "native",
+          "input_type": "person",
+          "source_key": "person",
+          "multiple": 0,
+          "native_column": "intake_owner",
+          "component_key": "",
+          "section_key": "task",
+          "column_span": 12,
+          "visible": 1,
+          "list_visible": 0,
+          "filterable": 1,
+          "dashboard_dimension": 0,
+          "sort": 30,
+          "is_builtin": 1,
+          "rules": {
+            "测试承接": 0,
+            "测试方案": 0,
+            "测试实施": 0,
+            "测试报告": 0,
+            "测试完成": 0
+          }
+        },
+        {
           "field_key": "impl_system",
           "label": "测试实施系统",
           "field_kind": "native",
@@ -2551,12 +2755,12 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "native_column": "impl_system",
           "component_key": "",
           "section_key": "task",
-          "column_span": 24,
+          "column_span": 12,
           "visible": 1,
           "list_visible": 1,
           "filterable": 1,
           "dashboard_dimension": 1,
-          "sort": 20,
+          "sort": 40,
           "is_builtin": 1,
           "rules": {
             "测试承接": 0,
@@ -2581,32 +2785,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "list_visible": 1,
           "filterable": 1,
           "dashboard_dimension": 1,
-          "sort": 30,
-          "is_builtin": 1,
-          "rules": {
-            "测试承接": 0,
-            "测试方案": 0,
-            "测试实施": 0,
-            "测试报告": 0,
-            "测试完成": 0
-          }
-        },
-        {
-          "field_key": "impl_org",
-          "label": "测试实施方",
-          "field_kind": "native",
-          "input_type": "select",
-          "source_key": "dict:org",
-          "multiple": 0,
-          "native_column": "impl_org",
-          "component_key": "",
-          "section_key": "task",
-          "column_span": 12,
-          "visible": 1,
-          "list_visible": 0,
-          "filterable": 1,
-          "dashboard_dimension": 1,
-          "sort": 40,
+          "sort": 50,
           "is_builtin": 1,
           "rules": {
             "测试承接": 0,
@@ -2631,7 +2810,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "list_visible": 0,
           "filterable": 0,
           "dashboard_dimension": 0,
-          "sort": 50,
+          "sort": 60,
           "is_builtin": 1,
           "rules": {
             "测试承接": 0,
@@ -2656,7 +2835,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "list_visible": 0,
           "filterable": 0,
           "dashboard_dimension": 1,
-          "sort": 60,
+          "sort": 70,
           "is_builtin": 1,
           "rules": {
             "测试承接": 0,
@@ -2681,7 +2860,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "list_visible": 0,
           "filterable": 0,
           "dashboard_dimension": 0,
-          "sort": 70,
+          "sort": 80,
           "is_builtin": 1,
           "rules": {
             "测试承接": 0,
@@ -2706,7 +2885,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "list_visible": 0,
           "filterable": 0,
           "dashboard_dimension": 1,
-          "sort": 80,
+          "sort": 90,
           "is_builtin": 1,
           "rules": {
             "测试承接": 0,
@@ -2724,7 +2903,15 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "input_mode": "both",
           "visible": 1,
           "sort": 0,
-          "layout_mode": "left"
+          "layout_mode": "right",
+          "rules": {
+            "测试承接": 0,
+            "测试方案": 0,
+            "测试实施": 0,
+            "测试报告": 0,
+            "测试完成": 0
+          },
+          "templates": []
         },
         {
           "deliverable_key": "builtin_2",
@@ -2732,14 +2919,15 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "input_mode": "both",
           "visible": 1,
           "sort": 10,
-          "layout_mode": "left",
+          "layout_mode": "right",
           "rules": {
             "测试承接": 0,
             "测试方案": 0,
             "测试实施": 0,
             "测试报告": 0,
             "测试完成": 1
-          }
+          },
+          "templates": []
         }
       ]
     },
@@ -2834,32 +3022,9 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "sort": 10,
           "is_builtin": 1,
           "rules": {
-            "工单登记": 1,
-            "工单分析": 1,
-            "分析完成": 1
-          }
-        },
-        {
-          "field_key": "propose_dept",
-          "label": "提出部门",
-          "field_kind": "native",
-          "input_type": "select",
-          "source_key": "dict:req_dept",
-          "multiple": 0,
-          "native_column": "propose_dept",
-          "component_key": "",
-          "section_key": "owners",
-          "column_span": 12,
-          "visible": 1,
-          "list_visible": 0,
-          "filterable": 1,
-          "dashboard_dimension": 1,
-          "sort": 10,
-          "is_builtin": 1,
-          "rules": {
-            "工单登记": 1,
-            "工单分析": 1,
-            "分析完成": 1
+            "工单登记": 0,
+            "工单分析": 0,
+            "分析完成": 0
           }
         },
         {
@@ -2883,6 +3048,29 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
             "工单登记": 0,
             "工单分析": 0,
             "分析完成": 0
+          }
+        },
+        {
+          "field_key": "propose_dept",
+          "label": "提出部门",
+          "field_kind": "native",
+          "input_type": "select",
+          "source_key": "dict:req_dept",
+          "multiple": 0,
+          "native_column": "propose_dept",
+          "component_key": "",
+          "section_key": "owners",
+          "column_span": 12,
+          "visible": 1,
+          "list_visible": 0,
+          "filterable": 1,
+          "dashboard_dimension": 1,
+          "sort": 10,
+          "is_builtin": 1,
+          "rules": {
+            "工单登记": 1,
+            "工单分析": 1,
+            "分析完成": 1
           }
         },
         {
@@ -2943,10 +3131,33 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "section_key": "owners",
           "column_span": 12,
           "visible": 1,
-          "list_visible": 1,
+          "list_visible": 0,
           "filterable": 1,
           "dashboard_dimension": 0,
           "sort": 20,
+          "is_builtin": 1,
+          "rules": {
+            "工单登记": 1,
+            "工单分析": 1,
+            "分析完成": 1
+          }
+        },
+        {
+          "field_key": "propose_time",
+          "label": "提出时间",
+          "field_kind": "native",
+          "input_type": "datetime",
+          "source_key": "",
+          "multiple": 0,
+          "native_column": "propose_time",
+          "component_key": "",
+          "section_key": "basic",
+          "column_span": 12,
+          "visible": 1,
+          "list_visible": 0,
+          "filterable": 0,
+          "dashboard_dimension": 1,
+          "sort": 30,
           "is_builtin": 1,
           "rules": {
             "工单登记": 1,
@@ -3001,26 +3212,26 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           }
         },
         {
-          "field_key": "propose_time",
-          "label": "提出时间",
+          "field_key": "expected_release_date",
+          "label": "期望投产时间",
           "field_kind": "native",
-          "input_type": "datetime",
+          "input_type": "date",
           "source_key": "",
           "multiple": 0,
-          "native_column": "propose_time",
+          "native_column": "expected_release_date",
           "component_key": "",
           "section_key": "basic",
           "column_span": 12,
           "visible": 1,
-          "list_visible": 1,
+          "list_visible": 0,
           "filterable": 0,
-          "dashboard_dimension": 1,
+          "dashboard_dimension": 0,
           "sort": 40,
           "is_builtin": 1,
           "rules": {
-            "工单登记": 1,
-            "工单分析": 1,
-            "分析完成": 1
+            "工单登记": 0,
+            "工单分析": 0,
+            "分析完成": 0
           }
         },
         {
@@ -3104,7 +3315,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "section_key": "owners",
           "column_span": 12,
           "visible": 1,
-          "list_visible": 1,
+          "list_visible": 0,
           "filterable": 1,
           "dashboard_dimension": 0,
           "sort": 50,
@@ -3148,10 +3359,10 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "native_column": "registrar",
           "component_key": "",
           "section_key": "owners",
-          "column_span": 24,
+          "column_span": 12,
           "visible": 1,
           "list_visible": 0,
-          "filterable": 0,
+          "filterable": 1,
           "dashboard_dimension": 0,
           "sort": 60,
           "is_builtin": 1,
@@ -3219,10 +3430,10 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "section_key": "basic",
           "column_span": 12,
           "visible": 1,
-      "list_visible": 1,
-      "filterable": 1,
+          "list_visible": 0,
+          "filterable": 1,
           "dashboard_dimension": 1,
-      "sort": 90,
+          "sort": 90,
           "is_builtin": 1,
           "rules": {
             "工单登记": 0,
@@ -3242,7 +3453,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           "section_key": "basic",
           "column_span": 12,
           "visible": 1,
-          "list_visible": 1,
+          "list_visible": 0,
           "filterable": 1,
           "dashboard_dimension": 0,
           "sort": 100,
@@ -3254,120 +3465,7 @@ const RAW_LOCAL_STAGE_CONTENT_SEED = {
           }
         }
       ],
-      "deliverables": [
-        {
-          "deliverable_key": `deliverable_${['be8b8a3a', '815a4c31', '94af60fe', 'c2342bf5'].join('')}`,
-          "label": "需求说明书",
-          "input_mode": "both",
-          "visible": 1,
-          "sort": 0,
-          "layout_mode": "left",
-          "rules": {
-            "工单登记": 0,
-            "工单分析": 0,
-            "分析完成": 0
-          }
-        }
-      ]
+      "deliverables": []
     }
   ]
-};
-
-function withIntakeOwner(scope) {
-  if (scope.scope_key !== 'dev' && !scope.scope_key.startsWith('test.')) return scope;
-  if (scope.fields.some((field) => field.field_key === 'intake_owner')) return scope;
-  const ownerIndex = scope.fields.findIndex((field) => field.field_key === 'owner');
-  if (ownerIndex < 0) return scope;
-  const owner = scope.fields[ownerIndex];
-  return {
-    ...scope,
-    fields: [
-      ...scope.fields.slice(0, ownerIndex + 1),
-      {
-        ...owner,
-        field_key: 'intake_owner',
-        label: scope.scope_key === 'dev' ? '开发承接人' : '测试承接人',
-        native_column: 'intake_owner',
-        sort: 20,
-      },
-      ...scope.fields.slice(ownerIndex + 1),
-    ],
-  };
-}
-
-// 本地“输入项配置”是新库的初始布局事实源；此处记录已由管理员确认的展示顺序和宽度。
-// 仅影响全新库及缺失字段补齐，不会覆盖既有环境中的管理员布局。
-const CURRENT_LOCAL_LAYOUT_OVERRIDES = {
-  // 列表首次打开的默认字段与用户级列偏好恢复默认值保持一致；仅作用于新库快照。
-  requirement: {
-    fields: {
-      status: { list_visible: 1, sort: 20 }, req_code: { list_visible: 1, sort: 30 }, req_type: { list_visible: 1, sort: 40 },
-      title: { list_visible: 1, sort: 50 }, implementation_org: { list_visible: 1, sort: 60 },
-      main_systems: { list_visible: 1, sort: 70 }, collab_dev_systems: { list_visible: 1, sort: 80 },
-      apply_release_points: { list_visible: 0 }, collab_test_systems: { list_visible: 0 },
-    },
-  },
-  ticket: {
-    fields: {
-      status: { list_visible: 1, sort: 20 }, ticket_code: { list_visible: 1, sort: 30 }, ticket_type: { list_visible: 1, sort: 40 },
-      title: { list_visible: 1, sort: 50 }, implementation_org: { list_visible: 1, sort: 60 },
-      main_systems: { list_visible: 1, sort: 70 }, collab_dev_systems: { list_visible: 1, sort: 80 },
-      apply_release_points: { list_visible: 0 }, collab_test_systems: { list_visible: 0 },
-    },
-  },
-  dev: {
-    fields: {
-      status: { list_visible: 1, sort: 20 }, task_name: { list_visible: 1, sort: 30 },
-      owner: { list_visible: 1, sort: 40 }, impl_system: { list_visible: 1, sort: 50 },
-      intake_owner: { list_visible: 0 }, impl_org: { list_visible: 0 }, content: { list_visible: 0 },
-    },
-  },
-  'test.NFT': { fields: { status: { list_visible: 1, sort: 20 }, task_name: { list_visible: 1, sort: 30 }, owner: { list_visible: 1, sort: 40 }, impl_system: { list_visible: 1, sort: 50 }, intake_owner: { list_visible: 0 }, impl_org: { list_visible: 0 } } },
-  release_apply: {
-    fields: {
-      release_point_id: { list_visible: 1, sort: 20 }, change_code: { list_visible: 1, sort: 30 },
-      change_system: { list_visible: 1, sort: 40 }, impl_org: { list_visible: 1, sort: 50 }, change_content: { list_visible: 1, sort: 60 },
-    },
-  },
-  release: { fields: { status: { list_visible: 1, sort: 20 } } },
-  'test.SEC': {
-    sections: { extension: { sort: 40 } },
-    fields: {
-      task_name: { column_span: 24, list_visible: 1, sort: 30 },
-      status: { list_visible: 1, sort: 20 }, owner: { list_visible: 1, sort: 40 },
-      impl_system: { list_visible: 1, sort: 50 }, intake_owner: { list_visible: 0 }, impl_org: { list_visible: 0 },
-    },
-  },
-  'test.SIT': {
-    sections: { coverage: { sort: 20 }, schedule: { sort: 30 } },
-    fields: {
-      task_name: { column_span: 24, list_visible: 1, sort: 30 },
-      status: { list_visible: 1, sort: 20 }, impl_system: { column_span: 12, list_visible: 1, sort: 50 },
-      owner: { list_visible: 1, sort: 40 }, intake_owner: { list_visible: 0 }, impl_org: { list_visible: 0 },
-    },
-  },
-  'test.UAT': {
-    fields: {
-      task_name: { list_visible: 1, sort: 30 }, status: { list_visible: 1, sort: 20 },
-      impl_system: { column_span: 12, list_visible: 1, sort: 50 }, owner: { list_visible: 1, sort: 40 },
-      intake_owner: { list_visible: 0 }, impl_org: { list_visible: 0 },
-    },
-  },
-};
-
-function withCurrentLocalLayout(scope) {
-  const overrides = CURRENT_LOCAL_LAYOUT_OVERRIDES[scope.scope_key] || {};
-  const merge = (items, values = {}) => items
-    .map((item) => ({ ...item, ...(values[item.field_key || item.section_key] || {}) }))
-    .sort((left, right) => left.sort - right.sort);
-  return {
-    ...scope,
-    sections: merge(scope.sections, overrides.sections),
-    fields: merge(scope.fields, overrides.fields),
-  };
-}
-
-export const LOCAL_STAGE_CONTENT_SEED = Object.freeze({
-  ...RAW_LOCAL_STAGE_CONTENT_SEED,
-  scopes: RAW_LOCAL_STAGE_CONTENT_SEED.scopes.map(withIntakeOwner).map(withCurrentLocalLayout),
 });

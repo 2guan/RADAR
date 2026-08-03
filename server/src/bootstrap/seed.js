@@ -9,7 +9,7 @@
 import { get, run, tx, all } from '../platform/persistence/index.js';
 import { hashPassword } from '../platform/auth/index.js';
 import { config } from '../platform/runtime/config.js';
-import { applyBuiltinConfigurationUpgrades, DEFAULT_REQUIRED_FIELD_CONFIG, REQUIRED_FIELDS_CONFIG_KEY, seedStageContentDefaults } from '../modules/settings/process-configuration/index.js';
+import { applyBuiltinConfigurationUpgrades, DEFAULT_REQUIRED_FIELD_CONFIG, LOCAL_STAGE_CONTENT_SEED, REQUIRED_FIELDS_CONFIG_KEY, seedStageContentDefaults } from '../modules/settings/process-configuration/index.js';
 import { parseJsonObject, logger } from '../platform/runtime/index.js';
 
 // 种子版本是“内置默认配置”而非业务数据版本；仅在首次初始化或显式升级版本时执行全量校准。
@@ -205,7 +205,7 @@ export const STAGE_BUILTIN_SECTION_DEFAULTS = {
 export const STAGE_BUILTIN_FIELD_METADATA = {
   requirement: {
     req_code: { section: 'basic', required_from: 'initial', list: 1, filter: 1 }, status: { section: 'basic', list: 1, filter: 1, dashboard: 1 },
-    req_type: { section: 'basic', required_from: 'initial', list: 1, filter: 1, dashboard: 1 }, apply_release_points: { section: 'basic', filter: 1 }, expected_release_date: { section: 'basic', import: 1, export: 1 },
+    req_type: { section: 'basic', required_from: 'initial', list: 1, filter: 1, dashboard: 1 }, expected_release_date: { section: 'basic', import: 1, export: 1 },
     propose_time: { section: 'basic', required_from: 'initial', dashboard: 1 }, issue_no: { section: 'basic', filter: 1 }, is_accounting: { section: 'basic', required_from: 'initial', filter: 1 }, priority: { section: 'basic', filter: 1, dashboard: 1 }, workload: { section: 'basic', filter: 1 },
     title: { section: 'basic', required_from: 'initial', list: 1 }, summary: { section: 'basic', required_from: 'initial' }, implementation_org: { section: 'systems', list: 1, filter: 1 }, main_systems: { section: 'systems', required_from: 'initial', list: 1, filter: 1, dashboard: 1 },
     collab_dev_systems: { section: 'systems', list: 1, filter: 1 }, collab_test_systems: { section: 'systems', filter: 1 }, propose_dept: { section: 'owners', required_from: 'initial', filter: 1, dashboard: 1 },
@@ -213,7 +213,7 @@ export const STAGE_BUILTIN_FIELD_METADATA = {
   },
   ticket: {
     ticket_code: { section: 'basic', required_from: 'initial', list: 1, filter: 1 }, status: { section: 'basic', list: 1, filter: 1, dashboard: 1 },
-    ticket_type: { section: 'basic', required_from: 'initial', list: 1, filter: 1, dashboard: 1 }, apply_release_points: { section: 'basic', filter: 1 }, expected_release_date: { section: 'basic', import: 1, export: 1 },
+    ticket_type: { section: 'basic', required_from: 'initial', list: 1, filter: 1, dashboard: 1 }, expected_release_date: { section: 'basic', import: 1, export: 1 },
     propose_time: { section: 'basic', required_from: 'initial', dashboard: 1 }, issue_no: { section: 'basic', filter: 1 }, is_accounting: { section: 'basic', required_from: 'initial', filter: 1 }, priority: { section: 'basic', filter: 1, dashboard: 1 }, workload: { section: 'basic', filter: 1 },
     title: { section: 'basic', required_from: 'initial', list: 1 }, summary: { section: 'basic', required_from: 'initial' }, implementation_org: { section: 'systems', list: 1, filter: 1 }, main_systems: { section: 'systems', required_from: 'initial', list: 1, filter: 1, dashboard: 1 },
     collab_dev_systems: { section: 'systems', list: 1, filter: 1 }, collab_test_systems: { section: 'systems', filter: 1 }, propose_dept: { section: 'owners', required_from: 'initial', filter: 1, dashboard: 1 },
@@ -570,6 +570,7 @@ export async function runSeed() {
     await seedStageContentDefaults({
       builtinMetadata: STAGE_BUILTIN_FIELD_METADATA,
       sectionDefaults: STAGE_BUILTIN_SECTION_DEFAULTS,
+      snapshot: LOCAL_STAGE_CONTENT_SEED,
     });
 
     // 3) 所属系统
@@ -701,6 +702,7 @@ export async function runSeed() {
   const upgrade = await applyBuiltinConfigurationUpgrades({
     builtinMetadata: STAGE_BUILTIN_FIELD_METADATA,
     sectionDefaults: STAGE_BUILTIN_SECTION_DEFAULTS,
+    snapshot: LOCAL_STAGE_CONTENT_SEED,
   });
 
   logger.info(seeded ? '[初始化] 种子数据已就绪' : '[初始化] 种子版本已就绪，跳过重复校准');

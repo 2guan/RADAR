@@ -162,13 +162,12 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
           <Space direction="vertical" size={4} style={{ width: '100%' }}>
             <Space style={{ justifyContent: 'space-between', width: '100%' }}><strong>{item.task_code}</strong><StatusBadge status={item.status} /></Space>
             <div>{item.task_name}</div>
-            <Space size="small">
-              {item.impl_system_name && (
-                <Tag className="status-tag tag-system" style={{ borderRadius: 2, margin: 0 }}>{item.impl_system_name}</Tag>
-              )}
-              <span>测试负责人：{item.owner || '—'}</span>
-              <span>测试承接人：{item.intake_owner || '—'}</span>
-            </Space>
+            <div style={{ fontSize: 12, color: 'var(--radar-text-secondary)' }}>测试实施方：{item.impl_org_display || item.impl_org || '—'}</div>
+            <div style={{ fontSize: 12, color: 'var(--radar-text-secondary)' }}>测试负责人：{item.owner || '—'}</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center', fontSize: 12, color: 'var(--radar-text-secondary)' }}>
+              <span>实施系统：</span>
+              {item.impl_system_name ? <Tag className="status-tag tag-system" style={{ borderRadius: 2, margin: 0 }}>{item.impl_system_name}</Tag> : <span>—</span>}
+            </div>
           </Space>
         )}
       />

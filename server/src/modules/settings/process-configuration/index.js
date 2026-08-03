@@ -28,3 +28,4 @@ export {
 } from './application/stage-content.js';
 export { assertStatusChangePermission } from './application/status-permission.js';
 export { buildExtensionListFilter } from './application/extension-list-filter.js';
+export { LOCAL_STAGE_CONTENT_SEED } from './application/local-stage-content-seed.js';

@@ -178,7 +178,7 @@ export default function Requirements() {
       key: 'proposer',
       render: (val) => (Array.isArray(val) ? val.join(', ') : (val || '—')),
     },
-      { title: '实施机构', dataIndex: 'implementation_org', key: 'implementation_org' },
+      { title: '实施机构', dataIndex: 'implementation_org', key: 'implementation_org', render: (value, row) => row.implementation_org_display || value || '—' },
     { title: '需求接收人', dataIndex: 'receiver', key: 'receiver' },
     { title: '工作量(人天)', dataIndex: 'workload', key: 'workload' },
     {
@@ -297,21 +297,13 @@ export default function Requirements() {
           <Space direction="vertical" size={4} style={{ width: '100%' }}>
             <Space style={{ justifyContent: 'space-between', width: '100%' }}><strong>{item.req_code}</strong><StatusBadge status={item.status} /></Space>
             <div>{item.title}</div>
-            {item.apply_release_points?.length > 0 && (
-              <div style={{ fontSize: '11px', color: 'var(--radar-text-secondary)' }}>
-                <span>申请投产点：</span>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4, marginTop: 2 }}>
-                  {item.apply_release_points.map((value) => <ReleasePointText key={value} value={value} />)}
-                </div>
-              </div>
-            )}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+            <div style={{ fontSize: 12, color: 'var(--radar-text-secondary)' }}>实施机构：{item.implementation_org_display || item.implementation_org || '—'}</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center', fontSize: 12, color: 'var(--radar-text-secondary)' }}>
+              <span>主责系统：</span>
               {(item.main_systems_names || []).map((name) => (
                 <Tag key={name} className="status-tag tag-system" style={{ borderRadius: 2, margin: 0 }}>{name}</Tag>
               ))}
-              {(item.collab_dev_systems_names || []).map((name) => (
-                <Tag key={name} className="status-tag tag-system" style={{ borderRadius: 2, margin: 0 }}>{name}</Tag>
-              ))}
+              {!item.main_systems_names?.length && <span>—</span>}
             </div>
           </Space>
         )}

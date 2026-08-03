@@ -20,7 +20,7 @@ import {
 } from '../../settings/process-configuration/index.js';
 import { auditCreate, auditUpdate, auditDelete } from '../../../platform/audit/index.js';
 import { listByEntity } from '../../../platform/attachments/index.js';
-import { windowIds, inClause, resolveDictAttr, resolveExistingDictAttr, resolveOrganizationValues, resolveSystemCode, formatAttachments } from '../../settings/reference-data/index.js';
+import { windowIds, inClause, getDictDisplayMap, resolveDictAttr, resolveExistingDictAttr, resolveOrganizationValues, resolveSystemCode, formatAttachments } from '../../settings/reference-data/index.js';
 import { ok, notFound, badRequest, forbidden } from '../../../platform/runtime/index.js';
 import { assertStatusChangePermission } from '../../settings/process-configuration/index.js';
 import { exportXlsx, parseXlsx } from '../../../platform/import-export/index.js';
@@ -190,7 +190,10 @@ export default async function testTaskRoutes(fastify) {
 
     // 仅针对当前页任务涉及的需求/工单映射申请投产点，避免随翻页整表扫描
     const pageCodes = [...new Set(result.list.map((r) => r.req_code).filter(Boolean))];
-    const systems = await all('SELECT sys_code, sys_name FROM system');
+    const [systems, orgDisplayMap] = await Promise.all([
+      all('SELECT sys_code, sys_name FROM system'),
+      getDictDisplayMap('org'),
+    ]);
     const sysMap = {};
     for (const s of systems) {
       sysMap[s.sys_code] = s.sys_name;
@@ -206,6 +209,7 @@ export default async function testTaskRoutes(fastify) {
       ...row,
       entity_type: itemMap[row.req_code]?.entity_type || null,
       entity_label: itemMap[row.req_code]?.entity_label || null,
+      impl_org_display: orgDisplayMap[row.impl_org] || row.impl_org || null,
       impl_system_name: sysMap[row.impl_system] || row.impl_system,
       task_status: taskStatuses[row.req_code]?.display || '需求/工单分析-未开始',
       task_status_short: taskStatuses[row.req_code]?.shortDisplay || '需求 · 未开始',

@@ -10,7 +10,7 @@ import { get, run, tx, all, dialect, listQuery } from '../../../../platform/pers
 import { claimReleaseApplyCode, previewReleaseApplyCode } from './index.js';
 import { auditCreate, auditUpdate, auditDelete } from '../../../../platform/audit/index.js';
 import { exportXlsx, parseXlsx } from '../../../../platform/import-export/index.js';
-import { windowIds, inClause, resolveOrganizationValues } from '../../../settings/reference-data/index.js';
+import { windowIds, inClause, getDictDisplayMap, resolveOrganizationValues } from '../../../settings/reference-data/index.js';
 import { ok, notFound, badRequest, forbidden, parseJsonArray, parseJsonObject } from '../../../../platform/runtime/index.js';
 import { beijingDateString } from '../../../../shared/utils/time.js';
 import {
@@ -108,11 +108,12 @@ async function pick(body) {
 
 /**
  * 由关联的需求/工单编号派生评审状态：从投产审批表（release_task）取评审状态，取最弱。
- * 无任何匹配则返回 null。
+ * 无任何匹配时使用 review_status 字典的“待评审”默认值，确保新增申请可读且可排序。
  */
 async function deriveReviewStatus(refCodes, releasePointId) {
+  const defaultStatus = await defaultDictAttr('review_status', '待评审') || '待评审';
   const codes = normalizeRefCodes(refCodes);
-  if (!codes.length) return null;
+  if (!codes.length) return defaultStatus;
   const placeholders = codes.map(() => '?').join(',');
   const rows = await all(
     `SELECT DISTINCT review_status FROM release_task
@@ -120,8 +121,9 @@ async function deriveReviewStatus(refCodes, releasePointId) {
         AND (release_point_id = ? OR (release_point_id IS NULL AND ? IS NULL))`,
     ...codes, releasePointId ?? null, releasePointId ?? null,
   );
-  if (!rows.length) return null;
+  if (!rows.length) return defaultStatus;
   const statuses = rows.map((row) => row.review_status).filter(Boolean);
+  if (!statuses.length) return defaultStatus;
   const statusPlaceholders = statuses.map(() => '?').join(',');
   const rankRows = await all(
     `SELECT attr_value, sort, extra FROM dict_item
@@ -140,7 +142,7 @@ async function deriveReviewStatus(refCodes, releasePointId) {
     const rank = rankMap.get(status) ?? Number.POSITIVE_INFINITY;
     if (rank < weakestRank) { weakestRank = rank; weakest = status; }
   }
-  return weakest;
+  return weakest || defaultStatus;
 }
 
 /** 解析投产点对应的窗口日期；当前日期占位符由编号服务统一提供。 */
@@ -243,7 +245,10 @@ export default async function releaseApplyRoutes(fastify) {
     });
 
     // 主数据映射
-    const rps = await all('SELECT id, release_date FROM release_point');
+    const [rps, orgDisplayMap] = await Promise.all([
+      all('SELECT id, release_date FROM release_point'),
+      getDictDisplayMap('org'),
+    ]);
     const rpMap = {};
     for (const rp of rps) rpMap[rp.id] = rp.release_date;
     const systems = await all('SELECT sys_code, sys_name FROM system');
@@ -256,6 +261,7 @@ export default async function releaseApplyRoutes(fastify) {
       const decoded = decode(row);
       decoded.review_status = await deriveReviewStatus(decoded.ref_codes, row.release_point_id);
       decoded.change_system_name = row.change_system ? `${row.change_system} - ${sysMap[row.change_system] || row.change_system}` : null;
+      decoded.impl_org_display = orgDisplayMap[row.impl_org] || row.impl_org || null;
       decoded.release_date = rpMap[row.release_point_id] || null;
       return decoded;
     }));

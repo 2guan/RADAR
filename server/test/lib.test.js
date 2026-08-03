@@ -346,7 +346,7 @@ test('静态 mock 问题快照：数量、状态、脱敏和处理方式保持�
   assert.ok(MOCK_ISSUE_SNAPSHOT.every((issue) => issue.handling_method === '换版'));
 });
 
-import { reqOrg } from '../src/modules/overview/api/routes.js';
+import { overviewCardLabels, reqOrg } from '../src/modules/overview/api/routes.js';
 
 test('reqOrg 实施机构分组逻辑：第一优先级（主责系统第一个开发任务的开发实施方）', () => {
   const req = {
@@ -426,6 +426,24 @@ test('reqOrg 实施机构分组逻辑：第四优先级（未分配机构兜底�
   const sysMap = {};
   const devMap = {};
   assert.equal(reqOrg(req, sysMap, devMap), '未分配机构');
+});
+
+test('版本概览卡片标签：未选主责系统时保留需求填写的实施机构显示值', () => {
+  const labels = overviewCardLabels(
+    { main_systems: '[]', implementation_org: '厦门事业群' },
+    {},
+    { 厦门事业群: '厦门' },
+  );
+  assert.deepEqual(labels, { systemName: '未确定主责系统', systemOrg: '厦门' });
+});
+
+test('版本概览卡片标签：选定主责系统后仍使用需求填写的实施机构', () => {
+  const labels = overviewCardLabels(
+    { main_systems: '["SYS001"]', implementation_org: '厦门事业群' },
+    { SYS001: { name: '核心支付系统', org: '北京事业群' } },
+    { 厦门事业群: '厦门', 北京事业群: '北京' },
+  );
+  assert.deepEqual(labels, { systemName: '核心支付系统', systemOrg: '厦门' });
 });
 
 

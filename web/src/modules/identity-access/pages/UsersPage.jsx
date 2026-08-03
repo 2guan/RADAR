@@ -191,7 +191,7 @@ export default function Users() {
       ),
     },
     { title: '姓名', dataIndex: 'name', key: 'name' },
-    { title: '所属机构', dataIndex: 'org', key: 'org' },
+    { title: '所属机构', dataIndex: 'org', key: 'org', render: (value, row) => row.org_display || value || '—' },
     {
       title: '角色',
       dataIndex: 'roles',
@@ -267,13 +267,24 @@ export default function Users() {
         showSearch={false}
         mobileCard={(item) => (
           <Space direction="vertical" size={4} style={{ width: '100%' }}>
-            <Space style={{ justifyContent: 'space-between', width: '100%' }}><strong>{item.name}</strong><span>{item.phone}</span></Space>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, width: '100%' }}>
+              <Space size={8} style={{ paddingInlineStart: 4, minWidth: 0 }}><strong>{item.name}</strong><span>{item.phone}</span></Space>
+              <Space size={0} style={{ flexShrink: 0 }} onClick={(event) => event.stopPropagation()}>
+                <Can module="user" action="edit">
+                  {((item.login_fail_count || 0) > 0 || !!item.lockout_until) && <Button type="link" size="small" icon={<UnlockOutlined />} onClick={() => unlockUser(item)}>解锁</Button>}
+                </Can>
+                <Can module="user" action="edit"><Button type="link" size="small" icon={<EditOutlined />} aria-label="编辑" title="编辑" onClick={() => openEdit(item)} /></Can>
+                <Can module="user" action="delete"><Popconfirm title="确认删除？" onConfirm={() => onDelete(item)}><Button type="link" size="small" danger icon={<DeleteOutlined />} aria-label="删除" title="删除" /></Popconfirm></Can>
+              </Space>
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--radar-text-secondary)' }}>所属机构：{item.org_display || item.org || '—'}</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center', fontSize: 12, color: 'var(--radar-text-secondary)' }}>
+              <span>角色：</span>
               {(item.roles || []).map((r) => (
                 <Tag key={r.id} className="status-tag tag-system" style={{ margin: 0 }}>{r.name}</Tag>
               ))}
+              {!item.roles?.length && <span>—</span>}
             </div>
-            <span>全机构权限：{Number(item.all_org_access) !== 0 ? '是' : '否'}（{item.all_org_access_source === 'person' ? '人员单独设置' : '角色配置'}）</span>
           </Space>
         )}
       />
