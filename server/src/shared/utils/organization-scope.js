@@ -42,7 +42,7 @@ function arrayValue(value) {
   }
 }
 
-/** 主责或协同改造系统任一机构命中，或手填实施机构命中，即工作项可见。 */
+/** 主责或任一阶段协同系统机构命中，或手填实施机构命中，即工作项可见。 */
 export function workItemMatchesOrganization(item, organization, systemOrganizationByCode = {}) {
   const values = organizationValues(organization);
   if (!item || !values.length) return false;
@@ -50,6 +50,7 @@ export function workItemMatchesOrganization(item, organization, systemOrganizati
   const systems = new Set([
     ...arrayValue(item.main_systems),
     ...arrayValue(item.collab_dev_systems),
+    ...arrayValue(item.collab_test_systems),
   ]);
   return [...systems].some((code) => organizationMatches(systemOrganizationByCode[code], values));
 }

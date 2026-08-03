@@ -1,0 +1,108 @@
+{
+  "schema_version": "1.0",
+  "requirement": {
+    "id": "REQ-20260803-010",
+    "ref": "hengguan/REQ-20260803-010",
+    "title": "测试承接按主责与协同系统拆分",
+    "status": "ready",
+    "document": "docs/requirements/hengguan/REQ-20260803-010/requirement.md",
+    "internet_ai_coding_allowed": true
+  },
+  "assignment": {
+    "developer": "hengguan",
+    "module": "governance",
+    "module_owner": "hengguan",
+    "branch": "hengguan/REQ-20260803-010-test-split-intake",
+    "base_branch": "origin/main",
+    "worktree": "codex-desktop-current-worktree"
+  },
+  "ai": {
+    "enabled": true,
+    "approved_service": "Codex desktop",
+    "model": "approved-by-user",
+    "contains_confidential_information": false,
+    "context_sanitized": true,
+    "production_access": false
+  },
+  "scope": {
+    "writable_paths": [
+      "docs/requirements/hengguan/REQ-20260803-010/**",
+      "server/src/modules/testing/**",
+      "web/src/modules/testing/**",
+      "server/src/shared/utils/organization-scope.js",
+      "server/test/**",
+      "web/test/**"
+    ],
+    "read_only_paths": [
+      "AGENTS.md",
+      "DESIGN.md",
+      "docs/governance/**",
+      "docs/architecture/**",
+      "governance/modules.yaml",
+      ".agents/skills/radar-delivery-engineer/**",
+      "server/src/platform/**",
+      "web/src/platform/**",
+      "web/src/shared/**"
+    ],
+    "forbidden_paths": [
+      ".github/**",
+      "docs/reports/**",
+      ".env",
+      "**/.env",
+      "**/*secret*",
+      "**/*credential*",
+      "attachments/**",
+      "data/**"
+    ]
+  },
+  "public_capability_change": {
+    "required": true,
+    "shared_change_issue": "hengguan/REQ-20260803-010",
+    "target_modules": ["testing", "shared/contracts"],
+    "new_methods": [],
+    "existing_method_changed": true,
+    "semantic_name_confirmed": true,
+    "old_behavior_preserved": true,
+    "compatibility_note": "整体测试承接请求和响应保持兼容；拆分模式仅读取工作项角色，历史请求中的 systemRoles 不读取也不校验。",
+    "owner_approved": true,
+    "owner_review_required_before_merge": true
+  },
+  "database": {
+    "changed": false,
+    "migration_paths": [],
+    "mysql8_compatible": true,
+    "historical_data_impact": "无 schema 或历史数据变更。",
+    "rollback_or_compensation": "回退代码不删除已创建的测试任务；如需业务撤销，按既有删除权限逐项处理。"
+  },
+  "external_access": {
+    "changed": false,
+    "api_paths": [],
+    "readable_field_whitelist": [],
+    "writable_field_whitelist": [],
+    "action_whitelist": [],
+    "audit_required": true
+  },
+  "required_tests": [
+    {"name": "api", "command": "npm run test:api --prefix server"},
+    {"name": "permission", "command": "npm run test:rbac --prefix server"},
+    {"name": "testing unit", "command": "npm test --prefix server"},
+    {"name": "ui_data_sources", "command": "node scripts/check-ui-data-sources.mjs"},
+    {"name": "module_boundaries", "command": "node scripts/check-module-boundaries.mjs"},
+    {"name": "build", "command": "npm run build --prefix web"},
+    {"name": "runtime", "command": "node scripts/verify-app-runtime.mjs"},
+    {"name": "governance", "command": "node scripts/check-governance.mjs && node scripts/check-code-comments.mjs && git diff --check"},
+    {"name": "browser", "command": "本地脱敏具备测试创建权限用户，在桌面及 390px 视口验证 SIT 拆分承接的只读角色标签、逐系统填写、错误提示、重复提交和列表刷新。"}
+  ],
+  "risk": {
+    "level": "important",
+    "reasons": ["测试承接跨模块调用 development 既有公开读取契约", "测试协同系统纳入共享机构范围计算"],
+    "required_approvals": ["hengguan"]
+  },
+  "completion": {
+    "changed_files_report_required": true,
+    "test_result_report_required": true,
+    "known_risks_report_required": true,
+    "rollback_report_required": true,
+    "requirement_acceptance_required": true
+  }
+}

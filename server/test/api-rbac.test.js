@@ -438,7 +438,8 @@ if (!process.env.RADAR_RUN_API_TESTS) {
     assert.equal(testPreview.json().data.overall[0].defaultImplOrg, '厦门事业群');
     assert.equal(testPreview.json().data.split[0].defaultImplOrg, '厦门事业群');
     const acceptedTest = await app.inject({ method: 'POST', url: '/api/test-tasks/intake', headers: adminHeaders, payload: {
-      reqCode: 'INTAKE-TEST-REQ', testType: 'SIT', splitMode: 'split', assignments: [{ sysCode: 'INTAKE-TEST-SYS', owner: administrator.name, implOrg: '厦门事业群' }],
+      reqCode: 'INTAKE-TEST-REQ', testType: 'SIT', splitMode: 'split',
+      assignments: [{ sysCode: 'INTAKE-TEST-SYS', owner: administrator.name, implOrg: '厦门事业群' }],
     } });
     assert.equal(acceptedTest.statusCode, 200);
     const acceptedTestTask = await get('SELECT owner, intake_owner, impl_org FROM test_task WHERE req_code = ?', 'INTAKE-TEST-REQ');
@@ -596,6 +597,57 @@ if (!process.env.RADAR_RUN_API_TESTS) {
     } });
     assert.equal(invalidTestOrg.statusCode, 400);
     assert.equal((await get('SELECT COUNT(*) AS c FROM test_task WHERE req_code = ?', 'INTAKE-TEST-INVALID-ORG')).c, 0);
+  });
+
+  test('测试承接按主责与协同系统拆分，角色只读且不回写工作项', async () => {
+    const administrator = await get('SELECT id, phone, name FROM user WHERE is_super = 1 LIMIT 1');
+    const headers = { authorization: `Bearer ${await app.jwt.sign({ id: administrator.id, phone: administrator.phone })}`, 'x-requested-by': 'RADAR' };
+    await run('INSERT INTO system (sys_code, sys_name, org) VALUES (?,?,?)', 'TEST-ROLE-SYS-A', '测试角色系统A', '厦门事业群');
+    await run('INSERT INTO system (sys_code, sys_name, org) VALUES (?,?,?)', 'TEST-ROLE-SYS-B', '测试角色系统B', '武汉事业群');
+    await run(
+      'INSERT INTO requirement (req_code, title, status, main_systems, collab_dev_systems, collab_test_systems) VALUES (?,?,?,?,?,?)',
+      'TEST-ROLE-REQ', '测试角色只读', '需求登记', JSON.stringify(['TEST-ROLE-SYS-A']), JSON.stringify(['DEV-SHOULD-STAY']), JSON.stringify(['TEST-ROLE-SYS-B']),
+    );
+
+    const preview = await app.inject({ method: 'POST', url: '/api/test-tasks/intake-preview', headers, payload: { reqCode: 'TEST-ROLE-REQ', testType: 'SIT' } });
+    assert.equal(preview.statusCode, 200);
+    assert.deepEqual(preview.json().data.split.map((item) => ({ sysCode: item.sysCode, role: item.role })), [
+      { sysCode: 'TEST-ROLE-SYS-A', role: '主责' },
+      { sysCode: 'TEST-ROLE-SYS-B', role: '协同' },
+    ]);
+
+    const intake = await app.inject({ method: 'POST', url: '/api/test-tasks/intake', headers, payload: {
+      reqCode: 'TEST-ROLE-REQ', testType: 'SIT', splitMode: 'split',
+      assignments: [
+        { sysCode: 'TEST-ROLE-SYS-A', owner: administrator.name, implOrg: '厦门事业群' },
+        { sysCode: 'TEST-ROLE-SYS-B', owner: administrator.name, implOrg: '武汉事业群' },
+      ],
+    } });
+    assert.equal(intake.statusCode, 200);
+    const updated = await get('SELECT main_systems, collab_dev_systems, collab_test_systems FROM requirement WHERE req_code = ?', 'TEST-ROLE-REQ');
+    assert.deepEqual(JSON.parse(updated.main_systems), ['TEST-ROLE-SYS-A']);
+    assert.deepEqual(JSON.parse(updated.collab_test_systems), ['TEST-ROLE-SYS-B']);
+    assert.deepEqual(JSON.parse(updated.collab_dev_systems), ['DEV-SHOULD-STAY']);
+    const tasks = await all('SELECT impl_system FROM test_task WHERE req_code = ? ORDER BY impl_system', 'TEST-ROLE-REQ');
+    assert.deepEqual(tasks.map((task) => task.impl_system), ['TEST-ROLE-SYS-A', 'TEST-ROLE-SYS-B']);
+
+    await run(
+      'INSERT INTO requirement (req_code, title, status, main_systems, collab_test_systems) VALUES (?,?,?,?,?)',
+      'TEST-ROLE-IGNORED', '测试角色字段忽略', '需求登记', JSON.stringify(['TEST-ROLE-SYS-A']), JSON.stringify(['TEST-ROLE-SYS-B']),
+    );
+    const ignoredRoles = await app.inject({ method: 'POST', url: '/api/test-tasks/intake', headers, payload: {
+      reqCode: 'TEST-ROLE-IGNORED', testType: 'SIT', splitMode: 'split',
+      systemRoles: [
+        { sysCode: 'TEST-ROLE-SYS-A', role: '主责' },
+        { sysCode: 'TEST-ROLE-SYS-B', role: '主责' },
+      ],
+      assignments: [{ sysCode: 'TEST-ROLE-SYS-A', owner: administrator.name, implOrg: '厦门事业群' }],
+    } });
+    assert.equal(ignoredRoles.statusCode, 200);
+    assert.equal((await get('SELECT COUNT(*) AS c FROM test_task WHERE req_code = ?', 'TEST-ROLE-IGNORED')).c, 1);
+    const unchanged = await get('SELECT main_systems, collab_test_systems FROM requirement WHERE req_code = ?', 'TEST-ROLE-IGNORED');
+    assert.deepEqual(JSON.parse(unchanged.main_systems), ['TEST-ROLE-SYS-A']);
+    assert.deepEqual(JSON.parse(unchanged.collab_test_systems), ['TEST-ROLE-SYS-B']);
   });
 
   test.skip('task-status：四类任务列表返回统一的全链路任务状态，且保留各自状态字段（投产点筛选夹具待改为申请关联）', async () => {
