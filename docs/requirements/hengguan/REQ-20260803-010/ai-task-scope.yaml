@@ -29,6 +29,8 @@
       "docs/requirements/hengguan/REQ-20260803-010/**",
       "server/src/modules/testing/**",
       "web/src/modules/testing/**",
+      "server/src/modules/requirements/routes.js",
+      "server/src/modules/tickets/routes.js",
       "server/src/shared/utils/organization-scope.js",
       "server/test/**",
       "web/test/**"
@@ -58,12 +60,12 @@
   "public_capability_change": {
     "required": true,
     "shared_change_issue": "hengguan/REQ-20260803-010",
-    "target_modules": ["testing", "shared/contracts"],
+    "target_modules": ["testing", "requirements", "tickets", "shared/contracts"],
     "new_methods": [],
     "existing_method_changed": true,
     "semantic_name_confirmed": true,
     "old_behavior_preserved": true,
-    "compatibility_note": "整体测试承接请求和响应保持兼容；拆分模式仅读取工作项角色，历史请求中的 systemRoles 不读取也不校验。",
+    "compatibility_note": "整体测试承接请求和响应保持兼容；拆分模式仅读取工作项角色，历史请求中的 systemRoles 不读取也不校验；需求和工单列表的数据范围补充协同测试系统，不收窄既有可见范围。",
     "owner_approved": true,
     "owner_review_required_before_merge": true
   },
@@ -95,7 +97,7 @@
   ],
   "risk": {
     "level": "important",
-    "reasons": ["测试承接跨模块调用 development 既有公开读取契约", "测试协同系统纳入共享机构范围计算"],
+    "reasons": ["测试承接跨模块调用 development 既有公开读取契约", "测试协同系统纳入共享机构与候选列表范围计算"],
     "required_approvals": ["hengguan"]
   },
   "completion": {

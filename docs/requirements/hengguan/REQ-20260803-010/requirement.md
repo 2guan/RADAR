@@ -42,7 +42,7 @@ last_updated: "2026-08-03"
 
 1. 为测试承接预览提供关联工作项的主责/测试协同系统集合、只读角色、系统名称、已有任务及可见性信息。
 2. 在测试承接“拆分承接”页面以只读标签展示系统角色；按当前主责加测试协同系统逐项填写负责人和实施方。
-3. 在服务端校验拆分系统：系统必须属于关联需求/工单、每个系统最多一条且处于用户数据范围内；成功后原子创建任务，不更新关联工作项的系统角色。
+3. 在服务端校验拆分系统：系统必须属于关联需求/工单、每个系统最多一条且处于用户数据范围内；仅配置协同测试系统的工作项也须出现在承接候选与拆分预览中；成功后原子创建任务，不更新关联工作项的系统角色。
 4. 补充 API 与页面回归测试，覆盖正常、异常、数据范围与重复承接。
 
 ### 明确不做
@@ -63,7 +63,7 @@ last_updated: "2026-08-03"
 
 | 规则编号 | 触发条件 | 业务规则 | 不满足时处理 |
 | --- | --- | --- | --- |
-| BR-001 | 打开拆分承接预览 | 系统集合为关联工作项的主责系统加协同系统，去重且主责优先 | 无系统时提示无法拆分承接 |
+| BR-001 | 打开拆分承接预览 | 系统集合为关联工作项的主责系统加协同系统，去重且主责优先；没有主责时仍展示协同测试系统 | 无系统时提示无法拆分承接 |
 | BR-002 | 查看系统角色 | 主责/协同由关联工作项分析结果决定，只读展示 | 不提供修改控件，也不提交角色字段 |
 | BR-003 | 提交拆分承接 | 每个待创建系统必须属于工作项、唯一、用户数据范围内，并配置合法负责人和实施方 | 返回字段级业务错误，不创建任务 |
 | BR-004 | 拆分承接成功 | 以当前主责加测试协同系统逐条创建测试任务，不更新关联需求/工单系统字段 | 使用事务；任一步失败全部回滚 |
@@ -114,7 +114,7 @@ last_updated: "2026-08-03"
 | AC-002 | 正常 | 同上 | 提交拆分承接 | 工作项仍保持主责 `SYS-A`、协同 `SYS-B` |
 | AC-003 | 正常 | 拆分预览有两个可见系统 | 不提供或传入任意 `systemRoles` 字段 | 不校验角色字段，按 `assignments` 中合法系统创建任务 |
 | AC-004 | 异常 | 请求包含非关联系统或重复系统 | 直接调用承接接口 | 返回 400，不创建任务 |
-| AC-005 | 权限 | 用户无关联工作项机构数据范围 | 打开预览或提交 | 不暴露系统或返回 403，不能创建任务 |
+| AC-005 | 权限 | 受限用户所属机构仅命中协同测试系统，工作项无主责系统 | 打开承接候选并拆分预览 | 工作项可见且展示协同测试系统；不命中任一系统时仍不暴露或返回 403 |
 | AC-006 | 边界 | 一个系统已承接、另一个未承接 | 再次拆分承接 | 仅保留未承接系统；全部完成后不再作为候选 |
 | AC-007 | 页面 | 桌面或窄屏打开拆分承接 | 查看角色与系统行并提交 | 主责/协同为只读标签；必填错误、加载和提交中状态清晰，成功后列表刷新 |
 
@@ -129,7 +129,7 @@ last_updated: "2026-08-03"
 ## 8. 研发上下文
 
 - 目标模块 / Owner / 基准分支：登记主模块为 `governance`，业务目标模块为 `testing` / Owner `hengguan` / 基准分支 `origin/main`；分支为 `hengguan/REQ-20260803-010-test-split-intake`。
-- 多模块协作：因需求与范围文档属于治理模块，登记主模块为 governance；testing 是业务目标模块，development 仅提供既有工作项读取契约，shared 调整无领域数据所有权的机构范围工具以纳入测试协同系统；Owner 均为 hengguan，开发系统角色契约不变。
+- 多模块协作：因需求与范围文档属于治理模块，登记主模块为 governance；testing 是业务目标模块，requirements/tickets 的候选列表数据范围与 shared 机构范围工具均纳入测试协同系统；development 仅提供既有工作项读取契约。Owner 均为 hengguan，开发系统角色契约不变。
 - 允许与禁止修改路径：见 `ai-task-scope.yaml`。
 - 必须复用的能力与公开契约：`server/src/modules/development/index.js` 的既有工作项读取；前端复用 Ant Design 表单和既有测试承接弹窗。
 - 接口契约：扩展既有内网受保护接口 `POST /test-tasks/intake-preview` 与 `POST /test-tasks/intake`，请求兼容整体承接；拆分模式仅以 `assignments: [{sysCode, owner, implOrg}]` 创建任务，历史请求中的 `systemRoles` 不读取也不校验，响应包装保持 `{code,data,message}`。
@@ -139,10 +139,10 @@ last_updated: "2026-08-03"
 
 ## 9. 完成记录
 
-- 修改文件与范围一致性：已修改 testing 承接 API、共享机构范围工具及 API 回归测试；弹窗已有只读标签展示，未再引入角色编辑控件。所有文件均在 `ai-task-scope.yaml` 的可写路径内。未修改未跟踪的 `docs/reports/`。
+- 修改文件与范围一致性：已修改 testing 承接 API、共享机构范围工具、需求/工单候选列表机构范围及 API 回归测试；弹窗已有只读标签展示，未再引入角色编辑控件。所有文件均在 `ai-task-scope.yaml` 的可写路径内。未修改未跟踪的 `docs/reports/`。
 - 配置与交付影响落实：未新增输入项、交付件、种子、mock、表结构、迁移或导入导出字段；拆分角色只读展示，`systemRoles` 不作为接口业务输入。测试任务按 `main_systems + collab_test_systems` 中的合法已选系统建立，工作项字段不写回。
-- 测试证据：`npm test --prefix server`（39 通过、1 跳过）；`npm run test:api --prefix server` 与 `npm run test:rbac --prefix server`（各 29 通过、5 跳过，含“测试承接按主责与协同系统拆分，角色只读且不回写工作项”）；`npm run build --prefix web`、`node scripts/check-ui-data-sources.mjs`、`node scripts/check-module-boundaries.mjs`、`node scripts/check-governance.mjs`、`node scripts/check-code-comments.mjs`、`node scripts/verify-app-runtime.mjs` 与 `git diff --check` 均通过。
-- 已知风险：测试协同系统现在参与机构范围判定；已在现有本地 SQLite 数据库，以脱敏具备测试创建权限用户完成桌面和 390px 窄屏验收，拆分角色为无编辑控件的标签、负责人/实施方控件正常，控制台无错误；未提交创建动作。上线前仍应由目标测试角色复核其机构数据范围。
+- 测试证据：`npm test --prefix server`（39 通过、1 跳过）；`npm run test:api --prefix server` 与 `npm run test:rbac --prefix server`（各 29 通过、5 跳过，覆盖受限机构用户仅通过协同测试系统查看需求/工单，以及无主责系统时的测试承接候选和拆分预览）；`npm run build --prefix web`、`node scripts/check-ui-data-sources.mjs`、`node scripts/check-module-boundaries.mjs`、`node scripts/check-governance.mjs`、`node scripts/check-code-comments.mjs`、`node scripts/verify-app-runtime.mjs` 与 `git diff --check` 均通过。
+- 已知风险：测试协同系统现在参与需求/工单候选列表和详情的机构范围判定；已在现有本地 SQLite 数据库，以脱敏具备测试创建权限用户完成桌面和 390px 窄屏验收，拆分角色为无编辑控件的标签、负责人/实施方控件正常，控制台无错误；未提交创建动作。上线前仍应由目标测试角色复核其机构数据范围。
 - 发布验证与回退：发布后以主责系统 `SYS-A`、测试协同系统 `SYS-B` 的脱敏工作项验证只读角色标签、双任务创建和工作项字段不变；回退代码不会删除已创建任务，如需业务撤销，按既有删除权限逐项删除。
 
 ## 10. 需求准入
