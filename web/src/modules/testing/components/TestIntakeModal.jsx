@@ -12,11 +12,20 @@ import { apiPost, apiGet } from '../api/index.js';
 
 const TYPE_LABEL = { SIT: '应用组装测试', UAT: '用户测试', NFT: '非功能测试', SEC: '安全测试' };
 
+function systemNames(value) {
+  if (Array.isArray(value)) return value.filter(Boolean).map(String);
+  if (!value) return [];
+  return String(value).split(/[、,，]/).map((name) => name.trim()).filter(Boolean);
+}
+
 function normalizeWorkItem(item) {
+  const mainSystems = item.main_systems_names ?? item.main_systems ?? (item.mainSystemsInfo || []).map((system) => system.sys_name || system.sys_code);
+  const collabTestSystems = item.collab_test_systems_names ?? item.collab_test_systems ?? [];
   return {
     ...item,
     entity_label: item.entity_label || (item.entity_type === 'ticket' ? '工单' : '需求'),
-    main_systems_names: item.main_systems_names || (item.mainSystemsInfo || []).map((system) => system.sys_name || system.sys_code) || [],
+    main_systems_names: systemNames(mainSystems),
+    collab_test_systems_names: systemNames(collabTestSystems),
   };
 }
 
@@ -140,13 +149,19 @@ export default function TestIntakeModal({ open, onClose, onSaved, initialWorkIte
   const filteredCandidates = useMemo(() => {
     const keyword = searchText.trim().toLowerCase();
     if (!keyword) return candidates;
-    return candidates.filter((item) => [item.req_code, item.title, ...(item.main_systems_names || [])].filter(Boolean).join(' ').toLowerCase().includes(keyword));
+    return candidates.filter((item) => [
+      item.req_code,
+      item.title,
+      ...(item.main_systems_names || []),
+      ...(item.collab_test_systems_names || []),
+    ].filter(Boolean).join(' ').toLowerCase().includes(keyword));
   }, [candidates, searchText]);
   const workItemColumns = [
     { title: '类型', dataIndex: 'entity_label', width: 70, render: (value) => <Tag className="status-tag" style={{ margin: 0 }}>{value}</Tag> },
     { title: '需求/工单编号', dataIndex: 'req_code', width: 150 },
     { title: '标题/概述', dataIndex: 'title', ellipsis: true },
     { title: '主责系统', dataIndex: 'main_systems_names', render: (names) => (names || []).join('、') || '—' },
+    { title: '协同测试系统', dataIndex: 'collab_test_systems_names', render: (names) => (names || []).join('、') || '—' },
   ];
   const previewColumns = [
     { title: '建立状态', dataIndex: 'status', width: 96, render: (value, row) => <Tag className={row.exists ? 'status-tag status-tag-final' : 'status-tag status-tag-in-progress'} style={{ margin: 0 }}>{value}</Tag> },
@@ -164,7 +179,7 @@ export default function TestIntakeModal({ open, onClose, onSaved, initialWorkIte
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <div className="form-section-card" style={{ marginBottom: 0 }}>
           <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>1. 选择需求/工单</div>
-          {initialWorkItem ? selectedCard : <><Input.Search placeholder="需求/工单编号、标题/概述、主责系统检索..." value={searchText} onChange={(event) => setSearchText(event.target.value)} size="small" style={{ width: isMobile ? '100%' : 320, marginBottom: 8 }} allowClear />{isMobile ? <List loading={loading} dataSource={filteredCandidates} rowKey="req_code" renderItem={(item) => <List.Item onClick={() => selectWorkItem(item)} style={{ cursor: 'pointer' }}><Radio checked={selectedWorkItem?.req_code === item.req_code} />&nbsp;<strong>{item.req_code}</strong>&nbsp;{item.title}</List.Item>} /> : <Table loading={loading} dataSource={filteredCandidates} columns={workItemColumns} rowKey="req_code" size="small" className="super-compact-table" pagination={{ pageSize: 5, size: 'small', showSizeChanger: false }} rowSelection={{ type: 'radio', selectedRowKeys: selectedWorkItem ? [selectedWorkItem.req_code] : [], onChange: (_, rows) => rows[0] && selectWorkItem(rows[0]) }} onRow={(item) => ({ onClick: () => selectWorkItem(item), style: { cursor: 'pointer' } })} />}</>}
+          {initialWorkItem ? selectedCard : <><Input.Search placeholder="需求/工单编号、标题/概述、主责或协同测试系统检索..." value={searchText} onChange={(event) => setSearchText(event.target.value)} size="small" style={{ width: isMobile ? '100%' : 360, marginBottom: 8 }} allowClear />{isMobile ? <List loading={loading} dataSource={filteredCandidates} rowKey="req_code" renderItem={(item) => <List.Item onClick={() => selectWorkItem(item)} style={{ cursor: 'pointer' }}><Space direction="vertical" size={2}><span><Radio checked={selectedWorkItem?.req_code === item.req_code} />&nbsp;<strong>{item.req_code}</strong>&nbsp;{item.title}</span><span className="lc-muted">主责：{item.main_systems_names.join('、') || '—'}；协同测试：{item.collab_test_systems_names.join('、') || '—'}</span></Space></List.Item>} /> : <Table loading={loading} dataSource={filteredCandidates} columns={workItemColumns} rowKey="req_code" size="small" className="super-compact-table" pagination={{ pageSize: 5, size: 'small', showSizeChanger: false }} rowSelection={{ type: 'radio', selectedRowKeys: selectedWorkItem ? [selectedWorkItem.req_code] : [], onChange: (_, rows) => rows[0] && selectWorkItem(rows[0]) }} onRow={(item) => ({ onClick: () => selectWorkItem(item), style: { cursor: 'pointer' } })} />}</>}
         </div>
         {selectedWorkItem && <div className="form-section-card" style={{ marginBottom: 0 }}><div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>2. 选择承接方式</div><Radio.Group value={splitMode} onChange={(event) => changeSplitMode(event.target.value)} size="small"><Radio value="overall">合并承接</Radio><Radio value="split">拆分承接</Radio></Radio.Group></div>}
         <div className="form-section-card" style={{ marginBottom: 0 }}>
