@@ -5,21 +5,14 @@
  * 作者：hengguan
  */
 
-import { formatBeijingDate } from '../../../../shared/utils/index.js';
+import { formatReleasePointDate, isNumericReleasePoint } from './release-point-format.js';
 
 export const PENDING_RELEASE_POINT = '投产点待定';
 
-const NUMERIC_RELEASE_POINT_RE = /^\d+$/;
 // 投产点日期与变更编号统一使用同一套等宽字体，保证数字在各列表/详情中对齐。
 const RELEASE_POINT_NUMBER_FONT = 'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace';
 
-export function isNumericReleasePoint(value) {
-  return NUMERIC_RELEASE_POINT_RE.test(String(value || ''));
-}
-
-export function formatReleasePointDate(value) {
-  return isNumericReleasePoint(value) && String(value).length === 8 ? formatBeijingDate(value) : String(value || '');
-}
+export { formatReleasePointDate, isNumericReleasePoint } from './release-point-format.js';
 
 // 投产点标签可按场景附带版本类型，供列表、筛选与搜索复用。
 export function releasePointLabelText(point, { includeVersionType = false, separator = ' · ' } = {}) {
