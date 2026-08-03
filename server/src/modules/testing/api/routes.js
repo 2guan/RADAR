@@ -26,7 +26,7 @@ import { assertStatusChangePermission } from '../../settings/process-configurati
 import { exportXlsx, parseXlsx } from '../../../platform/import-export/index.js';
 import {
   calcDeviation, formatCoverageText, generateTestTaskCode,
-  getWorkItem, workItemCodesInReleasePoints, releaseDateMapForCodes,
+  getWorkItem, listWorkItemsForTestIntake, workItemCodesInReleasePoints, releaseDateMapForCodes,
 } from '../../development/index.js';
 import { codePrefix, codeTemplateValues, formatCode } from '../../../shared/utils/code-template.js';
 import { resolveCurrentTaskStatuses } from '../../overview/index.js';
@@ -103,6 +103,33 @@ async function appendOrganizationScope(wh, params, field, user) {
 async function assertWorkItemOrganizationAccess(reqCode, user) {
   const codes = await organizationWorkItemCodes(user);
   if (codes !== null && !codes.includes(reqCode)) throw forbidden('无该机构数据权限');
+}
+
+async function pendingTestIntakeCodes(testType, requestedCodes) {
+  const uniqueCodes = [...new Set((requestedCodes || []).map(String).filter(Boolean))];
+  if (!uniqueCodes.length) return [];
+  const clause = inClause('req_code', uniqueCodes);
+  const existingRows = await all(`SELECT req_code, impl_system, task_name FROM test_task WHERE test_type = ? AND ${clause.where}`, testType, ...clause.params);
+  const existingByCode = new Map();
+  for (const row of existingRows) {
+    if (!existingByCode.has(row.req_code)) existingByCode.set(row.req_code, []);
+    existingByCode.get(row.req_code).push(row);
+  }
+  const pending = [];
+  for (const code of uniqueCodes) {
+    const item = await getWorkItem(code);
+    if (!item) continue;
+    const existing = existingByCode.get(code) || [];
+    const overallExists = existing.some((task) => task.task_name === `${testType}-${item.title}`);
+    const splitSystems = [...new Set([
+      ...(item.main_systems || []),
+      ...(item.collab_dev_systems || []),
+    ])];
+    // 拆分承接的完成态由实施系统覆盖决定。任务名称允许后续编辑，不能作为候选过滤依据。
+    const allSplitExists = splitSystems.length > 0 && splitSystems.every((sysCode) => existing.some((task) => task.impl_system === sysCode));
+    if (!overallExists && !allSplitExists) pending.push(code);
+  }
+  return pending;
 }
 export default async function testTaskRoutes(fastify) {
   const requireTestPerm = async (request, action, testType) => {
@@ -265,29 +292,24 @@ export default async function testTaskRoutes(fastify) {
     if (!TYPE_NAME[testType]) throw badRequest('测试类型非法');
     const requestedCodes = [...new Set((Array.isArray(request.body?.reqCodes) ? request.body.reqCodes : []).map(String).filter(Boolean))].slice(0, 500);
     if (!requestedCodes.length) return ok([]);
-    const scopedCodes = await organizationWorkItemCodes(request.currentUser);
-    const permittedCodes = scopedCodes === null ? requestedCodes : requestedCodes.filter((code) => scopedCodes.includes(code));
-    if (!permittedCodes.length) return ok([]);
-    const clause = inClause('req_code', permittedCodes);
-    const existingRows = await all(`SELECT req_code, impl_system, task_name FROM test_task WHERE test_type = ? AND ${clause.where}`, testType, ...clause.params);
-    const existingByCode = new Map();
-    for (const row of existingRows) {
-      if (!existingByCode.has(row.req_code)) existingByCode.set(row.req_code, []);
-      existingByCode.get(row.req_code).push(row);
-    }
+    return ok(await pendingTestIntakeCodes(testType, requestedCodes));
+  });
+
+  // 测试承接是跨机构动作：仅测试类型创建权限决定候选可见性。
+  fastify.post('/test-tasks/intake-candidates', async (request) => {
+    const { testType } = request.body || {};
+    await requireTestPerm(request, 'create', testType);
+    const candidates = await listWorkItemsForTestIntake(windowIds(request.body || {}));
+    const pendingCodes = new Set(await pendingTestIntakeCodes(testType, candidates.map((item) => item.req_code)));
     const systems = await all('SELECT sys_code, sys_name FROM system');
-    const sysName = new Map(systems.map((system) => [system.sys_code, system.sys_name]));
-    const pending = [];
-    for (const code of permittedCodes) {
-      const item = await getWorkItem(code);
-      if (!item) continue;
-      const existing = existingByCode.get(code) || [];
-      const overallExists = existing.some((task) => task.task_name === `${testType}-${item.title}`);
-      const splitSystems = [...new Set([...(item.main_systems || []), ...(item.collab_test_systems || [])])];
-      const allSplitExists = splitSystems.length > 0 && splitSystems.every((sysCode) => existing.some((task) => task.impl_system === sysCode && task.task_name === `${testType}-${item.title}-${sysName.get(sysCode) || sysCode}`));
-      if (!overallExists && !allSplitExists) pending.push(code);
-    }
-    return ok(pending);
+    const systemNames = new Map(systems.map((system) => [system.sys_code, system.sys_name]));
+    return ok(candidates.filter((item) => pendingCodes.has(item.req_code)).map((item) => ({
+      req_code: item.req_code,
+      title: item.title,
+      entity_type: item.entity_type,
+      entity_label: item.entity_label,
+      main_systems_names: (item.main_systems || []).map((sysCode) => systemNames.get(sysCode) || sysCode),
+    })));
   });
 
   // 测试承接预览
@@ -298,11 +320,10 @@ export default async function testTaskRoutes(fastify) {
     if (!testType) throw badRequest('请选择测试类型');
     const req = await getWorkItem(reqCode);
     if (!req) throw notFound('需求/工单不存在');
-    await assertWorkItemOrganizationAccess(reqCode, request.currentUser);
     const releaseWindow = (await releaseDateMapForCodes([reqCode]))[reqCode];
 
     const main = req.main_systems || [];
-    const collab = req.collab_test_systems || [];
+    const collab = req.collab_dev_systems || [];
 
     const existingTasks = await all('SELECT impl_system, task_code, task_name, status, owner FROM test_task WHERE req_code = ? AND test_type = ?', reqCode, testType);
 
@@ -416,7 +437,6 @@ export default async function testTaskRoutes(fastify) {
     if (!TYPE_NAME[testType]) throw badRequest('测试类型非法');
     const req = await getWorkItem(reqCode);
     if (!req) throw notFound('需求/工单不存在');
-    await assertWorkItemOrganizationAccess(reqCode, request.currentUser);
     const releaseWindow = (await releaseDateMapForCodes([reqCode]))[reqCode];
 
     const main = req.main_systems || [];
@@ -438,7 +458,10 @@ export default async function testTaskRoutes(fastify) {
       }
     }
     if (!targets.length) throw badRequest('请至少选择一个测试任务');
-    const configuredSystems = new Set([...main, ...(req.collab_test_systems || [])]);
+    const configuredSystems = new Set([
+      ...main,
+      ...(req.collab_dev_systems || []),
+    ]);
     if (splitMode !== 'overall' && targets.some((target) => !configuredSystems.has(target.sysCode))) throw badRequest('存在不属于该需求/工单的测试系统');
     for (const target of targets) {
       const assignment = assignmentBySystem.get(target.assignmentKey);

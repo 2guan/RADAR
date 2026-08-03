@@ -6,12 +6,13 @@
  */
 import {
   findRequirementWorkItem, requirementCodesInReleasePoints, requirementReleaseDates,
-  replaceRequirementDevelopmentSystemRoles,
+  listRequirementWorkItemsForTestIntake, replaceRequirementDevelopmentSystemRoles,
 } from '../../requirements/index.js';
 import {
   findTicketWorkItem, ticketCodesInReleasePoints, ticketReleaseDates,
-  replaceTicketDevelopmentSystemRoles,
+  listTicketWorkItemsForTestIntake, replaceTicketDevelopmentSystemRoles,
 } from '../../tickets/index.js';
+import { listReleaseTaskStageTypes } from '../../release/index.js';
 import { parseJsonArray } from '../../../platform/runtime/index.js';
 
 const JSON_FIELDS = ['main_systems', 'collab_dev_systems', 'collab_test_systems', 'proposer'];
@@ -32,6 +33,23 @@ function decode(row) {
 
 export async function getWorkItem(workItemCode) {
   return decode(await findRequirementWorkItem(workItemCode)) || decode(await findTicketWorkItem(workItemCode));
+}
+
+/**
+ * Public testing-read contract. Test intake deliberately does not inherit the
+ * source work-item organization scope; the caller owns its test-create RBAC.
+ */
+export async function listWorkItemsForTestIntake(releasePointIds) {
+  const [requirements, tickets, releaseCodes] = await Promise.all([
+    listRequirementWorkItemsForTestIntake(),
+    listTicketWorkItemsForTestIntake(),
+    workItemCodesInReleasePoints(releasePointIds),
+  ]);
+  const workItems = [...requirements, ...tickets].map(decode);
+  const releaseStageTypes = await listReleaseTaskStageTypes(workItems.map((item) => item.req_code));
+  const allowedCodes = releaseCodes === null ? null : new Set(releaseCodes);
+  return workItems.filter((item) => (!allowedCodes || allowedCodes.has(item.req_code))
+    && !['in-progress', 'final'].includes(releaseStageTypes[item.req_code]));
 }
 
 /** Public orchestration contract: source modules retain their own table write ownership. */

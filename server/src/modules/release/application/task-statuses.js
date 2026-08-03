@@ -6,6 +6,7 @@
  */
 
 import { all } from '../../../platform/persistence/index.js';
+import { statusTypeForProcessStatus } from '../../settings/process-configuration/index.js';
 
 /** 批量取得工作项关联的投产审批状态；保留既有“最后创建任务为代表”的口径。 */
 export async function listReleaseTaskStatuses(workItemCodes = []) {
@@ -20,4 +21,17 @@ export async function listReleaseTaskStatuses(workItemCodes = []) {
     result[row.req_code] = row;
     return result;
   }, {});
+}
+
+/**
+ * Public read contract for lifecycle candidates that must retain the release
+ * stage exclusion without reading the release module's owned table directly.
+ */
+export async function listReleaseTaskStageTypes(workItemCodes = []) {
+  const statuses = await listReleaseTaskStatuses(workItemCodes);
+  const entries = await Promise.all(Object.entries(statuses).map(async ([code, task]) => {
+    const stateType = await statusTypeForProcessStatus(task.status);
+    return [code, stateType === 'inProgress' ? 'in-progress' : stateType];
+  }));
+  return Object.fromEntries(entries);
 }

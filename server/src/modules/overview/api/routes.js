@@ -36,24 +36,17 @@ function nodeState(tasks) {
 
 /**
  * 取需求实施机构逻辑：
- * 1. 第一优先级：取需求关联的主责系统的第一个开发任务的开发实施方（impl_org）。
+ * 1. 第一优先级：取需求/工单自身填写的实施机构（implementation_org）。
  * 2. 第二优先级：取系统的第一个主责系统对应的所属机构（org）。
  * 3. 第三优先级：默认兜底值 "未分配机构"。
  */
-export function reqOrg(req, sysMap, devMap) {
+export function reqOrg(req, sysMap) {
+  const implementationOrg = String(req.implementation_org || '').trim();
+  if (implementationOrg) return implementationOrg;
+
   const main = parseJsonArray(req.main_systems);
 
-  // 第一优先级：取需求关联的主责系统的第一个开发任务的开发实施方
-  if (main.length) {
-    const devTasks = devMap[req.req_code] || [];
-    const mainDevTasks = devTasks.filter((t) => main.includes(t.impl_system));
-    if (mainDevTasks.length) {
-      const org = mainDevTasks[0].impl_org;
-      if (org) return org;
-    }
-  }
-
-  // 第二优先级：取系统的第一个主责系统对应的所属机构
+  // 未填写工作项实施机构时，才按第一个主责系统的所属机构回退。
   if (main.length) {
     const org = sysMap[main[0]]?.org;
     if (org) return org;
@@ -301,7 +294,7 @@ export default async function overviewRoutes(fastify) {
     const groups = {};
     for (const r of workItems) {
       if (isOrganizationRestricted(request.currentUser) && !workItemMatchesOrganization(r, await resolveOrganizationValues(request.currentUser?.org), Object.fromEntries(Object.entries(sysMap).map(([code, system]) => [code, system.org])))) continue;
-      const org = reqOrg(r, sysMap, devMap);
+      const org = reqOrg(r, sysMap);
       const chain = buildChain(r, devMap, testMap, rtMap, r.firstLabel);
       const mainSystems = parseJsonArray(r.main_systems);
       const collabDevSystems = parseJsonArray(r.collab_dev_systems);
@@ -578,7 +571,7 @@ export default async function overviewRoutes(fastify) {
 
     const filteredReqs = [];
     for (const r of workItems) {
-      const org = reqOrg(r, sysMap, devMap);
+      const org = reqOrg(r, sysMap);
 
       const testBucket = testMap[r.req_code] || {};
       const chain = buildChain(

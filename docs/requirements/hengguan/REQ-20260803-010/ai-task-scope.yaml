@@ -1,0 +1,147 @@
+{
+  "schema_version": "1.0",
+  "requirement": {
+    "id": "REQ-20260803-010",
+    "ref": "hengguan/REQ-20260803-010",
+    "title": "承接候选与版本概览实施机构分组",
+    "status": "ready",
+    "document": "docs/requirements/hengguan/REQ-20260803-010/requirement.md",
+    "internet_ai_coding_allowed": true
+  },
+  "assignment": {
+    "developer": "hengguan",
+    "module": "governance",
+    "module_owner": "hengguan",
+    "branch": "hengguan/REQ-20260803-010-test-intake-systems",
+    "base_branch": "origin/main",
+    "worktree": "/Volumes/GuanMac/Code/RADAR"
+  },
+  "ai": {
+    "enabled": true,
+    "approved_service": "Codex desktop",
+    "model": "approved-by-user",
+    "contains_confidential_information": false,
+    "context_sanitized": true,
+    "production_access": false
+  },
+  "scope": {
+    "writable_paths": [
+      "docs/requirements/hengguan/REQ-20260803-010/**",
+      "server/src/modules/testing/api/routes.js",
+      "server/src/modules/development/index.js",
+      "server/src/modules/development/application/work-items.js",
+      "server/src/modules/requirements/index.js",
+      "server/src/modules/tickets/index.js",
+      "server/src/modules/release/index.js",
+      "server/src/modules/release/application/task-statuses.js",
+      "server/src/modules/overview/api/routes.js",
+      "web/src/modules/development/components/DevIntakeModal.jsx",
+      "web/src/modules/testing/components/TestIntakeModal.jsx",
+      "server/test/api-rbac.test.js",
+      "server/test/lib.test.js",
+      "web/test/test-intake-modal.test.mjs"
+    ],
+    "read_only_paths": [
+      "AGENTS.md",
+      "DESIGN.md",
+      "docs/governance/**",
+      "docs/architecture/**",
+      "governance/modules.yaml",
+      ".agents/skills/radar-delivery-engineer/**",
+      "server/src/platform/**",
+      "server/src/shared/**",
+      "server/src/modules/identity-access/**",
+      "server/src/modules/testing/index.js",
+      "server/src/modules/development/api/**",
+      "server/src/modules/requirements/routes.js",
+      "server/src/modules/tickets/routes.js",
+      "web/src/platform/**",
+      "web/src/shared/**"
+    ],
+    "forbidden_paths": [
+      "server/src/platform/auth/**",
+      "server/src/platform/persistence/**",
+      "server/src/platform/audit/**",
+      "server/migrations/**",
+      "server/scripts/mock-data.js",
+      ".github/**",
+      "docs/reports/**",
+      ".env",
+      "**/.env",
+      "**/*secret*",
+      "**/*credential*",
+      "attachments/**",
+      "data/**"
+    ]
+  },
+  "public_capability_change": {
+    "required": true,
+    "shared_change_issue": "hengguan/REQ-20260803-010",
+    "target_modules": ["testing", "development", "requirements", "tickets", "release", "overview"],
+    "new_methods": [
+      "listRequirementWorkItemsForTestIntake",
+      "listTicketWorkItemsForTestIntake",
+      "listReleaseTaskStageTypes",
+      "listWorkItemsForTestIntake"
+    ],
+    "existing_method_changed": true,
+    "semantic_name_confirmed": true,
+    "old_behavior_preserved": true,
+    "compatibility_note": "常规需求/工单列表和测试任务查询的数据范围保持不变；测试承接新增最小候选接口，仅供对应测试类型 create 权限使用，既有承接 HTTP 路径和响应包装保持兼容，并继续过滤投产处理中或已结束、整体已承接或拆分已覆盖全部参与系统的工作项。版本概览卡片及其导出筛选的实施机构分组改为优先工作项填写值、为空时主责系统所属机构。",
+    "owner_approved": true,
+    "owner_review_required_before_merge": true
+  },
+  "database": {
+    "changed": false,
+    "migration_paths": [],
+    "mysql8_compatible": true,
+    "historical_data_impact": "不修改 schema 或历史任务。",
+    "rollback_or_compensation": "回退本需求代码即可恢复原有测试承接范围；无需数据补偿。"
+  },
+  "external_access": {
+    "changed": false,
+    "api_paths": [],
+    "readable_field_whitelist": [],
+    "writable_field_whitelist": [],
+    "action_whitelist": [],
+    "audit_required": false
+  },
+  "required_tests": [
+    {"name": "test_intake_modal", "command": "node --test web/test/test-intake-modal.test.mjs"},
+    {"name": "api", "command": "npm run test:api --prefix server"},
+    {"name": "permission", "command": "npm run test:rbac --prefix server"},
+    {"name": "scope", "command": "node scripts/check-ai-scope.mjs --scope docs/requirements/hengguan/REQ-20260803-010/ai-task-scope.yaml --base origin/main --head HEAD"},
+    {"name": "ui_data_sources", "command": "node scripts/check-ui-data-sources.mjs"},
+    {"name": "module_boundaries", "command": "node scripts/check-module-boundaries.mjs"},
+    {"name": "build", "command": "npm run build --prefix web"},
+    {"name": "runtime", "command": "node scripts/verify-app-runtime.mjs"},
+    {"name": "governance", "command": "node scripts/check-governance.mjs && node scripts/check-code-comments.mjs && git diff --check"},
+    {"name": "browser", "command": "本地脱敏管理员在桌面及移动视口验证跨机构候选、仅协同拆分及只读角色"}
+  ],
+  "risk": {
+    "level": "important",
+    "reasons": ["测试承接的数据范围例外", "跨模块公开只读候选契约"],
+    "required_approvals": ["hengguan"]
+  },
+  "completion": {
+    "changed_files_report_required": true,
+    "test_result_report_required": true,
+    "known_risks_report_required": true,
+    "rollback_report_required": true,
+    "requirement_acceptance_required": true,
+    "status": "implemented_and_verified",
+    "modified_files": [
+      "testing 承接 API/弹窗、development 聚合契约与开发承接弹窗、requirements/tickets/release 最小公开读取契约、overview 实施机构分组、API/前端回归测试和本需求文档。"
+    ],
+    "tests": [
+      "node --test web/test/test-intake-modal.test.mjs：3 passed，覆盖开发/测试承接手机端每页 5 条、搜索和重载重置页码。",
+      "npm test --prefix server：38 passed、1 skipped；npm run test:rbac --prefix server、npm run test:api --prefix server：各 30 passed、5 skipped；其中版本概览覆盖工作项填写实施机构优先、主责系统机构回退及筛选口径。",
+      "UI 数据源、模块边界、前端构建与隔离运行验证通过；本次手机端浏览器验收受本地浏览器未登录限制，待使用有承接权限的账号补验。"
+    ],
+    "risks": [
+      "测试承接是限定到对应 test.<type>:create 的跨机构例外；普通工作项与测试任务读取范围不变。",
+      "手机端分页为前端本地候选分页；上线后需以有承接权限账号复验开发和测试入口的切页与搜索重置。",
+      "版本概览分组与实施机构筛选统一优先工作项填写机构；历史空值继续回退主责系统所属机构。"
+    ]
+  }
+}

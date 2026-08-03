@@ -18,6 +18,16 @@ export async function findTicketWorkItem(workItemCode) {
   return row ? { ...row, workItemType: TICKET_WORK_ITEM_TYPE, workItemCode: row.ticket_code } : null;
 }
 
+/** Minimal public read DTO for downstream test-intake candidate aggregation. */
+export async function listTicketWorkItemsForTestIntake() {
+  const rows = await all('SELECT ticket_code, title, main_systems, collab_test_systems FROM ticket');
+  return rows.map((row) => ({
+    ...row,
+    workItemType: TICKET_WORK_ITEM_TYPE,
+    workItemCode: row.ticket_code,
+  }));
+}
+
 export async function ticketCodesInReleasePoints(ids) {
   if (!ids?.length) return null;
   const rows = await all('SELECT ticket_code AS code FROM ticket');

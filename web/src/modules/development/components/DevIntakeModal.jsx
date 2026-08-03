@@ -51,6 +51,7 @@ export default function DevIntakeModal({ open, onClose, onSaved, initialWorkItem
   const [orgOptions, setOrgOptions] = useState([]);
   const [userOptions, setUserOptions] = useState([]);
   const [searchText, setSearchText] = useState('');
+  const [candidatePage, setCandidatePage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -82,6 +83,7 @@ export default function DevIntakeModal({ open, onClose, onSaved, initialWorkItem
     let active = true;
     // 每次打开都清空上一次选择，避免从概览切换工作项时沿用旧系统、负责人或实施方。
     setSearchText('');
+    setCandidatePage(1);
     setCandidates([]);
     setSelectedWorkItem(null);
     setPreviewList([]);
@@ -100,7 +102,7 @@ export default function DevIntakeModal({ open, onClose, onSaved, initialWorkItem
     } else {
       setLoading(true);
       loadCandidates(releasePointIds)
-        .then((items) => { if (active) setCandidates(items); })
+        .then((items) => { if (active) { setCandidates(items); setCandidatePage(1); } })
         .catch((error) => { if (active) message.error(error.message || '加载可承接需求/工单失败'); })
         .finally(() => { if (active) setLoading(false); });
     }
@@ -179,8 +181,8 @@ export default function DevIntakeModal({ open, onClose, onSaved, initialWorkItem
         <div className="form-section-card" style={{ marginBottom: 0 }}>
           <div className="form-section-title" style={{ marginTop: 0, marginBottom: 8 }}>1. 选择需求/工单</div>
           {initialWorkItem ? selectedCard : <>
-            <Input.Search placeholder="需求/工单编号、标题/概述、主责系统检索..." value={searchText} onChange={(event) => setSearchText(event.target.value)} size="small" style={{ width: isMobile ? '100%' : 320, marginBottom: 8 }} allowClear />
-            {isMobile ? <List loading={loading} dataSource={filteredCandidates} rowKey="req_code" renderItem={(item) => <List.Item onClick={() => selectWorkItem(item)} style={{ cursor: 'pointer' }}><Radio checked={selectedWorkItem?.req_code === item.req_code} />&nbsp;<strong>{item.req_code}</strong>&nbsp;{item.title}</List.Item>} /> : <Table loading={loading} dataSource={filteredCandidates} columns={workItemColumns} rowKey="req_code" size="small" className="super-compact-table" pagination={{ pageSize: 5, size: 'small', showSizeChanger: false }} rowSelection={{ type: 'radio', selectedRowKeys: selectedWorkItem ? [selectedWorkItem.req_code] : [], onChange: (_, rows) => rows[0] && selectWorkItem(rows[0]) }} onRow={(item) => ({ onClick: () => selectWorkItem(item), style: { cursor: 'pointer' } })} />}
+            <Input.Search placeholder="需求/工单编号、标题/概述、主责系统检索..." value={searchText} onChange={(event) => { setSearchText(event.target.value); setCandidatePage(1); }} size="small" style={{ width: isMobile ? '100%' : 320, marginBottom: 8 }} allowClear />
+            {isMobile ? <List loading={loading} dataSource={filteredCandidates} rowKey="req_code" pagination={filteredCandidates.length > 5 ? { current: candidatePage, pageSize: 5, total: filteredCandidates.length, size: 'small', showSizeChanger: false, onChange: setCandidatePage } : false} renderItem={(item) => <List.Item onClick={() => selectWorkItem(item)} style={{ cursor: 'pointer' }}><Radio checked={selectedWorkItem?.req_code === item.req_code} />&nbsp;<strong>{item.req_code}</strong>&nbsp;{item.title}</List.Item>} /> : <Table loading={loading} dataSource={filteredCandidates} columns={workItemColumns} rowKey="req_code" size="small" className="super-compact-table" pagination={{ pageSize: 5, size: 'small', showSizeChanger: false }} rowSelection={{ type: 'radio', selectedRowKeys: selectedWorkItem ? [selectedWorkItem.req_code] : [], onChange: (_, rows) => rows[0] && selectWorkItem(rows[0]) }} onRow={(item) => ({ onClick: () => selectWorkItem(item), style: { cursor: 'pointer' } })} />}
           </>}
         </div>
         <div className="form-section-card" style={{ marginBottom: 0 }}>
