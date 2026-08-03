@@ -492,6 +492,7 @@ body {
 .chain-dot.done { background: var(--radar-primary); border-color: var(--radar-primary); }
 .chain-dot.doing { background: var(--radar-surface); border-color: var(--radar-primary); box-shadow: 0 0 0 3px var(--radar-primary-fade); }
 .chain-label { font-size: 11px; line-height: 16px; margin-top: 0; margin-bottom: 4px; color: var(--radar-text-secondary); white-space: nowrap; font-weight: 500; }
+.chain-label-mobile { display: none; }
 .chain-label.doing { color: var(--radar-primary); font-weight: 600; }
 .chain-status { margin-top: 4px; }
 /* 阶段状态标签：去掉底色，仅保留文字与边框颜色 */
@@ -983,6 +984,8 @@ body {
   border: 1px solid var(--radar-border); background: var(--radar-surface); padding: 14px; height: 100%;
 }
 .ov-req-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+.ov-req-title { font-weight: 600; font-size: 15px; margin: 8px 0 6px; }
+.ov-req-tags { margin-bottom: 12px; }
 .ov-chain-wrap { overflow-x: auto; padding-bottom: 2px; }
 
 /* 需求/任务编号 主色胶囊 */
@@ -1319,23 +1322,32 @@ body {
   .stage-config-editor-modal .form-section-card { padding: 10px 12px; }
 
   /* 版本概览的卡片不需要保留桌面端的双层留白。 */
-  .ov-page-card > .ant-card-head { min-height: 42px; padding-inline: 10px; }
-  .ov-page-card > .ant-card-head .ant-card-head-title { padding-block: 10px; }
-  .ov-page-card > .ant-card-body { padding: 10px !important; }
-  .ov-group-card .ant-card-head { min-height: 40px; padding-inline: 10px; }
-  .ov-group-card .ant-card-head-title { padding-block: 9px; }
-  .ov-group-card .ant-card-body { padding: 10px !important; }
-  .ov-group-card .ant-row { row-gap: 10px !important; }
-  .ov-req-card { padding: 10px; }
+  .ov-page-card > .ant-card-head { min-height: 38px; padding-inline: 8px; }
+  .ov-page-card > .ant-card-head .ant-card-head-title { padding-block: 8px; }
+  .ov-page-card > .ant-card-body { padding: 6px !important; }
+  .ov-page-card .radar-filter-bar { padding: 6px 8px; margin-bottom: 8px; gap: 8px; }
+  .ov-page-card .radar-filter-main,
+  .ov-page-card .radar-filter-inputs { gap: 8px; }
+  .ov-page-card .radar-filter-actions-wrapper { margin-top: 4px; }
+  .ov-group-card { margin-bottom: 8px !important; }
+  .ov-group-card .ant-card-head { min-height: 36px; padding-inline: 8px; }
+  .ov-group-card .ant-card-head-title { padding-block: 7px; }
+  .ov-group-card .ant-card-body { padding: 8px !important; }
+  .ov-group-card .ant-row { row-gap: 8px !important; }
+  .ov-req-card { padding: 8px; }
+  .ov-req-title { margin: 6px 0 4px; }
+  .ov-req-tags { margin-bottom: 8px; }
 
   /* 概览的流程节点始终压缩到卡片宽度内。标签允许换行，避免任一阶段把整行撑出横向滚动条。 */
   .ov-chain-wrap { overflow: hidden; padding-bottom: 0; }
   .ov-chain-wrap .chain-bar { min-width: 0; }
   .ov-chain-wrap .chain-step { flex: 1 1 0; min-width: 0; padding: 0; }
   .ov-chain-wrap .chain-label {
-    min-height: 28px; margin-bottom: 3px; overflow-wrap: anywhere; text-align: center;
+    min-height: 16px; margin-bottom: 3px; overflow-wrap: anywhere; text-align: center;
     white-space: normal;
   }
+  .ov-chain-wrap .chain-label.has-mobile-label .chain-label-full { display: none; }
+  .ov-chain-wrap .chain-label-mobile { display: inline; }
 
   /* 其他页面的流程时间轴仍可横向查看全部阶段。 */
   .chain-step { flex-basis: 46px; padding: 0; }

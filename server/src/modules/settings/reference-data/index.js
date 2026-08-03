@@ -14,7 +14,7 @@ export {
 } from './application/development-intake-overrides.js';
 export { inClause, windowIds } from './application/window.js';
 export {
-  resolveDictAttr, resolveExistingDictAttr, resolveOrganizationValues, resolveSystemCode, resolveSystemCodes, resolveReleasePoint, formatAttachments,
+  resolveDictAttr, resolveExistingDictAttr, getDictDisplayMap, resolveOrganizationValues, resolveSystemCode, resolveSystemCodes, resolveReleasePoint, formatAttachments,
 } from './application/resolver.js';
 export { cascadeDictRename, cascadeSystemRename } from './application/dict-cascade.js';
 export { MODULE_CONTRACT as referenceDataContract } from './contracts/index.js';

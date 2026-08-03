@@ -783,17 +783,20 @@ export default function Overview() {
                       </div>
 
                       {/* 标题/概述（编号下方，纯文本不加框） */}
-                      <div style={{ fontWeight: 600, fontSize: 15, margin: '8px 0 6px' }}>{c.title}</div>
+                      <div className="ov-req-title">{c.title}</div>
 
                       {/* 系统名称 + 所属机构（标签） */}
-                      <Space size={6} wrap style={{ marginBottom: 12 }}>
+                      <Space className="ov-req-tags" size={6} wrap>
                         <Tag className="status-tag tag-system" style={{ borderRadius: 2, margin: 0 }}>{c.systemName}</Tag>
                         <Tag className="status-tag tag-org" style={{ borderRadius: 2, margin: 0 }}>{c.systemOrg}</Tag>
                       </Space>
 
                       {/* 进度条 + 各阶段状态标签 */}
                       <div className="ov-chain-wrap">
-                        <ChainBar nodes={c.nodes} />
+                        <ChainBar
+                          nodes={c.nodes}
+                          mobileLabels={{ SIT: 'SIT', UAT: 'UAT', NFT: 'NFT', SEC: 'SEC' }}
+                        />
                       </div>
                     </div>
                   </Col>

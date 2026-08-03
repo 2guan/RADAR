@@ -10,7 +10,7 @@ import { get, all, run, tx, listQuery } from '../../../platform/persistence/inde
 import { hashPassword, validatePasswordComplexity, getSecurityConfig } from '../../../platform/auth/index.js';
 import { exportXlsx, parseXlsx } from '../../../platform/import-export/index.js';
 import { ok, notFound, badRequest, sanitizeText } from '../../../platform/runtime/index.js';
-import { resolveDictAttr } from '../../settings/reference-data/index.js';
+import { getDictDisplayMap, resolveDictAttr, resolveExistingDictAttr } from '../../settings/reference-data/index.js';
 import { resolveEffectiveAllOrgAccess } from '../../../shared/utils/organization-scope.js';
 
 // 导出列定义（不含密码）
@@ -47,6 +47,15 @@ async function resolveRoleCodes(text) {
   if (!text) return [];
   const parts = String(text).split(/[、,，;\s|]+/).map(p => p.trim()).filter(Boolean);
   return Promise.all(parts.map(async (p) => await resolveRoleCode(p) || p));
+}
+
+/** 用户所属机构只保存 org 属性值；管理端和 Excel 可输入对应显示值。 */
+async function normalizeOrganization(value) {
+  const text = String(value || '').trim();
+  if (!text) return null;
+  const attrValue = await resolveExistingDictAttr('org', text);
+  if (!attrValue) throw badRequest(`所属机构 [${text}] 不存在或已停用`);
+  return attrValue;
 }
 
 /** 统一的人员查询过滤条件构建器 */
@@ -136,7 +145,11 @@ export default async function userRoutes(fastify) {
       baseParams,
       select: 'id, phone, name, org, all_org_access_override, status, is_super, created_at, login_fail_count, lockout_until',
     });
-    result.list = await Promise.all(result.list.map(withEffectiveAccess));
+    const orgDisplayMap = await getDictDisplayMap('org');
+    result.list = await Promise.all(result.list.map((user) => withEffectiveAccess({
+      ...user,
+      org_display: orgDisplayMap[user.org] || user.org || null,
+    })));
     return ok(result);
   });
 
@@ -159,7 +172,8 @@ export default async function userRoutes(fastify) {
   fastify.get('/users/:id', { preHandler: fastify.requirePerm('user', 'view') }, async (request) => {
     const u = await get('SELECT id, phone, name, org, all_org_access_override, status, is_super, login_fail_count, lockout_until FROM user WHERE id = ?', request.params.id);
     if (!u) throw notFound();
-    return ok(await withEffectiveAccess(u));
+    const orgDisplayMap = await getDictDisplayMap('org');
+    return ok(await withEffectiveAccess({ ...u, org_display: orgDisplayMap[u.org] || u.org || null }));
   });
 
   // 解锁用户（重置登录失败计数与锁定时间）
@@ -190,6 +204,7 @@ export default async function userRoutes(fastify) {
       throw badRequest(`密码不符合复杂度要求（长度不能小于 ${minLength} 位，且必须包含大小写字母、数字和特殊字符）`);
     }
 
+    org = await normalizeOrganization(org);
     const accessOverride = parseAllOrgAccessOverride(all_org_access_override, { allowUndefined: true });
     const id = await tx(async () => {
       const res = await run(
@@ -209,11 +224,12 @@ export default async function userRoutes(fastify) {
     if (!old) throw notFound();
     const { name: rawName, org, status, roles, all_org_access_override } = request.body || {};
     const name = rawName !== undefined ? sanitizeText(rawName) : undefined;
+    const normalizedOrg = org === undefined ? old.org : await normalizeOrganization(org);
     const accessOverride = parseAllOrgAccessOverride(all_org_access_override, { allowUndefined: true });
     await tx(async () => {
       await run(
         `UPDATE user SET name=?, org=?, all_org_access_override=?, status=?, updated_at=datetime('now','localtime') WHERE id=?`,
-        name ?? old.name, org ?? old.org, accessOverride === undefined ? old.all_org_access_override : accessOverride, status ?? old.status, id,
+        name ?? old.name, normalizedOrg, accessOverride === undefined ? old.all_org_access_override : accessOverride, status ?? old.status, id,
       );
       // 角色可自由编辑（含超级管理员）；超管权限源于 is_super 标识，与角色无关，不会因改角色而丢失
       if (roles !== undefined) await setUserRoles(id, roles);
@@ -258,9 +274,7 @@ export default async function userRoutes(fastify) {
       select: 'id, phone, name, org, all_org_access_override, status, is_super',
     });
 
-    const orgsAll = await all("SELECT attr_value, display_value FROM dict_item WHERE category = 'org'");
-    const orgMap = {};
-    for (const o of orgsAll) orgMap[o.attr_value] = o.display_value;
+    const orgMap = await getDictDisplayMap('org');
 
     const rows = await Promise.all(result.list.map(async (u) => {
       const enriched = await withEffectiveAccess(u);
@@ -299,9 +313,7 @@ export default async function userRoutes(fastify) {
     const details = [];
 
     // 载入机构和角色映射用于变化展示及解析
-    const orgsAll = await all("SELECT attr_value, display_value FROM dict_item WHERE category = 'org'");
-    const orgMap = {};
-    for (const o of orgsAll) orgMap[o.attr_value] = o.display_value;
+    const orgMap = await getDictDisplayMap('org');
 
     const rolesAll = await all('SELECT code, name FROM role');
     const roleNameMap = {};
@@ -320,7 +332,7 @@ export default async function userRoutes(fastify) {
           if (!phone) throw new Error('手机号不能为空');
 
           // 兼容性字典转换
-          const resolvedOrg = await resolveDictAttr('org', r.org);
+          const resolvedOrg = await normalizeOrganization(r.org);
           const resolvedStatus = await resolveDictAttr('user_status', r.status) || '启用';
 
           const exists = await get('SELECT * FROM user WHERE phone = ?', phone);

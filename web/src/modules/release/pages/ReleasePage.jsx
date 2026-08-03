@@ -101,7 +101,7 @@ export default function Release() {
     },
     {
       title: '实施机构', dataIndex: 'impl_org', key: 'impl_org', sortKey: 'impl_org', width: 110, ellipsis: true,
-      render: (v) => v || '—',
+      render: (v, row) => row.impl_org_display || v || '—',
     },
     {
       title: '变更编号',
@@ -168,21 +168,16 @@ export default function Release() {
           <Space direction="vertical" size={4} style={{ width: '100%' }}>
             <Space style={{ justifyContent: 'space-between', width: '100%' }}>
               <strong>{r.code}</strong>
-              <Space size={4}><TaskStatusBadge shortStatus={r.task_status_short} status={r.task_status_value} fullStatus={r.task_status} /><StatusBadge status={r.release_status} />{r.review_status && <StatusBadge status={r.review_status} />}</Space>
+              <Space size={4} wrap><StatusBadge status={r.release_status} />{r.review_status ? <StatusBadge status={r.review_status} /> : <span>—</span>}</Space>
             </Space>
+            <div style={{ fontSize: 12, color: 'var(--radar-text-secondary)' }}>申请投产点：<ReleasePointText value={r.release_date} /></div>
             <div>{r.title}</div>
-            {Array.isArray(r.change_codes) && r.change_codes.length > 0 && (
-              <div style={{ fontSize: '11px', color: 'var(--radar-text-secondary)', display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <span>变更编号：</span>
-                {r.change_codes.map((code) => <span key={code} style={monoStyle}>{code}</span>)}
-              </div>
-            )}
-            {r.impl_org && (
-              <div style={{ fontSize: '11px', color: 'var(--radar-text-secondary)' }}>实施机构：{r.impl_org}</div>
-            )}
-            {r.release_date && (
-              <div style={{ fontSize: '11px', color: 'var(--radar-text-secondary)' }}>申请投产点：<ReleasePointText value={r.release_date} /></div>
-            )}
+            <div style={{ fontSize: 12, color: 'var(--radar-text-secondary)' }}>实施机构：{r.impl_org_display || r.impl_org || '—'}</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center', fontSize: 12, color: 'var(--radar-text-secondary)' }}>
+              <span>主责系统：</span>
+              {(r.main_systems_names || []).map((name) => <Tag key={name} className="status-tag tag-system" style={{ borderRadius: 2, margin: 0 }}>{name}</Tag>)}
+              {!r.main_systems_names?.length && <span>—</span>}
+            </div>
           </Space>
         )}
       />

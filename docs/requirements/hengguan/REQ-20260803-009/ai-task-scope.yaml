@@ -1,71 +1,60 @@
 {
   "schema_version": "1.0",
-  "requirement": {
-    "id": "REQ-20260803-009",
-    "ref": "hengguan/REQ-20260803-009",
-    "title": "交付件预览同源代理路径",
-    "status": "ready",
-    "document": "docs/requirements/hengguan/REQ-20260803-009/requirement.md",
-    "internet_ai_coding_allowed": true
-  },
-  "assignment": {
-    "developer": "hengguan",
-    "module": "governance",
-    "module_owner": "hengguan",
-    "branch": "hengguan/REQ-20260803-009-same-origin-preview",
-    "base_branch": "origin/main",
-    "worktree": "codex-desktop-current-worktree"
-  },
-  "ai": {
-    "enabled": true,
-    "approved_service": "Codex desktop",
-    "model": "approved-by-user",
-    "contains_confidential_information": false,
-    "context_sanitized": true,
-    "production_access": false
-  },
+  "requirement": {"id": "REQ-20260803-009", "ref": "hengguan/REQ-20260803-009", "title": "配置属性值存储与显示值展示统一", "status": "ready", "document": "docs/requirements/hengguan/REQ-20260803-009/requirement.md", "internet_ai_coding_allowed": true},
+  "assignment": {"developer": "hengguan", "module": "governance", "module_owner": "hengguan", "branch": "hengguan/REQ-20260803-009-config-display-values", "base_branch": "origin/main", "worktree": "codex-desktop-current-worktree"},
+  "ai": {"enabled": true, "approved_service": "Codex desktop", "model": "approved-by-user", "contains_confidential_information": false, "context_sanitized": true, "production_access": false},
   "scope": {
     "writable_paths": [
       "docs/requirements/hengguan/REQ-20260803-009/**",
-      ".env.example",
-      "server/src/platform/attachments/preview.js",
-      "server/test/api-rbac.test.js"
+      "server/src/bootstrap/**",
+      "server/scripts/mock-data.js",
+      "server/scripts/export-local-stage-content-seed.js",
+      "server/src/shared/**",
+      "server/src/platform/persistence/migrations/**",
+      "server/src/modules/settings/**",
+      "server/src/modules/requirements/**",
+      "server/src/modules/tickets/**",
+      "server/src/modules/development/**",
+      "server/src/modules/testing/**",
+      "server/src/modules/release/**",
+      "server/src/modules/overview/**",
+      "server/src/modules/dashboard/**",
+      "server/src/modules/issues/**",
+      "server/src/modules/identity-access/**",
+      "web/src/shared/**",
+      "web/src/modules/settings/**",
+      "web/src/modules/requirements/**",
+      "web/src/modules/tickets/**",
+      "web/src/modules/development/**",
+      "web/src/modules/testing/**",
+      "web/src/modules/release/**",
+      "web/src/modules/overview/**",
+      "web/src/modules/dashboard/**",
+      "web/src/modules/issues/**",
+      "web/src/modules/identity-access/**",
+      "web/src/platform/layout/**",
+      "web/src/styles.css",
+      "server/test/**",
+      "web/test/**"
     ],
-    "read_only_paths": [
-      "AGENTS.md",
-      "docs/governance/**",
-      "governance/modules.yaml",
-      ".agents/skills/radar-delivery-engineer/**",
-      "server/src/modules/settings/application/deliverable-preview-settings.js",
-      "server/src/platform/attachments/api/routes.js",
-      "web/src/platform/attachments/AttachmentField.jsx"
-    ],
-    "forbidden_paths": [".github/**", "docs/reports/**", ".env", "**/*secret*", "**/*credential*", "attachments/**", "data/**", "tools/**"]
+    "read_only_paths": ["AGENTS.md", "DESIGN.md", "docs/governance/**", "docs/architecture/**", "governance/modules.yaml", ".agents/skills/radar-delivery-engineer/**", "server/src/platform/auth/**", "server/src/platform/import-export/**", "server/src/platform/persistence/index.js", "server/src/platform/runtime/**", "web/src/platform/api.js"],
+    "forbidden_paths": [".github/**", "docs/reports/**", ".env", "**/.env", "**/*secret*", "**/*credential*", "attachments/**", "data/**"]
   },
-  "public_capability_change": {
-    "required": true,
-    "shared_change_issue": "hengguan/REQ-20260803-009",
-    "target_modules": ["governance", "platform/attachments"],
-    "new_methods": [],
-    "existing_method_changed": true,
-    "semantic_name_confirmed": true,
-    "old_behavior_preserved": true,
-    "compatibility_note": "预览会话仍返回 previewUrl 和 expiresAt，保持签名、授权、错误和直连路径兼容；当规范地址含代理路径时 previewUrl 改为同源绝对路径，浏览器按当前入口解析。",
-    "owner_approved": true,
-    "owner_review_required_before_merge": true
-  },
-  "database": {"changed": false, "migration_paths": [], "mysql8_compatible": true, "historical_data_impact": "无历史数据修改。", "rollback_or_compensation": "回退预览路径构造代码，无数据补偿。"},
+  "public_capability_change": {"required": true, "shared_change_issue": "hengguan/REQ-20260803-009", "target_modules": ["governance", "shared/contracts", "platform/persistence", "platform/import-export", "settings", "identity-access", "requirements", "tickets", "development", "testing", "release", "overview", "dashboard", "issues", "platform/runtime"], "new_methods": ["受控配置属性值解析与显示值映射"], "existing_method_changed": true, "semantic_name_confirmed": true, "old_behavior_preserved": true, "compatibility_note": "既有字段、API 包装和导入输入兼容；显示值仍可作为导入兼容输入，但所有新写入规范为属性值，读取/导出转为显示值。", "owner_approved": true, "owner_review_required_before_merge": true},
+  "database": {"changed": true, "migration_paths": ["server/src/platform/persistence/migrations/**", "server/src/platform/persistence/migrations/tdsql/**"], "mysql8_compatible": true, "historical_data_impact": "对可唯一映射的旧显示值做幂等转换；不确定值保留原样并记录风险。", "rollback_or_compensation": "迁移需提供双端回退/补偿说明，不修改历史迁移。"},
   "external_access": {"changed": false, "api_paths": [], "readable_field_whitelist": [], "writable_field_whitelist": [], "action_whitelist": [], "audit_required": true},
   "required_tests": [
     {"name": "unit", "command": "npm test --prefix server"},
     {"name": "api", "command": "npm run test:api --prefix server"},
     {"name": "permission", "command": "npm run test:rbac --prefix server"},
+    {"name": "migration", "command": "新增 SQLite 与 TDSQL/MySQL 8 迁移幂等验证"},
+    {"name": "ui_data_sources", "command": "node scripts/check-ui-data-sources.mjs"},
     {"name": "module_boundaries", "command": "node scripts/check-module-boundaries.mjs"},
-    {"name": "governance", "command": "node scripts/check-governance.mjs"},
     {"name": "build", "command": "npm run build --prefix web"},
     {"name": "runtime", "command": "node scripts/verify-app-runtime.mjs"},
-    {"name": "browser", "command": "部署人员在内网自定义端口与外网 HTTPS 域名分别验收当前/历史版本预览、下载、控制台与刷新"}
+    {"name": "governance", "command": "node scripts/check-governance.mjs && node scripts/check-code-comments.mjs && git diff --check"},
+    {"name": "browser", "command": "本地脱敏管理员在桌面及移动视口验证机构/字典列表、业务选择、详情、导入导出、概览和数据范围"}
   ],
-  "risk": {"level": "important", "reasons": ["附件预览会话是受签名与实体授权保护的公开平台能力。", "反向代理路径处理不当会造成预览资源失效或错误 Origin。"], "required_approvals": ["hengguan"]},
+  "risk": {"level": "important", "reasons": ["跨模块受控值公开契约", "机构数据范围与权限比较", "历史数据双端迁移与导入导出兼容"], "required_approvals": ["hengguan"]},
   "completion": {"changed_files_report_required": true, "test_result_report_required": true, "known_risks_report_required": true, "rollback_report_required": true, "requirement_acceptance_required": true}
 }

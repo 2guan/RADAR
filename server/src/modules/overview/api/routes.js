@@ -9,7 +9,7 @@
 import { get, all } from '../../../platform/persistence/index.js';
 import { isIssueTerminalStatus, isTerminalStatus } from '../../settings/process-configuration/index.js';
 import { listByEntity } from '../../../platform/attachments/index.js';
-import { windowIds, inClause, formatAttachments, resolveOrganizationValues } from '../../settings/reference-data/index.js';
+import { windowIds, inClause, formatAttachments, getDictDisplayMap, resolveOrganizationValues } from '../../settings/reference-data/index.js';
 import { ok, notFound, forbidden, parseJsonArray } from '../../../platform/runtime/index.js';
 import { exportXlsx } from '../../../platform/import-export/index.js';
 import { getWorkItem, formatImpactItemsText, formatCoverageText } from '../../development/index.js';
@@ -66,6 +66,19 @@ export function reqOrg(req, sysMap, devMap) {
 /** 系统编号转名称（标签展示用；sysMap 预载） */
 function sysNames(codes, sysMap) {
   return (codes || []).map((c) => sysMap[c]?.name || c);
+}
+
+/**
+ * 概览卡片标题下的标签与卡片分组机构是两套业务口径：
+ * 主责系统来自需求/工单本身，实施机构也只取需求/工单填写值，不能被开发任务或系统所属机构替代。
+ */
+export function overviewCardLabels(req, sysMap, orgDisplayMap = {}) {
+  const mainSystem = parseJsonArray(req.main_systems)[0];
+  const implementationOrg = req.implementation_org;
+  return {
+    systemName: mainSystem ? (sysMap[mainSystem]?.name || mainSystem) : '未确定主责系统',
+    systemOrg: implementationOrg ? (orgDisplayMap[implementationOrg] || implementationOrg) : '—',
+  };
 }
 
 /** 按姓名解析人员（姓名 + 所属机构 + 手机号），兼容历史对象值。 */
@@ -270,6 +283,7 @@ export default async function overviewRoutes(fastify) {
     for (const s of await all('SELECT sys_code, sys_name, org FROM system')) {
       sysMap[s.sys_code] = { name: s.sys_name, org: s.org };
     }
+    const orgDisplayMap = await getDictDisplayMap('org');
     const devMap = {};
     for (const d of await all('SELECT id, req_code, status, impl_system, impl_org FROM dev_task ORDER BY id ASC')) {
       (devMap[d.req_code] ||= []).push(d);
@@ -293,6 +307,7 @@ export default async function overviewRoutes(fastify) {
       const collabDevSystems = parseJsonArray(r.collab_dev_systems);
       const collabTestSystems = parseJsonArray(r.collab_test_systems);
       const names = sysNames(mainSystems, sysMap);
+      const cardLabels = overviewCardLabels(r, sysMap, orgDisplayMap);
 
       // 1. 实施机构
       if (orgsFilter && !orgsFilter.includes(org)) continue;
@@ -343,8 +358,8 @@ export default async function overviewRoutes(fastify) {
         req_code: r.req_code,
         title: r.title,
         systems: names,
-        systemName: names[0] || '—',     // 主责系统名称（标签展示）
-        systemOrg: org,                    // 系统所属机构（标签展示）
+        systemName: cardLabels.systemName,
+        systemOrg: cardLabels.systemOrg,
         currentStage: chain.currentStage,
         currentStageFull: chain.currentStageFull,
         currentStageStatus: chain.currentStageStatus,

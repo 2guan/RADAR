@@ -13,7 +13,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { get, all, run, tx, dialect } from '../../platform/persistence/index.js';
 import { auditUpdate } from '../../platform/audit/index.js';
-import { windowIds, formatAttachments, resolveOrganizationValues } from '../settings/reference-data/index.js';
+import { windowIds, formatAttachments, getDictDisplayMap, resolveOrganizationValues } from '../settings/reference-data/index.js';
 import { ok, notFound, badRequest, forbidden, parseJsonArray } from '../../platform/runtime/index.js';
 import { assertStatusChangePermission, defaultDictAttr, defaultProcessStatus } from '../settings/process-configuration/index.js';
 import { exportXlsx } from '../../platform/import-export/index.js';
@@ -757,9 +757,14 @@ async function computeEntities(windowIdList) {
     }
   }
 
-  const rps = await all('SELECT id, release_date FROM release_point');
+  const [rps, systems, orgDisplayMap] = await Promise.all([
+    all('SELECT id, release_date FROM release_point'),
+    all('SELECT sys_code, sys_name FROM system'),
+    getDictDisplayMap('org'),
+  ]);
   const rpMap = {};
   for (const rp of rps) rpMap[rp.id] = rp.release_date;
+  const sysMap = Object.fromEntries(systems.map((system) => [system.sys_code, system.sys_name]));
 
   // 会签角色数：未发起的实体会签进度按 0/角色数 展示（与首次打开详情后惰性创建的会签项数一致）
   const signoffRoleCount = (await get('SELECT COUNT(*) AS c FROM role WHERE is_signoff_role = 1'))?.c || 0;
@@ -768,9 +773,9 @@ async function computeEntities(windowIdList) {
   if (!codes.length) return [];
   const placeholders = codes.map(() => '?').join(',');
   const [requirements, tickets, issues, tasks] = await Promise.all([
-    all(`SELECT req_code AS code, title, status, 'requirement' AS entity_type FROM requirement WHERE req_code IN (${placeholders})`, ...codes),
-    all(`SELECT ticket_code AS code, title, status, 'ticket' AS entity_type FROM ticket WHERE ticket_code IN (${placeholders})`, ...codes),
-    all(`SELECT issue_code AS code, summary AS title, 'issue' AS entity_type FROM issue WHERE issue_code IN (${placeholders})`, ...codes),
+    all(`SELECT req_code AS code, title, status, main_systems, 'requirement' AS entity_type FROM requirement WHERE req_code IN (${placeholders})`, ...codes),
+    all(`SELECT ticket_code AS code, title, status, main_systems, 'ticket' AS entity_type FROM ticket WHERE ticket_code IN (${placeholders})`, ...codes),
+    all(`SELECT issue_code AS code, summary AS title, system, 'issue' AS entity_type FROM issue WHERE issue_code IN (${placeholders})`, ...codes),
     all(`SELECT id, req_code, release_point_id, status, review_status FROM release_task WHERE req_code IN (${placeholders})`, ...codes),
   ]);
   const itemMap = new Map([...requirements, ...tickets, ...issues].map((item) => [item.code, item]));
@@ -806,6 +811,10 @@ async function computeEntities(windowIdList) {
     const item = itemMap.get(code);
     const type = item?.entity_type || 'unknown';
     const title = item?.title || '';
+    const mainSystemCodes = type === 'issue'
+      ? [item?.system].filter(Boolean)
+      : parseJsonArray(item?.main_systems);
+    const mainSystemNames = [...new Set(mainSystemCodes.map((systemCode) => sysMap[systemCode] || systemCode).filter(Boolean))];
     const pointId = info.applyPointId;
     const releaseDate = rpMap[pointId] || null;
 
@@ -823,6 +832,8 @@ async function computeEntities(windowIdList) {
       change_codes: [...(info.changeCodes || [])].sort((a, b) => String(a).localeCompare(String(b))),
       title,
       impl_org: info.implOrg || null,
+      impl_org_display: orgDisplayMap[info.implOrg] || info.implOrg || null,
+      main_systems_names: mainSystemNames,
       release_point_id: pointId || null,
       release_date: releaseDate,
       release_status: releaseStatus,

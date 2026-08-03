@@ -24,7 +24,7 @@ import {
 import { auditCreate, auditUpdate, auditDelete } from '../../platform/audit/index.js';
 import { listByEntity } from '../../platform/attachments/index.js';
 import { exportXlsx, parseXlsx } from '../../platform/import-export/index.js';
-import { windowIds, inClause, resolveDictAttr, resolveOrganizationValues, resolveSystemCodes, formatAttachments } from '../settings/reference-data/index.js';
+import { windowIds, inClause, getDictDisplayMap, resolveDictAttr, resolveExistingDictAttr, resolveOrganizationValues, resolveSystemCodes, formatAttachments } from '../settings/reference-data/index.js';
 import { ok, notFound, badRequest, forbidden, parseJsonArray, parseJsonObject } from '../../platform/runtime/index.js';
 import { assertStatusChangePermission } from '../settings/process-configuration/index.js';
 import { resolveCurrentTaskStatuses } from '../overview/index.js';
@@ -123,7 +123,7 @@ async function normalizeAnalysisFields(data) {
     const value = String(out.implementation_org || '').trim();
     if (!value) out.implementation_org = null;
     else {
-      const resolved = await resolveDictAttr('org', value);
+      const resolved = await resolveExistingDictAttr('org', value);
       if (!resolved) throw badRequest(`实施机构 [${value}] 不存在或已停用`);
       out.implementation_org = resolved;
     }
@@ -298,6 +298,7 @@ export default async function requirementRoutes(fastify) {
     for (const s of systems) {
       sysMap[s.sys_code] = s.sys_name;
     }
+    const orgDisplayMap = await getDictDisplayMap('org');
 
     // 仅针对当前页的需求编号做关联查询，避免随翻页整表扫描 dev_task/test_task/release_task
     const pageCodes = result.list.map((r) => r.req_code).filter(Boolean);
@@ -335,6 +336,7 @@ export default async function requirementRoutes(fastify) {
       decoded.apply_release_point_ids = (applyPointMap[decoded.req_code] || []).map((point) => point.id);
       decoded.main_systems_names = (decoded.main_systems || []).map((code) => sysMap[code] || code);
       decoded.collab_dev_systems_names = (decoded.collab_dev_systems || []).map((code) => sysMap[code] || code);
+      decoded.implementation_org_display = orgDisplayMap[decoded.implementation_org] || decoded.implementation_org || null;
       decoded.has_tasks = linkedCodes.has(decoded.req_code);
 
       const rtStatus = rtMap[decoded.req_code] || null;
@@ -492,6 +494,7 @@ export default async function requirementRoutes(fastify) {
     const systems = await all('SELECT sys_code, sys_name FROM system');
     const sysMap = {};
     for (const s of systems) sysMap[s.sys_code] = s.sys_name;
+    const orgDisplayMap = await getDictDisplayMap('org');
 
     const applyPointMap = await requirementAppliedReleasePoints(result.list.map((row) => row.req_code));
 
@@ -537,6 +540,7 @@ export default async function requirementRoutes(fastify) {
         main_systems: main.map(c => sysMap[c] || c).join(', '),
         collab_dev_systems: collabDev.map(c => sysMap[c] || c).join(', '),
         collab_test_systems: collabTest.map(c => sysMap[c] || c).join(', '),
+        implementation_org: orgDisplayMap[row.implementation_org] || row.implementation_org || '',
         attachments: formatAttachments(attaches, '需求说明书'),
       };
     }));

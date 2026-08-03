@@ -8,12 +8,15 @@
 
 import { StatusBadge } from '../workflow/index.js';
 
-export default function ChainBar({ nodes }) {
+export default function ChainBar({ nodes, mobileLabels = {} }) {
   return (
     <div className="chain-bar">
       {nodes.map((n, i) => (
         <div key={n.key} className={`chain-step ${n.state}`} data-last={i === nodes.length - 1 ? '1' : '0'}>
-          <div className={`chain-label ${n.state === 'doing' ? 'doing' : ''}`}>{n.label}</div>
+          <div className={`chain-label ${n.state === 'doing' ? 'doing' : ''} ${mobileLabels[n.key] ? 'has-mobile-label' : ''}`}>
+            <span className="chain-label-full">{n.label}</span>
+            {mobileLabels[n.key] && <span className="chain-label-mobile" aria-hidden="true">{mobileLabels[n.key]}</span>}
+          </div>
           <div className={`chain-dot ${n.state}`} />
           <div className="chain-status">
             {n.status ? <StatusBadge status={n.status} /> : <span className="chain-status-none">未开始</span>}

@@ -147,6 +147,19 @@ if (!process.env.RADAR_RUN_API_TESTS) {
     assert.deepEqual(conflict.json().data, { implOrg: null, reason: 'conflict' });
   });
 
+  test('投产申请未生成审批实例时评审状态默认显示待评审', async () => {
+    const administrator = await get('SELECT id, phone FROM user WHERE is_super = 1 LIMIT 1');
+    const headers = { authorization: `Bearer ${await app.jwt.sign({ id: administrator.id, phone: administrator.phone })}`, 'x-requested-by': 'RADAR' };
+    const apply = await run(
+      'INSERT INTO release_apply (change_code, change_content, ref_codes, review_status) VALUES (?,?,?,?)',
+      'REVIEW-STATUS-DEFAULT-001', '评审默认状态回归', JSON.stringify([]), null,
+    );
+    const response = await app.inject({ method: 'POST', url: '/api/release-apply/list', headers, payload: { pageSize: 100 } });
+    assert.equal(response.statusCode, 200, response.body);
+    const row = response.json().data.list.find((item) => item.id === apply.lastInsertRowid);
+    assert.equal(row.review_status, '待评审');
+  });
+
   test('生产静态首页可返回且使用 no-cache，避免 Fastify 静态回调导致服务退出', async () => {
     const response = await app.inject({ method: 'GET', url: '/' });
     assert.equal(response.statusCode, 200);
@@ -293,9 +306,12 @@ if (!process.env.RADAR_RUN_API_TESTS) {
 
         const optionalMainSystems = await app.inject({
           method: 'PUT', url: `/api/${item.scopeKey === 'requirement' ? 'requirements' : 'tickets'}/${inserted.lastInsertRowid}`,
-          headers, payload: { implementation_org: '测试机构', main_systems: [] },
+          // 管理端可传显示值；接口必须解析为机构属性值后保存。
+          headers, payload: { implementation_org: '厦门', main_systems: [] },
         });
         assert.equal(optionalMainSystems.statusCode, 200);
+        const saved = await get(`SELECT implementation_org FROM ${item.table} WHERE id = ?`, inserted.lastInsertRowid);
+        assert.equal(saved.implementation_org, '厦门事业群');
       } finally {
         for (const rule of originalRules) {
           await run('UPDATE stage_field_status_rule SET required = ? WHERE field_definition_id = ? AND status_dict_item_id = ?', rule.required, rule.field_definition_id, initialStatus.id);
@@ -771,6 +787,37 @@ if (!process.env.RADAR_RUN_API_TESTS) {
     for (const stale of staleFields) {
       const field = await get("SELECT id, deleted_at FROM stage_field_definition WHERE scope_key=? AND field_key='release_point_id'", stale.scopeKey);
       assert.ok(field.deleted_at, `${stale.scopeKey} 的废弃字段应被软删除`);
+      assert.equal((await get('SELECT COUNT(*) AS c FROM stage_field_status_rule WHERE field_definition_id=?', field.id)).c, 0);
+    }
+  });
+
+  test('配置升级会移除需求和工单分析中的申请投产点', async () => {
+    const staleFields = [
+      { scopeKey: 'requirement', status: '需求登记' },
+      { scopeKey: 'ticket', status: '工单登记' },
+    ];
+    for (const stale of staleFields) {
+      const basic = await get("SELECT id FROM stage_section WHERE scope_key = ? AND section_key = 'basic'", stale.scopeKey);
+      const field = await run(`INSERT INTO stage_field_definition
+        (scope_key, field_key, label, field_kind, input_type, source_key, multiple, native_column, section_id, column_span, visible, list_visible, filterable, dashboard_dimension, sort, is_builtin)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      stale.scopeKey, 'apply_release_points', '申请投产点', 'native', 'release_point', 'release_point', 1, 'apply_release_points', basic.id, 24, 1, 1, 1, 0, 35, 1);
+      const status = await get('SELECT id FROM dict_item WHERE category = ? AND attr_value = ?', 'process_status', stale.status);
+      await run('INSERT INTO stage_field_status_rule (field_definition_id, status_dict_item_id, required) VALUES (?,?,1)', field.lastInsertRowid, status.id);
+    }
+    await run("DELETE FROM app_config WHERE key = 'stage.content.retire-analysis-release-point.v1'");
+
+    const result = await applyBuiltinConfigurationUpgrades({
+      builtinMetadata: STAGE_BUILTIN_FIELD_METADATA,
+      sectionDefaults: STAGE_BUILTIN_SECTION_DEFAULTS,
+    });
+    assert.deepEqual(result.added.filter((item) => item.endsWith('.apply_release_points')).sort(), [
+      'retired-field:requirement.apply_release_points',
+      'retired-field:ticket.apply_release_points',
+    ]);
+    for (const stale of staleFields) {
+      const field = await get("SELECT id, deleted_at FROM stage_field_definition WHERE scope_key=? AND field_key='apply_release_points'", stale.scopeKey);
+      assert.ok(field.deleted_at, `${stale.scopeKey} 的申请投产点应被软删除`);
       assert.equal((await get('SELECT COUNT(*) AS c FROM stage_field_status_rule WHERE field_definition_id=?', field.id)).c, 0);
     }
   });
