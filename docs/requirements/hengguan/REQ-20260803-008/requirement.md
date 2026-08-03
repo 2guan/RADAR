@@ -8,7 +8,7 @@ status: "ready"
 priority: "P1"
 requester: "hengguan"
 developer: "hengguan"
-module: "settings"
+module: "governance"
 module_owner: "hengguan"
 contains_confidential_information: false
 external_access_required: false
@@ -122,20 +122,20 @@ last_updated: "2026-08-03"
 
 ## 8. 研发上下文
 
-- 目标模块 / Owner / 基准分支：`settings` / `hengguan` / `origin/main`；分支为 `hengguan/REQ-20260803-008-release-point-date-format`。
-- 多模块协作：直接改动归属 `settings/reference-data` 的公开展示组件；`dashboard`、`overview`、`requirements`、`tickets`、`release` 和 `platform/runtime` 前端仅通过 settings 的公开入口消费，不直接写入其内部实现。Owner 均为 hengguan。
+- 目标模块 / Owner / 基准分支：`governance` / `hengguan` / `origin/main`；分支为 `hengguan/REQ-20260803-008-release-point-date-format`。以 governance 登记主模块，用于统筹需求范围文档和 settings 的公开展示能力变更。
+- 多模块协作：直接改动归属 `settings/reference-data` 的公开展示组件；`dashboard`、`overview`、`requirements`、`tickets`、`release` 和 `platform/runtime` 前端仅通过 settings 的公开入口消费，不直接写入其内部实现。组件 API、原始值、待定文本和空值兼容；数值投产点的展示文本按用户规则恢复为 `YYYYMMDD`。Owner 均为 hengguan。
 - 允许与禁止修改路径：见 `ai-task-scope.yaml`。
 - 必须复用的能力与公开契约：`web/src/modules/settings/reference-data/index.js` 的 `ReleasePointText`、`releasePointLabelText` 和选项工厂。
 - 接口契约：不新增或修改 API。
 - 数据库迁移、历史数据、SQLite/TDSQL/MySQL 8 兼容及回退：无迁移；回退本需求提交即可，无数据补偿。
-- 必须执行的构建、单元、API、权限、外网白名单与回归测试：组件格式断言（BR-001 至 BR-003）、前端构建、UI 数据源、模块边界、治理、代码注释、运行时和空白检查；以脱敏管理员完成 AC-001 至 AC-004 的桌面/移动验收。
+- 必须执行的构建、单元、API、权限、外网白名单与回归测试：组件格式断言（BR-001 至 BR-003）、服务端 API/RBAC 回归、前端构建、UI 数据源、模块边界、治理、代码注释、运行时和空白检查；以脱敏管理员完成 AC-001 至 AC-004 的桌面/移动验收。
 - 风险、审批与未决问题：风险为 normal；唯一展示语义变更已明确，无未决问题。
 
 ## 9. 完成记录
 
 - 修改文件与范围一致性：新增 `web/src/modules/settings/reference-data/components/release-point-format.js`，并将 `ReleasePointText.jsx` 改为复用该纯格式工具；新增 `web/test/release-point-format.test.mjs` 与本需求文档。所有变更均位于任务范围允许路径，未修改任何消费模块页面、数据库、接口或数据文件。
 - 配置与交付影响落实：输入项、交付件、种子、服务端校验、数据库、权限、审计、附件和外网均不适用；既有投产点列表、筛选、详情/编辑和配置页的展示通过 settings 公开组件/标签/选项工厂统一生效。`release_date` 的 `YYYYMMDD` 存储和传输格式未变。
-- 测试证据：`node --test web/test/release-point-format.test.mjs` 通过（2 passed），覆盖数值投产点、待定文本、空值和普通日期文本；`npm run build --prefix web`、`node scripts/check-ui-data-sources.mjs`、`node scripts/check-module-boundaries.mjs`、`node scripts/check-governance.mjs`、`node scripts/check-code-comments.mjs`、`node scripts/verify-app-runtime.mjs` 和 `git diff --check` 均通过。引用审计列出 settings、requirements、tickets、release、overview、dashboard 与顶栏的统一组件消费点，且未发现 `release_date` 使用通用北京日期格式化。
+- 测试证据：`node --test web/test/release-point-format.test.mjs` 通过（2 passed），覆盖数值投产点、待定文本、空值和普通日期文本；`npm test --prefix server` 通过（36 passed、1 skipped），`npm run test:api --prefix server` 与 `npm run test:rbac --prefix server` 均通过（各 26 passed、5 skipped）；`npm run build --prefix web`、`node scripts/check-ai-scope.mjs --scope docs/requirements/hengguan/REQ-20260803-008/ai-task-scope.yaml --base origin/main --head HEAD`、`node scripts/check-ui-data-sources.mjs`、`node scripts/check-module-boundaries.mjs`、`node scripts/check-governance.mjs`、`node scripts/check-code-comments.mjs`、`node scripts/verify-app-runtime.mjs` 和 `git diff --check` 均通过。引用审计列出 settings、requirements、tickets、release、overview、dashboard 与顶栏的统一组件消费点，且未发现 `release_date` 使用通用北京日期格式化。
 - 已知风险：仅调整投产点显示语义；非八位历史文本保持原样，避免错误解析，但如历史数据存在非标准投产点文本也不会被自动修正。未使用账号凭据，受保护页面的桌面/移动真实浏览器验收未执行。
 - 发布验证与回退：部署后以脱敏管理员检查系统设置投产点、顶栏、需求/工单列表、投产详情和概览中的 `20260525` 均无连字符，并确认普通日期仍为 `2026-5-25`；若有回归，回退本需求提交即可，无数据补偿。
 
