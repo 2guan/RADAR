@@ -1,0 +1,98 @@
+schema_version: "1.0"
+requirement:
+  id: "REQ-20260803-008"
+  ref: "hengguan/REQ-20260803-008"
+  title: "投产点日期固定使用 YYYYMMDD"
+  status: "ready"
+  document: "docs/requirements/hengguan/REQ-20260803-008/requirement.md"
+  internet_ai_coding_allowed: true
+assignment:
+  developer: "hengguan"
+  module: "settings"
+  module_owner: "hengguan"
+  branch: "hengguan/REQ-20260803-008-release-point-date-format"
+  base_branch: "origin/main"
+  worktree: "codex-desktop-current-worktree"
+ai:
+  enabled: true
+  approved_service: "Codex desktop"
+  model: "approved-by-user"
+  contains_confidential_information: false
+  context_sanitized: true
+  production_access: false
+scope:
+  writable_paths:
+    - "docs/requirements/hengguan/REQ-20260803-008/**"
+    - "web/src/modules/settings/reference-data/**"
+    - "web/test/**"
+  read_only_paths:
+    - "AGENTS.md"
+    - "DESIGN.md"
+    - "docs/governance/**"
+    - "docs/architecture/**"
+    - "governance/modules.yaml"
+    - ".agents/skills/radar-delivery-engineer/**"
+    - "web/src/modules/dashboard/**"
+    - "web/src/modules/overview/**"
+    - "web/src/modules/requirements/**"
+    - "web/src/modules/tickets/**"
+    - "web/src/modules/release/**"
+    - "web/src/platform/layout/**"
+  forbidden_paths:
+    - ".github/**"
+    - "docs/reports/**"
+    - ".env"
+    - "**/.env"
+    - "**/*secret*"
+    - "**/*credential*"
+    - "attachments/**"
+    - "data/**"
+public_capability_change:
+  required: true
+  shared_change_issue: "hengguan/REQ-20260803-008"
+  target_modules: ["settings", "dashboard", "overview", "requirements", "tickets", "release", "platform/runtime"]
+  new_methods: []
+  existing_method_changed: true
+  semantic_name_confirmed: true
+  old_behavior_preserved: false
+  compatibility_note: "投产点展示从 YYYY-M-D 恢复为稳定业务标识 YYYYMMDD；组件 API、原始值、接口和存储兼容。"
+  owner_approved: true
+  owner_review_required_before_merge: true
+database:
+  changed: false
+  migration_paths: []
+  mysql8_compatible: true
+  historical_data_impact: "不修改或回填历史投产点数据。"
+  rollback_or_compensation: "回退本需求代码提交即可，无数据补偿。"
+external_access:
+  changed: false
+  api_paths: []
+  readable_field_whitelist: []
+  writable_field_whitelist: []
+  action_whitelist: []
+  audit_required: false
+required_tests:
+  - name: "release_point_display"
+    command: "新增或更新投产点展示组件的自动化断言"
+  - name: "ui_data_sources"
+    command: "node scripts/check-ui-data-sources.mjs"
+  - name: "module_boundaries"
+    command: "node scripts/check-module-boundaries.mjs"
+  - name: "build"
+    command: "npm run build --prefix web"
+  - name: "runtime"
+    command: "node scripts/verify-app-runtime.mjs"
+  - name: "governance"
+    command: "node scripts/check-governance.mjs && node scripts/check-code-comments.mjs && git diff --check"
+  - name: "browser"
+    command: "本地脱敏管理员在桌面及移动视口验证投产点管理、业务选择项、详情、概览和顶栏"
+risk:
+  level: "normal"
+  reasons: ["跨模块消费同一投产点展示组件", "必须避免影响普通业务日期格式"]
+  required_approvals: ["hengguan"]
+completion:
+  changed_files_report_required: true
+  test_result_report_required: true
+  known_risks_report_required: true
+  rollback_report_required: true
+  requirement_acceptance_required: true
