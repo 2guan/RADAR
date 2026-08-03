@@ -31,7 +31,7 @@ function SourceSelect({ sourceKey, multiple, value, onChange, disabled }) {
 
 function DynamicInput({ field, value, onChange, disabled }) {
   if (field.input_type === 'textarea') return <Input.TextArea rows={3} value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)} />;
-  if (field.input_type === 'date' || field.input_type === 'datetime') return <DatePicker showTime={field.input_type === 'datetime'} style={{ width: '100%' }} value={value ? dayjs(value) : null} disabled={disabled} onChange={(date) => onChange(date ? date.format(field.input_type === 'datetime' ? 'YYYY-MM-DD HH:mm:ss' : 'YYYY-MM-DD') : null)} />;
+  if (field.input_type === 'date' || field.input_type === 'datetime') return <DatePicker showTime={field.input_type === 'datetime' ? { format: 'HH:mm' } : false} format={field.input_type === 'datetime' ? 'YYYY-M-D HH:mm' : 'YYYY-M-D'} style={{ width: '100%' }} value={value ? dayjs(value) : null} disabled={disabled} onChange={(date) => onChange(date ? date.format(field.input_type === 'datetime' ? 'YYYY-MM-DD HH:mm:00' : 'YYYY-MM-DD') : null)} />;
   if (['select', 'person', 'release_point'].includes(field.input_type)) return <SourceSelect sourceKey={field.source_key} multiple={!!field.multiple} value={value} onChange={onChange} disabled={disabled} />;
   return <Input value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)} />;
 }

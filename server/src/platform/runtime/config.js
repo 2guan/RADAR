@@ -16,6 +16,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // 才能与 Docker 镜像内的 /app/web、/app/data 和根目录 .env 保持一致。
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 loadEnvFile(path.join(REPO_ROOT, '.env'));
+// 所有 SQLite `localtime` 默认值及未显式时区的运行时计算均以北京时间为准；
+// TDSQL 连接仍通过下方既有 `TDSQL_TIMEZONE=+08:00` 固定会话时区。
+process.env.TZ = 'Asia/Shanghai';
 
 const isProd = process.env.NODE_ENV === 'production';
 

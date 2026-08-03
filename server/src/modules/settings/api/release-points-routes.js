@@ -11,6 +11,7 @@ import { get, all, run, tx, listQuery } from '../../../platform/persistence/inde
 import { registerIO } from '../../../platform/import-export/index.js';
 import { auditCreate, auditUpdate, auditDelete } from '../../../platform/audit/index.js';
 import { ok, notFound, badRequest } from '../../../platform/runtime/index.js';
+import { beijingCompactDateString } from '../../../shared/utils/time.js';
 
 const COLUMNS = ['id', 'release_date', 'version_type', 'remark', 'is_default', 'is_archived', 'created_at'];
 const LABELS = { release_date: '投产日期', version_type: '版本类型', remark: '备注' };
@@ -19,9 +20,7 @@ const DATE_RE = /^\d{8}$/;
 
 /** 取当天 YYYYMMDD */
 function todayStr() {
-  const d = new Date();
-  const p = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}`;
+  return beijingCompactDateString();
 }
 
 function isReleaseDate(v) {

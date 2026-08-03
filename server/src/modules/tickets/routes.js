@@ -29,6 +29,7 @@ import { assertStatusChangePermission } from '../settings/process-configuration/
 import { resolveCurrentTaskStatuses } from '../overview/index.js';
 import { isActivePersonName } from '../identity-access/index.js';
 import { isOrganizationRestricted, workItemMatchesOrganization } from '../../shared/utils/organization-scope.js';
+import { beijingDateTimeString, isValidDateOnly } from '../../shared/utils/time.js';
 
 // 导入/导出列定义
 const IO_COLUMNS = [
@@ -77,15 +78,14 @@ const LABELS = {
 };
 
 function formatRegistrationTime(date = new Date()) {
-  const pad = (value) => String(value).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return beijingDateTimeString(date).slice(0, 16);
 }
 
 function normalizeExpectedReleaseDate(value) {
   if (value === undefined) return undefined;
   const text = String(value || '').trim();
   if (!text) return null;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(text) || new Date(`${text}T00:00:00Z`).toISOString().slice(0, 10) !== text) {
+  if (!isValidDateOnly(text)) {
     throw badRequest('期望投产时间必须为合法日期（YYYY-MM-DD）');
   }
   return text;

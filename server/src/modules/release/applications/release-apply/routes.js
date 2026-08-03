@@ -12,6 +12,7 @@ import { auditCreate, auditUpdate, auditDelete } from '../../../../platform/audi
 import { exportXlsx, parseXlsx } from '../../../../platform/import-export/index.js';
 import { windowIds, inClause, resolveOrganizationValues } from '../../../settings/reference-data/index.js';
 import { ok, notFound, badRequest, forbidden, parseJsonArray, parseJsonObject } from '../../../../platform/runtime/index.js';
+import { beijingDateString } from '../../../../shared/utils/time.js';
 import {
   buildExtensionListFilter, defaultDictAttr,
 } from '../../../settings/process-configuration/index.js';
@@ -312,7 +313,7 @@ export default async function releaseApplyRoutes(fastify) {
         code,
         reviewStatus,
         request.currentUser?.name,
-        new Date().toISOString().slice(0, 10),
+        beijingDateString(),
         ...Object.keys(data).filter((k) => k !== 'change_code').map((k) => data[k]),
       ];
       const res = await run(
@@ -561,7 +562,7 @@ export default async function releaseApplyRoutes(fastify) {
                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
               code, r.change_content, r.impact_scope || null, r.change_system || null, r.impl_org || null,
               units, JSON.stringify(refs), reviewStatus, r.out_dept || null, r.deploy_dept || null,
-              request.currentUser?.name, new Date().toISOString().slice(0, 10),
+              request.currentUser?.name, beijingDateString(),
             );
             await syncReleaseApplyReferences(res.lastInsertRowid, refs, null);
             await auditCreate('release_apply', res.lastInsertRowid, code, request.currentUser?.name);

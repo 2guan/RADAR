@@ -32,6 +32,7 @@ import { codePrefix, codeTemplateValues, formatCode } from '../../../shared/util
 import { resolveCurrentTaskStatuses } from '../../overview/index.js';
 import { isOrganizationRestricted, workItemMatchesOrganization } from '../../../shared/utils/organization-scope.js';
 import { isActivePersonName } from '../../identity-access/index.js';
+import { beijingDateString } from '../../../shared/utils/time.js';
 
 // 导入模板列定义
 const IO_COLUMNS = [
@@ -459,7 +460,7 @@ export default async function testTaskRoutes(fastify) {
           `INSERT INTO test_task (req_code, task_code, task_name, test_type, status, owner, intake_owner, impl_system, impl_org, registrar, register_time)
            VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
           reqCode, taskCode, t.taskName, testType, initialStatus, t.owner, request.currentUser?.name || null, t.sysCode || null, t.implOrg,
-          request.currentUser?.name, new Date().toISOString().slice(0, 10),
+          request.currentUser?.name, beijingDateString(),
         );
         await auditCreate('test', res.lastInsertRowid, taskCode, request.currentUser?.name);
         out.push({ id: res.lastInsertRowid, task_code: taskCode });
@@ -743,7 +744,7 @@ export default async function testTaskRoutes(fastify) {
                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
               r.req_code, code, r.task_name, testTypeCode, status, r.owner || null, r.intake_owner || null, implSystem || null, implOrg || null,
               r.plan_start || null, r.plan_end || null, r.actual_start || null, r.actual_end || null, devRate,
-              request.currentUser?.name, new Date().toISOString().slice(0, 10)
+              request.currentUser?.name, beijingDateString()
             );
             await auditCreate('test', res.lastInsertRowid, code, request.currentUser?.name);
             await saveExtensionValues(scopeKey, res.lastInsertRowid, extensionValues, request.currentUser?.name);

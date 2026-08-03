@@ -12,6 +12,7 @@ import { CloudSyncOutlined } from '@ant-design/icons';
 import { StatusBadge } from '../../../shared/workflow/index.js';
 import Can from '../../../platform/auth/Can.jsx';
 import { apiGet, apiPost } from '../api/index.js';
+import { formatBeijingDateTime } from '../../../shared/utils/index.js';
 import './IssueDetail.css';
 
 const { Text } = Typography;
@@ -174,21 +175,21 @@ export default function IssueDetail({ open, issueId, onClose, onSynced }) {
             <div className="info-card">
               <span className="label-text">提出时间</span>
               <div className="value-primary">
-                {data.create_time || '—'}
+                {formatBeijingDateTime(data.create_time)}
               </div>
             </div>
 
             <div className="info-card">
               <span className="label-text">计划解决时间</span>
               <div className="value-primary">
-                {data.plan_resolve_time || '—'}
+                {formatBeijingDateTime(data.plan_resolve_time)}
               </div>
             </div>
 
             <div className="info-card">
               <span className="label-text">同步时间</span>
               <div className="value-primary">
-                {data.synced_at || '—'}
+                {formatBeijingDateTime(data.synced_at)}
               </div>
             </div>
 

@@ -38,6 +38,7 @@ import { codePrefix, codeTemplateValues, formatCode } from '../../../shared/util
 import { resolveCurrentTaskStatuses } from '../../overview/index.js';
 import { isOrganizationRestricted, organizationMatches, workItemMatchesOrganization } from '../../../shared/utils/organization-scope.js';
 import { isActivePersonName } from '../../identity-access/index.js';
+import { beijingDateString, beijingDateTimeString } from '../../../shared/utils/time.js';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
 
@@ -165,8 +166,7 @@ async function templatePath(filename) {
 }
 
 function formatLocalMinute(d = new Date()) {
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()} ${d.getHours()}:${pad(d.getMinutes())}`;
+  return beijingDateTimeString(d).slice(0, 16);
 }
 
 function filenameSafe(text) {
@@ -594,7 +594,7 @@ export default async function devTaskRoutes(fastify) {
           `INSERT INTO dev_task (req_code, task_code, task_name, status, owner, intake_owner, impl_system, impl_org, registrar, register_time)
            VALUES (?,?,?,?,?,?,?,?,?,?)`,
           reqCode, taskCode, taskName, initialStatus, assignmentBySystem.get(sysCode).owner, request.currentUser?.name || null, sysCode, assignmentBySystem.get(sysCode).implOrg,
-          request.currentUser?.name, new Date().toISOString().slice(0, 10),
+          request.currentUser?.name, beijingDateString(),
         );
         await auditCreate('dev', res.lastInsertRowid, taskCode, request.currentUser?.name);
         out.push({ id: res.lastInsertRowid, task_code: taskCode });
@@ -860,7 +860,7 @@ export default async function devTaskRoutes(fastify) {
                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
               r.req_code, code, r.task_name, r.content || null, status, r.owner || null, r.intake_owner || null, implSystem || null, implOrg || null,
               r.plan_start || null, r.plan_end || null, r.actual_start || null, r.actual_end || null, devRate,
-              request.currentUser?.name, new Date().toISOString().slice(0, 10)
+              request.currentUser?.name, beijingDateString()
             );
             await auditCreate('dev', res.lastInsertRowid, code, request.currentUser?.name);
             await saveExtensionValues('dev', res.lastInsertRowid, extensionValues, request.currentUser?.name);

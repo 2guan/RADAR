@@ -11,6 +11,7 @@ import {
   UploadOutlined, LinkOutlined, DownloadOutlined, DeleteOutlined, EyeOutlined, HistoryOutlined, SyncOutlined,
 } from '@ant-design/icons';
 import { apiGet, apiPost, apiDelete, rawClient, TOKEN_KEY } from '../api.js';
+import { formatBeijingShortDateTime } from '../../shared/utils/index.js';
 
 const attachmentCache = new Map();
 const attachmentRequests = new Map();
@@ -64,9 +65,7 @@ function attachmentName(item) {
 
 /** 页面只展示提交时间，不展示不参与用户决策的手机号掩码。 */
 function formatUploadTime(value) {
-  const match = String(value || '').match(/(?:\d{4}-)?(\d{1,2})-(\d{1,2})[ T](\d{1,2}):(\d{2})/);
-  if (!match) return value || '';
-  return `${Number(match[1])}-${Number(match[2])} ${match[3].padStart(2, '0')}:${match[4]}`;
+  return formatBeijingShortDateTime(value);
 }
 
 function CompactAttachmentTitle({ item, actions }) {

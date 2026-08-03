@@ -8,6 +8,7 @@
 import { all, run } from '../../../platform/persistence/index.js';
 import { startIssueDetailSync, syncIssueOverview } from './sync.js';
 import { logger } from '../../../platform/runtime/index.js';
+import { beijingDateString, beijingDateTimeParts } from '../../../shared/utils/time.js';
 
 const CONFIG_KEYS = [
   'issue.sync.enabled',
@@ -46,7 +47,7 @@ async function readConfig() {
   };
 }
 
-function isDue(schedule, now) {
+export function isDue(schedule, now) {
   if (!schedule.enabled) return false;
   const parsedLast = schedule.lastRunAt ? new Date(schedule.lastRunAt) : null;
   const last = parsedLast && !Number.isNaN(parsedLast.getTime()) ? parsedLast : null;
@@ -54,9 +55,9 @@ function isDue(schedule, now) {
   if (schedule.mode === 'daily') {
     const match = /^(\d{1,2}):(\d{2})$/.exec(schedule.dailyTime);
     if (!match) return false;
-    const due = new Date(now);
-    due.setHours(Number(match[1]), Number(match[2]), 0, 0);
-    return now >= due && (!last || last < due);
+    const current = beijingDateTimeParts(now);
+    if (!current || current.hour * 60 + current.minute < Number(match[1]) * 60 + Number(match[2])) return false;
+    return !last || beijingDateString(last) !== beijingDateString(now);
   }
   const unitMs = schedule.mode === 'hours' ? 60 * 60 * 1000 : 60 * 1000;
   return !last || now.getTime() - last.getTime() >= schedule.interval * unitMs;

@@ -297,16 +297,16 @@ export default function TaskEditor({ open, mode = 'modal', code, kind = 'dev', t
                     </Form.Item>
               </StageBuiltinField>
               <StageBuiltinField fieldKey="plan_start" defaultSection="schedule">
-                <Form.Item name="plan_start" label="计划开始" rules={required.rules('plan_start', '计划开始', { action: '请选择' })} style={{ marginBottom: 8 }}><DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" /></Form.Item>
+                <Form.Item name="plan_start" label="计划开始" rules={required.rules('plan_start', '计划开始', { action: '请选择' })} style={{ marginBottom: 8 }}><DatePicker size="small" format="YYYY-M-D" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" /></Form.Item>
               </StageBuiltinField>
               <StageBuiltinField fieldKey="plan_end" defaultSection="schedule">
-                <Form.Item name="plan_end" label="计划结束" rules={required.rules('plan_end', '计划结束', { action: '请选择' })} style={{ marginBottom: 8 }}><DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" /></Form.Item>
+                <Form.Item name="plan_end" label="计划结束" rules={required.rules('plan_end', '计划结束', { action: '请选择' })} style={{ marginBottom: 8 }}><DatePicker size="small" format="YYYY-M-D" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" /></Form.Item>
               </StageBuiltinField>
               <StageBuiltinField fieldKey="actual_start" defaultSection="schedule">
-                <Form.Item name="actual_start" label="实际开始" rules={required.rules('actual_start', '实际开始', { action: '请选择' })} style={{ marginBottom: 0 }}><DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" /></Form.Item>
+                <Form.Item name="actual_start" label="实际开始" rules={required.rules('actual_start', '实际开始', { action: '请选择' })} style={{ marginBottom: 0 }}><DatePicker size="small" format="YYYY-M-D" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" /></Form.Item>
               </StageBuiltinField>
               <StageBuiltinField fieldKey="actual_end" defaultSection="schedule">
-                <Form.Item name="actual_end" label="实际结束" rules={required.rules('actual_end', '实际结束', { action: '请选择' })} style={{ marginBottom: 0 }}><DatePicker size="small" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" /></Form.Item>
+                <Form.Item name="actual_end" label="实际结束" rules={required.rules('actual_end', '实际结束', { action: '请选择' })} style={{ marginBottom: 0 }}><DatePicker size="small" format="YYYY-M-D" style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} placeholder="选择日期" /></Form.Item>
               </StageBuiltinField>
 
               {kind === 'dev' && <StageBuiltinField fieldKey="impact_analysis" defaultSection="impact" defaultColumnSpan={24}>

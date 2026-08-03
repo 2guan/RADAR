@@ -9,11 +9,15 @@ const BEIJING_TIME_ZONE = 'Asia/Shanghai';
 
 const pad2 = (n) => String(n).padStart(2, '0');
 
-function formatParts(year, month, day, hour, minute, second) {
-  return `${year}-${Number(month)}-${Number(day)} ${pad2(hour)}:${pad2(minute)}:${pad2(second)}`;
+function formatDateParts(year, month, day) {
+  return `${Number(year)}-${Number(month)}-${Number(day)}`;
 }
 
-function formatDateInBeijing(date) {
+function formatDateTimeParts(year, month, day, hour, minute) {
+  return `${formatDateParts(year, month, day)} ${pad2(hour)}:${pad2(minute)}`;
+}
+
+function datePartsInBeijing(date) {
   if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '—';
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: BEIJING_TIME_ZONE,
@@ -29,26 +33,65 @@ function formatDateInBeijing(date) {
     return acc;
   }, {});
 
-  return formatParts(parts.year, parts.month, parts.day, parts.hour, parts.minute, parts.second);
+  return parts;
+}
+
+function formatDateInBeijing(date) {
+  const parts = datePartsInBeijing(date);
+  return parts === '—' ? parts : formatDateParts(parts.year, parts.month, parts.day);
+}
+
+function formatDateTimeInBeijing(date) {
+  const parts = datePartsInBeijing(date);
+  return parts === '—' ? parts : formatDateTimeParts(parts.year, parts.month, parts.day, parts.hour, parts.minute);
+}
+
+function parseNaive(value) {
+  return /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[ T](\d{1,2}):(\d{1,2})(?::\d{1,2})?(?:\.\d+)?)?$/.exec(String(value || '').trim());
+}
+
+/** 业务纯日期保持原日历日，默认显示为 YYYY-M-D。 */
+export function formatBeijingDate(value) {
+  if (!value) return '—';
+  const compact = /^(\d{4})(\d{2})(\d{2})$/.exec(String(value).trim());
+  if (compact) return formatDateParts(compact[1], compact[2], compact[3]);
+  const naive = parseNaive(value);
+  if (naive) return formatDateParts(naive[1], naive[2], naive[3]);
+  return formatDateInBeijing(new Date(value));
+}
+
+/** 明确标注为紧凑位置时，显示 M-D。 */
+export function formatBeijingShortDate(value) {
+  if (!value) return '—';
+  const date = formatBeijingDate(value);
+  const match = /^(\d+)-(\d+)-(\d+)$/.exec(date);
+  return match ? `${match[2]}-${match[3]}` : date;
 }
 
 /**
- * 历史记录时间统一格式：2026-5-31 18:05:02。
+ * 默认日期时间统一格式：2026-5-31 18:05。
  * 带时区的时间转换为北京时间；数据库无时区字符串按北京时间墙上时间展示。
  */
 export function formatBeijingDateTime(value) {
   if (!value) return '—';
-  if (value instanceof Date || typeof value === 'number') return formatDateInBeijing(new Date(value));
+  if (value instanceof Date || typeof value === 'number') return formatDateTimeInBeijing(new Date(value));
 
   const text = String(value).trim();
   if (!text) return '—';
 
-  const naive = text.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})[ T](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?(?:\.\d+)?$/);
+  const naive = parseNaive(text);
   if (naive) {
-    const [, year, month, day, hour, minute, second = '0'] = naive;
-    return formatParts(year, month, day, hour, minute, second);
+    const [, year, month, day, hour, minute] = naive;
+    return hour === undefined ? formatDateParts(year, month, day) : formatDateTimeParts(year, month, day, hour, minute);
   }
 
   const zonedText = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(text) ? text.replace(' ', 'T') : text;
-  return formatDateInBeijing(new Date(zonedText));
+  return formatDateTimeInBeijing(new Date(zonedText));
+}
+
+/** 明确标注为紧凑位置的日期时间：M-D HH:mm。 */
+export function formatBeijingShortDateTime(value) {
+  const formatted = formatBeijingDateTime(value);
+  const match = /^(\d+)-(\d+)-(\d+)\s+(\d{2}:\d{2})$/.exec(formatted);
+  return match ? `${match[2]}-${match[3]} ${match[4]}` : formatted;
 }

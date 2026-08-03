@@ -5,10 +5,11 @@
  * 作者：hengguan
  */
 
-/** 生成 YYYYMMDD 格式的当前日期，供缺失投产窗口时兼容旧行为。 */
+import { beijingCompactDateString } from './time.js';
+
+/** 生成北京时间 YYYYMMDD 格式的当前日期，供缺失投产窗口时兼容旧行为。 */
 function currentDateStr(date = new Date()) {
-  const pad = (value) => String(value).padStart(2, '0');
-  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}`;
+  return beijingCompactDateString(date);
 }
 
 /** 将非法或空的投产窗口回退为当前日期。 */

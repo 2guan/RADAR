@@ -24,15 +24,14 @@ import { DictSelect, PersonPicker, makeReleasePointOptions, ReleasePointText } f
 import { apiGet, apiPost, apiPut, apiDelete, rawClient } from '../api/index.js';
 import { useAppStore } from '../../../platform/state/app.js';
 import ReleaseApplyEditor from './ReleaseApplyEditor.jsx';
+import { formatBeijingShortDateTime } from '../../../shared/utils/index.js';
 
 const DEFAULT_SIGNOFF_CONCLUSION = '已确认所有评审点符合要求，同意投产。';
 const LEGACY_SIGNOFF_CONCLUSION = '同意投产';
 
-/** 签署时间缩略：YYYY-MM-DD HH:MM:SS -> M-D H:MM */
+/** 签署时间是明确的紧凑日期时间位置：M-D HH:mm。 */
 function fmtSignTime(s) {
-  if (!s) return '—';
-  const m = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{1,2}))?/.exec(String(s));
-  return m ? `${Number(m[2])}-${Number(m[3])} ${Number(m[4] || 0)}:${String(m[5] || '0').padStart(2, '0')}` : s;
+  return formatBeijingShortDateTime(s);
 }
 
 // 各阶段状态推进顺序（用于取「最弱状态」聚合展示）

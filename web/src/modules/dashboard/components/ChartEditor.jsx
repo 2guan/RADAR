@@ -309,7 +309,7 @@ export default function ChartEditor({ open, onClose, onSave, initialData, scope,
                       if (isDate(dim)) {
                         return (
                           <Form.Item {...rest} name={[n, 'val']} rules={[{ required: true, message: '时间区间' }]} style={{ width: 260, marginBottom: 0 }}>
-                            <DatePicker.RangePicker size="small" style={{ width: '100%' }} />
+                            <DatePicker.RangePicker size="small" format="YYYY-M-D" style={{ width: '100%' }} />
                           </Form.Item>
                         );
                       }
