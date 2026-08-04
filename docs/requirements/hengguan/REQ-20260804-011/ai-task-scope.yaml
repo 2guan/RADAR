@@ -1,0 +1,101 @@
+{
+  "schema_version": "1.0",
+  "requirement": {
+    "id": "REQ-20260804-011",
+    "ref": "hengguan/REQ-20260804-011",
+    "title": "离线单端口部署网页手册",
+    "status": "ready",
+    "document": "docs/requirements/hengguan/REQ-20260804-011/requirement.md",
+    "internet_ai_coding_allowed": true
+  },
+  "assignment": {
+    "developer": "hengguan",
+    "module": "governance",
+    "module_owner": "hengguan",
+    "branch": "hengguan/REQ-20260804-011-offline-single-port-manual",
+    "base_branch": "origin/main",
+    "worktree": "codex-desktop-current-worktree"
+  },
+  "ai": {
+    "enabled": true,
+    "approved_service": "Codex desktop",
+    "model": "approved-by-user",
+    "contains_confidential_information": false,
+    "context_sanitized": true,
+    "production_access": false
+  },
+  "scope": {
+    "writable_paths": [
+      "docs/requirements/hengguan/REQ-20260804-011/**",
+      "docs/deployment/offline-single-port-deployment.html"
+    ],
+    "read_only_paths": [
+      "AGENTS.md",
+      "DESIGN.md",
+      "docs/governance/**",
+      "docs/architecture/**",
+      "governance/modules.yaml",
+      ".agents/skills/radar-delivery-engineer/**",
+      ".env.example",
+      "docker-compose.yml"
+    ],
+    "forbidden_paths": [
+      ".github/**",
+      "docs/reports/**",
+      ".env",
+      "**/.env",
+      "**/*secret*",
+      "**/*credential*",
+      "attachments/**",
+      "data/**",
+      "server/**",
+      "web/**"
+    ]
+  },
+  "public_capability_change": {
+    "required": true,
+    "shared_change_issue": "hengguan/REQ-20260804-011",
+    "target_modules": ["governance"],
+    "new_methods": ["离线单端口部署网页手册"],
+    "existing_method_changed": false,
+    "semantic_name_confirmed": true,
+    "old_behavior_preserved": true,
+    "compatibility_note": "新增治理模块部署文档，不改变应用运行时、API 或已有部署配置契约。",
+    "owner_approved": true,
+    "owner_review_required_before_merge": true
+  },
+  "database": {
+    "changed": false,
+    "migration_paths": [],
+    "mysql8_compatible": true,
+    "historical_data_impact": "无",
+    "rollback_or_compensation": "无数据库变更；手册说明数据目录备份与容器回退步骤。"
+  },
+  "external_access": {
+    "changed": false,
+    "api_paths": [],
+    "readable_field_whitelist": [],
+    "writable_field_whitelist": [],
+    "action_whitelist": [],
+    "audit_required": false
+  },
+  "required_tests": [
+    {"name": "html_structure", "command": "Node.js 解析 HTML，确认文档、标题、关键配置段和复制脚本存在"},
+    {"name": "api", "command": "npm run test:api --prefix server"},
+    {"name": "permission", "command": "npm run test:rbac --prefix server"},
+    {"name": "governance", "command": "node scripts/check-governance.mjs && git diff --check"},
+    {"name": "manual_review", "command": "人工核对 Docker Compose、kkFileView、Nginx 与验证命令的变量、端口和网络名称一致"}
+  ],
+  "risk": {
+    "level": "normal",
+    "reasons": ["部署文档可能被直接用于内网服务器"],
+    "required_approvals": ["hengguan"]
+  },
+  "completion": {
+    "changed_files_report_required": true,
+    "test_result_report_required": true,
+    "known_risks_report_required": true,
+    "rollback_report_required": true,
+    "requirement_acceptance_required": true
+  }
+}

@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="RADAR、kkFileView 和 NginxWebUI 的离线单端口部署手册">
+  <title>RADAR 离线单端口部署手册</title>
+  <style>
+    :root { --ink:#192235; --muted:#5c687d; --line:#d9e1ec; --brand:#1565c0; --soft:#edf5ff; --code:#101826; --good:#087f5b; --warn:#a75b00; --bad:#b42318; --paper:#fff; --ground:#f4f7fb; }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body { margin:0; background:var(--ground); color:var(--ink); font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; }
+    a { color:var(--brand); }
+    .hero { color:#fff; background:linear-gradient(120deg,#0e315b,#1565c0 65%,#2385b8); padding:52px max(24px,calc((100% - 1160px)/2)); }
+    .hero h1 { margin:0 0 10px; font-size:clamp(28px,5vw,42px); letter-spacing:.02em; }
+    .hero p { max-width:780px; margin:0; color:#dceeff; font-size:17px; }
+    .badges { display:flex; flex-wrap:wrap; gap:8px; margin-top:22px; }
+    .badge { border:1px solid #73b4ee; border-radius:999px; padding:3px 11px; font-size:13px; background:#0e427b99; }
+    .layout { max-width:1160px; margin:0 auto; padding:28px 24px 60px; display:grid; grid-template-columns:240px minmax(0,1fr); gap:26px; }
+    nav { position:sticky; top:20px; align-self:start; background:var(--paper); border:1px solid var(--line); border-radius:12px; padding:14px; box-shadow:0 4px 20px #172a4610; }
+    nav b { display:block; padding:4px 8px 8px; font-size:13px; color:var(--muted); }
+    nav a { display:block; border-radius:7px; color:#3d4a5e; padding:6px 8px; text-decoration:none; font-size:14px; }
+    nav a:hover { color:var(--brand); background:var(--soft); }
+    main { min-width:0; }
+    section { margin-bottom:28px; background:var(--paper); border:1px solid var(--line); border-radius:12px; padding:26px; box-shadow:0 4px 20px #172a4609; }
+    h2 { margin:0 0 16px; font-size:23px; line-height:1.3; }
+    h3 { margin:25px 0 10px; font-size:17px; }
+    h4 { margin:20px 0 8px; font-size:15px; }
+    p { margin:8px 0 14px; }
+    ul, ol { margin:8px 0 14px; padding-left:1.45em; }
+    li { margin:4px 0; }
+    .callout { margin:16px 0; border-left:4px solid var(--brand); background:var(--soft); padding:12px 14px; border-radius:0 8px 8px 0; }
+    .callout.warn { border-color:#e99b21; background:#fff7e7; }
+    .callout.danger { border-color:#df4b45; background:#fff1f0; }
+    .callout strong { color:#123f76; }
+    .arch { display:grid; gap:10px; margin:16px 0; text-align:center; }
+    .node { border:1px solid #b7d1ed; background:#f3f9ff; padding:10px; border-radius:8px; font-weight:650; }
+    .node.private { background:#f7f8fa; border-color:#cbd2dc; }
+    .arrow { color:var(--brand); font-weight:700; font-size:20px; line-height:1; }
+    .arch-row { display:grid; grid-template-columns:1fr 34px 1fr; align-items:center; gap:6px; }
+    table { width:100%; border-collapse:collapse; margin:12px 0 18px; overflow:hidden; border:1px solid var(--line); border-radius:8px; }
+    th,td { padding:10px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
+    th { background:#f6f8fb; font-weight:650; }
+    tr:last-child td { border-bottom:0; }
+    code { padding:1px 4px; border-radius:4px; background:#edf1f6; color:#26354b; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:.91em; word-break:break-word; }
+    .code { position:relative; margin:10px 0 18px; }
+    pre { margin:0; overflow:auto; padding:17px 16px; border-radius:8px; background:var(--code); color:#e8eef7; font:12.5px/1.58 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; tab-size:2; white-space:pre; }
+    pre code { padding:0; background:transparent; color:inherit; font-size:inherit; }
+    .copy { position:absolute; top:8px; right:8px; border:1px solid #71819a; border-radius:6px; color:#eef5ff; background:#263448; padding:4px 8px; font:12px inherit; cursor:pointer; }
+    .copy:hover { background:#3a516f; }
+    .steps { counter-reset:steps; list-style:none; padding-left:0; }
+    .steps > li { position:relative; padding:0 0 24px 47px; min-height:44px; }
+    .steps > li::before { counter-increment:steps; content:counter(steps); position:absolute; left:0; top:0; display:grid; place-items:center; width:29px; height:29px; border-radius:50%; background:var(--brand); color:#fff; font-weight:700; }
+    .steps > li:not(:last-child)::after { content:""; position:absolute; left:14px; top:34px; bottom:0; border-left:2px solid #c8d9ed; }
+    .steps h3 { margin:0 0 8px; }
+    details { margin:10px 0; border:1px solid var(--line); border-radius:8px; padding:0 13px; }
+    summary { cursor:pointer; padding:11px 0; font-weight:650; }
+    .matrix { font-size:13px; }
+    .ok { color:var(--good); font-weight:650; } .no { color:var(--bad); font-weight:650; }
+    .foot { color:var(--muted); font-size:13px; }
+    @media (max-width:850px) { .layout { display:block; padding:16px 12px 36px; } nav { position:static; margin-bottom:16px; } section { padding:19px 16px; border-radius:10px; } th,td { padding:8px; } .hero { padding:34px 20px; } .arch-row { grid-template-columns:1fr; } .arch-row .arrow { transform:rotate(90deg); } }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <h1>RADAR 离线单端口部署手册</h1>
+    <p>适用于无互联网环境、仅开放 <strong>TCP 3510</strong> 的服务器。RADAR 通过 Docker Compose 部署；Nginx 统一入口，kkFileView 仅在内部网络提供文件预览。</p>
+    <div class="badges"><span class="badge">离线镜像导入</span><span class="badge">仅 3510 对外开放</span><span class="badge">RADAR Docker Compose</span><span class="badge">同源 /preview/ 预览</span></div>
+  </header>
+  <div class="layout">
+    <nav aria-label="手册目录">
+      <b>目录</b>
+      <a href="#scope">1. 适用范围</a>
+      <a href="#topology">2. 拓扑与端口</a>
+      <a href="#prepare">3. 部署前准备</a>
+      <a href="#images">4. 导入三个镜像包</a>
+      <a href="#radar">5. Docker Compose 部署 RADAR</a>
+      <a href="#kk">6. 部署 kkFileView</a>
+      <a href="#nginxwebui">7. 启动 NginxWebUI</a>
+      <a href="#nginx">8. 配置统一反向代理</a>
+      <a href="#future-https">8.2 未来 HTTPS 自适应</a>
+      <a href="#settings">9. RADAR 系统设置</a>
+      <a href="#verify">10. 验证清单</a>
+      <a href="#troubleshoot">11. 常见故障</a>
+      <a href="#backup">12. 升级、备份与回退</a>
+    </nav>
+    <main>
+      <section id="scope">
+        <h2>1. 适用范围与约定</h2>
+        <p>本手册中的 <code>SERVER_IP</code> 是部署服务器的内网 IP 占位符。执行前，统一替换为实际地址；不要把示例中的占位符原样写入配置。</p>
+        <table>
+          <thead><tr><th>项目</th><th>本手册约定</th></tr></thead>
+          <tbody>
+            <tr><td>客户端入口</td><td><code>http://SERVER_IP:3510</code></td></tr>
+            <tr><td>对外开放端口</td><td>仅 <code>3510/tcp</code></td></tr>
+            <tr><td>内部服务</td><td>RADAR <code>127.0.0.1:3000</code>；kkFileView <code>127.0.0.1:8012</code>；NginxWebUI <code>127.0.0.1:8080</code></td></tr>
+            <tr><td>离线包</td><td><code>radar-image.tar</code>、<code>kkFileView-4.1.0-docker.tar</code>、<code>nginxwebui.tar</code></td></tr>
+            <tr><td>容器网络</td><td><code>radar-internal</code>；RADAR 与 kkFileView 通过服务名互访</td></tr>
+          </tbody>
+        </table>
+        <div class="callout warn"><strong>不要开放 3000、8012 或 8080。</strong>它们只应绑定到 <code>127.0.0.1</code> 或 Docker 内部网络。NginxWebUI 是管理面，不能从业务入口 <code>:3510</code> 暴露。</div>
+      </section>
+
+      <section id="topology">
+        <h2>2. 最终拓扑与端口边界</h2>
+        <div class="arch" aria-label="单端口部署拓扑">
+          <div class="node">浏览器<br><code>http://SERVER_IP:3510</code></div><div class="arrow">↓ 仅此端口穿过边界</div>
+          <div class="node">宿主机 Nginx（由 NginxWebUI 管理）<br><code>:3510</code>：<code>/</code> → RADAR；<code>/preview/</code> → kkFileView</div>
+          <div class="arrow">↓ 本机回环</div>
+          <div class="arch-row"><div class="node private">RADAR 容器<br><code>127.0.0.1:3000</code></div><div class="arrow">↔</div><div class="node private">kkFileView 容器<br><code>127.0.0.1:8012</code></div></div>
+          <div class="arrow">↓ Docker 内部网络 <code>radar-internal</code></div>
+          <div class="node private">kkFileView 以 <code>http://radar:3000</code> 拉取 RADAR 已签名的附件预览源</div>
+        </div>
+        <p>浏览器始终访问同一来源（<code>http://SERVER_IP:3510</code>）。因此预览 URL 应为 <code>/preview/onlinePreview?url=...</code>，而不是 <code>http://SERVER_IP:8012/...</code>。</p>
+        <table class="matrix"><thead><tr><th>端口</th><th>监听位置</th><th>用途</th><th>客户端可直接访问？</th></tr></thead><tbody>
+          <tr><td>3510</td><td>所有网卡</td><td>Nginx 唯一业务入口</td><td class="ok">可以</td></tr>
+          <tr><td>3000</td><td>127.0.0.1</td><td>RADAR 应用</td><td class="no">不可以</td></tr>
+          <tr><td>8012</td><td>127.0.0.1</td><td>kkFileView</td><td class="no">不可以</td></tr>
+          <tr><td>8080</td><td>127.0.0.1</td><td>NginxWebUI 管理界面</td><td class="no">不可以</td></tr>
+        </tbody></table>
+      </section>
+
+      <section id="prepare">
+        <h2>3. 部署前准备</h2>
+        <ol class="steps">
+          <li><h3>确认基础条件</h3><p>在目标服务器执行。Docker Compose 必须是 v2（命令为 <code>docker compose</code>）。若 3510 已被占用，先确认占用方并停止在该端口提供的旧服务。</p>
+            <div class="code"><button class="copy" type="button">复制</button><pre><code>docker --version
+docker compose version
+ss -lntp | grep -E ':(3510|3000|8012|8080)\b' || true
+df -h
+free -h</code></pre></div>
+          </li>
+          <li><h3>规划目录并传入离线包</h3><p>建议将镜像包与持久化数据分离。下面目录名只是建议；创建后需确保运维账户对其具有读写权限。</p>
+            <div class="code"><button class="copy" type="button">复制</button><pre><code>mkdir -p /opt/radar-offline/images
+mkdir -p /opt/radar-offline/radar/data
+mkdir -p /opt/radar-offline/radar/attachments
+mkdir -p /opt/radar-offline/nginxwebui
+
+# 将三个 tar 文件上传或拷贝到：
+# /opt/radar-offline/images/</code></pre></div>
+          </li>
+          <li><h3>理解配置中的地址</h3><p><code>SERVER_IP</code> 仅用于浏览器可达的同源入口；容器之间<strong>不要</strong>使用该 IP，也不要使用 <code>host.docker.internal</code>。同一 Docker 网络内统一使用服务名 <code>radar</code>。</p></li>
+        </ol>
+      </section>
+
+      <section id="images">
+        <h2>4. 导入三个离线镜像</h2>
+        <p>在无互联网环境中只用 <code>docker load -i</code>，不执行 <code>docker pull</code>。本次离线包已确定内含以下标签：<code>ghcr.io/2guan/radar:latest</code>、<code>keking/kkfileview:4.1.0</code> 和 <code>cym1102/nginxwebui:latest</code>，导入后无需再次标记。</p>
+        <div class="code"><button class="copy" type="button">复制</button><pre><code>cd /opt/radar-offline/images
+docker load -i radar-image.tar
+docker load -i kkFileView-4.1.0-docker.tar
+docker load -i nginxwebui.tar
+
+docker image ls ghcr.io/2guan/radar:latest keking/kkfileview:4.1.0 cym1102/nginxwebui:latest</code></pre></div>
+        <div class="callout">若最后一条命令没有同时列出三个指定标签，说明导入包与本手册约定不一致；请停止后续部署并确认离线包来源，而不是临时改用未知镜像标签。</div>
+      </section>
+
+      <section id="radar">
+        <h2>5. 使用 Docker Compose 部署 RADAR</h2>
+        <p>先创建 Docker 内部网络。它不是对外端口；其作用是让 kkFileView 使用稳定服务名 <code>radar</code> 请求附件源。</p>
+        <div class="code"><button class="copy" type="button">复制</button><pre><code>docker network inspect radar-internal &gt;/dev/null 2&gt;&amp;1 || docker network create radar-internal</code></pre></div>
+        <h3>5.1 创建 <code>/opt/radar-offline/radar/.env</code></h3>
+        <p>用编辑器新建该文件，粘贴以下内容，并将所有 <code>SERVER_IP</code> 替换为实际内网 IP。此示例使用 SQLite；数据和附件由 Compose 挂载到宿主机目录。</p>
+<div class="code"><button class="copy" type="button">复制</button><pre><code>HOST=0.0.0.0
+PORT=3000
+NODE_ENV=production
+
+# 首次部署必须替换为随机长字符串和强密码；不要保留尖括号内容。
+JWT_SECRET=&lt;请生成至少 32 位的随机密钥&gt;
+JWT_EXPIRES_IN=12h
+ADMIN_PHONE=&lt;首次超级管理员手机号或登录名&gt;
+ADMIN_NAME=超级管理员
+ADMIN_PASSWORD=&lt;首次超级管理员强密码&gt;
+
+# SQLite 持久化路径（容器内路径）
+DB_CLIENT=sqlite
+DB_FILE=/app/data/radar.db
+ATTACHMENT_DIR=/app/attachments
+WEB_DIST=/app/web/dist
+
+# 单一浏览器来源：Nginx 对外入口
+CORS_ORIGINS=http://SERVER_IP:3510
+CSP_CONNECT_SRC=self
+CSP_UPGRADE_INSECURE_REQUESTS=false
+HSTS_ENABLED=false
+CSRF_HEADER_VALUE=RADAR
+
+# 上传限制；白名单按逗号分隔。可按本单位制度收紧，修改后重启 RADAR。
+MAX_FILE_SIZE=52428800
+UPLOAD_ALLOWED_EXTENSIONS=.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.gif,.tif,.tiff,.pdf,.ofd,.txt,.html,.htm,.xml,.json,.properties,.md,.log,.py,.sql,.zip,.rar
+
+# 交付件预览：浏览器走同源反向代理；kkFileView 在内部经 Docker DNS 回源
+DELIVERABLE_PREVIEW_ENABLED=true
+KKFILEVIEW_BASE_URL=http://SERVER_IP:3510/preview
+KKFILEVIEW_ALLOWED_ORIGINS=http://SERVER_IP:3510
+ATTACHMENT_PREVIEW_SOURCE_BASE_URL=http://radar:3000</code></pre></div>
+        <div class="callout danger"><strong>先替换安全占位符再启动：</strong><code>JWT_SECRET</code>、<code>ADMIN_PHONE</code> 与 <code>ADMIN_PASSWORD</code> 不能使用示例文本，也不要提交到代码仓库、聊天记录或共享文档。</div>
+        <div class="callout warn"><strong>三个预览地址不要混用：</strong><code>KKFILEVIEW_BASE_URL</code> 是浏览器入口，必须带 <code>/preview</code>；<code>KKFILEVIEW_ALLOWED_ORIGINS</code> 是浏览器 Origin，不能带路径；<code>ATTACHMENT_PREVIEW_SOURCE_BASE_URL</code> 是 kkFileView 容器内部回源地址，必须是 <code>http://radar:3000</code>。</div>
+        <h3>5.2 创建 <code>/opt/radar-offline/radar/compose.yaml</code></h3>
+        <p>请使用以下 Compose 文件。<code>127.0.0.1:3000:3000</code> 是关键：RADAR 不直接对内网客户端暴露，只允许宿主机 Nginx 回源。</p>
+        <div class="code"><button class="copy" type="button">复制</button><pre><code>services:
+  radar:
+    image: ghcr.io/2guan/radar:latest
+    container_name: radar
+    restart: unless-stopped
+    user: "0:0"
+    env_file:
+      - .env
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - ./data:/app/data
+      - ./attachments:/app/attachments
+    networks:
+      - radar-internal
+
+networks:
+  radar-internal:
+    external: true
+    name: radar-internal</code></pre></div>
+        <h3>5.3 启动与本机检查</h3>
+        <div class="code"><button class="copy" type="button">复制</button><pre><code>cd /opt/radar-offline/radar
+docker compose -f compose.yaml config
+docker compose -f compose.yaml up -d
+docker compose -f compose.yaml ps
+curl -sS http://127.0.0.1:3000/api/health</code></pre></div>
+        <p>健康检查应返回 JSON 且 HTTP 状态为 200。若失败，先查看 <code>docker compose -f /opt/radar-offline/radar/compose.yaml logs --tail=200 radar</code>，不要在未备份数据目录时删除容器或卷。</p>
+      </section>
+
+      <section id="kk">
+        <h2>6. 部署 kkFileView（仅本机 8012）</h2>
+        <p>以下命令加入同一个 <code>radar-internal</code> 网络并限制 CPU/内存。kkFileView 默认将 Office 文档转为 PDF 预览，且禁用页面上的 JPG/PDF 切换按钮。</p>
+        <div class="code"><button class="copy" type="button">复制</button><pre><code>docker run -d \
+  --name kkfileview \
+  --restart unless-stopped \
+  --network radar-internal \
+  -p 127.0.0.1:8012:8012 \
+  --memory=1g \
+  --cpus=1 \
+  -e KK_BASE_URL=default \
+  -e KK_TRUST_HOST=radar \
+  -e KK_NOT_TRUST_HOST=default \
+  -e KK_OFFICE_PREVIEW_TYPE=pdf \
+  -e KK_OFFICE_PREVIEW_SWITCH_DISABLED=true \
+  keking/kkfileview:4.1.0</code></pre></div>
+        <p>确认服务与内部回源：</p>
+        <div class="code"><button class="copy" type="button">复制</button><pre><code>docker ps --filter name=kkfileview
+curl -sS -I http://127.0.0.1:8012/
+docker exec kkfileview sh -c 'wget -S -O /dev/null http://radar:3000/api/health'</code></pre></div>
+        <div class="callout">最后一条命令若返回 <code>HTTP/1.1 200 OK</code>，说明 kkFileView 能通过 Docker 网络访问 RADAR。此方式不依赖 DNS，也不依赖对外端口。</div>
+      </section>
+
+      <section id="nginxwebui">
+        <h2>7. 启动 NginxWebUI（管理端只监听本机）</h2>
+        <p>NginxWebUI 使用宿主机网络管理 Nginx。管理界面监听 <code>127.0.0.1:8080</code>，因此不会从 3510 访问到它。</p>
+        <div class="code"><button class="copy" type="button">复制</button><pre><code>docker run -d \
+  --name nginxwebui \
+  --restart unless-stopped \
+  --privileged=true \
+  --network host \
+  -v /opt/radar-offline/nginxwebui:/home/nginxWebUI \
+  -e BOOT_OPTIONS="--server.port=8080 --server.address=127.0.0.1" \
+  cym1102/nginxwebui:latest</code></pre></div>
+        <p>本机检查：</p>
+        <div class="code"><button class="copy" type="button">复制</button><pre><code>docker ps --filter name=nginxwebui
+curl -sS -I http://127.0.0.1:8080/</code></pre></div>
+        <div class="callout warn"><strong>管理入口的访问方式：</strong>仅在有独立的运维管理通道时，使用 SSH 本地转发 <code>ssh -N -L 8080:127.0.0.1:8080 运维账户@SERVER_IP</code> 后，在本机浏览器打开 <code>http://127.0.0.1:8080</code>。若没有管理网络通道，请在服务器控制台使用本机浏览器或既有受控跳板访问。不要把 8080 转发到 3510。</div>
+        <details><summary>若当前 NginxWebUI 版本不接受 <code>--server.address</code></summary><p>保留 <code>--network host</code> 和 <code>--server.port=8080</code>，再在服务器防火墙中明确拒绝非本机访问 8080，或只在受控管理网开放它。完成后用 <code>ss -lntp | grep :8080</code> 确认监听范围。业务入口仍只允许 3510。</p></details>
+      </section>
+
+      <section id="nginx">
+        <h2>8. 在 NginxWebUI 配置唯一业务入口</h2>
+        <p>登录 NginxWebUI 后，进入“HTTP 参数配置”或“网站管理”（不同版本名称略有不同），新增一个监听 <code>3510</code> 的 server 配置。保存后先执行“测试配置”，通过后再“重载 Nginx”。下方配置已经预留未来 HTTPS 网关的协议自适应能力。</p>
+        <h3>8.0 在全局 HTTP 配置中添加协议推导</h3>
+        <p>将以下 <code>map</code> 放在 Nginx 的 <code>http { ... }</code> 范围（不是 <code>server { ... }</code> 内）。直接访问 3510 时取当前 HTTP 协议；未来外层 Nginx 传入 HTTPS 标记时，自动改为 HTTPS。此配置不需要修改 RADAR 或 kkFileView 环境变量。</p>
+        <div class="code"><button class="copy" type="button">复制</button><pre><code>map $http_x_forwarded_proto $preview_scheme {
+    default $scheme;
+    https   https;
+}</code></pre></div>
+        <div class="code"><button class="copy" type="button">复制</button><pre><code>server {
+    listen 3510 default_server;
+    server_name _;
+    client_max_body_size 100m;
+
+    # 浏览器请求 /preview/... 时，转发给仅绑定本机的 kkFileView。
+    # 结尾的 / 会移除 /preview/ 前缀，使 kkFileView 收到 /onlinePreview?...。
+    location ^~ /preview/ {
+        proxy_pass http://127.0.0.1:8012/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto http;
+        proxy_set_header X-Base-Url $preview_scheme://$http_host/preview/;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+    }
+
+    # 其他请求全部到 RADAR。
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $preview_scheme;
+    }
+}</code></pre></div>
+        <div class="callout danger"><strong>不要省略 <code>X-Base-Url</code>，也不要让客户端传入该头。</strong>此处由 Nginx 根据当前或可信上游的协议固定覆盖为 <code>$preview_scheme://$http_host/preview/</code>，kkFileView 生成的子资源才能继续走当前浏览器来源。</div>
+        <h3>8.1 从宿主机检查 Nginx</h3>
+        <div class="code"><button class="copy" type="button">复制</button><pre><code>nginx -t
+nginx -s reload
+curl -sS http://127.0.0.1:3000/api/health
+curl -sS -I http://127.0.0.1:8012/
+curl -sS http://SERVER_IP:3510/api/health</code></pre></div>
+        <p>最后一条应返回 RADAR 健康检查 JSON。若服务器自身无法用 <code>SERVER_IP</code> 回环访问，可改用另一台获授权内网客户端执行。</p>
+      </section>
+
+      <section id="future-https">
+        <h2>8.2 未来增加 HTTPS 域名时：无需增加 RADAR 双套配置</h2>
+        <p>当另一台 Nginx（“外层网关”）把 <code>https://PUBLIC_DOMAIN</code> 反向代理到本机 <code>http://SERVER_IP:3510</code> 时，浏览器仍只使用相对路径 <code>/preview/...</code>。第 8 节的 <code>map</code> 会让 kkFileView 自动生成对应协议的子资源地址，因此内网 IP/HTTP 和外网域名/HTTPS 可以同时使用。</p>
+        <div class="arch">
+          <div class="node">内网浏览器 → <code>http://SERVER_IP:3510</code></div>
+          <div class="node">外网浏览器 → <code>https://PUBLIC_DOMAIN</code> → 外层 Nginx → <code>http://SERVER_IP:3510</code></div>
+          <div class="node private">同一内层 Nginx → <code>/</code> 到 RADAR；<code>/preview/</code> 到 kkFileView</div>
+        </div>
+        <h3>外层 HTTPS Nginx 配置</h3>
+        <p>证书、私钥和 443 只部署在外层网关；RADAR 所在服务器仍只需要对该网关开放 3510。证书文件路径按网关实际环境填写。</p>
+        <div class="code"><button class="copy" type="button">复制</button><pre><code>server {
+    listen 443 ssl;
+    server_name PUBLIC_DOMAIN;
+
+    ssl_certificate     /path/to/fullchain.pem;
+    ssl_certificate_key /path/to/privkey.pem;
+
+    location / {
+        proxy_pass http://SERVER_IP:3510;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Port 443;
+    }
+}</code></pre></div>
+        <p>可选地在外层网关增加 HTTP 到 HTTPS 的跳转；这属于外层网关的端口与证书策略，不改变 RADAR 服务器的 3510 单端口限制。</p>
+        <div class="callout"><strong>无需修改的项：</strong><code>KKFILEVIEW_BASE_URL</code>、<code>KKFILEVIEW_ALLOWED_ORIGINS</code>、<code>ATTACHMENT_PREVIEW_SOURCE_BASE_URL</code> 以及系统设置中的预览地址均可保持原值。当前 RADAR 仅从该地址取受控的 <code>/preview</code> 路径，最终返回给浏览器的是相对路径。</div>
+        <h3>安全加强：仅信任固定外层网关</h3>
+        <p>若 3510 同时允许客户端直接访问，建议用下面两段替换第 8.0 节的简单 <code>map</code>。将 <code>EDGE_NGINX_IP</code> 替换为外层网关连接到 RADAR 服务器时使用的固定源 IP；不要同时保留两套 <code>map</code>。</p>
+        <div class="code"><button class="copy" type="button">复制</button><pre><code>geo $trusted_preview_gateway {
+    default       0;
+    EDGE_NGINX_IP 1;
+}
+
+map "$trusted_preview_gateway:$http_x_forwarded_proto" $preview_scheme {
+    default       $scheme;
+    "~^1:https$"  https;
+}</code></pre></div>
+        <div class="callout warn"><strong>双入口共存时保持现状：</strong>RADAR 的 <code>CSP_UPGRADE_INSECURE_REQUESTS=false</code> 和 <code>HSTS_ENABLED=false</code> 不要改为 true，否则直接使用 IP/HTTP 的客户端可能被浏览器强制升级到不存在的 HTTPS。若未来彻底停用 IP/HTTP，可只在外层 HTTPS 网关启用 HSTS。</div>
+      </section>
+
+      <section id="settings">
+        <h2>9. 在 RADAR 系统设置确认交付件预览</h2>
+        <p>环境变量生效后，使用具备系统设置权限的账号进入 <strong>系统设置 → 基础配置 → 交付件预览</strong>：</p>
+        <ol>
+          <li>打开“交付件预览”开关。</li>
+          <li>确认 kkFileView 地址显示为 <code>http://SERVER_IP:3510/preview</code>。</li>
+          <li>保存后重新进入需求、工单、开发、测试或投产页面，验证交付件卡片出现预览按钮。</li>
+        </ol>
+        <p>历史版本的预览按钮也会跟随该开关；关闭开关时，当前版本和历史版本均不显示预览动作。</p>
+      </section>
+
+      <section id="verify">
+        <h2>10. 上线前验证清单</h2>
+        <h3>10.1 服务与端口</h3>
+        <div class="code"><button class="copy" type="button">复制</button><pre><code>docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
+docker network inspect radar-internal
+ss -lntp | grep -E ':(3510|3000|8012|8080)\b'</code></pre></div>
+        <table><thead><tr><th>检查项</th><th>期望结果</th></tr></thead><tbody>
+          <tr><td><code>radar</code></td><td>运行中；端口显示 <code>127.0.0.1:3000-&gt;3000/tcp</code></td></tr>
+          <tr><td><code>kkfileview</code></td><td>运行中；端口显示 <code>127.0.0.1:8012-&gt;8012/tcp</code></td></tr>
+          <tr><td><code>nginxwebui</code></td><td>运行中；管理端只监听 <code>127.0.0.1:8080</code></td></tr>
+          <tr><td>Nginx</td><td><code>0.0.0.0:3510</code>（或服务器业务网卡）正在监听</td></tr>
+        </tbody></table>
+        <h3>10.2 浏览器业务验收</h3>
+        <ol>
+          <li>在同一内网访问 <code>http://SERVER_IP:3510</code>，完成登录。</li>
+          <li>进入任一含交付件的详情，上传一个允许预览的测试文件。</li>
+          <li>点击“预览”，浏览器地址或嵌入页应包含 <code>/preview/onlinePreview</code>，不得出现 <code>:8012</code>。</li>
+          <li>分别验证当前版本和历史版本的预览、下载；关闭“交付件预览”开关后，两个位置的预览按钮均应消失。</li>
+        </ol>
+      </section>
+
+      <section id="troubleshoot">
+        <h2>11. 常见故障排查</h2>
+        <table><thead><tr><th>现象</th><th>优先检查</th><th>处理方式</th></tr></thead><tbody>
+          <tr><td>访问 <code>:3510</code> 返回 502</td><td><code>curl http://127.0.0.1:3000/api/health</code>；RADAR 日志</td><td>先恢复 RADAR Compose 服务，再在 NginxWebUI 测试配置和重载。</td></tr>
+          <tr><td>预览页 502</td><td><code>curl -I http://127.0.0.1:8012/</code>；<code>docker logs --tail=200 kkfileview</code></td><td>确认 kkFileView 正在运行、8012 只绑定本机，且 Nginx 的 <code>/preview/</code> 反代保留尾部斜杠。</td></tr>
+          <tr><td>kkFileView 提示不受信任主机</td><td><code>docker exec kkfileview ... http://radar:3000/api/health</code></td><td>确认两个容器都在 <code>radar-internal</code>，并使用 <code>KK_TRUST_HOST=radar</code>；不要改为宿主机 IP。</td></tr>
+          <tr><td>浏览器仍访问 <code>:8012</code></td><td>RADAR 的预览环境变量</td><td><code>KKFILEVIEW_BASE_URL</code> 应为 <code>http://SERVER_IP:3510/preview</code>；更新 .env 后执行 <code>docker compose up -d</code> 重新创建 RADAR 容器。</td></tr>
+          <tr><td>没有预览按钮</td><td>RADAR 系统设置和文件类型</td><td>打开“系统设置 → 基础配置 → 交付件预览”；确认文件扩展名在系统允许预览类型中。</td></tr>
+          <tr><td>Office 预览失败或资源耗尽</td><td><code>docker stats kkfileview</code>；容器日志</td><td>当前限制是 1 CPU、1 GiB。大文件并发转换不足时，先在测试环境评估后再上调限制；不要无上限运行。</td></tr>
+          <tr><td>更新 Nginx 后页面资源 404</td><td><code>proxy_pass</code> 的尾部斜杠</td><td><code>location ^~ /preview/</code> 必须配 <code>proxy_pass http://127.0.0.1:8012/;</code>，使前缀正确去除。</td></tr>
+        </tbody></table>
+      </section>
+
+      <section id="backup">
+        <h2>12. 备份、升级与回退</h2>
+        <h3>备份</h3>
+        <p>升级 RADAR 镜像前，停止写入或安排维护窗口，并备份宿主机的持久化目录。SQLite 文件与附件目录都必须保留；仅重建容器不能替代数据备份。</p>
+        <div class="code"><button class="copy" type="button">复制</button><pre><code>cd /opt/radar-offline/radar
+docker compose -f compose.yaml ps
+
+# 在运维批准的备份位置创建带日期的副本；以下仅为示例目录名。
+mkdir -p /opt/radar-offline/backup-config-YYYYMMDD
+cp -a data /opt/radar-offline/backup-data-YYYYMMDD
+cp -a attachments /opt/radar-offline/backup-attachments-YYYYMMDD
+cp .env compose.yaml /opt/radar-offline/backup-config-YYYYMMDD/</code></pre></div>
+        <h3>升级 RADAR 镜像</h3>
+        <ol><li>导入新的 RADAR tar 前，先用日期标签保留当前镜像，例如 <code>docker tag ghcr.io/2guan/radar:latest ghcr.io/2guan/radar:backup-YYYYMMDD</code>；再导入新 tar。</li><li>备份数据、附件、<code>.env</code> 和 <code>compose.yaml</code>。</li><li>Compose 保持 <code>image: ghcr.io/2guan/radar:latest</code>，运行 <code>docker compose -f compose.yaml up -d</code>。</li><li>重复第 10 节所有健康与业务验收。</li></ol>
+        <h3>回退</h3>
+        <p>若新版本启动或验收失败，先停止变更后的 Compose 服务，将 <code>image:</code> 改回前一已验证的本地标签，再重新 <code>up -d</code>。若升级包含数据库变更，按该版本发布说明从升级前备份恢复；不要手工猜测或修改 SQLite 内容。</p>
+        <p class="foot">手册版本：2026-08-04。配置值和命令应在预发布环境先行验证，再用于正式内网环境。</p>
+      </section>
+    </main>
+  </div>
+  <script>
+    document.querySelectorAll('.copy').forEach((button) => {
+      button.addEventListener('click', async () => {
+        const code = button.parentElement.querySelector('code').innerText;
+        try { await navigator.clipboard.writeText(code); button.textContent = '已复制'; }
+        catch (_) { button.textContent = '请手动复制'; }
+        window.setTimeout(() => { button.textContent = '复制'; }, 1400);
+      });
+    });
+  </script>
+</body>
+</html>
