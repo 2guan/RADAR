@@ -1,0 +1,107 @@
+{
+  "schema_version": "1.0",
+  "requirement": {
+    "id": "REQ-20260804-012",
+    "ref": "hengguan/REQ-20260804-012",
+    "title": "服务端依赖高危审计修复",
+    "status": "ready",
+    "document": "docs/requirements/hengguan/REQ-20260804-012/requirement.md",
+    "internet_ai_coding_allowed": true
+  },
+  "assignment": {
+    "developer": "hengguan",
+    "module": "governance",
+    "module_owner": "hengguan",
+    "branch": "hengguan/REQ-20260804-012-server-dependency-audit",
+    "base_branch": "origin/main",
+    "worktree": "codex-desktop-current-worktree"
+  },
+  "ai": {
+    "enabled": true,
+    "approved_service": "Codex desktop",
+    "model": "approved-by-user",
+    "contains_confidential_information": false,
+    "context_sanitized": true,
+    "production_access": false
+  },
+  "scope": {
+    "writable_paths": [
+      "docs/requirements/hengguan/REQ-20260804-012/**",
+      "server/package.json",
+      "server/package-lock.json"
+    ],
+    "read_only_paths": [
+      "AGENTS.md",
+      "DESIGN.md",
+      "docs/governance/**",
+      "docs/architecture/**",
+      "governance/modules.yaml",
+      "governance/security-audit-baseline.json",
+      ".agents/skills/radar-delivery-engineer/**",
+      "server/src/**",
+      "server/test/**",
+      "web/**",
+      "scripts/**"
+    ],
+    "forbidden_paths": [
+      ".github/**",
+      "docs/reports/**",
+      ".env",
+      "**/.env",
+      "**/*secret*",
+      "**/*credential*",
+      "attachments/**",
+      "data/**",
+      "governance/security-audit-baseline.json"
+    ]
+  },
+  "public_capability_change": {
+    "required": true,
+    "shared_change_issue": "hengguan/REQ-20260804-012",
+    "target_modules": ["governance"],
+    "new_methods": ["服务端依赖高危审计修复"],
+    "existing_method_changed": false,
+    "semantic_name_confirmed": true,
+    "old_behavior_preserved": true,
+    "compatibility_note": "仅更新依赖解析版本，不改变公开方法、DTO、API、权限或运行时语义。",
+    "owner_approved": true,
+    "owner_review_required_before_merge": true
+  },
+  "database": {
+    "changed": false,
+    "migration_paths": [],
+    "mysql8_compatible": true,
+    "historical_data_impact": "无",
+    "rollback_or_compensation": "回退修复提交即可恢复原锁文件；无数据库补偿。"
+  },
+  "external_access": {
+    "changed": false,
+    "api_paths": [],
+    "readable_field_whitelist": [],
+    "writable_field_whitelist": [],
+    "action_whitelist": [],
+    "audit_required": true
+  },
+  "required_tests": [
+    {"name": "unit", "command": "npm test --prefix server"},
+    {"name": "api", "command": "npm run test:api --prefix server"},
+    {"name": "permission", "command": "npm run test:rbac --prefix server"},
+    {"name": "dependency_audit", "command": "node scripts/check-dependency-audit.mjs"},
+    {"name": "build", "command": "npm run build --prefix web"},
+    {"name": "runtime", "command": "node scripts/verify-app-runtime.mjs"},
+    {"name": "module_boundaries", "command": "node scripts/check-module-boundaries.mjs"},
+    {"name": "governance", "command": "node scripts/check-governance.mjs && node scripts/check-ai-scope.mjs --scope docs/requirements/hengguan/REQ-20260804-012/ai-task-scope.yaml --base origin/main --head HEAD && git diff --check"}
+  ],
+  "risk": {
+    "level": "important",
+    "reasons": ["服务端依赖解析变更", "依赖安全门禁恢复", "Excel 导出与服务端启动兼容性"],
+    "required_approvals": ["hengguan"]
+  },
+  "completion": {
+    "changed_files_report_required": true,
+    "test_result_report_required": true,
+    "known_risks_report_required": true,
+    "rollback_report_required": true,
+    "requirement_acceptance_required": true
+  }
+}
