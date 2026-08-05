@@ -352,11 +352,17 @@ function ReleaseDetailCard({ release, onEdit }) {
             {a.change_system_name && <span style={{ fontSize: 11, color: 'var(--radar-text-secondary)', textAlign: 'right', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.change_system_name}</span>}
           </div>
           {(a.units && a.units.length) ? a.units.map((u, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', background: 'var(--radar-bg)', border: '1px solid var(--radar-border)', borderRadius: 2, padding: '3px 6px', marginTop: 4 }}>
-              {u.artifact_type && <Tag className="status-tag tag-system" style={{ margin: 0, borderRadius: 2, fontSize: 10 }}>{u.artifact_type}</Tag>}
-              {u.new_version && <span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', fontSize: 11, color: 'var(--radar-ink)' }}>{u.new_version}</span>}
-              {u.delivery_unit && <span title={u.delivery_unit} style={{ fontSize: 11, color: 'var(--radar-text-secondary)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.delivery_unit}</span>}
-              <span style={{ marginLeft: 'auto' }}><StatusBadge status={u.ferry_status} /></span>
+            <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 4, background: 'var(--radar-bg)', border: '1px solid var(--radar-border)', borderRadius: 2, padding: '5px 6px', marginTop: 4 }}>
+              {/* 与投产审批详情保持一致：状态仅作概览读取，不提供下拉或编辑入口。 */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', minWidth: 0 }}>
+                {u.artifact_type && <Tag className="status-tag tag-system" style={{ margin: 0, borderRadius: 2, fontSize: 10 }}>{u.artifact_type}</Tag>}
+                {u.new_version && <span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', fontSize: 11, color: 'var(--radar-ink)' }}>{u.new_version}</span>}
+                <span style={{ marginLeft: 'auto' }}><StatusBadge status={u.ferry_status} /></span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                <span title={u.delivery_unit || ''} style={{ fontSize: 11, color: 'var(--radar-text-secondary)', flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>{u.delivery_unit || '—'}</span>
+                <span style={{ marginLeft: 'auto' }}><StatusBadge status={u.artifact_release_status} /></span>
+              </div>
             </div>
           )) : <div className="lc-muted" style={{ fontSize: 11 }}>无交付制品</div>}
         </div>

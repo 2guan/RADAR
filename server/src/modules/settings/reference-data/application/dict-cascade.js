@@ -67,6 +67,10 @@ const DICT_REFERENCES = {
   ferry_status: [
     { table: 'release_apply', column: 'delivery_units', jsonKey: 'ferry_status' },
   ],
+  // 制品投产状态（同上，存于 delivery_units 元素）
+  artifact_release_status: [
+    { table: 'release_apply', column: 'delivery_units', jsonKey: 'artifact_release_status' },
+  ],
 };
 
 /**

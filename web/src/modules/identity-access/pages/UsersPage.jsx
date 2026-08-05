@@ -190,7 +190,7 @@ export default function Users() {
         </span>
       ),
     },
-    { title: '姓名', dataIndex: 'name', key: 'name' },
+    { title: '姓名', dataIndex: 'name', key: 'name', align: 'center' },
     { title: '所属机构', dataIndex: 'org', key: 'org', render: (value, row) => row.org_display || value || '—' },
     {
       title: '角色',

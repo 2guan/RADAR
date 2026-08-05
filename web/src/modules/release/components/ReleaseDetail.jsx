@@ -92,6 +92,7 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
   const [impactOpen, setImpactOpen] = useState(false);
   const [coverageOpen, setCoverageOpen] = useState(false);
   const [analysisSummary, setAnalysisSummary] = useState(null);
+  const [savingArtifactKey, setSavingArtifactKey] = useState(null);
 
   const releasePointQuery = () => {
     const id = currentReleasePointId ?? detail?.entity?.apply_release_point_id ?? releasePointId;
@@ -462,7 +463,31 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
     </div>
   );
 
-  // 关联制品卡片（只读）：含各部署单元的摆渡状态
+  const canEditArtifactStatuses = can('release', 'view') && can('release_apply', 'edit');
+  const updateArtifactStatus = async (apply, unitIndex, unit, field, value) => {
+    if (!canEditArtifactStatuses || value === unit[field]) return;
+    const key = `${apply.id}:${unitIndex}`;
+    setSavingArtifactKey(key);
+    try {
+      await apiPut(`/release-apply/${apply.id}/delivery-units/${unitIndex}/status`, {
+        workItemCode: entityCode,
+        releasePointId: currentReleasePointId ?? detail?.releaseTask?.release_point_id ?? null,
+        ferry_status: field === 'ferry_status' ? value : unit.ferry_status,
+        artifact_release_status: field === 'artifact_release_status' ? value : unit.artifact_release_status,
+        expected_ferry_status: unit.ferry_status,
+        expected_artifact_release_status: unit.artifact_release_status,
+      });
+      message.success('制品状态已更新');
+      await reload(currentReleasePointId ?? detail?.releaseTask?.release_point_id ?? null);
+      onChanged?.();
+    } catch {
+      // HTTP 客户端已统一展示服务端错误；保留当前详情，避免局部失败掩盖真实状态。
+    } finally {
+      setSavingArtifactKey(null);
+    }
+  };
+
+  // 关联制品卡片：每组制品固定双行；拥有申请编辑权时可就地更新两个状态。
   const ArtifactCard = ({ a }) => {
     const units = Array.isArray(a.units) ? a.units : [];
     return (
@@ -477,18 +502,52 @@ export default function ReleaseDetail({ open, mode = 'modal', code, reqCode, rel
           <div>实施机构：<span style={{ color: 'var(--radar-ink)' }}>{a.impl_org || '—'}</span></div>
           <div style={{ wordBreak: 'break-all' }}>变更内容：<span style={{ color: 'var(--radar-ink)' }}>{a.change_content || '—'}</span></div>
         </div>
-        {/* 各部署单元（制品类型 / 新版本号 / 交付单元名称 + 摆渡状态） */}
+        {/* 各部署单元：第一行制品类型/新版本号/摆渡状态，第二行交付单元/制品投产状态。 */}
         <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
           {units.length === 0 ? (
             <div style={{ fontSize: 11, color: '#bbb' }}>无交付制品</div>
-          ) : units.map((u, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', background: 'var(--radar-bg)', border: '1px solid var(--radar-border)', borderRadius: 2, padding: '4px 6px' }}>
-              {u.artifact_type && <Tag className="status-tag tag-system" style={{ margin: 0, borderRadius: 2 }}>{u.artifact_type}</Tag>}
-              {u.new_version && <span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', fontSize: 11, color: 'var(--radar-ink)' }}>{u.new_version}</span>}
-              {u.delivery_unit && <span title={u.delivery_unit} style={{ fontSize: 11, color: 'var(--radar-text-secondary)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.delivery_unit}</span>}
-              <span style={{ marginLeft: 'auto' }}><StatusBadge status={u.ferry_status} /></span>
-            </div>
-          ))}
+          ) : units.map((u, i) => {
+            const saving = savingArtifactKey === `${a.id}:${i}`;
+            const editable = canEditArtifactStatuses;
+            const stopCardOpen = (event) => event.stopPropagation();
+            const statusControl = (field, category, placeholder) => (
+              <span
+                onClick={stopCardOpen}
+                className={`status-select status-select-${getStatusType(u[field])}`}
+                style={{ marginLeft: 'auto' }}
+              >
+                <DictSelect
+                  category={category}
+                  value={u[field]}
+                  onChange={(value) => updateArtifactStatus(a, i, u, field, value)}
+                  allowClear={false}
+                  showSearch={false}
+                  size="small"
+                  popupClassName="status-select-dropdown"
+                  popupMatchSelectWidth={false}
+                  disabled={saving}
+                  style={{
+                    width: statusSelectWidth(u[field], placeholder),
+                    ...(!editable ? { pointerEvents: 'none' } : {}),
+                  }}
+                  tabIndex={editable ? undefined : -1}
+                />
+              </span>
+            );
+            return (
+              <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 4, background: 'var(--radar-bg)', border: '1px solid var(--radar-border)', borderRadius: 2, padding: '5px 6px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', minWidth: 0 }}>
+                  {u.artifact_type && <Tag className="status-tag tag-system" style={{ margin: 0, borderRadius: 2 }}>{u.artifact_type}</Tag>}
+                  {u.new_version && <span style={{ fontFamily: 'SFMono-Regular, Consolas, monospace', fontSize: 11, color: 'var(--radar-ink)' }}>{u.new_version}</span>}
+                  {statusControl('ferry_status', 'ferry_status', '摆渡状态')}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                  <span title={u.delivery_unit || ''} style={{ fontSize: 11, color: 'var(--radar-text-secondary)', flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>{u.delivery_unit || '—'}</span>
+                  {statusControl('artifact_release_status', 'artifact_release_status', '制品投产状态')}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </Card>
     );

@@ -13,7 +13,7 @@ import { windowIds, inClause, formatAttachments, getDictDisplayMap, resolveOrgan
 import { ok, notFound, forbidden, parseJsonArray } from '../../../platform/runtime/index.js';
 import { exportXlsx } from '../../../platform/import-export/index.js';
 import { getWorkItem, formatImpactItemsText, formatCoverageText } from '../../development/index.js';
-import { appliedReleasePointsForWorkItems, workItemCodesForAppliedReleasePoints } from '../../release/index.js';
+import { appliedReleasePointsForWorkItems, workItemCodesForAppliedReleasePoints, withArtifactReleaseStatusDefaults } from '../../release/index.js';
 import { buildTaskStatusChain } from '../index.js';
 import { isOrganizationRestricted, workItemMatchesOrganization } from '../../../shared/utils/organization-scope.js';
 
@@ -177,7 +177,7 @@ async function resolveSystem(code) {
     || { sys_code: code, sys_name: code, org: null, sector: null };
 }
 
-/** 读取引用了该需求/问题编号的投产申请制品（含各交付单元的摆渡状态），供投产列展示 */
+/** 读取引用了该需求/问题编号的投产申请制品；沿用 release 的历史投产状态默认化，供投产列展示。 */
 async function entityArtifacts(code) {
   if (!code) return [];
   const rows = await all(
@@ -188,8 +188,8 @@ async function entityArtifacts(code) {
      ORDER BY ra.id DESC`,
     code,
   );
-  return rows.map((r) => {
-    const units = parseJsonArray(r.delivery_units);
+  return await Promise.all(rows.map(async (r) => {
+    const units = await withArtifactReleaseStatusDefaults(parseJsonArray(r.delivery_units));
     return {
       id: r.id,
       change_code: r.change_code,
@@ -199,7 +199,7 @@ async function entityArtifacts(code) {
       change_content: r.change_content,
       units,
     };
-  });
+  }));
 }
 
 /** 构建单需求/工单链路概要，复用公开任务状态契约保持所有入口口径一致。 */
@@ -777,7 +777,7 @@ export default async function overviewRoutes(fastify) {
         related_artifacts: '',
       };
       const artifacts = await entityArtifacts(r.req_code);
-      releaseInfo.related_artifacts = artifacts.flatMap((artifact) => (artifact.units || []).map((unit) => [artifact.change_code, artifact.change_system_name, unit.artifact_type, unit.delivery_unit, unit.new_version, unit.ferry_status].filter(Boolean).join(' / '))).join('\n');
+      releaseInfo.related_artifacts = artifacts.flatMap((artifact) => (artifact.units || []).map((unit) => [artifact.change_code, artifact.change_system_name, unit.artifact_type, unit.delivery_unit, unit.new_version, unit.ferry_status, unit.artifact_release_status].filter(Boolean).join(' / '))).join('\n');
       if (rtRow) {
         const signoffs = await all('SELECT * FROM release_signoff WHERE release_task_id = ? ORDER BY id', rtRow.id);
         const releaseAttaches = await all("SELECT * FROM attachment WHERE entity_type = 'release' AND entity_id = ?", rtRow.id);

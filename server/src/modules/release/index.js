@@ -5,12 +5,13 @@
  * 作者：hengguan
  */
 
-/** Public boundary: release currently exposes no cross-module mutable operations. */
+/** Public boundary: release exposes read-only artifact normalization for other aggregate views. */
 export { buildReleaseWordDoc, formatWordDateTime } from './application/release-word.js';
 export {
   claimReleaseApplyCode, generateReleaseApplyCode, previewReleaseApplyCode,
 } from './applications/release-apply/index.js';
 export { listReleaseTaskStageTypes, listReleaseTaskStatuses } from './application/task-statuses.js';
+export { withArtifactReleaseStatusDefaults } from './application/artifact-release-status.js';
 export {
   appliedReleasePointsForWorkItems, pendingAppliedReleasePoint, workItemCodesForAppliedReleasePoints,
 } from './application/work-item-release-points.js';

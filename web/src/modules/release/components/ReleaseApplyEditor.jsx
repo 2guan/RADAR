@@ -502,6 +502,12 @@ export default function ReleaseApplyEditor({ open, mode = 'modal', code, applyId
                         <DictSelect category="ferry_status" size="small" allowClear={false} style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} />
                       </Form.Item>
                     )}
+                    {/* 制品投产状态：与摆渡状态一致，仅编辑时显示，新增由后端写入字典默认值。 */}
+                    {isEdit && (
+                      <Form.Item name={[field.name, 'artifact_release_status']} label={idx === 0 ? '制品投产状态' : undefined} style={{ marginBottom: 0, flex: '1 1 120px', minWidth: 110 }}>
+                        <DictSelect category="artifact_release_status" size="small" allowClear={false} style={{ width: '100%', ...(readonly ? { pointerEvents: 'none' } : {}) }} tabIndex={readonly ? -1 : undefined} />
+                      </Form.Item>
+                    )}
                     {!readonly && fields.length > 1 && (
                       <Button type="text" size="small" danger icon={<MinusCircleOutlined />} onClick={() => remove(field.name)} style={{ marginBottom: 2, flexShrink: 0 }} />
                     )}

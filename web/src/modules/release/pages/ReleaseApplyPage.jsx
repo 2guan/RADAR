@@ -33,6 +33,7 @@ export default function ReleaseApply() {
   const [systems, setSystems] = useState([]);
   const [artifactTypes, setArtifactTypes] = useState([]);
   const [ferryStatuses, setFerryStatuses] = useState([]);
+  const [artifactReleaseStatuses, setArtifactReleaseStatuses] = useState([]);
 
   // 编辑器与筛选器共用这些字典，首次进入页面时集中加载以保持选项口径一致。
   useEffect(() => {
@@ -40,12 +41,14 @@ export default function ReleaseApply() {
     apiGet('/systems/all').then(setSystems).catch(() => {});
     apiGet('/dict/by-category/artifact_type').then(setArtifactTypes).catch(() => {});
     apiGet('/dict/by-category/ferry_status').then(setFerryStatuses).catch(() => {});
+    apiGet('/dict/by-category/artifact_release_status').then(setArtifactReleaseStatuses).catch(() => {});
   }, []);
 
   const orgOptions = orgs.map((o) => ({ value: o.attr_value, label: o.display_value }));
   const systemOptions = systems.map((s) => ({ value: s.sys_code, label: `${s.sys_code} - ${s.sys_name}` }));
   const artifactOptions = artifactTypes.map((d) => ({ value: d.attr_value, label: d.display_value }));
   const ferryOptions = ferryStatuses.map((d) => ({ value: d.attr_value, label: d.display_value }));
+  const artifactReleaseOptions = artifactReleaseStatuses.map((d) => ({ value: d.attr_value, label: d.display_value }));
 
   // 动态阶段字段由公共 Hook 注入，使列表配置与投产申请表单保持同步。
   const filterConfigs = [
@@ -55,6 +58,7 @@ export default function ReleaseApply() {
     { field: 'change_system', label: '变更系统', type: 'select', op: 'in', options: systemOptions },
     { field: 'artifact_type', label: '制品类型', type: 'select', op: 'in', options: artifactOptions },
     { field: 'ferry_status', label: '摆渡状态', type: 'select', op: 'in', options: ferryOptions },
+    { field: 'artifact_release_status', label: '制品投产状态', type: 'select', op: 'in', options: artifactReleaseOptions },
     ...stageList.filterConfigs,
   ];
 
@@ -121,6 +125,12 @@ export default function ReleaseApply() {
                 {u.ferry_status && (
                   <StatusBadge
                     status={u.ferry_status}
+                    style={{ width: 68, display: 'inline-flex', justifyContent: 'center' }}
+                  />
+                )}
+                {u.artifact_release_status && (
+                  <StatusBadge
+                    status={u.artifact_release_status}
                     style={{ width: 68, display: 'inline-flex', justifyContent: 'center' }}
                   />
                 )}
