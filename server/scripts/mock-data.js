@@ -1078,6 +1078,7 @@ export async function runMock() {
     // ----------------------------------------------------------------------
     const ARTIFACTS = ['镜像制品', '二进制制品', '介质库文件', '无制品'];
     const FERRY = ['未摆渡', '待发送', '已摆渡', '摆渡失败'];
+    const ARTIFACT_RELEASE_STATUS = ['待投产', '已投产', '已回退', '已取消'];
     /** 评审状态派生（取最弱）——与 release-apply 路由一致 */
     const REVIEW_RANK = { 评审拒绝: 0, 评审撤销: 1, 待评审: 2, 应急审批: 3, 评审同意: 4 };
     async function deriveReview(refCodes, releasePointId) {
@@ -1106,6 +1107,7 @@ export async function runMock() {
             : `${sysCode}-${pick(['app', 'svc', 'batch'])}-v${2 + i}.${Math.floor(rng() * 9)}.0`,
           new_version: `V${2 + i}.${Math.floor(rng() * 9)}.${Math.floor(rng() * 9)}`,
           ferry_status: pick(FERRY),
+          artifact_release_status: pick(ARTIFACT_RELEASE_STATUS),
         });
       }
       return out;

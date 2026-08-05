@@ -63,6 +63,7 @@ const DICT_CATEGORIES = [
   ['req_dept', '需求部门', 50],
   ['artifact_type', '制品类型', 60],
   ['ferry_status', '摆渡状态', 70],
+  ['artifact_release_status', '制品投产状态', 75],
   ['version_type', '版本类型', 80],
   ['org', '实施机构', 90],
   ['sector', '业务板块', 100],
@@ -252,6 +253,8 @@ const ISSUE_STATUS = [['已解决', 1, true], ['待验证', 2, true]];
 const ARTIFACT_TYPE = [['镜像制品', 1], ['二进制制品', 2], ['介质库文件', 3], ['无制品', 4]];
 // 摆渡状态（投产申请）：未摆渡（默认）/ 待发送 / 已摆渡 / 摆渡失败
 const FERRY_STATUS = [['未摆渡', 1], ['待发送', 2], ['已摆渡', 3], ['摆渡失败', 4]];
+// 制品投产状态（投产申请）：待投产（默认）/ 已投产 / 已回退 / 已取消
+const ARTIFACT_RELEASE_STATUS = [['待投产', 1], ['已投产', 2], ['已回退', 3], ['已取消', 4]];
 
 // 机构（实施机构 / 组织机构共用）：[属性值, 显示值, 排序]
 const ORGS = [
@@ -561,6 +564,7 @@ export async function runSeed() {
     for (const [attr, sort, isTerminal] of ISSUE_STATUS) await seedDict('issue_status', attr, attr, sort, { isTerminal });
     for (const [attr, sort] of ARTIFACT_TYPE) await seedDict('artifact_type', attr, attr, sort);
     for (const [attr, sort] of FERRY_STATUS) await seedDict('ferry_status', attr, attr, sort);
+    for (const [attr, sort] of ARTIFACT_RELEASE_STATUS) await seedDict('artifact_release_status', attr, attr, sort);
     for (const [attr, disp, sort] of ORGS) await seedDict('org', attr, disp, sort);
     for (const [attr, disp, sort] of SECTORS) await seedDict('sector', attr, disp, sort);
     for (const [attr, sort] of REQ_DEPTS) await seedDict('req_dept', attr, attr, sort);

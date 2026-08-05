@@ -141,16 +141,19 @@ test('排期偏差率：延期为正、提前为负、信息不全为 null', () 
   assert.equal(calcDeviation('2026-07-01', '2026-07-10', null), null);
 });
 
-test('投产申请 Excel：一个单元格按换行导入多组交付制品，并兼容历史四列', () => {
+test('投产申请 Excel：一个单元格按换行导入多组交付制品，并兼容历史四列和当前五列', () => {
   assert.deepEqual(parseImportedDeliveryUnits({
     delivery_units: '镜像制品 / 包A / v1.0.0 / 未摆渡\n二进制制品 / 包B / v1.0.1 / 已摆渡',
   }), [
-    { artifact_type: '镜像制品', delivery_unit: '包A', new_version: 'v1.0.0', ferry_status: '未摆渡' },
-    { artifact_type: '二进制制品', delivery_unit: '包B', new_version: 'v1.0.1', ferry_status: '已摆渡' },
+    { artifact_type: '镜像制品', delivery_unit: '包A', new_version: 'v1.0.0', ferry_status: '未摆渡', artifact_release_status: null },
+    { artifact_type: '二进制制品', delivery_unit: '包B', new_version: 'v1.0.1', ferry_status: '已摆渡', artifact_release_status: null },
   ]);
   assert.deepEqual(parseImportedDeliveryUnits({
     artifact_type: '镜像制品', delivery_unit: '包A', new_version: 'v1.0.0', ferry_status: '未摆渡',
-  }), [{ artifact_type: '镜像制品', delivery_unit: '包A', new_version: 'v1.0.0', ferry_status: '未摆渡' }]);
+  }), [{ artifact_type: '镜像制品', delivery_unit: '包A', new_version: 'v1.0.0', ferry_status: '未摆渡', artifact_release_status: null }]);
+  assert.deepEqual(parseImportedDeliveryUnits({
+    delivery_units: '镜像制品 / 包C / v2.0.0 / 已摆渡 / 已投产',
+  }), [{ artifact_type: '镜像制品', delivery_unit: '包C', new_version: 'v2.0.0', ferry_status: '已摆渡', artifact_release_status: '已投产' }]);
   assert.throws(() => parseImportedDeliveryUnits({ delivery_units: '镜像制品 / 包A' }), /第 1 行/);
 });
 

@@ -1,0 +1,130 @@
+{
+  "schema_version": "1.0",
+  "requirement": {
+    "id": "REQ-20260805-014",
+    "ref": "hengguan/REQ-20260805-014",
+    "title": "交付制品投产状态与审批自动完成",
+    "status": "ready",
+    "document": "docs/requirements/hengguan/REQ-20260805-014/requirement.md",
+    "internet_ai_coding_allowed": true
+  },
+  "assignment": {
+    "developer": "hengguan",
+    "module": "governance",
+    "module_owner": "hengguan",
+    "branch": "hengguan/REQ-20260805-014-artifact-release-status",
+    "base_branch": "origin/main",
+    "worktree": "/Volumes/GuanMac/Code/RADAR"
+  },
+  "ai": {
+    "enabled": true,
+    "approved_service": "Codex desktop",
+    "model": "approved-by-user",
+    "contains_confidential_information": false,
+    "context_sanitized": true,
+    "production_access": false
+  },
+  "scope": {
+    "writable_paths": [
+      "docs/requirements/hengguan/REQ-20260805-014/**",
+      "server/src/modules/release/**",
+      "server/src/modules/overview/**",
+      "web/src/modules/release/**",
+      "web/src/modules/overview/**",
+      "web/src/modules/identity-access/**",
+      "server/src/modules/settings/**",
+      "web/src/modules/settings/**",
+      "server/src/platform/persistence/migrations/0048_artifact_release_status.sql",
+      "server/src/platform/persistence/migrations/tdsql/0028_artifact_release_status.sql",
+      "server/src/bootstrap/seed.js",
+      "server/scripts/mock-data.js",
+      "server/test/**",
+      "web/test/**"
+    ],
+    "read_only_paths": [
+      "AGENTS.md",
+      "DESIGN.md",
+      "docs/governance/**",
+      "docs/architecture/**",
+      "governance/modules.yaml",
+      ".agents/skills/radar-delivery-engineer/**",
+      "server/src/platform/auth/**",
+      "server/src/platform/audit/**",
+      "server/src/platform/attachments/**",
+      "server/src/platform/import-export/**",
+      "server/src/platform/persistence/index.js",
+      "server/src/platform/persistence/contracts/**",
+      "server/src/platform/runtime/**",
+      "server/src/shared/**",
+      "web/src/platform/**",
+      "web/src/shared/**"
+    ],
+    "forbidden_paths": [
+      "server/src/platform/persistence/migrations/0001_init.sql",
+      "server/src/platform/persistence/migrations/tdsql/0001_init.sql",
+      "server/src/platform/persistence/migrations/00[0-4][0-7]_*.sql",
+      "server/src/platform/persistence/migrations/tdsql/00[0-2][0-7]_*.sql",
+      ".github/**",
+      "docs/reports/**",
+      ".env",
+      "**/.env",
+      "**/*secret*",
+      "**/*credential*",
+      "attachments/**",
+      "data/**"
+    ]
+  },
+  "public_capability_change": {
+    "required": true,
+    "shared_change_issue": "hengguan/REQ-20260805-014",
+    "target_modules": ["governance", "release", "overview", "identity-access", "settings", "platform/persistence"],
+    "new_methods": [],
+    "existing_method_changed": true,
+    "semantic_name_confirmed": true,
+    "old_behavior_preserved": true,
+    "compatibility_note": "投产申请、投产审批详情和版本概览详情的 delivery_units DTO 新增可选 artifact_release_status；老客户端和旧四项 Excel 导入继续可用，服务端以默认待投产兼容缺失键。投产审批详情新增仅更新单个制品两个状态及其期望旧值的受保护 URI，保留既有完整申请更新 URI 语义，并在冲突时拒绝覆盖；版本概览只读复用同一制品 DTO，不新增写入口。release 仅通过 settings/reference-data 已登记公开入口读取/解析字典；platform/persistence 仅追加配对字典种子迁移，不承载业务规则。",
+    "owner_approved": true,
+    "owner_review_required_before_merge": true
+  },
+  "database": {
+    "changed": true,
+    "migration_paths": [
+      "server/src/platform/persistence/migrations/0048_artifact_release_status.sql",
+      "server/src/platform/persistence/migrations/tdsql/0028_artifact_release_status.sql"
+    ],
+    "mysql8_compatible": true,
+    "historical_data_impact": "不新增或改写业务表列；仅补齐缺失的字典项。既有 release_apply.delivery_units JSON 缺少 artifact_release_status 时按默认待投产读取，更新后才规范化写回。",
+    "rollback_or_compensation": "回退本需求应用代码后旧代码忽略 JSON 扩展键；不删除字典或业务数据，不需要数据补偿。"
+  },
+  "external_access": {
+    "changed": false,
+    "api_paths": [],
+    "readable_field_whitelist": [],
+    "writable_field_whitelist": [],
+    "action_whitelist": [],
+    "audit_required": true
+  },
+  "required_tests": [
+    {"name": "api", "command": "新增/更新 server 测试，覆盖 AC-001 至 AC-015：字典种子/级联、默认化、旧 JSON/旧 Excel 兼容、非法值拒绝、投产申请列表状态顺序、审批详情双行 DTO、局部双状态更新、同工作项同投产点全量聚合、评审同意/应急审批自动推进及不覆盖已取消；执行 npm run test:api --prefix server"},
+    {"name": "permission", "command": "执行 npm run test:rbac --prefix server；断言审批详情直接编辑同时要求 release:view、release_apply:edit 和申请实体范围，且断言制品状态/自动推进审计及不满足条件无伪成功审计"},
+    {"name": "server", "command": "npm test --prefix server"},
+    {"name": "ui_data_sources", "command": "node scripts/check-ui-data-sources.mjs"},
+    {"name": "build", "command": "npm run build --prefix web"},
+    {"name": "scope", "command": "node scripts/check-ai-scope.mjs --scope docs/requirements/hengguan/REQ-20260805-014/ai-task-scope.yaml --base origin/main --head HEAD"},
+    {"name": "governance", "command": "node scripts/check-module-boundaries.mjs && node scripts/check-governance.mjs && node scripts/check-code-comments.mjs && git diff --check"},
+    {"name": "runtime", "command": "node scripts/verify-app-runtime.mjs"},
+    {"name": "browser", "command": "使用本地脱敏管理员在桌面和移动视口：新建、编辑、导入旧/新格式、核对申请列表中摆渡状态后紧接制品投产状态；验证审批详情每组双行和直接下拉、两投产点隔离与评审同意/应急审批自动已投产；检查刷新后状态、网络失败、空态、无权限、长文本、卡片跳转隔离与控制台错误"}
+  ],
+  "risk": {
+    "level": "high",
+    "reasons": ["JSON 受控字段向后兼容", "交付制品与审批任务跨申请聚合", "服务端自动状态推进与审计", "SQLite/TDSQL 双端字典初始数据"],
+    "required_approvals": ["hengguan"]
+  },
+  "completion": {
+    "changed_files_report_required": true,
+    "test_result_report_required": true,
+    "known_risks_report_required": true,
+    "rollback_report_required": true,
+    "requirement_acceptance_required": true
+  }
+}

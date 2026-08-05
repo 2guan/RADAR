@@ -9,7 +9,7 @@
 import { all, get, run, tx, dialect, listQuery } from '../../../platform/persistence/index.js';
 import { registerCrud, exportXlsx, parseXlsx } from '../../../platform/import-export/index.js';
 import { cascadeDictRename } from '../reference-data/index.js';
-import { ok, badRequest, parseJsonObject } from '../../../platform/runtime/index.js';
+import { ok, badRequest, parseJsonArray, parseJsonObject } from '../../../platform/runtime/index.js';
 import { refreshStatusSemantics } from '../process-configuration/index.js';
 
 // 基础列；流程状态额外含 阶段/终态
@@ -64,6 +64,13 @@ export default async function dictRoutes(fastify) {
     },
     // 阶段内容规则以字典 ID 绑定。被规则或业务记录使用的状态不能直接删除，避免配置悬空。
     beforeDelete: async (row) => {
+      if (row.category === 'artifact_release_status') {
+        const candidates = await all('SELECT id, delivery_units FROM release_apply WHERE delivery_units LIKE ?', `%${row.attr_value}%`);
+        const used = candidates.some((candidate) => parseJsonArray(candidate.delivery_units)
+          .some((unit) => unit?.artifact_release_status === row.attr_value));
+        if (used) throw badRequest('该制品投产状态已被交付制品使用，请改为保留或先处理业务数据');
+        return;
+      }
       if (!['process_status', 'review_status'].includes(row.category)) return;
       const fieldRule = await get('SELECT 1 FROM stage_field_status_rule WHERE status_dict_item_id = ? LIMIT 1', row.id);
       const deliverableRule = await get('SELECT 1 FROM deliverable_status_rule WHERE status_dict_item_id = ? LIMIT 1', row.id);

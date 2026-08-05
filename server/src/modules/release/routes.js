@@ -19,6 +19,11 @@ import { assertStatusChangePermission, defaultDictAttr, defaultProcessStatus } f
 import { exportXlsx } from '../../platform/import-export/index.js';
 import { signatureDataUrl, resolveAttachmentPath } from '../../platform/attachments/index.js';
 import { buildReleaseWordDoc } from './index.js';
+import {
+  isApprovedReviewStatus,
+  reconcileReleaseTaskArtifactStatus,
+  withArtifactReleaseStatusDefaults,
+} from './application/artifact-release-status.js';
 import { getWorkItem } from '../development/index.js';
 import { resolveCurrentTaskStatuses } from '../overview/index.js';
 import { appendStageExcelValues, getStageExcelColumns, validateStageContent } from '../settings/process-configuration/index.js';
@@ -271,15 +276,15 @@ async function recomputeReviewStatus(releaseTaskId) {
 }
 
 /**
- * 会签结果变化时同步投产状态：评审同意推进至待投产；撤回同意后恢复待评审。
+ * 会签结果变化时同步投产状态：评审同意或应急审批推进至待投产；撤回后恢复待评审。
  * 仅在这两个相邻状态间联动，不覆盖已投产、已取消等后续状态。
  */
 async function syncReleaseStatusWithReview(releaseTaskId) {
   const rt = await get('SELECT id, req_code, status, review_status FROM release_task WHERE id = ?', releaseTaskId);
   if (!rt) return null;
-  const nextStatus = rt.review_status === '评审同意' && rt.status === '待评审'
+  const nextStatus = isApprovedReviewStatus(rt.review_status) && rt.status === '待评审'
     ? '待投产'
-    : (rt.review_status !== '评审同意' && rt.status === '待投产' ? '待评审' : null);
+    : (!isApprovedReviewStatus(rt.review_status) && rt.status === '待投产' ? '待评审' : null);
   if (!nextStatus) return null;
   await run(
     `UPDATE release_task SET status=?, updated_at=datetime('now','localtime') WHERE id=?`,
@@ -301,8 +306,11 @@ async function classifyEntity(code) {
  */
 async function ensureReleaseTask(code, entityType, releasePointId) {
   let rt = await releaseTaskByCodePoint(code, releasePointId);
-  if (rt) return rt;
-  return await tx(async () => {
+  if (rt) {
+    await reconcileReleaseTaskArtifactStatus(rt.id);
+    return await releaseTaskByCodePoint(code, releasePointId);
+  }
+  rt = await tx(async () => {
     const releaseStatus = await defaultProcessStatus('投产', 'initial', '待评审');
     const reviewStatus = await defaultDictAttr('review_status', '待评审');
     const res = await run(
@@ -316,6 +324,8 @@ async function ensureReleaseTask(code, entityType, releasePointId) {
     }
     return await get('SELECT * FROM release_task WHERE id = ?', rtId);
   });
+  await reconcileReleaseTaskArtifactStatus(rt.id);
+  return await get('SELECT * FROM release_task WHERE id = ?', rt.id);
 }
 
 /** 读取引用了该需求/工单/问题编号的投产申请制品信息（关联制品情况） */
@@ -332,8 +342,8 @@ async function entityArtifacts(code, releasePointId, sysMap) {
      ORDER BY ra.id DESC`,
     ...params,
   );
-  return rows.map((r) => {
-    const units = parseJsonArray(r.delivery_units);
+  return await Promise.all(rows.map(async (r) => {
+    const units = await withArtifactReleaseStatusDefaults(parseJsonArray(r.delivery_units));
     return {
       id: r.id,
       change_code: r.change_code,
@@ -343,7 +353,7 @@ async function entityArtifacts(code, releasePointId, sysMap) {
       change_content: r.change_content,
       units,
     };
-  });
+  }));
 }
 
 async function applicantPrioritySystems(code, entityType) {
@@ -1076,9 +1086,9 @@ export default async function releaseRoutes(fastify) {
     // 评审状态调整时保持投产状态一致；不覆盖已投产、已取消等后续状态。
     const effectiveReviewStatus = updateData.review_status ?? rt.review_status;
     const effectiveReleaseStatus = updateData.status ?? rt.status;
-    if (effectiveReviewStatus === '评审同意' && effectiveReleaseStatus === '待评审') {
+    if (isApprovedReviewStatus(effectiveReviewStatus) && effectiveReleaseStatus === '待评审') {
       updateData.status = '待投产';
-    } else if (review_status !== undefined && effectiveReviewStatus !== '评审同意' && effectiveReleaseStatus === '待投产') {
+    } else if (review_status !== undefined && !isApprovedReviewStatus(effectiveReviewStatus) && effectiveReleaseStatus === '待投产') {
       updateData.status = '待评审';
     }
 
@@ -1092,6 +1102,7 @@ export default async function releaseRoutes(fastify) {
       );
       const labels = { owner: '投产负责人', status: '投产状态', review_status: '评审状态' };
       await auditUpdate('release', rt.id, rt.req_code, request.currentUser?.name, rt, updateData, labels);
+      await reconcileReleaseTaskArtifactStatus(rt.id, request.currentUser?.name);
     }
     return ok({ id: rt.id });
   });
@@ -1146,6 +1157,7 @@ export default async function releaseRoutes(fastify) {
       await auditUpdate('release', statusSynced.id, statusSynced.req_code, request.currentUser?.name,
         { status: statusSynced.status }, { status: statusSynced.nextStatus }, { status: '投产状态' });
     }
+    await reconcileReleaseTaskArtifactStatus(so.release_task_id, request.currentUser?.name);
     return ok(null, cancelSigned ? '已取消签署' : '签署完成');
   });
 

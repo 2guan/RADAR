@@ -1,6 +1,6 @@
 /**
  * 文件：server/src/modules/release/applications/release-apply/routes.js
- * 说明：ref_codes（需求/工单编号）以 JSON 数组入库；change_system 存系统编号；制品类型/摆渡状态取自字典。
+ * 说明：ref_codes（需求/工单编号）以 JSON 数组入库；change_system 存系统编号；制品类型、摆渡状态和制品投产状态取自字典。
  * 用途：投产申请（版本变更申请）模块接口。变更申请 CRUD（全字段可改并留痕）、变更编号生成、
  *       默认按当前投产窗口过滤、导入导出。评审状态由所关联需求的投产审批评审状态派生（取最弱）。
  * 作者：hengguan
@@ -10,12 +10,16 @@ import { get, run, tx, all, dialect, listQuery } from '../../../../platform/pers
 import { claimReleaseApplyCode, previewReleaseApplyCode } from './index.js';
 import { auditCreate, auditUpdate, auditDelete } from '../../../../platform/audit/index.js';
 import { exportXlsx, parseXlsx } from '../../../../platform/import-export/index.js';
-import { windowIds, inClause, getDictDisplayMap, resolveDictAttr, resolveOrganizationValues } from '../../../settings/reference-data/index.js';
+import { windowIds, inClause, getDictDisplayMap, resolveDictAttr, resolveExistingDictAttr, resolveOrganizationValues } from '../../../settings/reference-data/index.js';
 import { ok, notFound, badRequest, forbidden, parseJsonArray, parseJsonObject } from '../../../../platform/runtime/index.js';
 import { beijingDateString } from '../../../../shared/utils/time.js';
 import {
   buildExtensionListFilter, defaultDictAttr,
 } from '../../../settings/process-configuration/index.js';
+import {
+  reconcileReleaseTasksForArtifactChange,
+  withArtifactReleaseStatusDefaults,
+} from '../../application/artifact-release-status.js';
 import { getWorkItem, listDevelopmentImplementationOrgs } from '../../../development/index.js';
 import { isOrganizationRestricted, organizationMatches, workItemMatchesOrganization } from '../../../../shared/utils/organization-scope.js';
 import {
@@ -47,9 +51,6 @@ const LABELS = {
   release_point_id: '申请投产点', review_status: '评审状态',
 };
 
-// 交付制品分组字段
-const UNIT_KEYS = ['artifact_type', 'delivery_unit', 'new_version', 'ferry_status'];
-
 /** 规整关联编号并去重，避免同一申请写入重复关系行或触发无效评审查询。 */
 function normalizeRefCodes(refCodes) {
   return [...new Set((Array.isArray(refCodes) ? refCodes : [])
@@ -68,7 +69,7 @@ async function syncReleaseApplyReferences(releaseApplyId, refCodes, releasePoint
   }
 }
 
-/** Excel 单元格内每行一组制品，兼容没有该列的历史四列模板。 */
+/** Excel 单元格内每行一组制品，兼容历史四列与当前五列格式。 */
 export function parseImportedDeliveryUnits(row) {
   const text = String(row?.delivery_units || '').trim();
   if (!text) return [{
@@ -76,29 +77,39 @@ export function parseImportedDeliveryUnits(row) {
     delivery_unit: row?.delivery_unit || null,
     new_version: row?.new_version || null,
     ferry_status: row?.ferry_status || null,
+    artifact_release_status: row?.artifact_release_status || null,
   }];
   return text.split(/\r?\n/).map((line, index) => {
     const parts = line.split(/\s*[/／|]\s*/).map((part) => part.trim());
-    if (parts.length !== 4) throw new Error(`交付制品第 ${index + 1} 行须填写“制品类型 / 交付单元 / 新版本号 / 摆渡状态”四项`);
-    return { artifact_type: parts[0], delivery_unit: parts[1], new_version: parts[2], ferry_status: parts[3] };
+    if (![4, 5].includes(parts.length)) throw new Error(`交付制品第 ${index + 1} 行须填写四项或五项：“制品类型 / 交付单元 / 新版本号 / 摆渡状态 [ / 制品投产状态 ]”`);
+    return {
+      artifact_type: parts[0], delivery_unit: parts[1], new_version: parts[2], ferry_status: parts[3],
+      artifact_release_status: parts[4] || null,
+    };
   });
 }
 
-/** 规整交付制品数组：仅保留组内字段，过滤全空组，摆渡状态取字典默认值 */
+/** 规整交付制品数组：仅保留组内字段，过滤全空组，两个状态都取受控字典默认值。 */
 async function normalizeUnits(units) {
   if (!Array.isArray(units)) return [];
   const defaultFerryStatus = await defaultDictAttr('ferry_status', '未摆渡');
+  const defaultArtifactReleaseStatus = await resolveExistingDictAttr('artifact_release_status', await defaultDictAttr('artifact_release_status', '待投产'));
+  if (!defaultFerryStatus) throw badRequest('摆渡状态默认配置不可用');
+  if (!defaultArtifactReleaseStatus) throw badRequest('制品投产状态默认配置不可用');
   const normalized = [];
   for (const unit of units) {
     const artifactType = unit?.artifact_type ? await resolveDictAttr('artifact_type', unit.artifact_type) : null;
     const ferryStatus = unit?.ferry_status ? await resolveDictAttr('ferry_status', unit.ferry_status) : defaultFerryStatus;
-    if (unit?.artifact_type && !artifactType) throw badRequest(`制品类型 [${unit.artifact_type}] 不存在或已停用`);
-    if (unit?.ferry_status && !ferryStatus) throw badRequest(`摆渡状态 [${unit.ferry_status}] 不存在或已停用`);
+    const artifactReleaseStatus = unit?.artifact_release_status
+      ? await resolveExistingDictAttr('artifact_release_status', unit.artifact_release_status)
+      : defaultArtifactReleaseStatus;
+    if (unit?.artifact_release_status && !artifactReleaseStatus) throw badRequest(`制品投产状态 [${unit.artifact_release_status}] 不存在或已停用`);
     const value = {
       artifact_type: artifactType,
       delivery_unit: unit?.delivery_unit ? String(unit.delivery_unit).trim() : null,
       new_version: unit?.new_version ? String(unit.new_version).trim() : null,
       ferry_status: ferryStatus,
+      artifact_release_status: artifactReleaseStatus,
     };
     if (value.artifact_type || value.delivery_unit || value.new_version) normalized.push(value);
   }
@@ -111,6 +122,13 @@ function decode(row) {
   const out = { ...row };
   for (const f of JSON_FIELDS) out[f] = parseJsonArray(row[f]);
   return out;
+}
+
+/** 为历史四列制品追加只读默认投产状态，不在读取路径回写业务 JSON。 */
+async function decodeWithUnitDefaults(row) {
+  const decoded = decode(row);
+  if (decoded) decoded.delivery_units = await withArtifactReleaseStatusDefaults(decoded.delivery_units);
+  return decoded;
 }
 
 /** 把前端数组字段序列化为 JSON 字符串 */
@@ -248,7 +266,7 @@ export default async function releaseApplyRoutes(fastify) {
           wh.push(`${f.field} IN (${vals.map(() => '?').join(',')})`);
           params.push(...vals);
         }
-      } else if (['artifact_type', 'ferry_status'].includes(f.field)) {
+      } else if (['artifact_type', 'ferry_status', 'artifact_release_status'].includes(f.field)) {
         // 交付制品为 JSON 数组，按组内字段匹配
         const vals = Array.isArray(f.value) ? f.value : [f.value];
         if (vals.length) {
@@ -282,7 +300,7 @@ export default async function releaseApplyRoutes(fastify) {
     // 逐行补充派生字段（ref_codes 解码、评审状态实时派生、系统名称、投产点日期）
     const pageRows = await Promise.all(result.list.map((r) => get('SELECT * FROM release_apply WHERE id = ?', r.id)));
     result.list = await Promise.all(pageRows.map(async (row) => {
-      const decoded = decode(row);
+      const decoded = await decodeWithUnitDefaults(row);
       decoded.review_status = await deriveReviewStatus(decoded.ref_codes, row.release_point_id);
       decoded.change_system_name = row.change_system ? `${row.change_system} - ${sysMap[row.change_system] || row.change_system}` : null;
       decoded.impl_org_display = orgDisplayMap[row.impl_org] || row.impl_org || null;
@@ -299,7 +317,7 @@ export default async function releaseApplyRoutes(fastify) {
     const row = await get('SELECT * FROM release_apply WHERE id = ?', request.params.id);
     if (!row) throw notFound();
     await assertReleaseApplyOrganizationAccess(row, request.currentUser);
-    const decoded = decode(row);
+    const decoded = await decodeWithUnitDefaults(row);
     decoded.review_status = await deriveReviewStatus(decoded.ref_codes, row.release_point_id);
     return ok(decoded);
   });
@@ -309,7 +327,7 @@ export default async function releaseApplyRoutes(fastify) {
     const row = await get('SELECT * FROM release_apply WHERE change_code = ?', request.params.code);
     if (!row) throw notFound();
     await assertReleaseApplyOrganizationAccess(row, request.currentUser);
-    const decoded = decode(row);
+    const decoded = await decodeWithUnitDefaults(row);
     decoded.review_status = await deriveReviewStatus(decoded.ref_codes, row.release_point_id);
     return ok(decoded);
   });
@@ -355,6 +373,7 @@ export default async function releaseApplyRoutes(fastify) {
     });
 
     await auditCreate('release_apply', result.id, result.code, request.currentUser?.name);
+    await reconcileReleaseTasksForArtifactChange(refCodes, body.release_point_id ?? null, request.currentUser?.name);
     return ok({ id: result.id, change_code: result.code });
   });
 
@@ -378,6 +397,7 @@ export default async function releaseApplyRoutes(fastify) {
     const newRefs = picked.ref_codes !== undefined
       ? (Array.isArray(picked.ref_codes) ? picked.ref_codes : [])
       : parseJsonArray(old.ref_codes);
+    const oldRefs = parseJsonArray(old.ref_codes);
     await assertReleaseApplyOrganizationAccess({ change_system: picked.change_system ?? old.change_system }, request.currentUser);
     await assertWorkItemReferencesOrganizationAccess(newRefs, request.currentUser);
     const nextReleasePointId = picked.release_point_id !== undefined ? picked.release_point_id : old.release_point_id;
@@ -398,8 +418,69 @@ export default async function releaseApplyRoutes(fastify) {
       const oldReadable = decode(old);
       const newReadable = { ...picked };
       await auditUpdate('release_apply', id, old.change_code, request.currentUser?.name, oldReadable, newReadable, LABELS);
+      await reconcileReleaseTasksForArtifactChange(oldRefs, old.release_point_id ?? null, request.currentUser?.name);
+      await reconcileReleaseTasksForArtifactChange(newRefs, nextReleasePointId ?? null, request.currentUser?.name);
     }
     return ok({ id });
+  });
+
+  // 审批详情的局部制品状态直改：同时要求审批可查看和投产申请可编辑，避免状态权限越权。
+  fastify.put('/release-apply/:id/delivery-units/:unitIndex/status', {
+    preHandler: async (request) => {
+      await fastify.requirePerm('release', 'view')(request);
+      await fastify.requirePerm('release_apply', 'edit')(request);
+    },
+  }, async (request) => {
+    const id = Number(request.params.id);
+    const unitIndex = Number(request.params.unitIndex);
+    if (!Number.isInteger(id) || id <= 0 || !Number.isInteger(unitIndex) || unitIndex < 0) throw badRequest('制品索引非法');
+    const row = await get('SELECT * FROM release_apply WHERE id = ?', id);
+    if (!row) throw notFound();
+    await assertReleaseApplyOrganizationAccess(row, request.currentUser);
+
+    const body = request.body || {};
+    const workItemCode = String(body.workItemCode || '').trim();
+    const refs = parseJsonArray(row.ref_codes);
+    if (!workItemCode || !refs.includes(workItemCode)) throw forbidden('该制品未关联当前投产审批对象');
+    await assertWorkItemReferencesOrganizationAccess([workItemCode], request.currentUser);
+    if (body.releasePointId !== undefined) {
+      const requestedPointId = body.releasePointId === null || body.releasePointId === '' ? null : Number(body.releasePointId);
+      const rowPointId = row.release_point_id === null ? null : Number(row.release_point_id);
+      if (!Number.isFinite(requestedPointId ?? 0) || requestedPointId !== rowPointId) throw forbidden('该制品不属于当前申请投产点');
+    }
+
+    const nextFerryStatus = await resolveExistingDictAttr('ferry_status', body.ferry_status);
+    const nextArtifactReleaseStatus = await resolveExistingDictAttr('artifact_release_status', body.artifact_release_status);
+    if (!nextFerryStatus) throw badRequest(`摆渡状态 [${body.ferry_status || ''}] 不存在或已停用`);
+    if (!nextArtifactReleaseStatus) throw badRequest(`制品投产状态 [${body.artifact_release_status || ''}] 不存在或已停用`);
+
+    const units = await withArtifactReleaseStatusDefaults(parseJsonArray(row.delivery_units));
+    const current = units[unitIndex];
+    if (!current || !(current.artifact_type || current.delivery_unit || current.new_version)) throw badRequest('制品索引不存在或已失效，请刷新后重试');
+    if (body.expected_ferry_status !== current.ferry_status || body.expected_artifact_release_status !== current.artifact_release_status) {
+      throw badRequest('制品状态已被他人修改，请刷新后重试');
+    }
+
+    const nextUnit = {
+      ...current,
+      ferry_status: nextFerryStatus,
+      artifact_release_status: nextArtifactReleaseStatus,
+    };
+    units[unitIndex] = nextUnit;
+    await tx(async () => {
+      await run(
+        "UPDATE release_apply SET delivery_units=?, updated_at=datetime('now','localtime') WHERE id=?",
+        JSON.stringify(units), id,
+      );
+      await reconcileReleaseTasksForArtifactChange(refs, row.release_point_id ?? null, request.currentUser?.name);
+    });
+    await auditUpdate(
+      'release_apply', id, row.change_code, request.currentUser?.name,
+      { ferry_status: current.ferry_status, artifact_release_status: current.artifact_release_status },
+      { ferry_status: nextUnit.ferry_status, artifact_release_status: nextUnit.artifact_release_status },
+      { ferry_status: `交付制品 ${unitIndex + 1} 摆渡状态`, artifact_release_status: `交付制品 ${unitIndex + 1} 制品投产状态` },
+    );
+    return ok({ id, unitIndex, unit: nextUnit });
   });
 
   // 预览变更编号（不占用序列）
@@ -458,7 +539,9 @@ export default async function releaseApplyRoutes(fastify) {
     const rps = await all('SELECT id, release_date FROM release_point');
     const rpMap = {};
     for (const rp of rps) rpMap[rp.id] = rp.release_date;
-    const [orgDisplayMap, reviewStatusMap] = await Promise.all([getDictDisplayMap('org'), getDictDisplayMap('review_status')]);
+    const [orgDisplayMap, reviewStatusMap, artifactReleaseStatusMap] = await Promise.all([
+      getDictDisplayMap('org'), getDictDisplayMap('review_status'), getDictDisplayMap('artifact_release_status'),
+    ]);
 
     const cols = [
       { key: 'change_code', title: '变更编号' },
@@ -466,7 +549,7 @@ export default async function releaseApplyRoutes(fastify) {
       { key: 'impact_scope', title: '影响范围' },
       { key: 'change_system', title: '变更系统' },
       { key: 'impl_org', title: '实施机构' },
-      { key: 'delivery_units', title: '交付制品（制品类型/交付单元/新版本号/摆渡状态）' },
+      { key: 'delivery_units', title: '交付制品（制品类型/交付单元/新版本号/摆渡状态/制品投产状态）' },
       { key: 'ref_codes', title: '关联需求/工单' },
       { key: 'review_status', title: '评审状态' },
       { key: 'out_dept', title: '变更负责部门（输出口径）' },
@@ -478,9 +561,9 @@ export default async function releaseApplyRoutes(fastify) {
 
     const mappedList = await Promise.all(result.list.map(async (row) => {
       const refs = parseJsonArray(row.ref_codes);
-      const units = parseJsonArray(row.delivery_units);
+      const units = await withArtifactReleaseStatusDefaults(parseJsonArray(row.delivery_units));
       const unitsText = units
-        .map((u) => [u.artifact_type, u.delivery_unit, u.new_version, u.ferry_status].filter(Boolean).join(' / '))
+        .map((u) => [u.artifact_type, u.delivery_unit, u.new_version, u.ferry_status, artifactReleaseStatusMap[u.artifact_release_status] || u.artifact_release_status].filter(Boolean).join(' / '))
         .join('\n');
       const reviewStatus = await deriveReviewStatus(refs, row.release_point_id);
       return {
@@ -511,7 +594,7 @@ export default async function releaseApplyRoutes(fastify) {
     { key: 'impact_scope', title: '影响范围' },
     { key: 'change_system', title: '变更系统' },
     { key: 'impl_org', title: '实施机构' },
-    { key: 'delivery_units', title: '交付制品（每行：制品类型 / 交付单元 / 新版本号 / 摆渡状态）', width: 58, wrapText: true },
+    { key: 'delivery_units', title: '交付制品（每行：制品类型 / 交付单元 / 新版本号 / 摆渡状态 / 制品投产状态）', width: 58, wrapText: true },
     { key: 'ref_codes', title: '关联需求/工单' },
     { key: 'out_dept', title: '变更负责部门（输出口径）' },
     { key: 'deploy_dept', title: '变更负责部门（部署口径）' },
@@ -528,7 +611,7 @@ export default async function releaseApplyRoutes(fastify) {
   fastify.get('/release-apply/template', { preHandler: fastify.requirePerm('release_apply', 'import') }, async (request, reply) => {
     const buf = await exportXlsx(await getStageExcelColumns('release_apply', IO_COLUMNS, { includeDeliverables: false }), await buildStageExcelTemplateRows('release_apply', [{
       change_code: 'CHG-DEMO-001', change_content: '示例投产变更', impact_scope: '示例范围', change_system: 'SYS_A', impl_org: '示例机构',
-      delivery_units: '镜像制品 / 包A / v1.0.0 / 未摆渡\n镜像制品 / 包B / v1.0.1 / 已摆渡', ref_codes: 'REQ-DEMO-001,TICKET-DEMO-001',
+      delivery_units: '镜像制品 / 包A / v1.0.0 / 未摆渡 / 待投产\n镜像制品 / 包B / v1.0.1 / 已摆渡 / 已投产', ref_codes: 'REQ-DEMO-001,TICKET-DEMO-001',
       out_dept: '示例输出部门', deploy_dept: '示例部署部门', release_point_id: '2026-05-05',
     }]), '投产申请模板');
     reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -594,6 +677,8 @@ export default async function releaseApplyRoutes(fastify) {
               release_point_id: releasePointId,
             }, LABELS);
             await saveExtensionValues('release_apply', exists.id, extensionValues, request.currentUser?.name);
+            await reconcileReleaseTasksForArtifactChange(parseJsonArray(exists.ref_codes), exists.release_point_id ?? null, request.currentUser?.name);
+            await reconcileReleaseTasksForArtifactChange(refs, releasePointId ?? null, request.currentUser?.name);
             stat.updated++;
             details.push({ key: code, title: r.change_content, action: 'update', status: 'success', __rowNum__: rowNum });
           } else {
@@ -613,6 +698,7 @@ export default async function releaseApplyRoutes(fastify) {
             await syncReleaseApplyReferences(res.lastInsertRowid, refs, releasePointId);
             await auditCreate('release_apply', res.lastInsertRowid, code, request.currentUser?.name);
             await saveExtensionValues('release_apply', res.lastInsertRowid, extensionValues, request.currentUser?.name);
+            await reconcileReleaseTasksForArtifactChange(refs, releasePointId ?? null, request.currentUser?.name);
             stat.inserted++;
             details.push({ key: code, title: r.change_content, action: 'insert', status: 'success', __rowNum__: rowNum });
           }

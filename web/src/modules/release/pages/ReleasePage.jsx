@@ -122,7 +122,7 @@ export default function Release() {
       },
     },
     {
-      title: '需求/问题/工单编号', dataIndex: 'code', key: 'code', width: 220,
+      title: <span style={{ display: 'block', textAlign: 'center' }}>需求/工单编号</span>, dataIndex: 'code', key: 'code', width: 220, align: 'left',
       render: (val, r) => (
         <Space size={6}>
           <Tag className="status-tag tag-system" style={{ margin: 0, borderRadius: 2 }}>{r.entity_type === 'issue' ? '问题' : (r.entity_type === 'ticket' ? '工单' : (r.entity_type === 'requirement' ? '需求' : '其他'))}</Tag>

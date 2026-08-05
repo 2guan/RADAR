@@ -342,7 +342,11 @@ function RoleManager() {
       io={{ enabled: true }}
       filterConfigs={filterConfigs}
       columns={[
-        { title: '角色名称', dataIndex: 'name' },
+        {
+          title: <span style={{ display: 'block', textAlign: 'center' }}>角色名称</span>,
+          dataIndex: 'name',
+          align: 'center',
+        },
         {
           title: '默认首页',
           dataIndex: 'default_home',
@@ -362,8 +366,20 @@ function RoleManager() {
           dataIndex: 'is_signoff_role',
           render: (v) => (v ? <Tag className="status-tag tag-system" style={{ margin: 0 }}>会签</Tag> : '—')
         },
-        { title: '会签职责', dataIndex: 'signoff_responsibility', width: 240, render: renderTwoLineSignoffConfig },
-        { title: '会签评审点', dataIndex: 'signoff_review_points', width: 240, render: renderTwoLineSignoffConfig },
+        {
+          title: <span style={{ display: 'block', textAlign: 'center' }}>会签职责</span>,
+          dataIndex: 'signoff_responsibility',
+          width: 240,
+          align: 'left',
+          render: renderTwoLineSignoffConfig,
+        },
+        {
+          title: <span style={{ display: 'block', textAlign: 'center' }}>会签评审点</span>,
+          dataIndex: 'signoff_review_points',
+          width: 240,
+          align: 'left',
+          render: renderTwoLineSignoffConfig,
+        },
         { title: '内置', dataIndex: 'is_builtin', width: 80, render: (v) => (v ? <Tag>内置</Tag> : '—') },
       ]}
       transformIn={(row) => ({ ...row, is_signoff_role: !!row.is_signoff_role, all_org_access: Number(row.all_org_access) !== 0 })}
@@ -510,6 +526,7 @@ export default function Settings() {
       { key: 'reqdept', label: '需求部门', children: <DictManager category="req_dept" title="需求部门" /> },
       { key: 'artifact', label: '制品类型', children: <DictManager category="artifact_type" title="制品类型" /> },
       { key: 'ferry', label: '摆渡状态', children: <DictManager category="ferry_status" title="摆渡状态" /> },
+      { key: 'artifact-release', label: '制品投产状态', children: <DictManager category="artifact_release_status" title="制品投产状态" /> },
     ]} />
   );
 

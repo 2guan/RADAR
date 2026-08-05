@@ -192,6 +192,75 @@ if (!process.env.RADAR_RUN_API_TESTS) {
     assert.equal(row.review_status, '待评审');
   });
 
+  test('制品投产状态兼容历史四列，可在审批详情直改并在全部已投产时自动推进', async () => {
+    const administrator = await get('SELECT id, phone FROM user WHERE is_super = 1 LIMIT 1');
+    const headers = { authorization: `Bearer ${await app.jwt.sign({ id: administrator.id, phone: administrator.phone })}`, 'x-requested-by': 'RADAR' };
+    const values = await all("SELECT attr_value FROM dict_item WHERE category = 'artifact_release_status' ORDER BY sort");
+    assert.deepEqual(values.map((row) => row.attr_value), ['待投产', '已投产', '已回退', '已取消']);
+
+    const point = await run('INSERT INTO release_point (release_date, version_type) VALUES (?,?)', '20990808', '常规版本');
+    const releasePointId = Number(point.lastInsertRowid);
+    const workItemCode = 'ARTIFACT-RELEASE-STATUS-001';
+    await run('INSERT INTO requirement (req_code, title, status) VALUES (?,?,?)', workItemCode, '制品投产状态回归需求', '需求分析完成');
+    const apply = await run(
+      'INSERT INTO release_apply (change_code, change_content, release_point_id, ref_codes, delivery_units) VALUES (?,?,?,?,?)',
+      'ARTIFACT-RELEASE-STATUS-APPLY-001', '历史四列交付制品', releasePointId, JSON.stringify([workItemCode]),
+      JSON.stringify([{ artifact_type: '镜像制品', delivery_unit: 'status.tar.gz', new_version: '1.0.0', ferry_status: '未摆渡' }]),
+    );
+    await run('INSERT INTO release_apply_reference (release_apply_id, ref_code, release_point_id) VALUES (?,?,?)', apply.lastInsertRowid, workItemCode, releasePointId);
+    await run(
+      'INSERT INTO release_task (req_code, release_point_id, entity_type, status, review_status) VALUES (?,?,?,?,?)',
+      workItemCode, releasePointId, 'requirement', '待投产', '评审同意',
+    );
+
+    const unauthenticated = await app.inject({
+      method: 'PUT', url: `/api/release-apply/${apply.lastInsertRowid}/delivery-units/0/status`, payload: {}, headers: { 'x-requested-by': 'RADAR' },
+    });
+    assert.equal(unauthenticated.statusCode, 401);
+
+    const detail = await app.inject({ method: 'GET', url: `/api/release/${workItemCode}?releasePointId=${releasePointId}`, headers });
+    assert.equal(detail.statusCode, 200, detail.body);
+    assert.equal(detail.json().data.artifacts[0].units[0].artifact_release_status, '待投产');
+    const overviewDetail = await app.inject({ method: 'GET', url: `/api/overview/${workItemCode}/detail`, headers });
+    assert.equal(overviewDetail.statusCode, 200, overviewDetail.body);
+    assert.equal(overviewDetail.json().data.release.artifacts[0].units[0].artifact_release_status, '待投产');
+
+    const updated = await app.inject({
+      method: 'PUT', url: `/api/release-apply/${apply.lastInsertRowid}/delivery-units/0/status`, headers,
+      payload: {
+        workItemCode, releasePointId, ferry_status: '已摆渡', artifact_release_status: '已投产',
+        expected_ferry_status: '未摆渡', expected_artifact_release_status: '待投产',
+      },
+    });
+    assert.equal(updated.statusCode, 200, updated.body);
+    assert.equal(updated.json().data.unit.artifact_release_status, '已投产');
+    assert.equal((await get('SELECT status FROM release_task WHERE req_code=? AND release_point_id=?', workItemCode, releasePointId)).status, '已投产');
+    const stored = JSON.parse((await get('SELECT delivery_units FROM release_apply WHERE id=?', apply.lastInsertRowid)).delivery_units)[0];
+    assert.deepEqual(
+      { ferry_status: stored.ferry_status, artifact_release_status: stored.artifact_release_status },
+      { ferry_status: '已摆渡', artifact_release_status: '已投产' },
+    );
+
+    const conflict = await app.inject({
+      method: 'PUT', url: `/api/release-apply/${apply.lastInsertRowid}/delivery-units/0/status`, headers,
+      payload: {
+        workItemCode, releasePointId, ferry_status: '未摆渡', artifact_release_status: '待投产',
+        expected_ferry_status: '未摆渡', expected_artifact_release_status: '待投产',
+      },
+    });
+    assert.equal(conflict.statusCode, 400, conflict.body);
+    assert.match(conflict.json().message, /刷新后重试/);
+
+    const filtered = await app.inject({
+      method: 'POST', url: '/api/release-apply/list', headers,
+      payload: { pageSize: 100, filters: [{ field: 'artifact_release_status', op: 'in', value: ['已投产'] }] },
+    });
+    assert.equal(filtered.statusCode, 200, filtered.body);
+    assert.ok(filtered.json().data.list.some((row) => row.id === apply.lastInsertRowid));
+    const audit = await get("SELECT id FROM audit_log WHERE entity_type='release_apply' AND entity_id=? ORDER BY id DESC", apply.lastInsertRowid);
+    assert.ok(audit);
+  });
+
   test('生产静态首页可返回且使用 no-cache，避免 Fastify 静态回调导致服务退出', async () => {
     const response = await app.inject({ method: 'GET', url: '/' });
     assert.equal(response.statusCode, 200);
