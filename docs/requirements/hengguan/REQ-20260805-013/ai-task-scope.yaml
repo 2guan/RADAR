@@ -3,7 +3,7 @@
   "requirement": {
     "id": "REQ-20260805-013",
     "ref": "hengguan/REQ-20260805-013",
-    "title": "统一业务导入模板与导出字段",
+    "title": "统一业务导入导出与人员管理展示",
     "status": "ready",
     "document": "docs/requirements/hengguan/REQ-20260805-013/requirement.md",
     "internet_ai_coding_allowed": true
@@ -12,7 +12,7 @@
     "developer": "hengguan",
     "module": "governance",
     "module_owner": "hengguan",
-    "branch": "hengguan/REQ-20260805-013-import-export-templates",
+    "branch": "hengguan/REQ-20260805-013-personnel-ui",
     "base_branch": "origin/main",
     "worktree": "/Volumes/GuanMac/Code/RADAR"
   },
@@ -38,7 +38,8 @@
       "server/src/modules/identity-access/**",
       "server/src/modules/settings/**",
       "server/test/**",
-      "web/test/**"
+      "web/test/**",
+      "web/src/modules/identity-access/pages/UsersPage.jsx"
     ],
     "read_only_paths": [
       "AGENTS.md",
@@ -53,8 +54,7 @@
       "server/src/platform/runtime/**",
       "server/src/shared/**",
       "web/src/platform/**",
-      "web/src/shared/**",
-      "web/src/modules/**"
+      "web/src/shared/**"
     ],
     "forbidden_paths": [
       "server/migrations/**",
@@ -77,7 +77,7 @@
     "existing_method_changed": true,
     "semantic_name_confirmed": true,
     "old_behavior_preserved": true,
-    "compatibility_note": "既有导入 URI、响应包装和历史模板列继续兼容；模板/导出列按当前可见配置补齐。业务受控值导入兼容属性值与显示值、导出显示值；系统设置属性值与显示值均显式导入导出。",
+    "compatibility_note": "既有导入 URI、响应包装和历史模板列继续兼容；模板/导出列按当前可见配置补齐。业务受控值导入兼容属性值与显示值、导出显示值；系统设置属性值与显示值均显式导入导出。人员管理仅调整既有列表标签的主题颜色与换行布局，不改变接口或数据契约。",
     "owner_approved": true,
     "owner_review_required_before_merge": true
   },
@@ -106,7 +106,7 @@
     {"name": "build", "command": "npm run build --prefix web"},
     {"name": "runtime", "command": "node scripts/verify-app-runtime.mjs"},
     {"name": "governance", "command": "node scripts/check-governance.mjs && node scripts/check-code-comments.mjs && git diff --check"},
-    {"name": "browser", "command": "本地脱敏管理员在桌面及移动视口下载模板、导入属性/显示值、导出并核对列、示例、日期时间与附件文件名"}
+    {"name": "browser", "command": "本地脱敏管理员在桌面及移动视口下载模板、导入属性/显示值、导出并核对列、示例、日期时间与附件文件名；以多角色人员核对全机构权限主题标签与角色自动换行"}
   ],
   "risk": {
     "level": "important",

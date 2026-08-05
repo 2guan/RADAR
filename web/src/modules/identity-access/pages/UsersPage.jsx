@@ -197,7 +197,7 @@ export default function Users() {
       dataIndex: 'roles',
       key: 'roles',
       render: (rs) => (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, max-content)', gap: '4px 8px' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
           {(rs || []).map((r) => (
             <Tag key={r.id} className="status-tag tag-system" style={{ margin: 0 }}>{r.name}</Tag>
           ))}
@@ -206,7 +206,11 @@ export default function Users() {
     },
     {
       title: '全机构权限', dataIndex: 'all_org_access', key: 'all_org_access', width: 120,
-      render: (value) => <Tag color={Number(value) !== 0 ? 'green' : 'default'}>{Number(value) !== 0 ? '是' : '否'}</Tag>,
+      render: (value) => (
+        <Tag className={Number(value) !== 0 ? 'status-tag tag-system' : 'status-tag status-tag-not-started'} style={{ margin: 0 }}>
+          {Number(value) !== 0 ? '是' : '否'}
+        </Tag>
+      ),
     },
     {
       title: '状态',
