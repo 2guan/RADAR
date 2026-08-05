@@ -19,9 +19,12 @@ const EXPORT_COLUMNS = [
   { key: 'name', title: '姓名' },
   { key: 'org', title: '所属机构' },
   { key: 'roles', title: '角色' },
+  { key: 'all_org_access_override', title: '全机构权限（单独设置）' },
   { key: 'all_org_access', title: '全机构权限（生效）' },
   { key: 'all_org_access_source', title: '权限来源' },
   { key: 'status', title: '状态' },
+  { key: 'created_at', title: '创建时间', valueType: 'datetime' },
+  { key: 'updated_at', title: '更新时间', valueType: 'datetime' },
 ];
 // 导入列定义（额外含初始密码）
 const IMPORT_COLUMNS = [
@@ -266,12 +269,12 @@ export default async function userRoutes(fastify) {
     const { query, baseWhere, baseParams } = buildUserListQuery(request.body || {});
     const result = await listQuery({
       table: 'user',
-      columns: ['id', 'phone', 'name', 'org', 'all_org_access_override', 'status'],
+      columns: ['id', 'phone', 'name', 'org', 'all_org_access_override', 'status', 'created_at', 'updated_at'],
       searchColumns: ['phone', 'name', 'org'],
       query: { ...query, pageSize: 0 },
       baseWhere,
       baseParams,
-      select: 'id, phone, name, org, all_org_access_override, status, is_super',
+      select: 'id, phone, name, org, all_org_access_override, status, is_super, created_at, updated_at',
     });
 
     const orgMap = await getDictDisplayMap('org');
@@ -282,6 +285,9 @@ export default async function userRoutes(fastify) {
         ...enriched,
         org: orgMap[u.org] || u.org || '',
         roles: enriched.roles.map((r) => r.name).join('、'),
+        all_org_access_override: enriched.all_org_access_override === null || enriched.all_org_access_override === undefined
+          ? '继承角色配置'
+          : (Number(enriched.all_org_access_override) ? '是' : '否'),
         all_org_access: enriched.all_org_access ? '是' : '否',
         all_org_access_source: enriched.all_org_access_source === 'person' ? '人员单独设置' : '角色配置',
       };
@@ -294,7 +300,9 @@ export default async function userRoutes(fastify) {
 
   // 导入模板（含初始密码列）
   fastify.get('/users/template', { preHandler: fastify.requirePerm('user', 'import') }, async (request, reply) => {
-    const buf = await exportXlsx(IMPORT_COLUMNS, [], '人员模板');
+    const buf = await exportXlsx(IMPORT_COLUMNS, [{
+      phone: '13800000001', name: '示例人员', org: '示例机构', roles: '业务人员,测试人员', all_org_access_override: '继承角色配置', status: '启用', password: 'Demo@2026Pass',
+    }], '人员模板');
     reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     reply.header('Content-Disposition', 'attachment; filename=users_template.xlsx');
     return reply.send(buf);

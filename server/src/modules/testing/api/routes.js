@@ -13,6 +13,7 @@ import {
 import {
   appendStageExcelValues,
   appendStageListValues,
+  buildStageExcelTemplateRows,
   extensionValuesFromExcelRow,
   getStageExcelColumns,
   saveExtensionValues,
@@ -573,6 +574,7 @@ export default async function testTaskRoutes(fastify) {
     const systems = await all('SELECT sys_code, sys_name FROM system');
     const sysMap = {};
     for (const s of systems) sysMap[s.sys_code] = s.sys_name;
+    const [orgDisplayMap, statusDisplayMap] = await Promise.all([getDictDisplayMap('org'), getDictDisplayMap('process_status')]);
 
     const cols = [
       { key: 'req_code', title: '关联需求/工单编号' },
@@ -580,19 +582,19 @@ export default async function testTaskRoutes(fastify) {
       { key: 'task_name', title: '测试任务名称' },
       { key: 'test_type', title: '测试类型' },
       { key: 'status', title: '测试状态' },
+      { key: 'task_status', title: '任务状态' },
       { key: 'owner', title: '测试负责人' },
+      { key: 'intake_owner', title: '测试承接人' },
       { key: 'impl_system', title: '测试实施系统' },
       { key: 'impl_org', title: '测试实施方' },
-      { key: 'plan_start', title: '计划开始时间' },
-      { key: 'plan_end', title: '计划结束时间' },
-      { key: 'actual_start', title: '实际开始时间' },
-      { key: 'actual_end', title: '实际结束时间' },
+      { key: 'plan_start', title: '计划开始时间', valueType: 'date' },
+      { key: 'plan_end', title: '计划结束时间', valueType: 'date' },
+      { key: 'actual_start', title: '实际开始时间', valueType: 'date' },
+      { key: 'actual_end', title: '实际结束时间', valueType: 'date' },
       { key: 'deviation_rate', title: '排期偏差率 (%)' },
       { key: 'registrar', title: '登记人' },
-      { key: 'register_time', title: '登记时间' },
-      { key: 'test_plan', title: '测试方案' },
+      { key: 'register_time', title: '登记时间', valueType: 'datetime' },
       { key: 'test_coverage_design', title: '测试覆盖性分析', width: 60, wrapText: true },
-      { key: 'test_report', title: '测试报告' },
     ];
 
     // 测试覆盖性分析按需求/工单级别存储，仅 SIT 展示，按 req_code 缓存
@@ -612,8 +614,11 @@ export default async function testTaskRoutes(fastify) {
       const attaches = await all("SELECT * FROM attachment WHERE entity_type = 'test' AND entity_id = ?", row.id);
       return {
         ...row,
+        status: statusDisplayMap[row.status] || row.status || '',
+        task_status: statusDisplayMap[row.status] || row.status || '',
         test_type: TYPE_NAME[row.test_type] || row.test_type,
         impl_system: sysMap[row.impl_system] || row.impl_system,
+        impl_org: orgDisplayMap[row.impl_org] || row.impl_org || '',
         deviation_rate: row.deviation_rate != null ? `${row.deviation_rate}%` : '0%',
         test_plan: formatAttachments(attaches, '测试方案'),
         test_coverage_design: row.test_type === 'SIT' ? await coverageTextFor(row.req_code) : '',
@@ -624,7 +629,7 @@ export default async function testTaskRoutes(fastify) {
     const scopeKey = `test.${body.test_type}`;
     const extensionColumns = await getStageExcelColumns(scopeKey);
     const exportRows = await appendStageExcelValues(scopeKey, mappedList);
-    const buf = await exportXlsx([...cols, ...extensionColumns], exportRows, '测试任务清单');
+    const buf = await exportXlsx(await getStageExcelColumns(scopeKey, cols), exportRows, '测试任务清单');
     reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     reply.header('Content-Disposition', 'attachment; filename=test_tasks.xlsx');
     return reply.send(buf);
@@ -634,7 +639,11 @@ export default async function testTaskRoutes(fastify) {
   fastify.get('/test-tasks/template', async (request, reply) => {
     await requireTestPerm(request, 'import', request.query?.testType);
     const scopeKey = `test.${request.query?.testType}`;
-    const buf = await exportXlsx([...IO_COLUMNS, ...await getStageExcelColumns(scopeKey)], [], '测试任务模板');
+    const buf = await exportXlsx(await getStageExcelColumns(scopeKey, IO_COLUMNS, { includeDeliverables: false }), await buildStageExcelTemplateRows(scopeKey, [{
+      req_code: 'REQ-DEMO-001', task_code: 'SIT-DEMO-001', task_name: '示例测试任务', test_type: '应用组装测试', status: '测试承接',
+      owner: '张三', intake_owner: '李四', impl_system: 'SYS_A', impl_org: '示例机构',
+      plan_start: '2026-05-05', plan_end: '2026-05-06', actual_start: '2026-05-05', actual_end: '2026-05-06',
+    }]), '测试任务模板');
     reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     reply.header('Content-Disposition', 'attachment; filename=test_tasks_template.xlsx');
     return reply.send(buf);
@@ -649,7 +658,7 @@ export default async function testTaskRoutes(fastify) {
     await requireTestPerm(request, 'import', testType);
     const buffer = await data.toBuffer();
     const scopeKey = `test.${testType}`;
-    const rows = await parseXlsx(buffer, [...IO_COLUMNS, ...await getStageExcelColumns(scopeKey)]);
+    const rows = await parseXlsx(buffer, await getStageExcelColumns(scopeKey, IO_COLUMNS, { includeDeliverables: false }));
     if (!rows.length) throw badRequest('文件中无有效数据');
 
     const stat = { inserted: 0, updated: 0, skipped: 0, failed: 0 };

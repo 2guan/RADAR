@@ -659,21 +659,93 @@ function extensionExcelKey(fieldKey) {
   return `extension__${fieldKey}`;
 }
 
+function deliverableExcelKey(deliverableKey) {
+  return `deliverable__${deliverableKey}`;
+}
+
 async function listExcelExtensionFields(scopeKey) {
   await getStageScope(scopeKey);
-  return await all(`SELECT id, field_key, label, multiple
+  return await all(`SELECT id, field_key, label, input_type, multiple
     FROM stage_field_definition
     WHERE scope_key = ? AND field_kind = 'extension' AND visible = 1 AND deleted_at IS NULL
     ORDER BY sort, id`, scopeKey);
 }
 
-/** 为既有业务 Excel 模板/导出文件追加扩展字段列。 */
-export async function getStageExcelColumns(scopeKey) {
+async function listExcelDeliverables(scopeKey) {
+  await getStageScope(scopeKey);
+  return await all(`SELECT deliverable_key, label
+    FROM deliverable_definition
+    WHERE scope_key = ? AND visible = 1 AND deleted_at IS NULL
+    ORDER BY sort, id`, scopeKey);
+}
+
+/** 为既有业务 Excel 模板/导出文件追加配置字段列。附件文件名仅用于导出，不进入导入模板。 */
+export async function getStageExcelColumns(scopeKey, baseColumns = [], { includeDeliverables = true } = {}) {
+  const config = await getStageContentConfig(scopeKey);
+  const nativeByKey = new Map(config.fields.filter((field) => field.field_kind === 'native').map((field) => [field.field_key, field]));
   const fields = await listExcelExtensionFields(scopeKey);
-  return fields.map((field) => ({
+  const deliverables = includeDeliverables ? await listExcelDeliverables(scopeKey) : [];
+  const visibleBaseColumns = baseColumns
+    .filter((column) => {
+      const native = nativeByKey.get(column.configKey || column.key);
+      return !native || native.visible;
+    })
+    .map((column) => {
+      const native = nativeByKey.get(column.configKey || column.key);
+      if (!native) return column;
+      return {
+        ...column,
+        // 内置字段的显示名和日期类型以当前过程配置为准；业务专有的任务状态等列保持原口径。
+        title: native.label || column.title,
+        valueType: column.valueType || (native.input_type === 'date' ? 'date' : (native.input_type === 'datetime' ? 'datetime' : undefined)),
+      };
+    });
+  return [...visibleBaseColumns, ...fields.map((field) => ({
     key: extensionExcelKey(field.field_key),
     title: `扩展字段：${field.label}`,
-  }));
+    valueType: field.input_type === 'date' ? 'date' : (field.input_type === 'datetime' ? 'datetime' : undefined),
+  })), ...deliverables.map((deliverable) => ({
+    key: deliverableExcelKey(deliverable.deliverable_key),
+    title: `交付件文件名：${deliverable.label}`,
+  }))];
+}
+
+async function fieldExampleValue(field) {
+  const fallback = field.multiple ? `示例${field.label}一,示例${field.label}二` : `示例${field.label}`;
+  const selected = (values) => values.slice(0, field.multiple ? 2 : 1).join(',');
+  if (field.input_type === 'date') return '2026-05-05';
+  if (field.input_type === 'datetime') return '2026-05-05 18:46';
+  if (field.source_key === 'system') {
+    const rows = await all('SELECT sys_code FROM system ORDER BY sort, id LIMIT 2');
+    return rows.length ? selected(rows.map((row) => row.sys_code)) : fallback;
+  }
+  if (field.source_key === 'person') {
+    const rows = await all("SELECT name FROM user WHERE status = '启用' ORDER BY id LIMIT 2");
+    return rows.length ? selected(rows.map((row) => row.name)) : fallback;
+  }
+  if (field.source_key === 'release_point') {
+    const rows = await all('SELECT release_date FROM release_point ORDER BY release_date, id LIMIT 2');
+    return rows.length ? selected(rows.map((row) => String(row.release_date).replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3'))) : fallback;
+  }
+  if (field.source_key?.startsWith('dict:')) {
+    const category = field.source_key.slice(5);
+    const rows = await all('SELECT display_value, attr_value FROM dict_item WHERE category = ? ORDER BY sort, id LIMIT 2', category);
+    return rows.length ? selected(rows.map((row) => row.display_value || row.attr_value)) : fallback;
+  }
+  return fallback;
+}
+
+/** 为动态扩展字段补充可读、可直接参考的模板示例；多值字段固定展示两个值。 */
+export async function buildStageExcelTemplateRows(scopeKey, rows = []) {
+  const fields = await listExcelExtensionFields(scopeKey);
+  if (!fields.length) return rows.slice(0, 2);
+  const examples = Object.fromEntries(await Promise.all(fields.map(async (field) => [
+    extensionExcelKey(field.field_key), await fieldExampleValue(field),
+  ])));
+  return rows.slice(0, 2).map((row) => {
+    const dynamic = Object.fromEntries(Object.entries(examples).filter(([key]) => row?.[key] === undefined || row?.[key] === ''));
+    return { ...row, ...dynamic };
+  });
 }
 
 /**
@@ -701,14 +773,17 @@ export async function appendStageExcelValues(scopeKey, rows) {
   if (!rows?.length) return rows || [];
   const scope = await getStageScope(scopeKey);
   const fields = await listExcelExtensionFields(scopeKey);
-  if (!fields.length) return rows;
+  const deliverables = await listExcelDeliverables(scopeKey);
+  if (!fields.length && !deliverables.length) return rows;
   const ids = rows.map((row) => Number(row.id)).filter(Boolean);
   if (!ids.length) return rows;
-  const values = await all(`SELECT field_definition_id, entity_id, ordinal, value_text, value_date, value_code, value_ref_id, value_label_snapshot
+  const values = fields.length ? await all(`SELECT field_definition_id, entity_id, ordinal, value_text, value_date, value_code, value_ref_id, value_label_snapshot
     FROM stage_field_value
     WHERE entity_type = ? AND entity_id IN (${ids.map(() => '?').join(',')})
       AND field_definition_id IN (${fields.map(() => '?').join(',')})
-    ORDER BY entity_id, field_definition_id, ordinal`, scope.entity_type, ...ids, ...fields.map((field) => field.id));
+    ORDER BY entity_id, field_definition_id, ordinal`, scope.entity_type, ...ids, ...fields.map((field) => field.id)) : [];
+  const attachments = deliverables.length ? await all(`SELECT entity_id, field_key, filename, path_text
+    FROM attachment WHERE entity_type = ? AND entity_id IN (${ids.map(() => '?').join(',')})`, scope.entity_type, ...ids) : [];
   const fieldById = new Map(fields.map((field) => [field.id, field]));
   const valuesByEntity = new Map();
   for (const value of values) {
@@ -718,12 +793,21 @@ export async function appendStageExcelValues(scopeKey, rows) {
     const entityValues = valuesByEntity.get(value.entity_id);
     (entityValues[field.field_key] ||= []).push(value.value_label_snapshot ?? value.value_code ?? value.value_date ?? value.value_text ?? String(value.value_ref_id ?? ''));
   }
+  const attachmentByEntity = new Map();
+  for (const attachment of attachments) {
+    if (!attachmentByEntity.has(attachment.entity_id)) attachmentByEntity.set(attachment.entity_id, {});
+    (attachmentByEntity.get(attachment.entity_id)[attachment.field_key] ||= []).push(attachment.filename || attachment.path_text || '');
+  }
   return rows.map((row) => {
     const entityValues = valuesByEntity.get(row.id) || {};
     const extensionValues = Object.fromEntries(fields.map((field) => [
       extensionExcelKey(field.field_key), (entityValues[field.field_key] || []).join(','),
     ]));
-    return { ...row, ...extensionValues };
+    const attachmentValues = attachmentByEntity.get(row.id) || {};
+    const deliverableValues = Object.fromEntries(deliverables.map((deliverable) => [
+      deliverableExcelKey(deliverable.deliverable_key), (attachmentValues[deliverable.label] || []).join('\n'),
+    ]));
+    return { ...row, ...extensionValues, ...deliverableValues };
   });
 }
 

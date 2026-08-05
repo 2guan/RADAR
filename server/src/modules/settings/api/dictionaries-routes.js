@@ -138,7 +138,10 @@ export default async function dictRoutes(fastify) {
   // 模板下载（按分类）
   fastify.get('/dict/template', { preHandler: fastify.requirePerm('settings', 'import') }, async (request, reply) => {
     const category = request.query.category;
-    const buf = await exportXlsx(colsOf(category), [], '字典模板');
+    const sample = category === 'process_status'
+      ? [{ stage: '需求', attr_value: 'demo_status', display_value: '示例状态', sort: 10, state_type: '进行中' }]
+      : [{ attr_value: 'demo_value', display_value: '示例显示值', sort: 10 }];
+    const buf = await exportXlsx(colsOf(category), sample, '字典模板');
     reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     reply.header('Content-Disposition', 'attachment; filename=dict_template.xlsx');
     return reply.send(buf);

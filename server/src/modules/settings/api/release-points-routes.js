@@ -13,7 +13,7 @@ import { auditCreate, auditUpdate, auditDelete } from '../../../platform/audit/i
 import { ok, notFound, badRequest } from '../../../platform/runtime/index.js';
 import { beijingCompactDateString } from '../../../shared/utils/time.js';
 
-const COLUMNS = ['id', 'release_date', 'version_type', 'remark', 'is_default', 'is_archived', 'created_at'];
+const COLUMNS = ['id', 'release_date', 'version_type', 'remark', 'is_default', 'is_archived', 'created_at', 'updated_at'];
 const LABELS = { release_date: '投产日期', version_type: '版本类型', remark: '备注' };
 const PENDING_RELEASE_DATE = '投产点待定';
 const DATE_RE = /^\d{8}$/;
@@ -32,6 +32,11 @@ function normalizeReleaseDate(v) {
   if (!value) throw badRequest('投产日期必填');
   if (value === PENDING_RELEASE_DATE || isReleaseDate(value)) return value;
   throw badRequest('投产日期需为 YYYYMMDD 或 投产点待定');
+}
+
+function flagValue(value, fallback = 0) {
+  if (value === undefined || value === null || String(value).trim() === '') return fallback;
+  return ['是', 'Y', 'y', 'true', '1'].includes(String(value).trim()) ? 1 : 0;
 }
 
 /** 计算当前投产窗口 */
@@ -171,25 +176,37 @@ export default async function releasePointRoutes(fastify) {
   registerIO(fastify, {
     prefix: '/release-points', module: 'settings', name: '投产点',
     columns: [
-      { key: 'release_date', title: '投产日期' }, { key: 'version_type', title: '版本类型' },
-      { key: 'remark', title: '备注' }, { key: 'is_default', title: '默认' },
+      { key: 'release_date', title: '投产日期', valueType: 'date' }, { key: 'version_type', title: '版本类型' },
+      { key: 'remark', title: '备注' }, { key: 'is_default', title: '默认' }, { key: 'is_archived', title: '已归档' },
     ],
+    exportColumns: [
+      { key: 'release_date', title: '投产日期', valueType: 'date' }, { key: 'version_type', title: '版本类型' },
+      { key: 'remark', title: '备注' }, { key: 'is_default', title: '默认' }, { key: 'is_archived', title: '已归档' },
+      { key: 'created_at', title: '创建时间', valueType: 'datetime' }, { key: 'updated_at', title: '更新时间', valueType: 'datetime' },
+    ],
+    templateRows: [{ release_date: '2026-05-05', version_type: '常规版本', remark: '示例投产点', is_default: '否', is_archived: '否' }],
     list: async (q) => (await listQuery({ table: 'release_point', columns: COLUMNS, searchColumns: ['release_date', 'version_type', 'remark'], query: q }))
-      .list.map((r) => ({ ...r, is_default: r.is_default ? '是' : '' })),
+      .list.map((r) => ({ ...r, is_default: r.is_default ? '是' : '否', is_archived: r.is_archived ? '是' : '否' })),
     upsert: async (r, mode) => {
       if (!r.release_date) return 'skipped';
       const releaseDate = normalizeReleaseDate(r.release_date);
       const exists = await get('SELECT id FROM release_point WHERE release_date = ?', releaseDate);
-      if (exists) {
-        if (mode === 'skip') return 'skipped';
-        if (mode === 'rollback') throw badRequest(`投产日期重复：${releaseDate}，已回滚`);
-        await run('UPDATE release_point SET version_type=?, remark=?, updated_at=datetime(\'now\',\'localtime\') WHERE id=?',
-          r.version_type || null, r.remark || null, exists.id);
-        return 'updated';
-      }
-      await run('INSERT INTO release_point (release_date, version_type, remark) VALUES (?,?,?)',
-        releaseDate, r.version_type || null, r.remark || null);
-      return 'inserted';
+      if (exists && mode === 'skip') return 'skipped';
+      if (exists && mode === 'rollback') throw badRequest(`投产日期重复：${releaseDate}，已回滚`);
+      const current = exists ? await get('SELECT * FROM release_point WHERE id = ?', exists.id) : null;
+      const isArchived = flagValue(r.is_archived, current?.is_archived || 0);
+      const isDefault = isArchived ? 0 : flagValue(r.is_default, current?.is_default || 0);
+      return await tx(async () => {
+        if (isDefault) await run('UPDATE release_point SET is_default = 0 WHERE is_default = 1');
+        if (exists) {
+          await run('UPDATE release_point SET version_type=?, remark=?, is_default=?, is_archived=?, updated_at=datetime(\'now\',\'localtime\') WHERE id=?',
+            r.version_type || null, r.remark || null, isDefault, isArchived, exists.id);
+          return 'updated';
+        }
+        await run('INSERT INTO release_point (release_date, version_type, remark, is_default, is_archived) VALUES (?,?,?,?,?)',
+          releaseDate, r.version_type || null, r.remark || null, isDefault, isArchived);
+        return 'inserted';
+      });
     },
   });
 }

@@ -15,6 +15,7 @@ import {
 import {
   appendStageExcelValues,
   appendStageListValues,
+  buildStageExcelTemplateRows,
   extensionValuesFromExcelRow,
   getStageExcelColumns,
   normalizeConfiguredFieldValue,
@@ -45,7 +46,6 @@ const IO_COLUMNS = [
   { key: 'yn_owner', title: '云南农信工单负责人' },
   { key: 'jk_owner', title: '建信金科工单负责人' },
   { key: 'propose_time', title: '提出时间' },
-  { key: 'apply_release_points', title: '申请投产点' },
   { key: 'expected_release_date', title: '期望投产时间' },
   { key: 'main_systems', title: '主责系统' },
   { key: 'collab_dev_systems', title: '协同改造系统' },
@@ -297,7 +297,9 @@ export default async function ticketRoutes(fastify) {
     for (const s of systems) {
       sysMap[s.sys_code] = s.sys_name;
     }
-    const orgDisplayMap = await getDictDisplayMap('org');
+    const [orgDisplayMap, statusDisplayMap, typeDisplayMap, deptDisplayMap] = await Promise.all([
+      getDictDisplayMap('org'), getDictDisplayMap('process_status'), getDictDisplayMap('ticket_type'), getDictDisplayMap('req_dept'),
+    ]);
 
     // 仅针对当前页的工单编号做关联查询，避免随翻页整表扫描 dev_task/test_task/release_task
     const pageCodes = result.list.map((r) => r.ticket_code).filter(Boolean);
@@ -508,7 +510,9 @@ export default async function ticketRoutes(fastify) {
     const systems = await all('SELECT sys_code, sys_name FROM system');
     const sysMap = {};
     for (const s of systems) sysMap[s.sys_code] = s.sys_name;
-    const orgDisplayMap = await getDictDisplayMap('org');
+    const [orgDisplayMap, statusDisplayMap, typeDisplayMap, deptDisplayMap] = await Promise.all([
+      getDictDisplayMap('org'), getDictDisplayMap('process_status'), getDictDisplayMap('ticket_type'), getDictDisplayMap('req_dept'),
+    ]);
 
     const applyPointMap = await ticketAppliedReleasePoints(result.list.map((row) => row.ticket_code));
 
@@ -517,6 +521,7 @@ export default async function ticketRoutes(fastify) {
       { key: 'title', title: '工单标题' },
       { key: 'summary', title: '工单详情' },
       { key: 'status', title: '工单状态' },
+      { key: 'task_status', title: '任务状态' },
       { key: 'ticket_type', title: '工单类型' },
       { key: 'is_accounting', title: '是否涉账' },
       { key: 'priority', title: '优先级' },
@@ -524,9 +529,9 @@ export default async function ticketRoutes(fastify) {
       { key: 'proposer', title: '提出人' },
       { key: 'yn_owner', title: '云南农信工单负责人' },
       { key: 'jk_owner', title: '建信金科工单负责人' },
-      { key: 'propose_time', title: '提出时间' },
+      { key: 'propose_time', title: '提出时间', valueType: 'datetime' },
       { key: 'apply_release_points', title: '申请投产点' },
-      { key: 'expected_release_date', title: '期望投产时间' },
+      { key: 'expected_release_date', title: '期望投产时间', valueType: 'date' },
       { key: 'main_systems', title: '主责系统' },
       { key: 'collab_dev_systems', title: '协同改造系统' },
       { key: 'collab_test_systems', title: '协同测试系统' },
@@ -535,9 +540,10 @@ export default async function ticketRoutes(fastify) {
       { key: 'receiver', title: '需求接收人' },
       { key: 'workload', title: '工作量(人天)' },
       { key: 'registrar', title: '录入人' },
-      { key: 'register_time', title: '录入时间' },
+      { key: 'register_time', title: '录入时间', valueType: 'datetime' },
     ];
 
+    const taskStatuses = await resolveCurrentTaskStatuses(result.list.map((row) => ({ ...row, entity_type: 'ticket' })));
     const mappedList = result.list.map(row => {
       const main = parseJsonArray(row.main_systems);
       const collabDev = parseJsonArray(row.collab_dev_systems);
@@ -546,18 +552,23 @@ export default async function ticketRoutes(fastify) {
 
       return {
         ...row,
+        status: statusDisplayMap[row.status] || row.status || '',
+        ticket_type: typeDisplayMap[row.ticket_type] || row.ticket_type || '',
+        propose_dept: deptDisplayMap[row.propose_dept] || row.propose_dept || '',
         apply_release_points: (applyPointMap[row.ticket_code] || []).map((point) => point.release_date).join(', '),
         proposer: proposerArray.join(', '),
         main_systems: main.map(c => sysMap[c] || c).join(', '),
         collab_dev_systems: collabDev.map(c => sysMap[c] || c).join(', '),
         collab_test_systems: collabTest.map(c => sysMap[c] || c).join(', '),
         implementation_org: orgDisplayMap[row.implementation_org] || row.implementation_org || '',
+        task_status: taskStatuses[row.ticket_code]?.display || '需求/工单分析-未开始',
+        attachments: '',
       };
     });
 
     const extensionColumns = await getStageExcelColumns('ticket');
     const exportRows = await appendStageExcelValues('ticket', mappedList);
-    const buf = await exportXlsx([...cols, ...extensionColumns], exportRows, '工单清单');
+    const buf = await exportXlsx(await getStageExcelColumns('ticket', cols), exportRows, '工单清单');
     reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     reply.header('Content-Disposition', 'attachment; filename=tickets.xlsx');
     return reply.send(buf);
@@ -565,7 +576,11 @@ export default async function ticketRoutes(fastify) {
 
   // 导入模板
   fastify.get('/tickets/template', { preHandler: fastify.requirePerm('ticket', 'import') }, async (request, reply) => {
-    const buf = await exportXlsx([...IO_COLUMNS, ...await getStageExcelColumns('ticket')], [], '工单模板');
+    const buf = await exportXlsx(await getStageExcelColumns('ticket', IO_COLUMNS, { includeDeliverables: false }), await buildStageExcelTemplateRows('ticket', [{
+      ticket_code: 'TICKET-DEMO-001', title: '示例工单', summary: '用于说明导入填写方式', status: '工单登记', ticket_type: '故障修复',
+      is_accounting: '否', priority: '中', proposer: '张三,李四', propose_time: '2026-05-05 18:46', expected_release_date: '2026-05-05',
+      main_systems: 'SYS_A,SYS_B', collab_dev_systems: 'SYS_C,SYS_D', collab_test_systems: 'SYS_E,SYS_F', implementation_org: '示例机构', workload: '2',
+    }]), '工单模板');
     reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     reply.header('Content-Disposition', 'attachment; filename=tickets_template.xlsx');
     return reply.send(buf);
@@ -577,7 +592,7 @@ export default async function ticketRoutes(fastify) {
     if (!data) throw badRequest('请上传文件');
     const mode = data.fields?.mode?.value || 'skip';
     const buffer = await data.toBuffer();
-    const rows = await parseXlsx(buffer, [...IO_COLUMNS, ...await getStageExcelColumns('ticket')]);
+    const rows = await parseXlsx(buffer, await getStageExcelColumns('ticket', IO_COLUMNS, { includeDeliverables: false }));
     if (!rows.length) throw badRequest('文件中无有效数据');
 
     const stat = { inserted: 0, updated: 0, skipped: 0, failed: 0 };

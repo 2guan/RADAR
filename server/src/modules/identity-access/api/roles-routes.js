@@ -21,6 +21,25 @@ function parseAllOrgAccess(value) {
   throw badRequest('全机构权限仅支持“是/否”');
 }
 
+// 数据库存稳定预设键；Excel 和管理页面面对用户使用中文展示值，导入兼容两种口径。
+const THEME_DISPLAY_MAP = {
+  sky: '蔚蓝', teal: '滇红', coral: '暮橘', emerald: '松翠',
+  forest: '澄碧', violet: '楹紫', rose: '山茶', graphite: '苍青',
+};
+
+export function normalizeDefaultTheme(value, fallback = 'sky') {
+  const text = String(value ?? '').trim();
+  if (!text) return fallback;
+  if (THEME_DISPLAY_MAP[text]) return text;
+  const matched = Object.entries(THEME_DISPLAY_MAP).find(([, display]) => display === text);
+  if (!matched) throw badRequest(`默认主题 [${text}] 不存在，可填写：${Object.values(THEME_DISPLAY_MAP).join('、')}`);
+  return matched[0];
+}
+
+function displayDefaultTheme(value) {
+  return THEME_DISPLAY_MAP[value] || value || THEME_DISPLAY_MAP.sky;
+}
+
 /** 同步修改或删除的会签角色到所有未完成的投产任务中 */
 async function syncModifySignoffRole(roleId, roleName, isSignoffRole, oldIsSignoffRole, oldName) {
   const tasks = await all("SELECT id FROM release_task WHERE status NOT IN ('已投产', '已取消')");
@@ -107,7 +126,7 @@ export default async function roleRoutes(fastify) {
       name, code, default_home || '/dashboard', access, sign,
       sign ? (signoff_responsibility || null) : null,
       sign ? (signoff_review_points || null) : null,
-      default_theme || 'sky',
+      normalizeDefaultTheme(default_theme),
     );
     const roleId = res.lastInsertRowid;
     if (sign === 1) {
@@ -130,7 +149,7 @@ export default async function roleRoutes(fastify) {
       newName, default_home ?? old.default_home, access, newSign,
       newSign ? (signoff_responsibility ?? old.signoff_responsibility) : null,
       newSign ? (signoff_review_points ?? old.signoff_review_points) : null,
-      default_theme ?? old.default_theme, id,
+      default_theme === undefined ? old.default_theme : normalizeDefaultTheme(default_theme, old.default_theme), id,
     );
     await syncModifySignoffRole(id, newName, newSign, old.is_signoff_role, old.name);
     return ok({ id });
@@ -195,10 +214,28 @@ export default async function roleRoutes(fastify) {
       { key: 'signoff_review_points', title: '会签评审点' },
       { key: 'default_theme', title: '默认主题' },
     ],
+    exportColumns: [
+      { key: 'name', title: '角色名称' }, { key: 'code', title: '角色标识' }, { key: 'is_builtin', title: '内置角色' },
+      { key: 'default_home', title: '默认首页' }, { key: 'is_signoff_role', title: '会签角色' },
+      { key: 'all_org_access', title: '全机构权限' }, { key: 'signoff_responsibility', title: '会签职责' },
+      { key: 'signoff_review_points', title: '会签评审点' }, { key: 'signoff_check_content', title: '会签检查内容' },
+      { key: 'default_theme', title: '默认主题' },
+      { key: 'created_at', title: '创建时间', valueType: 'datetime' }, { key: 'updated_at', title: '更新时间', valueType: 'datetime' },
+    ],
+    templateRows: [{
+      name: '示例角色', code: 'demo_role', default_home: '/dashboard', is_signoff_role: '否', all_org_access: '是',
+      signoff_responsibility: '', signoff_review_points: '', default_theme: '蔚蓝',
+    }],
     list: async (q) => (await listQuery({
-      table: 'role', columns: ['id', 'name', 'code', 'default_home', 'all_org_access', 'is_signoff_role', 'signoff_responsibility', 'signoff_review_points', 'default_theme'],
+      table: 'role', columns: ['id', 'name', 'code', 'default_home', 'all_org_access', 'is_builtin', 'is_signoff_role', 'signoff_responsibility', 'signoff_review_points', 'signoff_check_content', 'default_theme', 'created_at', 'updated_at'],
       searchColumns: ['name', 'code'], query: q,
-    })).list.map((r) => ({ ...r, all_org_access: Number(r.all_org_access) !== 0 ? '是' : '否', is_signoff_role: r.is_signoff_role ? '是' : '' })),
+    })).list.map((r) => ({
+      ...r,
+      all_org_access: Number(r.all_org_access) !== 0 ? '是' : '否',
+      is_builtin: r.is_builtin ? '是' : '否',
+      is_signoff_role: r.is_signoff_role ? '是' : '否',
+      default_theme: displayDefaultTheme(r.default_theme),
+    })),
     upsert: async (r, mode) => {
       if (!r.name || !r.code) return 'skipped';
       const sign = truthy(r.is_signoff_role) ? 1 : 0;
@@ -210,14 +247,14 @@ export default async function roleRoutes(fastify) {
         if (mode === 'skip') return 'skipped';
         if (mode === 'rollback') throw badRequest(`角色标识重复：${r.code}，已回滚`);
         await run(`UPDATE role SET name=?, default_home=?, all_org_access=?, is_signoff_role=?, signoff_responsibility=?, signoff_review_points=?, default_theme=?, updated_at=datetime('now','localtime') WHERE id=?`,
-          r.name, r.default_home || '/dashboard', access, sign, responsibility, reviewPoints, r.default_theme || 'sky', exists.id);
+          r.name, r.default_home || '/dashboard', access, sign, responsibility, reviewPoints, normalizeDefaultTheme(r.default_theme), exists.id);
         await syncModifySignoffRole(exists.id, r.name, sign, exists.is_signoff_role, exists.name);
         return 'updated';
       }
       const res = await run(`INSERT INTO role (name, code, default_home, all_org_access, is_builtin, is_signoff_role,
          signoff_responsibility, signoff_review_points, default_theme)
          VALUES (?,?,?,?,0,?,?,?,?)`,
-        r.name, r.code, r.default_home || '/dashboard', access, sign, responsibility, reviewPoints, r.default_theme || 'sky');
+        r.name, r.code, r.default_home || '/dashboard', access, sign, responsibility, reviewPoints, normalizeDefaultTheme(r.default_theme));
       if (sign === 1) {
         await syncModifySignoffRole(res.lastInsertRowid, r.name, 1, 0, r.name);
       }

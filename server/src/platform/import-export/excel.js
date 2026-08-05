@@ -10,7 +10,7 @@ import ExcelJS from 'exceljs';
 
 /**
  * 导出数据为 xlsx Buffer。
- * @param {Array<{key:string,title:string,width?:number,wrapText?:boolean}>} columns 列定义
+ * @param {Array<{key:string,title:string,width?:number,wrapText?:boolean,valueType?:'date'|'datetime'}>} columns 列定义
  * @param {object[]} rows 数据行
  * @param {string} [sheetName] 工作表名
  * @returns {Promise<Buffer>}
@@ -22,7 +22,13 @@ export async function exportXlsx(columns, rows, sheetName = '数据') {
   ws.columns = columns.map((c) => ({ header: c.title, key: c.key, width: c.width || 22 }));
   // 表头加粗
   ws.getRow(1).font = { bold: true };
-  for (const row of rows) ws.addRow(row);
+  for (const row of rows) {
+    const formatted = Object.fromEntries(columns.map((column) => [
+      column.key,
+      formatExportValue(row?.[column.key], column.valueType),
+    ]));
+    ws.addRow(formatted);
+  }
   columns.forEach((column, index) => {
     if (!column.wrapText) return;
     ws.getColumn(index + 1).eachCell({ includeEmpty: true }, (cell, rowNumber) => {
@@ -31,6 +37,18 @@ export async function exportXlsx(columns, rows, sheetName = '数据') {
   });
   const buf = await wb.xlsx.writeBuffer();
   return Buffer.from(buf);
+}
+
+/** Excel 对外日期不暴露内部紧凑格式、秒或时区。仅由列显式声明时转换，避免误改编号。 */
+function formatExportValue(value, valueType) {
+  if (value === null || value === undefined || value === '' || !valueType) return value;
+  const text = String(value).trim();
+  const compact = /^(\d{4})(\d{2})(\d{2})$/.exec(text);
+  const date = compact ? `${compact[1]}-${compact[2]}-${compact[3]}` : text.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return value;
+  if (valueType === 'date') return date;
+  const time = text.match(/[T\s](\d{2}:\d{2})/);
+  return time ? `${date} ${time[1]}` : date;
 }
 
 /**

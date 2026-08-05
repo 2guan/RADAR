@@ -17,16 +17,18 @@ import { ok, badRequest } from '../runtime/index.js';
  * @param {string} cfg.prefix 路由前缀，如 '/systems'
  * @param {string} cfg.module RBAC 模块键（通常 'settings' 或 'user'）
  * @param {string} cfg.name 资源中文名（用于文件名）
- * @param {Array<{key:string,title:string}>} cfg.columns 导入导出列定义
+ * @param {Array<{key:string,title:string,valueType?:'date'|'datetime'}>} cfg.columns 导入导出列定义
+ * @param {object[]} [cfg.templateRows] 脱敏模板示例；未提供时保持仅表头的既有行为
+ * @param {Array} [cfg.exportColumns] 仅导出时追加的只读列；导入模板和解析仍使用 columns
  * @param {Function} cfg.list (query)=>对象数组，导出用（已是导出形状）
  * @param {Function} cfg.upsert (row, mode, ctx)=>'inserted'|'updated'|'skipped'；rollback 模式冲突应抛错
  */
 export function registerIO(fastify, cfg) {
-  const { prefix, module, name, columns, list, upsert } = cfg;
+  const { prefix, module, name, columns, exportColumns = columns, list, upsert, templateRows = [] } = cfg;
 
-  // 模板下载（仅表头）
+  // 模板下载（可选脱敏示例；未配置时保持仅表头的既有行为）
   fastify.get(`${prefix}/template`, { preHandler: fastify.requirePerm(module, 'import') }, async (request, reply) => {
-    const buf = await exportXlsx(columns, [], `${name}模板`);
+    const buf = await exportXlsx(columns, templateRows.slice(0, 2), `${name}模板`);
     reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     reply.header('Content-Disposition', `attachment; filename=${encodeURIComponent(name)}_template.xlsx`);
     return reply.send(buf);
@@ -35,7 +37,7 @@ export function registerIO(fastify, cfg) {
   // 导出（支持当前筛选；pageSize=0 全量）
   fastify.post(`${prefix}/export`, { preHandler: fastify.requirePerm(module, 'export') }, async (request, reply) => {
     const rows = await list({ ...(request.body || {}), pageSize: 0 });
-    const buf = await exportXlsx(columns, rows, name);
+    const buf = await exportXlsx(exportColumns, rows, name);
     reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     reply.header('Content-Disposition', `attachment; filename=${encodeURIComponent(name)}.xlsx`);
     return reply.send(buf);
