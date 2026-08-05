@@ -10,7 +10,7 @@ import { get, run, tx, all, dialect, listQuery } from '../../../../platform/pers
 import { claimReleaseApplyCode, previewReleaseApplyCode } from './index.js';
 import { auditCreate, auditUpdate, auditDelete } from '../../../../platform/audit/index.js';
 import { exportXlsx, parseXlsx } from '../../../../platform/import-export/index.js';
-import { windowIds, inClause, getDictDisplayMap, resolveOrganizationValues } from '../../../settings/reference-data/index.js';
+import { windowIds, inClause, getDictDisplayMap, resolveDictAttr, resolveOrganizationValues } from '../../../settings/reference-data/index.js';
 import { ok, notFound, badRequest, forbidden, parseJsonArray, parseJsonObject } from '../../../../platform/runtime/index.js';
 import { beijingDateString } from '../../../../shared/utils/time.js';
 import {
@@ -21,6 +21,7 @@ import { isOrganizationRestricted, organizationMatches, workItemMatchesOrganizat
 import {
   appendStageExcelValues,
   appendStageListValues,
+  buildStageExcelTemplateRows,
   extensionValuesFromExcelRow,
   getStageExcelColumns,
   saveExtensionValues,
@@ -67,18 +68,41 @@ async function syncReleaseApplyReferences(releaseApplyId, refCodes, releasePoint
   }
 }
 
+/** Excel 单元格内每行一组制品，兼容没有该列的历史四列模板。 */
+export function parseImportedDeliveryUnits(row) {
+  const text = String(row?.delivery_units || '').trim();
+  if (!text) return [{
+    artifact_type: row?.artifact_type || null,
+    delivery_unit: row?.delivery_unit || null,
+    new_version: row?.new_version || null,
+    ferry_status: row?.ferry_status || null,
+  }];
+  return text.split(/\r?\n/).map((line, index) => {
+    const parts = line.split(/\s*[/／|]\s*/).map((part) => part.trim());
+    if (parts.length !== 4) throw new Error(`交付制品第 ${index + 1} 行须填写“制品类型 / 交付单元 / 新版本号 / 摆渡状态”四项`);
+    return { artifact_type: parts[0], delivery_unit: parts[1], new_version: parts[2], ferry_status: parts[3] };
+  });
+}
+
 /** 规整交付制品数组：仅保留组内字段，过滤全空组，摆渡状态取字典默认值 */
 async function normalizeUnits(units) {
   if (!Array.isArray(units)) return [];
   const defaultFerryStatus = await defaultDictAttr('ferry_status', '未摆渡');
-  return units
-    .map((u) => ({
-      artifact_type: u?.artifact_type ?? null,
-      delivery_unit: u?.delivery_unit ?? null,
-      new_version: u?.new_version ?? null,
-      ferry_status: u?.ferry_status || defaultFerryStatus,
-    }))
-    .filter((u) => u.artifact_type || u.delivery_unit || u.new_version);
+  const normalized = [];
+  for (const unit of units) {
+    const artifactType = unit?.artifact_type ? await resolveDictAttr('artifact_type', unit.artifact_type) : null;
+    const ferryStatus = unit?.ferry_status ? await resolveDictAttr('ferry_status', unit.ferry_status) : defaultFerryStatus;
+    if (unit?.artifact_type && !artifactType) throw badRequest(`制品类型 [${unit.artifact_type}] 不存在或已停用`);
+    if (unit?.ferry_status && !ferryStatus) throw badRequest(`摆渡状态 [${unit.ferry_status}] 不存在或已停用`);
+    const value = {
+      artifact_type: artifactType,
+      delivery_unit: unit?.delivery_unit ? String(unit.delivery_unit).trim() : null,
+      new_version: unit?.new_version ? String(unit.new_version).trim() : null,
+      ferry_status: ferryStatus,
+    };
+    if (value.artifact_type || value.delivery_unit || value.new_version) normalized.push(value);
+  }
+  return normalized;
 }
 
 /** 把 JSON 字符串字段解析为数组返回给前端 */
@@ -434,6 +458,7 @@ export default async function releaseApplyRoutes(fastify) {
     const rps = await all('SELECT id, release_date FROM release_point');
     const rpMap = {};
     for (const rp of rps) rpMap[rp.id] = rp.release_date;
+    const [orgDisplayMap, reviewStatusMap] = await Promise.all([getDictDisplayMap('org'), getDictDisplayMap('review_status')]);
 
     const cols = [
       { key: 'change_code', title: '变更编号' },
@@ -446,9 +471,9 @@ export default async function releaseApplyRoutes(fastify) {
       { key: 'review_status', title: '评审状态' },
       { key: 'out_dept', title: '变更负责部门（输出口径）' },
       { key: 'deploy_dept', title: '变更负责部门（部署口径）' },
-      { key: 'release_date', title: '申请投产点' },
+      { key: 'release_date', title: '申请投产点', valueType: 'date' },
       { key: 'registrar', title: '登记人' },
-      { key: 'register_time', title: '登记时间' },
+      { key: 'register_time', title: '登记时间', valueType: 'datetime' },
     ];
 
     const mappedList = await Promise.all(result.list.map(async (row) => {
@@ -457,19 +482,23 @@ export default async function releaseApplyRoutes(fastify) {
       const unitsText = units
         .map((u) => [u.artifact_type, u.delivery_unit, u.new_version, u.ferry_status].filter(Boolean).join(' / '))
         .join('\n');
+      const reviewStatus = await deriveReviewStatus(refs, row.release_point_id);
       return {
         ...row,
-        change_system: row.change_system ? `${row.change_system} - ${sysMap[row.change_system] || row.change_system}` : '',
+        change_system: row.change_system ? (sysMap[row.change_system] || row.change_system) : '',
+        impl_org: orgDisplayMap[row.impl_org] || row.impl_org || '',
+        out_dept: orgDisplayMap[row.out_dept] || row.out_dept || '',
+        deploy_dept: orgDisplayMap[row.deploy_dept] || row.deploy_dept || '',
         delivery_units: unitsText,
         ref_codes: refs.join('、'),
-        review_status: await deriveReviewStatus(refs, row.release_point_id) || '',
+        review_status: reviewStatusMap[reviewStatus] || reviewStatus || '',
         release_date: rpMap[row.release_point_id] || '',
       };
     }));
 
     const extensionColumns = await getStageExcelColumns('release_apply');
     const exportRows = await appendStageExcelValues('release_apply', mappedList);
-    const buf = await exportXlsx([...cols, ...extensionColumns], exportRows, '投产申请清单');
+    const buf = await exportXlsx(await getStageExcelColumns('release_apply', cols), exportRows, '投产申请清单');
     reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     reply.header('Content-Disposition', 'attachment; filename=release_apply.xlsx');
     return reply.send(buf);
@@ -482,17 +511,26 @@ export default async function releaseApplyRoutes(fastify) {
     { key: 'impact_scope', title: '影响范围' },
     { key: 'change_system', title: '变更系统' },
     { key: 'impl_org', title: '实施机构' },
-    { key: 'artifact_type', title: '制品类型' },
-    { key: 'delivery_unit', title: '交付单元名称' },
-    { key: 'new_version', title: '新版本号' },
+    { key: 'delivery_units', title: '交付制品（每行：制品类型 / 交付单元 / 新版本号 / 摆渡状态）', width: 58, wrapText: true },
     { key: 'ref_codes', title: '关联需求/工单' },
     { key: 'out_dept', title: '变更负责部门（输出口径）' },
     { key: 'deploy_dept', title: '变更负责部门（部署口径）' },
+    { key: 'release_point_id', title: '申请投产点', valueType: 'date' },
+  ];
+  // 旧模板曾把一组制品拆成四列；解析时保留兼容，新的模板只展示可表达多组的单元格列。
+  const LEGACY_DELIVERY_COLUMNS = [
+    { key: 'artifact_type', title: '制品类型' },
+    { key: 'delivery_unit', title: '交付单元名称' },
+    { key: 'new_version', title: '新版本号' },
     { key: 'ferry_status', title: '摆渡状态' },
   ];
 
   fastify.get('/release-apply/template', { preHandler: fastify.requirePerm('release_apply', 'import') }, async (request, reply) => {
-    const buf = await exportXlsx([...IO_COLUMNS, ...await getStageExcelColumns('release_apply')], [], '投产申请模板');
+    const buf = await exportXlsx(await getStageExcelColumns('release_apply', IO_COLUMNS, { includeDeliverables: false }), await buildStageExcelTemplateRows('release_apply', [{
+      change_code: 'CHG-DEMO-001', change_content: '示例投产变更', impact_scope: '示例范围', change_system: 'SYS_A', impl_org: '示例机构',
+      delivery_units: '镜像制品 / 包A / v1.0.0 / 未摆渡\n镜像制品 / 包B / v1.0.1 / 已摆渡', ref_codes: 'REQ-DEMO-001,TICKET-DEMO-001',
+      out_dept: '示例输出部门', deploy_dept: '示例部署部门', release_point_id: '2026-05-05',
+    }]), '投产申请模板');
     reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     reply.header('Content-Disposition', 'attachment; filename=release_apply_template.xlsx');
     return reply.send(buf);
@@ -504,14 +542,13 @@ export default async function releaseApplyRoutes(fastify) {
     if (!data) throw badRequest('请上传文件');
     const mode = data.fields?.mode?.value || 'skip';
     const buffer = await data.toBuffer();
-    const rows = await parseXlsx(buffer, [...IO_COLUMNS, ...await getStageExcelColumns('release_apply')]);
+    const rows = await parseXlsx(buffer, await getStageExcelColumns('release_apply', [...IO_COLUMNS, ...LEGACY_DELIVERY_COLUMNS], { includeDeliverables: false }));
     if (!rows.length) throw badRequest('文件中无有效数据');
 
     const stat = { inserted: 0, updated: 0, skipped: 0, failed: 0 };
     const details = [];
 
     const splitCodes = (v) => String(v || '').split(/[、,，\s]+/).map((s) => s.trim()).filter(Boolean);
-
     const apply = async () => {
       for (const r of rows) {
         const rowNum = r.__rowNum__;
@@ -520,13 +557,15 @@ export default async function releaseApplyRoutes(fastify) {
           const refs = splitCodes(r.ref_codes);
           let code = String(r.change_code || '').trim();
           const exists = code ? await get('SELECT * FROM release_apply WHERE change_code = ?', code) : null;
-          const reviewStatus = await deriveReviewStatus(refs, exists?.release_point_id ?? null);
+          const releasePointText = String(r.release_point_id || '').trim();
+          const releasePoint = releasePointText
+            ? await get('SELECT id FROM release_point WHERE release_date = ? OR release_date = ?', releasePointText, releasePointText.replaceAll('-', ''))
+            : null;
+          if (releasePointText && !releasePoint) throw new Error(`申请投产点 [${releasePointText}] 不存在`);
+          const releasePointId = releasePoint?.id ?? exists?.release_point_id ?? null;
+          const reviewStatus = await deriveReviewStatus(refs, releasePointId);
           const extensionValues = await extensionValuesFromExcelRow('release_apply', r);
-          // 导入按单组交付制品处理（多组请在页面维护）
-          const units = JSON.stringify(await normalizeUnits([{
-            artifact_type: r.artifact_type || null, delivery_unit: r.delivery_unit || null,
-            new_version: r.new_version || null, ferry_status: r.ferry_status || null,
-          }]));
+          const units = JSON.stringify(await normalizeUnits(parseImportedDeliveryUnits(r)));
           if (exists) {
             if (mode === 'skip') {
               stat.skipped++;
@@ -536,12 +575,12 @@ export default async function releaseApplyRoutes(fastify) {
             if (mode === 'rollback') throw new Error(`变更编号 [${code}] 已存在，无法覆盖`);
             await run(
               `UPDATE release_apply SET change_content=?, impact_scope=?, change_system=?, impl_org=?, delivery_units=?,
-                 ref_codes=?, review_status=?, out_dept=?, deploy_dept=?,
+                 ref_codes=?, review_status=?, out_dept=?, deploy_dept=?, release_point_id=?,
                  updated_at=datetime('now','localtime') WHERE id=?`,
               r.change_content, r.impact_scope || null, r.change_system || null, r.impl_org || null, units,
-              JSON.stringify(refs), reviewStatus, r.out_dept || null, r.deploy_dept || null, exists.id,
+              JSON.stringify(refs), reviewStatus, r.out_dept || null, r.deploy_dept || null, releasePointId, exists.id,
             );
-            await syncReleaseApplyReferences(exists.id, refs, exists.release_point_id ?? null);
+            await syncReleaseApplyReferences(exists.id, refs, releasePointId);
             await auditUpdate('release_apply', exists.id, code, request.currentUser?.name, exists, {
               change_content: r.change_content,
               impact_scope: r.impact_scope || null,
@@ -552,6 +591,7 @@ export default async function releaseApplyRoutes(fastify) {
               review_status: reviewStatus,
               out_dept: r.out_dept || null,
               deploy_dept: r.deploy_dept || null,
+              release_point_id: releasePointId,
             }, LABELS);
             await saveExtensionValues('release_apply', exists.id, extensionValues, request.currentUser?.name);
             stat.updated++;
@@ -559,18 +599,18 @@ export default async function releaseApplyRoutes(fastify) {
           } else {
             // 导入空编号按真实已用记录确认，避免旧预览操作造成无意义跳号。
             if (!code) code = await claimReleaseApplyCode(
-              await releaseWindowOf(null), '', await workItemCodeFor(refs),
+              await releaseWindowOf(releasePointId), '', await workItemCodeFor(refs),
             );
             const res = await run(
               `INSERT INTO release_apply
                  (change_code, change_content, impact_scope, change_system, impl_org, delivery_units,
-                  ref_codes, review_status, out_dept, deploy_dept, registrar, register_time)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+                  ref_codes, review_status, out_dept, deploy_dept, release_point_id, registrar, register_time)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
               code, r.change_content, r.impact_scope || null, r.change_system || null, r.impl_org || null,
               units, JSON.stringify(refs), reviewStatus, r.out_dept || null, r.deploy_dept || null,
-              request.currentUser?.name, beijingDateString(),
+              releasePointId, request.currentUser?.name, beijingDateString(),
             );
-            await syncReleaseApplyReferences(res.lastInsertRowid, refs, null);
+            await syncReleaseApplyReferences(res.lastInsertRowid, refs, releasePointId);
             await auditCreate('release_apply', res.lastInsertRowid, code, request.currentUser?.name);
             await saveExtensionValues('release_apply', res.lastInsertRowid, extensionValues, request.currentUser?.name);
             stat.inserted++;

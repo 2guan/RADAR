@@ -1,0 +1,123 @@
+{
+  "schema_version": "1.0",
+  "requirement": {
+    "id": "REQ-20260805-013",
+    "ref": "hengguan/REQ-20260805-013",
+    "title": "统一业务导入模板与导出字段",
+    "status": "ready",
+    "document": "docs/requirements/hengguan/REQ-20260805-013/requirement.md",
+    "internet_ai_coding_allowed": true
+  },
+  "assignment": {
+    "developer": "hengguan",
+    "module": "governance",
+    "module_owner": "hengguan",
+    "branch": "hengguan/REQ-20260805-013-import-export-templates",
+    "base_branch": "origin/main",
+    "worktree": "/Volumes/GuanMac/Code/RADAR"
+  },
+  "ai": {
+    "enabled": true,
+    "approved_service": "Codex desktop",
+    "model": "approved-by-user",
+    "contains_confidential_information": false,
+    "context_sanitized": true,
+    "production_access": false
+  },
+  "scope": {
+    "writable_paths": [
+      "docs/requirements/hengguan/REQ-20260805-013/**",
+      "server/src/platform/import-export/io.js",
+      "server/src/platform/import-export/excel.js",
+      "server/src/modules/overview/**",
+      "server/src/modules/requirements/**",
+      "server/src/modules/tickets/**",
+      "server/src/modules/development/**",
+      "server/src/modules/testing/**",
+      "server/src/modules/release/**",
+      "server/src/modules/identity-access/**",
+      "server/src/modules/settings/**",
+      "server/test/**",
+      "web/test/**"
+    ],
+    "read_only_paths": [
+      "AGENTS.md",
+      "DESIGN.md",
+      "docs/governance/**",
+      "docs/architecture/**",
+      "governance/modules.yaml",
+      ".agents/skills/radar-delivery-engineer/**",
+      "server/src/platform/auth/**",
+      "server/src/platform/persistence/**",
+      "server/src/platform/audit/**",
+      "server/src/platform/runtime/**",
+      "server/src/shared/**",
+      "web/src/platform/**",
+      "web/src/shared/**",
+      "web/src/modules/**"
+    ],
+    "forbidden_paths": [
+      "server/migrations/**",
+      "server/scripts/mock-data.js",
+      ".github/**",
+      "docs/reports/**",
+      ".env",
+      "**/.env",
+      "**/*secret*",
+      "**/*credential*",
+      "attachments/**",
+      "data/**"
+    ]
+  },
+  "public_capability_change": {
+    "required": true,
+    "shared_change_issue": "hengguan/REQ-20260805-013",
+    "target_modules": ["governance", "settings", "identity-access", "requirements", "tickets", "development", "testing", "release", "overview", "platform/import-export"],
+    "new_methods": [],
+    "existing_method_changed": true,
+    "semantic_name_confirmed": true,
+    "old_behavior_preserved": true,
+    "compatibility_note": "既有导入 URI、响应包装和历史模板列继续兼容；模板/导出列按当前可见配置补齐。业务受控值导入兼容属性值与显示值、导出显示值；系统设置属性值与显示值均显式导入导出。",
+    "owner_approved": true,
+    "owner_review_required_before_merge": true
+  },
+  "database": {
+    "changed": false,
+    "migration_paths": [],
+    "mysql8_compatible": true,
+    "historical_data_impact": "不修改 schema 或历史数据。",
+    "rollback_or_compensation": "回退本需求代码即可恢复原有模板与导出列，无数据补偿。"
+  },
+  "external_access": {
+    "changed": false,
+    "api_paths": [],
+    "readable_field_whitelist": [],
+    "writable_field_whitelist": [],
+    "action_whitelist": [],
+    "audit_required": true
+  },
+  "required_tests": [
+    {"name": "targeted_import_export", "command": "新增/更新 server 导入导出回归，覆盖 AC-001 至 AC-009"},
+    {"name": "api", "command": "npm run test:api --prefix server"},
+    {"name": "permission", "command": "npm run test:rbac --prefix server"},
+    {"name": "scope", "command": "node scripts/check-ai-scope.mjs --scope docs/requirements/hengguan/REQ-20260805-013/ai-task-scope.yaml --base origin/main --head HEAD"},
+    {"name": "ui_data_sources", "command": "node scripts/check-ui-data-sources.mjs"},
+    {"name": "module_boundaries", "command": "node scripts/check-module-boundaries.mjs"},
+    {"name": "build", "command": "npm run build --prefix web"},
+    {"name": "runtime", "command": "node scripts/verify-app-runtime.mjs"},
+    {"name": "governance", "command": "node scripts/check-governance.mjs && node scripts/check-code-comments.mjs && git diff --check"},
+    {"name": "browser", "command": "本地脱敏管理员在桌面及移动视口下载模板、导入属性/显示值、导出并核对列、示例、日期时间与附件文件名"}
+  ],
+  "risk": {
+    "level": "important",
+    "reasons": ["跨模块 Excel 公开输出契约", "配置可见性驱动的动态列", "受控属性值/显示值兼容", "附件文件名信息边界"],
+    "required_approvals": ["hengguan"]
+  },
+  "completion": {
+    "changed_files_report_required": true,
+    "test_result_report_required": true,
+    "known_risks_report_required": true,
+    "rollback_report_required": true,
+    "requirement_acceptance_required": true
+  }
+}

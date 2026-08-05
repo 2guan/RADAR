@@ -776,7 +776,7 @@ async function computeEntities(windowIdList) {
     all(`SELECT req_code AS code, title, status, main_systems, 'requirement' AS entity_type FROM requirement WHERE req_code IN (${placeholders})`, ...codes),
     all(`SELECT ticket_code AS code, title, status, main_systems, 'ticket' AS entity_type FROM ticket WHERE ticket_code IN (${placeholders})`, ...codes),
     all(`SELECT issue_code AS code, summary AS title, system, 'issue' AS entity_type FROM issue WHERE issue_code IN (${placeholders})`, ...codes),
-    all(`SELECT id, req_code, release_point_id, status, review_status FROM release_task WHERE req_code IN (${placeholders})`, ...codes),
+    all(`SELECT id, req_code, release_point_id, status, owner, review_status FROM release_task WHERE req_code IN (${placeholders})`, ...codes),
   ]);
   const itemMap = new Map([...requirements, ...tickets, ...issues].map((item) => [item.code, item]));
   const taskStatuses = await resolveCurrentTaskStatuses([...requirements, ...tickets]);
@@ -786,7 +786,7 @@ async function computeEntities(windowIdList) {
   const signoffByTask = new Map();
   if (taskIds.length) {
     const taskPlaceholders = taskIds.map(() => '?').join(',');
-    const [attachments, signoffs] = await Promise.all([
+    const [attachments, signoffs, signoffDetails] = await Promise.all([
       all(`SELECT * FROM attachment WHERE entity_type = 'release' AND entity_id IN (${taskPlaceholders})`, ...taskIds),
       all(`SELECT release_task_id,
                   SUM(CASE WHEN result <> '不涉及' THEN 1 ELSE 0 END) AS total,
@@ -794,6 +794,8 @@ async function computeEntities(windowIdList) {
                   SUM(CASE WHEN result = '已驳回' THEN 1 ELSE 0 END) AS rejected
              FROM release_signoff WHERE release_task_id IN (${taskPlaceholders})
             GROUP BY release_task_id`, ...taskIds),
+      all(`SELECT release_task_id, role_name, signer_name, result, conclusion, sign_time
+            FROM release_signoff WHERE release_task_id IN (${taskPlaceholders}) ORDER BY role_name, id`, ...taskIds),
     ]);
     for (const attachment of attachments) {
       const taskAttachments = attachmentsByTask.get(attachment.entity_id) || [];
@@ -803,6 +805,11 @@ async function computeEntities(windowIdList) {
     for (const summary of signoffs) signoffByTask.set(summary.release_task_id, {
       total: Number(summary.total || 0), signed: Number(summary.signed || 0), rejected: Number(summary.rejected || 0),
     });
+    for (const detail of signoffDetails) {
+      const value = signoffByTask.get(detail.release_task_id) || { total: 0, signed: 0, rejected: 0 };
+      (value.details ||= []).push([detail.role_name, detail.signer_name || '未签署', detail.conclusion || detail.result || '', detail.sign_time || ''].join(' / '));
+      signoffByTask.set(detail.release_task_id, value);
+    }
   }
 
   const list = [];
@@ -843,6 +850,7 @@ async function computeEntities(windowIdList) {
       task_status_value: taskStatus?.status || releaseStatus,
       review_status: rt?.review_status || defaultReviewStatus,
       signoff: summary,
+      signoff_details: (summary.details || []).join('\n'),
       initiated: !!rt,
       release_change_plan: formatAttachments(releaseAttaches, '投产变更方案'),
       release_change_control: formatAttachments(releaseAttaches, '投产变更控制表'),
@@ -1223,12 +1231,13 @@ export default async function releaseRoutes(fastify) {
       { key: 'code', title: '需求/问题/工单编号' },
       { key: 'entity_label', title: '类型' },
       { key: 'title', title: '需求标题/工单标题/问题概述' },
-      { key: 'release_date', title: '申请投产点' },
+      { key: 'release_date', title: '申请投产点', valueType: 'date' },
       { key: 'release_status', title: '投产状态' },
+      { key: 'owner', title: '投产负责人' },
+      { key: 'task_status', title: '任务状态' },
       { key: 'review_status', title: '评审状态' },
       { key: 'signoff_progress', title: '会签进度' },
-      { key: 'release_change_plan', title: '投产变更方案' },
-      { key: 'release_change_control', title: '投产变更控制表' },
+      { key: 'signoff_details', title: '投产审批会签（角色 / 签署人 / 结论 / 时间）', wrapText: true },
     ];
 
     const mapped = rows.map((r) => ({
@@ -1241,15 +1250,18 @@ export default async function releaseRoutes(fastify) {
       title: r.title,
       release_date: r.release_date || '',
       release_status: r.release_status,
+      owner: r.owner || '',
+      task_status: r.release_status,
       review_status: r.review_status || '',
       signoff_progress: r.signoff.total ? `签 ${r.signoff.signed} 驳 ${r.signoff.rejected} / ${r.signoff.total}` : '未发起',
+      signoff_details: r.signoff_details || '',
       release_change_plan: r.release_change_plan || '',
       release_change_control: r.release_change_control || '',
     }));
 
     const extensionColumns = await getStageExcelColumns('release');
     const exportRows = await appendStageExcelValues('release', mapped);
-    const buf = await exportXlsx([...cols, ...extensionColumns], exportRows, '投产审批清单');
+    const buf = await exportXlsx(await getStageExcelColumns('release', cols), exportRows, '投产审批清单');
     reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     reply.header('Content-Disposition', 'attachment; filename=release_approval.xlsx');
     return reply.send(buf);

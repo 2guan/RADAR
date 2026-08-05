@@ -99,6 +99,9 @@ export default async function systemRoutes(fastify) {
       { key: 'out_dept', title: '变更负责部门（输出口径）' }, { key: 'deploy_dept', title: '变更负责部门（部署口径）' },
       { key: 'sort', title: '排序' },
     ],
+    templateRows: [{
+      sys_code: 'SYS_DEMO', sys_name: '示例系统', org: '示例机构', sector: '示例板块', out_dept: '示例输出部门', deploy_dept: '示例部署部门', sort: 10,
+    }],
     list: async (q) => (await listQuery({ table: 'system', columns: COLUMNS, searchColumns: ['sys_code', 'sys_name', 'org', 'sector'], query: q })).list,
     upsert: async (r, mode) => {
       if (!r.sys_code || !r.sys_name) return 'skipped';

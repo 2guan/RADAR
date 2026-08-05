@@ -16,6 +16,7 @@ import {
 import {
   appendStageExcelValues,
   appendStageListValues,
+  buildStageExcelTemplateRows,
   extensionValuesFromExcelRow,
   getStageExcelColumns,
   saveExtensionValues,
@@ -682,6 +683,7 @@ export default async function devTaskRoutes(fastify) {
     const systems = await all('SELECT sys_code, sys_name FROM system');
     const sysMap = {};
     for (const s of systems) sysMap[s.sys_code] = s.sys_name;
+    const [orgDisplayMap, statusDisplayMap] = await Promise.all([getDictDisplayMap('org'), getDictDisplayMap('process_status')]);
 
     const cols = [
       { key: 'req_code', title: '关联需求/工单编号' },
@@ -689,22 +691,18 @@ export default async function devTaskRoutes(fastify) {
       { key: 'task_name', title: '开发任务名称' },
       { key: 'content', title: '开发内容概述' },
       { key: 'status', title: '开发状态' },
+      { key: 'task_status', title: '任务状态' },
       { key: 'owner', title: '开发负责人' },
+      { key: 'intake_owner', title: '开发承接人' },
       { key: 'impl_system', title: '开发实施系统' },
       { key: 'impl_org', title: '开发实施方' },
-      { key: 'plan_start', title: '计划开始时间' },
-      { key: 'plan_end', title: '计划结束时间' },
-      { key: 'actual_start', title: '实际开始时间' },
-      { key: 'actual_end', title: '实际结束时间' },
+      { key: 'plan_start', title: '计划开始时间', valueType: 'date' },
+      { key: 'plan_end', title: '计划结束时间', valueType: 'date' },
+      { key: 'actual_start', title: '实际开始时间', valueType: 'date' },
+      { key: 'actual_end', title: '实际结束时间', valueType: 'date' },
       { key: 'deviation_rate', title: '排期偏差率 (%)' },
       { key: 'registrar', title: '登记人' },
-      { key: 'register_time', title: '登记时间' },
-      { key: 'design_brief', title: '概要设计' },
-      { key: 'design_detail', title: '详细设计' },
-      { key: 'code_review', title: '代码走查' },
-      { key: 'unit_test', title: '单元测试报告' },
-      { key: 'coding_checklist', title: '编码检查表' },
-      { key: 'tech_solution_confirm', title: '技术方案确认单' },
+      { key: 'register_time', title: '登记时间', valueType: 'datetime' },
       { key: 'impact_analysis', title: '影响性分析', width: 60, wrapText: true },
     ];
 
@@ -723,7 +721,10 @@ export default async function devTaskRoutes(fastify) {
       const attaches = await all("SELECT * FROM attachment WHERE entity_type = 'dev' AND entity_id = ?", row.id);
       return {
         ...row,
+        status: statusDisplayMap[row.status] || row.status || '',
+        task_status: statusDisplayMap[row.status] || row.status || '',
         impl_system: sysMap[row.impl_system] || row.impl_system,
+        impl_org: orgDisplayMap[row.impl_org] || row.impl_org || '',
         deviation_rate: row.deviation_rate != null ? `${row.deviation_rate}%` : '0%',
         design_brief: formatAttachments(attaches, '概要设计'),
         design_detail: formatAttachments(attaches, '详细设计'),
@@ -737,7 +738,7 @@ export default async function devTaskRoutes(fastify) {
 
     const extensionColumns = await getStageExcelColumns('dev');
     const exportRows = await appendStageExcelValues('dev', mappedList);
-    const buf = await exportXlsx([...cols, ...extensionColumns], exportRows, '开发任务清单');
+    const buf = await exportXlsx(await getStageExcelColumns('dev', cols), exportRows, '开发任务清单');
     reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     reply.header('Content-Disposition', 'attachment; filename=dev_tasks.xlsx');
     return reply.send(buf);
@@ -745,7 +746,11 @@ export default async function devTaskRoutes(fastify) {
 
   // 模板下载
   fastify.get('/dev-tasks/template', { preHandler: fastify.requirePerm('dev', 'import') }, async (request, reply) => {
-    const buf = await exportXlsx([...IO_COLUMNS, ...await getStageExcelColumns('dev')], [], '开发任务模板');
+    const buf = await exportXlsx(await getStageExcelColumns('dev', IO_COLUMNS, { includeDeliverables: false }), await buildStageExcelTemplateRows('dev', [{
+      req_code: 'REQ-DEMO-001', task_code: 'DEV-DEMO-001', task_name: '示例开发任务', content: '示例开发内容', status: '开发承接',
+      owner: '张三', intake_owner: '李四', impl_system: 'SYS_A', impl_org: '示例机构',
+      plan_start: '2026-05-05', plan_end: '2026-05-06', actual_start: '2026-05-05', actual_end: '2026-05-06',
+    }]), '开发任务模板');
     reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     reply.header('Content-Disposition', 'attachment; filename=dev_tasks_template.xlsx');
     return reply.send(buf);
@@ -757,7 +762,7 @@ export default async function devTaskRoutes(fastify) {
     if (!data) throw badRequest('请上传文件');
     const mode = data.fields?.mode?.value || 'skip';
     const buffer = await data.toBuffer();
-    const rows = await parseXlsx(buffer, [...IO_COLUMNS, ...await getStageExcelColumns('dev')]);
+    const rows = await parseXlsx(buffer, await getStageExcelColumns('dev', IO_COLUMNS, { includeDeliverables: false }));
     if (!rows.length) throw badRequest('文件中无有效数据');
 
     const stat = { inserted: 0, updated: 0, skipped: 0, failed: 0 };

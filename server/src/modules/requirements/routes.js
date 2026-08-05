@@ -15,6 +15,7 @@ import {
 import {
   appendStageExcelValues,
   appendStageListValues,
+  buildStageExcelTemplateRows,
   extensionValuesFromExcelRow,
   getStageExcelColumns,
   normalizeConfiguredFieldValue,
@@ -46,7 +47,6 @@ const IO_COLUMNS = [
   { key: 'yn_owner', title: '云南农信业务负责人' },
   { key: 'jk_owner', title: '建信金科业务负责人' },
   { key: 'propose_time', title: '提出时间' },
-  { key: 'apply_release_points', title: '申请投产点' },
   { key: 'expected_release_date', title: '期望投产时间' },
   { key: 'main_systems', title: '主责系统' },
   { key: 'collab_dev_systems', title: '协同改造系统' },
@@ -298,7 +298,9 @@ export default async function requirementRoutes(fastify) {
     for (const s of systems) {
       sysMap[s.sys_code] = s.sys_name;
     }
-    const orgDisplayMap = await getDictDisplayMap('org');
+    const [orgDisplayMap, statusDisplayMap, typeDisplayMap, deptDisplayMap] = await Promise.all([
+      getDictDisplayMap('org'), getDictDisplayMap('process_status'), getDictDisplayMap('req_type'), getDictDisplayMap('req_dept'),
+    ]);
 
     // 仅针对当前页的需求编号做关联查询，避免随翻页整表扫描 dev_task/test_task/release_task
     const pageCodes = result.list.map((r) => r.req_code).filter(Boolean);
@@ -494,7 +496,9 @@ export default async function requirementRoutes(fastify) {
     const systems = await all('SELECT sys_code, sys_name FROM system');
     const sysMap = {};
     for (const s of systems) sysMap[s.sys_code] = s.sys_name;
-    const orgDisplayMap = await getDictDisplayMap('org');
+    const [orgDisplayMap, statusDisplayMap, typeDisplayMap, deptDisplayMap] = await Promise.all([
+      getDictDisplayMap('org'), getDictDisplayMap('process_status'), getDictDisplayMap('req_type'), getDictDisplayMap('req_dept'),
+    ]);
 
     const applyPointMap = await requirementAppliedReleasePoints(result.list.map((row) => row.req_code));
 
@@ -503,6 +507,7 @@ export default async function requirementRoutes(fastify) {
       { key: 'title', title: '需求标题' },
       { key: 'summary', title: '需求概述' },
       { key: 'status', title: '需求状态' },
+      { key: 'task_status', title: '任务状态' },
       { key: 'req_type', title: '需求类型' },
       { key: 'is_accounting', title: '是否涉账' },
       { key: 'priority', title: '优先级' },
@@ -510,9 +515,9 @@ export default async function requirementRoutes(fastify) {
       { key: 'proposer', title: '提出人' },
       { key: 'yn_owner', title: '云南农信业务负责人' },
       { key: 'jk_owner', title: '建信金科业务负责人' },
-      { key: 'propose_time', title: '提出时间' },
+      { key: 'propose_time', title: '提出时间', valueType: 'datetime' },
       { key: 'apply_release_points', title: '申请投产点' },
-      { key: 'expected_release_date', title: '期望投产时间' },
+      { key: 'expected_release_date', title: '期望投产时间', valueType: 'date' },
       { key: 'main_systems', title: '主责系统' },
       { key: 'collab_dev_systems', title: '协同改造系统' },
       { key: 'collab_test_systems', title: '协同测试系统' },
@@ -521,10 +526,10 @@ export default async function requirementRoutes(fastify) {
       { key: 'receiver', title: '需求接收人' },
       { key: 'workload', title: '工作量(人天)' },
       { key: 'registrar', title: '录入人' },
-      { key: 'register_time', title: '录入时间' },
-      { key: 'attachments', title: '需求说明书' },
+      { key: 'register_time', title: '录入时间', valueType: 'datetime' },
     ];
 
+    const taskStatuses = await resolveCurrentTaskStatuses(result.list.map((row) => ({ ...row, entity_type: 'requirement' })));
     const mappedList = await Promise.all(result.list.map(async row => {
       const main = parseJsonArray(row.main_systems);
       const collabDev = parseJsonArray(row.collab_dev_systems);
@@ -535,19 +540,23 @@ export default async function requirementRoutes(fastify) {
 
       return {
         ...row,
+        status: statusDisplayMap[row.status] || row.status || '',
+        req_type: typeDisplayMap[row.req_type] || row.req_type || '',
+        propose_dept: deptDisplayMap[row.propose_dept] || row.propose_dept || '',
         apply_release_points: (applyPointMap[row.req_code] || []).map((point) => point.release_date).join(', '),
         proposer: proposerArray.join(', '),
         main_systems: main.map(c => sysMap[c] || c).join(', '),
         collab_dev_systems: collabDev.map(c => sysMap[c] || c).join(', '),
         collab_test_systems: collabTest.map(c => sysMap[c] || c).join(', '),
         implementation_org: orgDisplayMap[row.implementation_org] || row.implementation_org || '',
+        task_status: taskStatuses[row.req_code]?.display || '需求/工单分析-未开始',
         attachments: formatAttachments(attaches, '需求说明书'),
       };
     }));
 
     const extensionColumns = await getStageExcelColumns('requirement');
     const exportRows = await appendStageExcelValues('requirement', mappedList);
-    const buf = await exportXlsx([...cols, ...extensionColumns], exportRows, '需求清单');
+    const buf = await exportXlsx(await getStageExcelColumns('requirement', cols), exportRows, '需求清单');
     reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     reply.header('Content-Disposition', 'attachment; filename=requirements.xlsx');
     return reply.send(buf);
@@ -555,7 +564,11 @@ export default async function requirementRoutes(fastify) {
 
   // 导入模板
   fastify.get('/requirements/template', { preHandler: fastify.requirePerm('requirement', 'import') }, async (request, reply) => {
-    const buf = await exportXlsx([...IO_COLUMNS, ...await getStageExcelColumns('requirement')], [], '需求模板');
+    const buf = await exportXlsx(await getStageExcelColumns('requirement', IO_COLUMNS, { includeDeliverables: false }), await buildStageExcelTemplateRows('requirement', [{
+      req_code: 'REQ-DEMO-001', title: '示例需求', summary: '用于说明导入填写方式', status: '需求登记', req_type: '功能优化',
+      is_accounting: '否', priority: '中', proposer: '张三,李四', propose_time: '2026-05-05 18:46', expected_release_date: '2026-05-05',
+      main_systems: 'SYS_A,SYS_B', collab_dev_systems: 'SYS_C,SYS_D', collab_test_systems: 'SYS_E,SYS_F', implementation_org: '示例机构', workload: '3.5',
+    }]), '需求模板');
     reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     reply.header('Content-Disposition', 'attachment; filename=requirements_template.xlsx');
     return reply.send(buf);
@@ -567,7 +580,7 @@ export default async function requirementRoutes(fastify) {
     if (!data) throw badRequest('请上传文件');
     const mode = data.fields?.mode?.value || 'skip';
     const buffer = await data.toBuffer();
-    const rows = await parseXlsx(buffer, [...IO_COLUMNS, ...await getStageExcelColumns('requirement')]);
+    const rows = await parseXlsx(buffer, await getStageExcelColumns('requirement', IO_COLUMNS, { includeDeliverables: false }));
     if (!rows.length) throw badRequest('文件中无有效数据');
 
     const stat = { inserted: 0, updated: 0, skipped: 0, failed: 0 };

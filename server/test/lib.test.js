@@ -34,6 +34,8 @@ import {
   beijingCompactDateString, beijingDateString, beijingDateTimeString, isValidDateOnly,
 } from '../src/shared/utils/time.js';
 import { isDue as isIssueSyncScheduleDue } from '../src/modules/issues/application/issue-sync-scheduler.js';
+import { parseImportedDeliveryUnits } from '../src/modules/release/applications/release-apply/routes.js';
+import { normalizeDefaultTheme } from '../src/modules/identity-access/api/roles-routes.js';
 
 test('运行时路径：平台配置从仓库根目录解析静态资源与持久化默认目录', () => {
   const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -137,6 +139,26 @@ test('排期偏差率：延期为正、提前为负、信息不全为 null', () 
   assert.ok(calcDeviation('2026-07-01', '2026-07-10', '2026-07-05') < 0);
   // 缺少实际结束 -> null
   assert.equal(calcDeviation('2026-07-01', '2026-07-10', null), null);
+});
+
+test('投产申请 Excel：一个单元格按换行导入多组交付制品，并兼容历史四列', () => {
+  assert.deepEqual(parseImportedDeliveryUnits({
+    delivery_units: '镜像制品 / 包A / v1.0.0 / 未摆渡\n二进制制品 / 包B / v1.0.1 / 已摆渡',
+  }), [
+    { artifact_type: '镜像制品', delivery_unit: '包A', new_version: 'v1.0.0', ferry_status: '未摆渡' },
+    { artifact_type: '二进制制品', delivery_unit: '包B', new_version: 'v1.0.1', ferry_status: '已摆渡' },
+  ]);
+  assert.deepEqual(parseImportedDeliveryUnits({
+    artifact_type: '镜像制品', delivery_unit: '包A', new_version: 'v1.0.0', ferry_status: '未摆渡',
+  }), [{ artifact_type: '镜像制品', delivery_unit: '包A', new_version: 'v1.0.0', ferry_status: '未摆渡' }]);
+  assert.throws(() => parseImportedDeliveryUnits({ delivery_units: '镜像制品 / 包A' }), /第 1 行/);
+});
+
+test('角色 Excel：默认主题导出展示值，导入兼容展示值和稳定键', () => {
+  assert.equal(normalizeDefaultTheme('蔚蓝'), 'sky');
+  assert.equal(normalizeDefaultTheme('滇红'), 'teal');
+  assert.equal(normalizeDefaultTheme('sky'), 'sky');
+  assert.throws(() => normalizeDefaultTheme('未知主题'), /默认主题/);
 });
 
 test('投产评审 Word 日期时间格式：使用北京时间且时间补零到分钟', () => {
@@ -253,6 +275,20 @@ test('Excel 导出：分析内容在单个单元格内换行显示', async () =>
 
   assert.equal(cell.value, '第一条内容\n第二条内容');
   assert.equal(cell.alignment.wrapText, true);
+});
+
+test('Excel 导出：日期和时间列统一为可读格式且不误改编号', async () => {
+  const buffer = await exportXlsx([
+    { key: 'code', title: '编号' },
+    { key: 'date', title: '日期', valueType: 'date' },
+    { key: 'datetime', title: '时间', valueType: 'datetime' },
+  ], [{ code: '20260505', date: '20260505', datetime: '2026-05-05 18:46:12' }], '格式测试');
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer);
+  const row = workbook.worksheets[0].getRow(2);
+  assert.equal(row.getCell(1).value, '20260505');
+  assert.equal(row.getCell(2).value, '2026-05-05');
+  assert.equal(row.getCell(3).value, '2026-05-05 18:46');
 });
 
 test('检查内容设置：支持影响性分析与测试覆盖性分析', () => {

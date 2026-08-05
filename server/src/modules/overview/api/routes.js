@@ -7,7 +7,7 @@
  */
 
 import { get, all } from '../../../platform/persistence/index.js';
-import { isIssueTerminalStatus, isTerminalStatus } from '../../settings/process-configuration/index.js';
+import { appendStageExcelValues, getStageContentConfig, getStageExcelColumns, isIssueTerminalStatus, isTerminalStatus } from '../../settings/process-configuration/index.js';
 import { listByEntity } from '../../../platform/attachments/index.js';
 import { windowIds, inClause, formatAttachments, getDictDisplayMap, resolveOrganizationValues } from '../../settings/reference-data/index.js';
 import { ok, notFound, forbidden, parseJsonArray } from '../../../platform/runtime/index.js';
@@ -32,6 +32,86 @@ function nodeState(tasks) {
   const status = nonTerminal ? nonTerminal.status : tasks[tasks.length - 1].status;
   const text = tasks.map((t) => t.status).join('、');
   return { state: allTerminal ? 'done' : 'doing', text, status };
+}
+
+/** 宽表按阶段拼接动态扩展字段和交付件，避免同名配置项覆盖且不跨实体类型取值。 */
+async function appendOverviewStageColumns(rows, { scopeKey, prefix, idKey, matches }) {
+  const stageColumns = await getStageExcelColumns(scopeKey);
+  if (!stageColumns.length) return { columns: [], rows };
+  const stageRows = rows.map((row) => ({ id: matches(row) ? row[idKey] : null }));
+  const values = await appendStageExcelValues(scopeKey, stageRows);
+  const columns = stageColumns.map((column) => ({
+    ...column,
+    key: `${scopeKey}__${column.key}`,
+    title: `${prefix}：${column.title}`,
+  }));
+  return {
+    columns,
+    rows: rows.map((row, index) => ({
+      ...row,
+      ...Object.fromEntries(stageColumns.map((column) => [
+        `${scopeKey}__${column.key}`, values[index]?.[column.key] || '',
+      ])),
+    })),
+  };
+}
+
+// 宽表复用同一列展示需求和工单时，任一对应阶段仍可见才保留该列；单阶段列严格遵从该阶段配置。
+const OVERVIEW_NATIVE_COLUMN_BINDINGS = {
+  req_code: [['requirement', 'req_code'], ['ticket', 'ticket_code']],
+  req_title: [['requirement', 'title'], ['ticket', 'title']],
+  req_summary: [['requirement', 'summary'], ['ticket', 'summary']],
+  req_status: [['requirement', 'status'], ['ticket', 'status']],
+  req_type: [['requirement', 'req_type'], ['ticket', 'ticket_type']],
+  is_accounting: [['requirement', 'is_accounting'], ['ticket', 'is_accounting']],
+  priority: [['requirement', 'priority'], ['ticket', 'priority']],
+  propose_dept: [['requirement', 'propose_dept'], ['ticket', 'propose_dept']],
+  proposer: [['requirement', 'proposer'], ['ticket', 'proposer']],
+  yn_owner: [['requirement', 'yn_owner'], ['ticket', 'yn_owner']],
+  jk_owner: [['requirement', 'jk_owner'], ['ticket', 'jk_owner']],
+  propose_time: [['requirement', 'propose_time'], ['ticket', 'propose_time']],
+  expected_release_date: [['requirement', 'expected_release_date'], ['ticket', 'expected_release_date']],
+  issue_no: [['requirement', 'issue_no'], ['ticket', 'issue_no']],
+  receiver: [['requirement', 'receiver'], ['ticket', 'receiver']],
+  workload: [['requirement', 'workload'], ['ticket', 'workload']],
+  registrar: [['requirement', 'registrar'], ['ticket', 'registrar']],
+  implementation_org: [['requirement', 'implementation_org'], ['ticket', 'implementation_org']],
+  main_systems: [['requirement', 'main_systems'], ['ticket', 'main_systems']],
+  collab_dev_systems: [['requirement', 'collab_dev_systems'], ['ticket', 'collab_dev_systems']],
+  collab_test_systems: [['requirement', 'collab_test_systems'], ['ticket', 'collab_test_systems']],
+  dev_name: [['dev', 'task_name']], dev_content: [['dev', 'content']], dev_status: [['dev', 'status']],
+  dev_owner: [['dev', 'owner']], dev_intake_owner: [['dev', 'intake_owner']], dev_system: [['dev', 'impl_system']], dev_org: [['dev', 'impl_org']],
+  dev_plan_start: [['dev', 'plan_start']], dev_plan_end: [['dev', 'plan_end']], dev_actual_start: [['dev', 'actual_start']], dev_actual_end: [['dev', 'actual_end']],
+  sit_name: [['test.SIT', 'task_name']], sit_status: [['test.SIT', 'status']], sit_owner: [['test.SIT', 'owner']], sit_intake_owner: [['test.SIT', 'intake_owner']], sit_system: [['test.SIT', 'impl_system']], sit_org: [['test.SIT', 'impl_org']], sit_plan_start: [['test.SIT', 'plan_start']], sit_plan_end: [['test.SIT', 'plan_end']], sit_actual_start: [['test.SIT', 'actual_start']], sit_actual_end: [['test.SIT', 'actual_end']],
+  uat_name: [['test.UAT', 'task_name']], uat_status: [['test.UAT', 'status']], uat_owner: [['test.UAT', 'owner']], uat_intake_owner: [['test.UAT', 'intake_owner']], uat_system: [['test.UAT', 'impl_system']], uat_org: [['test.UAT', 'impl_org']], uat_plan_start: [['test.UAT', 'plan_start']], uat_plan_end: [['test.UAT', 'plan_end']], uat_actual_start: [['test.UAT', 'actual_start']], uat_actual_end: [['test.UAT', 'actual_end']],
+  nft_name: [['test.NFT', 'task_name']], nft_status: [['test.NFT', 'status']], nft_owner: [['test.NFT', 'owner']], nft_intake_owner: [['test.NFT', 'intake_owner']], nft_system: [['test.NFT', 'impl_system']], nft_org: [['test.NFT', 'impl_org']], nft_plan_start: [['test.NFT', 'plan_start']], nft_plan_end: [['test.NFT', 'plan_end']], nft_actual_start: [['test.NFT', 'actual_start']], nft_actual_end: [['test.NFT', 'actual_end']],
+  sec_name: [['test.SEC', 'task_name']], sec_status: [['test.SEC', 'status']], sec_owner: [['test.SEC', 'owner']], sec_intake_owner: [['test.SEC', 'intake_owner']], sec_system: [['test.SEC', 'impl_system']], sec_org: [['test.SEC', 'impl_org']], sec_plan_start: [['test.SEC', 'plan_start']], sec_plan_end: [['test.SEC', 'plan_end']], sec_actual_start: [['test.SEC', 'actual_start']], sec_actual_end: [['test.SEC', 'actual_end']],
+  release_status: [['release', 'status']], release_owner: [['release', 'owner']],
+};
+
+async function visibleOverviewColumns(columns) {
+  const scopeKeys = [...new Set(Object.values(OVERVIEW_NATIVE_COLUMN_BINDINGS).flat().map(([scopeKey]) => scopeKey))];
+  const fieldMaps = new Map(await Promise.all(scopeKeys.map(async (scopeKey) => [
+    scopeKey,
+    new Map((await getStageContentConfig(scopeKey)).fields.filter((field) => field.field_kind === 'native').map((field) => [field.field_key, field])),
+  ])));
+  return columns
+    .filter((column) => {
+      const bindings = OVERVIEW_NATIVE_COLUMN_BINDINGS[column.key];
+      if (!bindings) return true;
+      return bindings.some(([scopeKey, fieldKey]) => fieldMaps.get(scopeKey)?.get(fieldKey)?.visible);
+    })
+    .map((column) => {
+      const bindings = OVERVIEW_NATIVE_COLUMN_BINDINGS[column.key];
+      if (!bindings || bindings.length !== 1) return column;
+      const [scopeKey, fieldKey] = bindings[0];
+      const field = fieldMaps.get(scopeKey)?.get(fieldKey);
+      if (!field?.label) return column;
+      const testPrefix = {
+        'test.SIT': '应用组装', 'test.UAT': '用户', 'test.NFT': '非功能', 'test.SEC': '安全',
+      }[scopeKey];
+      return { ...column, title: testPrefix ? `${testPrefix}${field.label}` : field.label };
+    });
 }
 
 /**
@@ -270,7 +350,6 @@ export default async function overviewRoutes(fastify) {
     const allWorkItems = [...reqs, ...tickets];
     const matchedCodes = await workItemCodesForAppliedReleasePoints(allWorkItems.map((item) => item.req_code), selectedPointIds);
     const workItems = matchedCodes ? allWorkItems.filter((item) => matchedCodes.includes(item.req_code)) : allWorkItems;
-
     // 关联状态与系统主数据一次性载入并分桶，替代逐需求 N+1 查询
     const sysMap = {};
     for (const s of await all('SELECT sys_code, sys_name, org FROM system')) {
@@ -536,6 +615,11 @@ export default async function overviewRoutes(fastify) {
     const allWorkItems = [...reqs, ...tickets];
     const matchedCodes = await workItemCodesForAppliedReleasePoints(allWorkItems.map((item) => item.req_code), selectedPointIds);
     const workItems = matchedCodes ? allWorkItems.filter((item) => matchedCodes.includes(item.req_code)) : allWorkItems;
+    const [applyPointMap, orgDisplayMap, statusDisplayMap, reqTypeDisplayMap, ticketTypeDisplayMap, deptDisplayMap] = await Promise.all([
+      appliedReleasePointsForWorkItems(workItems.map((item) => item.req_code)),
+      getDictDisplayMap('org'),
+      getDictDisplayMap('process_status'), getDictDisplayMap('req_type'), getDictDisplayMap('ticket_type'), getDictDisplayMap('req_dept'),
+    ]);
 
     const sysMap = {};
     for (const s of await all('SELECT sys_code, sys_name, org FROM system')) {
@@ -627,11 +711,16 @@ export default async function overviewRoutes(fastify) {
     }
 
     // 2. 将筛选出来的需求/工单按开发任务行展开
-    const wideRows = [];
+    let wideRows = [];
     for (const r of filteredReqs) {
       const devTasks = devMap[r.req_code] || [];
       const testBucket = testMap[r.req_code] || {};
       const rtRow = rtMap[r.req_code];
+      const taskStatus = buildChain(
+        r, devMap,
+        Object.fromEntries(Object.entries(testBucket).map(([key, value]) => [key, value.map((item) => ({ status: item.status }))])),
+        Object.fromEntries(Object.entries(rtMap).map(([key, value]) => [key, value.status])),
+      ).currentStageFull;
       const analysisText = await analysisTextFor(r.req_code);
 
       // 提取需求/工单层级的基础信息
@@ -649,18 +738,28 @@ export default async function overviewRoutes(fastify) {
       const proposerArray = parseJsonArray(r.proposer);
 
       const reqInfo = {
+        id: r.id,
         entity_label: r.entityType === 'ticket' ? '工单' : '需求',
         req_code: r.req_code,
         req_title: r.title,
         req_summary: r.summary,
-        req_status: r.status,
-        req_type: r.req_type,
+        req_status: statusDisplayMap[r.status] || r.status || '',
+        task_status: taskStatus,
+        req_type: (r.entityType === 'ticket' ? ticketTypeDisplayMap[r.req_type] : reqTypeDisplayMap[r.req_type]) || r.req_type || '',
         is_accounting: r.is_accounting || '否',
-        propose_dept: r.propose_dept,
+        priority: r.priority || '',
+        propose_dept: deptDisplayMap[r.propose_dept] || r.propose_dept || '',
         proposer: proposerArray.join(', '),
         yn_owner: r.yn_owner,
         jk_owner: r.jk_owner,
         propose_time: r.propose_time,
+        expected_release_date: r.expected_release_date || '',
+        issue_no: r.issue_no || '',
+        receiver: r.receiver || '',
+        workload: r.workload || '',
+        registrar: r.registrar || '',
+        implementation_org: orgDisplayMap[r.implementation_org] || r.implementation_org || '',
+        release_date: (applyPointMap[r.req_code] || []).map((point) => String(point.release_date || '').replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3')).join(', '),
         main_systems: reqMainSys.map(c => sysMap[c]?.name || c).join(', '),
         collab_dev_systems: reqCollabDev.map(c => sysMap[c]?.name || c).join(', '),
         collab_test_systems: reqCollabTest.map(c => sysMap[c]?.name || c).join(', '),
@@ -669,18 +768,22 @@ export default async function overviewRoutes(fastify) {
 
       // 投产与会签信息（同一需求/工单共享）
       let releaseInfo = {
+        release_entity_id: rtRow?.id || null,
         release_status: rtRow?.status || '未发起',
         release_owner: rtRow?.owner || '',
         release_change_plan: '',
         release_change_control: '',
         signoff_details: '无',
+        related_artifacts: '',
       };
+      const artifacts = await entityArtifacts(r.req_code);
+      releaseInfo.related_artifacts = artifacts.flatMap((artifact) => (artifact.units || []).map((unit) => [artifact.change_code, artifact.change_system_name, unit.artifact_type, unit.delivery_unit, unit.new_version, unit.ferry_status].filter(Boolean).join(' / '))).join('\n');
       if (rtRow) {
         const signoffs = await all('SELECT * FROM release_signoff WHERE release_task_id = ? ORDER BY id', rtRow.id);
         const releaseAttaches = await all("SELECT * FROM attachment WHERE entity_type = 'release' AND entity_id = ?", rtRow.id);
         releaseInfo.release_change_plan = formatAttachments(releaseAttaches, '投产变更方案');
         releaseInfo.release_change_control = formatAttachments(releaseAttaches, '投产变更控制表');
-        releaseInfo.signoff_details = signoffs.map(s => `${s.role_name}·${s.signer_name || '未签署'}(${s.result}${s.conclusion ? ':' + s.conclusion : ''})`).join('; ') || '无会签记录';
+        releaseInfo.signoff_details = signoffs.map((s) => [s.role_name, s.signer_name || '未签署', s.conclusion || s.result || '', s.sign_time || ''].join(' / ')).join('\n') || '无会签记录';
       }
 
       // 如果没有任何开发任务，我们依然保留这一行，只是开发相关的字段和关联系统状态为空
@@ -688,7 +791,8 @@ export default async function overviewRoutes(fastify) {
 
       for (const d of tasksToLoop) {
         let devInfo = {
-          dev_code: '', dev_name: '', dev_content: '', dev_status: '', dev_owner: '',
+          dev_entity_id: '',
+          dev_code: '', dev_name: '', dev_content: '', dev_status: '', dev_owner: '', dev_intake_owner: '',
           dev_system: '', dev_org: '', dev_plan_start: '', dev_plan_end: '',
           dev_actual_start: '', dev_actual_end: '', dev_deviation_rate: '',
           dev_design_brief: '', dev_design_detail: '', dev_code_review: '', dev_unit_test: '',
@@ -706,13 +810,15 @@ export default async function overviewRoutes(fastify) {
           const devAttaches = await all("SELECT * FROM attachment WHERE entity_type = 'dev' AND entity_id = ?", d.id);
 
           devInfo = {
+            dev_entity_id: d.id,
             dev_code: d.task_code,
             dev_name: d.task_name,
             dev_content: d.content || '',
             dev_status: d.status,
             dev_owner: d.owner || '',
+            dev_intake_owner: d.intake_owner || '',
             dev_system: sysMap[d.impl_system]?.name || d.impl_system,
-            dev_org: d.impl_org || '',
+            dev_org: orgDisplayMap[d.impl_org] || d.impl_org || '',
             dev_plan_start: d.plan_start || '',
             dev_plan_end: d.plan_end || '',
             dev_actual_start: d.actual_start || '',
@@ -747,9 +853,17 @@ export default async function overviewRoutes(fastify) {
             if (match) {
               const testAttaches = await all("SELECT * FROM attachment WHERE entity_type = 'test' AND entity_id = ?", match.id);
               return {
+                id: match.id,
                 code: match.task_code,
+                name: match.task_name || '',
                 status: match.status,
                 owner: match.owner || '',
+                intake_owner: match.intake_owner || '',
+                impl_system: sysMap[match.impl_system]?.name || match.impl_system || '',
+                impl_org: orgDisplayMap[match.impl_org] || match.impl_org || '',
+                plan_start: match.plan_start || '',
+                plan_end: match.plan_end || '',
+                actual_start: match.actual_start || '',
                 actual_end: match.actual_end || '进行中',
                 test_plan: formatAttachments(testAttaches, '测试方案') || '无',
                 test_report: formatAttachments(testAttaches, '测试报告') || '无',
@@ -762,8 +876,16 @@ export default async function overviewRoutes(fastify) {
           if (sitMatch) {
             sitInfo = {
               sit_code: sitMatch.code,
+              sit_entity_id: sitMatch.id,
+              sit_name: sitMatch.name,
               sit_status: sitMatch.status,
               sit_owner: sitMatch.owner,
+              sit_intake_owner: sitMatch.intake_owner,
+              sit_system: sitMatch.impl_system,
+              sit_org: sitMatch.impl_org,
+              sit_plan_start: sitMatch.plan_start,
+              sit_plan_end: sitMatch.plan_end,
+              sit_actual_start: sitMatch.actual_start,
               sit_actual_end: sitMatch.actual_end,
               sit_test_plan: sitMatch.test_plan,
               sit_test_report: sitMatch.test_report,
@@ -774,8 +896,16 @@ export default async function overviewRoutes(fastify) {
           if (uatMatch) {
             uatInfo = {
               uat_code: uatMatch.code,
+              uat_entity_id: uatMatch.id,
+              uat_name: uatMatch.name,
               uat_status: uatMatch.status,
               uat_owner: uatMatch.owner,
+              uat_intake_owner: uatMatch.intake_owner,
+              uat_system: uatMatch.impl_system,
+              uat_org: uatMatch.impl_org,
+              uat_plan_start: uatMatch.plan_start,
+              uat_plan_end: uatMatch.plan_end,
+              uat_actual_start: uatMatch.actual_start,
               uat_actual_end: uatMatch.actual_end,
               uat_test_plan: uatMatch.test_plan,
               uat_test_report: uatMatch.test_report
@@ -785,8 +915,16 @@ export default async function overviewRoutes(fastify) {
           if (nftMatch) {
             nftInfo = {
               nft_code: nftMatch.code,
+              nft_entity_id: nftMatch.id,
+              nft_name: nftMatch.name,
               nft_status: nftMatch.status,
               nft_owner: nftMatch.owner,
+              nft_intake_owner: nftMatch.intake_owner,
+              nft_system: nftMatch.impl_system,
+              nft_org: nftMatch.impl_org,
+              nft_plan_start: nftMatch.plan_start,
+              nft_plan_end: nftMatch.plan_end,
+              nft_actual_start: nftMatch.actual_start,
               nft_actual_end: nftMatch.actual_end,
               nft_test_plan: nftMatch.test_plan,
               nft_test_report: nftMatch.test_report
@@ -796,8 +934,16 @@ export default async function overviewRoutes(fastify) {
           if (secMatch) {
             secInfo = {
               sec_code: secMatch.code,
+              sec_entity_id: secMatch.id,
+              sec_name: secMatch.name,
               sec_status: secMatch.status,
               sec_owner: secMatch.owner,
+              sec_intake_owner: secMatch.intake_owner,
+              sec_system: secMatch.impl_system,
+              sec_org: secMatch.impl_org,
+              sec_plan_start: secMatch.plan_start,
+              sec_plan_end: secMatch.plan_end,
+              sec_actual_start: secMatch.actual_start,
               sec_actual_end: secMatch.actual_end,
               sec_test_plan: secMatch.test_plan,
               sec_test_report: secMatch.test_report
@@ -813,35 +959,80 @@ export default async function overviewRoutes(fastify) {
           ...releaseInfo,
 
           sit_code: sitInfo.sit_code,
+          sit_name: sitInfo.sit_name,
           sit_status: sitInfo.sit_status,
           sit_owner: sitInfo.sit_owner,
+          sit_intake_owner: sitInfo.sit_intake_owner,
+          sit_system: sitInfo.sit_system,
+          sit_org: sitInfo.sit_org,
+          sit_plan_start: sitInfo.sit_plan_start,
+          sit_plan_end: sitInfo.sit_plan_end,
+          sit_actual_start: sitInfo.sit_actual_start,
           sit_actual_end: sitInfo.sit_actual_end,
           sit_test_plan: sitInfo.sit_test_plan,
           sit_test_coverage_design: sitInfo.sit_test_coverage_design,
           sit_test_report: sitInfo.sit_test_report,
 
           uat_code: uatInfo.uat_code,
+          uat_name: uatInfo.uat_name,
           uat_status: uatInfo.uat_status,
           uat_owner: uatInfo.uat_owner,
+          uat_intake_owner: uatInfo.uat_intake_owner,
+          uat_system: uatInfo.uat_system,
+          uat_org: uatInfo.uat_org,
+          uat_plan_start: uatInfo.uat_plan_start,
+          uat_plan_end: uatInfo.uat_plan_end,
+          uat_actual_start: uatInfo.uat_actual_start,
           uat_actual_end: uatInfo.uat_actual_end,
           uat_test_plan: uatInfo.uat_test_plan,
           uat_test_report: uatInfo.uat_test_report,
 
           nft_code: nftInfo.nft_code,
+          nft_name: nftInfo.nft_name,
           nft_status: nftInfo.nft_status,
           nft_owner: nftInfo.nft_owner,
+          nft_intake_owner: nftInfo.nft_intake_owner,
+          nft_system: nftInfo.nft_system,
+          nft_org: nftInfo.nft_org,
+          nft_plan_start: nftInfo.nft_plan_start,
+          nft_plan_end: nftInfo.nft_plan_end,
+          nft_actual_start: nftInfo.nft_actual_start,
           nft_actual_end: nftInfo.nft_actual_end,
           nft_test_plan: nftInfo.nft_test_plan,
           nft_test_report: nftInfo.nft_test_report,
 
           sec_code: secInfo.sec_code,
+          sec_name: secInfo.sec_name,
           sec_status: secInfo.sec_status,
           sec_owner: secInfo.sec_owner,
+          sec_intake_owner: secInfo.sec_intake_owner,
+          sec_system: secInfo.sec_system,
+          sec_org: secInfo.sec_org,
+          sec_plan_start: secInfo.sec_plan_start,
+          sec_plan_end: secInfo.sec_plan_end,
+          sec_actual_start: secInfo.sec_actual_start,
           sec_actual_end: secInfo.sec_actual_end,
           sec_test_plan: secInfo.sec_test_plan,
           sec_test_report: secInfo.sec_test_report,
         });
       }
+    }
+
+    const dynamicStages = [
+      { scopeKey: 'requirement', prefix: '需求分析', idKey: 'id', matches: (row) => row.entity_label === '需求' },
+      { scopeKey: 'ticket', prefix: '工单分析', idKey: 'id', matches: (row) => row.entity_label === '工单' },
+      { scopeKey: 'dev', prefix: '开发管理', idKey: 'dev_entity_id', matches: () => true },
+      { scopeKey: 'test.SIT', prefix: '应用组装测试', idKey: 'sit_entity_id', matches: () => true },
+      { scopeKey: 'test.UAT', prefix: '用户测试', idKey: 'uat_entity_id', matches: () => true },
+      { scopeKey: 'test.NFT', prefix: '非功能测试', idKey: 'nft_entity_id', matches: () => true },
+      { scopeKey: 'test.SEC', prefix: '安全测试', idKey: 'sec_entity_id', matches: () => true },
+      { scopeKey: 'release', prefix: '投产审批', idKey: 'release_entity_id', matches: () => true },
+    ];
+    const dynamicColumns = [];
+    for (const stage of dynamicStages) {
+      const result = await appendOverviewStageColumns(wideRows, stage);
+      wideRows = result.rows;
+      dynamicColumns.push(...result.columns);
     }
 
     const cols = [
@@ -851,78 +1042,99 @@ export default async function overviewRoutes(fastify) {
       { key: 'req_title', title: '需求标题/工单标题' },
       { key: 'req_summary', title: '需求概述/工单详情' },
       { key: 'req_status', title: '需求/工单状态' },
+      { key: 'task_status', title: '任务状态' },
       { key: 'req_type', title: '需求/工单类型' },
       { key: 'is_accounting', title: '是否涉账' },
+      { key: 'priority', title: '优先级' },
       { key: 'propose_dept', title: '提出部门' },
       { key: 'proposer', title: '提出人' },
       { key: 'yn_owner', title: '云南农信负责人' },
       { key: 'jk_owner', title: '建信金科负责人' },
-      { key: 'propose_time', title: '提出时间' },
-      { key: 'release_date', title: '申请投产点' },
+      { key: 'propose_time', title: '提出时间', valueType: 'datetime' },
+      { key: 'expected_release_date', title: '期望投产时间', valueType: 'date' },
+      { key: 'issue_no', title: 'OA编号/工单编号' },
+      { key: 'receiver', title: '需求接收人' },
+      { key: 'workload', title: '工作量(人天)' },
+      { key: 'registrar', title: '录入人' },
+      { key: 'implementation_org', title: '实施机构' },
+      { key: 'release_date', title: '申请投产点', valueType: 'date' },
       { key: 'main_systems', title: '主责系统' },
       { key: 'collab_dev_systems', title: '协同改造系统' },
       { key: 'collab_test_systems', title: '协同测试系统' },
-      { key: 'req_spec', title: '需求说明书' },
       // 开发任务
       { key: 'dev_code', title: '开发任务编号' },
       { key: 'dev_name', title: '开发任务名称' },
       { key: 'dev_content', title: '开发内容概述' },
       { key: 'dev_status', title: '开发状态' },
       { key: 'dev_owner', title: '开发负责人' },
+      { key: 'dev_intake_owner', title: '开发承接人' },
       { key: 'dev_system', title: '开发实施系统' },
       { key: 'dev_org', title: '开发实施方' },
-      { key: 'dev_plan_start', title: '开发计划开始' },
-      { key: 'dev_plan_end', title: '开发计划结束' },
-      { key: 'dev_actual_start', title: '开发实际开始' },
-      { key: 'dev_actual_end', title: '开发实际结束' },
+      { key: 'dev_plan_start', title: '开发计划开始', valueType: 'date' },
+      { key: 'dev_plan_end', title: '开发计划结束', valueType: 'date' },
+      { key: 'dev_actual_start', title: '开发实际开始', valueType: 'date' },
+      { key: 'dev_actual_end', title: '开发实际结束', valueType: 'date' },
       { key: 'dev_deviation_rate', title: '开发排期偏差率' },
-      { key: 'dev_design_brief', title: '概要设计' },
-      { key: 'dev_design_detail', title: '详细设计' },
-      { key: 'dev_code_review', title: '代码走查' },
-      { key: 'dev_unit_test', title: '单元测试报告' },
-      { key: 'dev_coding_checklist', title: '编码检查表' },
-      { key: 'dev_tech_solution_confirm', title: '技术方案确认单' },
       { key: 'dev_impact_analysis', title: '影响性分析', width: 60, wrapText: true },
       // 应用组装测试 (SIT)
       { key: 'sit_code', title: '应用组装测试任务编号' },
+      { key: 'sit_name', title: '应用组装测试任务名称' },
       { key: 'sit_status', title: '应用组装测试状态' },
       { key: 'sit_owner', title: '应用组装测试负责人' },
-      { key: 'sit_actual_end', title: '应用组装测试实际完成时间' },
-      { key: 'sit_test_plan', title: '应用组装测试方案' },
+      { key: 'sit_intake_owner', title: '应用组装测试承接人' },
+      { key: 'sit_system', title: '应用组装测试实施系统' },
+      { key: 'sit_org', title: '应用组装测试实施方' },
+      { key: 'sit_plan_start', title: '应用组装测试计划开始时间', valueType: 'date' },
+      { key: 'sit_plan_end', title: '应用组装测试计划结束时间', valueType: 'date' },
+      { key: 'sit_actual_start', title: '应用组装测试实际开始时间', valueType: 'date' },
+      { key: 'sit_actual_end', title: '应用组装测试实际完成时间', valueType: 'date' },
       { key: 'sit_test_coverage_design', title: '应用组装测试覆盖性分析', width: 60, wrapText: true },
-      { key: 'sit_test_report', title: '应用组装测试报告' },
       // 用户测试 (UAT)
       { key: 'uat_code', title: '用户测试任务编号' },
+      { key: 'uat_name', title: '用户测试任务名称' },
       { key: 'uat_status', title: '用户测试状态' },
       { key: 'uat_owner', title: '用户测试负责人' },
-      { key: 'uat_actual_end', title: '用户测试实际完成时间' },
-      { key: 'uat_test_plan', title: '用户测试方案' },
-      { key: 'uat_test_report', title: '用户测试报告' },
+      { key: 'uat_intake_owner', title: '用户测试承接人' },
+      { key: 'uat_system', title: '用户测试实施系统' },
+      { key: 'uat_org', title: '用户测试实施方' },
+      { key: 'uat_plan_start', title: '用户测试计划开始时间', valueType: 'date' },
+      { key: 'uat_plan_end', title: '用户测试计划结束时间', valueType: 'date' },
+      { key: 'uat_actual_start', title: '用户测试实际开始时间', valueType: 'date' },
+      { key: 'uat_actual_end', title: '用户测试实际完成时间', valueType: 'date' },
       // 非功能测试 (NFT)
       { key: 'nft_code', title: '非功能测试任务编号' },
+      { key: 'nft_name', title: '非功能测试任务名称' },
       { key: 'nft_status', title: '非功能测试状态' },
       { key: 'nft_owner', title: '非功能测试负责人' },
-      { key: 'nft_actual_end', title: '非功能测试实际完成时间' },
-      { key: 'nft_test_plan', title: '非功能测试方案' },
-      { key: 'nft_test_report', title: '非功能测试报告' },
+      { key: 'nft_intake_owner', title: '非功能测试承接人' },
+      { key: 'nft_system', title: '非功能测试实施系统' },
+      { key: 'nft_org', title: '非功能测试实施方' },
+      { key: 'nft_plan_start', title: '非功能测试计划开始时间', valueType: 'date' },
+      { key: 'nft_plan_end', title: '非功能测试计划结束时间', valueType: 'date' },
+      { key: 'nft_actual_start', title: '非功能测试实际开始时间', valueType: 'date' },
+      { key: 'nft_actual_end', title: '非功能测试实际完成时间', valueType: 'date' },
       // 安全测试 (SEC)
       { key: 'sec_code', title: '安全测试任务编号' },
+      { key: 'sec_name', title: '安全测试任务名称' },
       { key: 'sec_status', title: '安全测试状态' },
       { key: 'sec_owner', title: '安全测试负责人' },
-      { key: 'sec_actual_end', title: '安全测试实际完成时间' },
-      { key: 'sec_test_plan', title: '安全测试方案' },
-      { key: 'sec_test_report', title: '安全测试报告' },
+      { key: 'sec_intake_owner', title: '安全测试承接人' },
+      { key: 'sec_system', title: '安全测试实施系统' },
+      { key: 'sec_org', title: '安全测试实施方' },
+      { key: 'sec_plan_start', title: '安全测试计划开始时间', valueType: 'date' },
+      { key: 'sec_plan_end', title: '安全测试计划结束时间', valueType: 'date' },
+      { key: 'sec_actual_start', title: '安全测试实际开始时间', valueType: 'date' },
+      { key: 'sec_actual_end', title: '安全测试实际完成时间', valueType: 'date' },
       // 投产
       { key: 'release_status', title: '投产状态' },
       { key: 'release_owner', title: '投产负责人' },
-      { key: 'release_change_plan', title: '投产变更方案' },
-      { key: 'release_change_control', title: '投产变更控制表' },
+      { key: 'related_artifacts', title: '关联制品情况', wrapText: true },
       { key: 'signoff_details', title: '会签决议详情' },
-      { key: 'sys_release_time', title: '系统上线实际时间' },
+      { key: 'sys_release_time', title: '系统上线实际时间', valueType: 'datetime' },
       { key: 'sys_release_status', title: '系统上线状态' },
     ];
 
-    const buf = await exportXlsx(cols, wideRows, '版本概览宽表');
+    const buf = await exportXlsx([...(await visibleOverviewColumns(cols)), ...dynamicColumns], wideRows, '版本概览宽表');
     reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     reply.header('Content-Disposition', 'attachment; filename=version_overview_wide_table.xlsx');
     return reply.send(buf);

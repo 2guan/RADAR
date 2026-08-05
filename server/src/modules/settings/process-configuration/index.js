@@ -19,7 +19,7 @@ export {
 export {
   appendStageExcelValues, appendStageListValues, assertDeliverableInputAllowed,
   assertDeliverableRemovable, deleteDeliverableDefinition, deleteFieldDefinition, deleteSection,
-  extensionValuesFromExcelRow, getExtensionValues, getStageContentConfig, getStageExcelColumns,
+  buildStageExcelTemplateRows, extensionValuesFromExcelRow, getExtensionValues, getStageContentConfig, getStageExcelColumns,
   getStageScope, listFieldSourceOptions, listStageScopes, listStageStatuses, recordConfigRevision,
   applyBuiltinConfigurationUpgrades, BUILTIN_CONFIGURATION_UPGRADE_ID, normalizeConfiguredFieldValue,
   PRIORITY_OPTIONS, resolveBuiltinConfiguration,
