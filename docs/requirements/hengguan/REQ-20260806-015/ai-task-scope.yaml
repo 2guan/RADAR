@@ -1,0 +1,99 @@
+{
+  "schema_version": "1.0",
+  "requirement": {
+    "id": "REQ-20260806-015",
+    "ref": "hengguan/REQ-20260806-015",
+    "title": "列表列宽边界、筛选有效性与配置动态对齐",
+    "status": "ready",
+    "document": "docs/requirements/hengguan/REQ-20260806-015/requirement.md",
+    "internet_ai_coding_allowed": true
+  },
+  "assignment": {
+    "developer": "hengguan",
+    "module": "governance",
+    "module_owner": "hengguan",
+    "branch": "hengguan/REQ-20260806-015-table-filter-validity",
+    "base_branch": "origin/main",
+    "worktree": "/Volumes/GuanMac/Code/RADAR"
+  },
+  "ai": {
+    "enabled": true,
+    "approved_service": "Codex desktop",
+    "model": "approved-by-user",
+    "contains_confidential_information": false,
+    "context_sanitized": true,
+    "production_access": false
+  },
+  "scope": {
+    "writable_paths": [
+      "docs/requirements/hengguan/REQ-20260806-015/**",
+      "web/src/shared/ui/DataTable.jsx",
+      "web/src/shared/ui/ResizableTitle.jsx",
+      "web/src/shared/ui/FilterPanel.jsx",
+      "web/src/modules/**",
+      "server/src/modules/identity-access/application/list-preferences.js",
+      "server/src/modules/overview/**",
+      "server/src/modules/settings/**",
+      "server/test/**",
+      "web/test/**"
+    ],
+    "read_only_paths": [
+      "AGENTS.md", "DESIGN.md", "docs/governance/**", "docs/architecture/**", "governance/modules.yaml",
+      ".agents/skills/radar-delivery-engineer/**", "server/src/platform/**", "server/src/shared/**", "web/src/platform/**"
+    ],
+    "forbidden_paths": [
+      "server/src/platform/persistence/migrations/**", ".github/**", "docs/reports/**", ".env", "**/.env",
+      "**/*secret*", "**/*credential*", "attachments/**", "data/**"
+    ]
+  },
+  "public_capability_change": {
+    "required": true,
+    "shared_change_issue": "hengguan/REQ-20260806-015",
+    "target_modules": ["governance", "shared/contracts", "identity-access", "settings", "overview"],
+    "new_methods": [],
+    "existing_method_changed": true,
+    "semantic_name_confirmed": true,
+    "old_behavior_preserved": true,
+    "compatibility_note": "公共 DataTable/ResizableTitle 仅将列宽规范为 50 至 800 的整数；既有输入项配置的 filterable 属性成为页面筛选可见性的动态来源，不改变已有多内容筛选的控件、值形状或查询语义；版本概览保持现有 list/export URI 和筛选 DTO。",
+    "owner_approved": true,
+    "owner_review_required_before_merge": true
+  },
+  "database": {
+    "changed": false,
+    "migration_paths": [],
+    "mysql8_compatible": true,
+    "historical_data_impact": "不修改业务数据或 schema；只在客户端非破坏性处理非法历史列宽偏好。",
+    "rollback_or_compensation": "回退本需求应用版本即可；不删除、不迁移或补偿任何数据。"
+  },
+  "external_access": {
+    "changed": false,
+    "api_paths": [],
+    "readable_field_whitelist": [],
+    "writable_field_whitelist": [],
+    "action_whitelist": [],
+    "audit_required": false
+  },
+  "required_tests": [
+    {"name": "unit-and-api", "command": "新增并执行命中 AC-001 至 AC-005、AC-007 的共享列宽、版本概览筛选/导出、输入项 filterable 动态开关及多内容筛选回归测试；执行 npm test --prefix server 和关联前端测试。"},
+    {"name": "api", "command": "npm run test:api --prefix server"},
+    {"name": "permission", "command": "npm run test:rbac --prefix server"},
+    {"name": "ui-data-sources", "command": "node scripts/check-ui-data-sources.mjs"},
+    {"name": "build", "command": "npm run build --prefix web"},
+    {"name": "scope", "command": "node scripts/check-ai-scope.mjs --scope docs/requirements/hengguan/REQ-20260806-015/ai-task-scope.yaml --base origin/main --head HEAD"},
+    {"name": "governance", "command": "node scripts/check-module-boundaries.mjs && node scripts/check-governance.mjs && node scripts/check-code-comments.mjs && git diff --check"},
+    {"name": "runtime", "command": "node scripts/verify-app-runtime.mjs"},
+    {"name": "browser", "command": "使用本地脱敏管理员在桌面和移动视口核验列宽边界、版本概览三项筛选、组合/重置/导出、输入项配置的是否筛选动态开关、既有多内容筛选，以及空态/失败/无权限、刷新与控制台错误。"}
+  ],
+  "risk": {
+    "level": "important",
+    "reasons": ["公共表格交互影响所有业务列表", "输入项配置与页面筛选动态契约", "版本概览跨模块只读聚合与导出一致性", "全页面既有筛选契约回归"],
+    "required_approvals": ["hengguan"]
+  },
+  "completion": {
+    "changed_files_report_required": true,
+    "test_result_report_required": true,
+    "known_risks_report_required": true,
+    "rollback_report_required": true,
+    "requirement_acceptance_required": true
+  }
+}

@@ -7,6 +7,15 @@
 
 import { useRef } from 'react';
 
+const MIN_COLUMN_WIDTH = 50;
+const MAX_COLUMN_WIDTH = 800;
+
+function normalizeColumnWidth(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return MIN_COLUMN_WIDTH;
+  return Math.min(MAX_COLUMN_WIDTH, Math.max(MIN_COLUMN_WIDTH, Math.round(numeric)));
+}
+
 export default function ResizableTitle(props) {
   const { onResize, width, ...rest } = props;
   const startX = useRef(0);
@@ -19,9 +28,10 @@ export default function ResizableTitle(props) {
     e.stopPropagation();
     e.preventDefault();
     startX.current = e.clientX;
-    startW.current = width || (thRef.current ? thRef.current.getBoundingClientRect().width : 0);
+    startW.current = normalizeColumnWidth(width || (thRef.current ? thRef.current.getBoundingClientRect().width : 0));
     const onMove = (ev) => {
-      const next = Math.max(60, startW.current + (ev.clientX - startX.current));
+      // 与个人列表偏好服务端校验保持同一边界，避免拖拽时提交 0–49 或小数宽度而报错。
+      const next = normalizeColumnWidth(startW.current + (ev.clientX - startX.current));
       onResize(next);
     };
     const onUp = () => {

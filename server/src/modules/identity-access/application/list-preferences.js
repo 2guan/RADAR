@@ -43,7 +43,7 @@ function normalizedWidths(value, allowed) {
   for (const [key, width] of Object.entries(value)) {
     if (!isAllowedColumnKey(allowed, key) || LOCKED_COLUMNS.has(key)) throw badRequest('列宽包含不允许的字段');
     const numeric = Number(width);
-    if (!Number.isInteger(numeric) || numeric < 72 || numeric > 800) throw badRequest('列宽必须为 72 至 800 的整数');
+    if (!Number.isInteger(numeric) || numeric < 50 || numeric > 800) throw badRequest('列宽必须为 50 至 800 的整数');
     out[key] = numeric;
   }
   return out;

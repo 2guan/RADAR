@@ -64,7 +64,7 @@ export default function DevTasks() {
     { field: 'owners', label: '负责人', type: 'select', op: 'in', options: userOptions },
     { field: 'impl_system', label: '实施系统', type: 'select', op: 'in', options: systemOptions },
     ...stageList.filterConfigs,
-  ];
+  ].filter((config) => stageList.isFilterable(config.field));
 
   /**
    * 监听过滤器变更，构造标准的通用 SQL 筛选条件结构

@@ -60,7 +60,7 @@ export default function ReleaseApply() {
     { field: 'ferry_status', label: '摆渡状态', type: 'select', op: 'in', options: ferryOptions },
     { field: 'artifact_release_status', label: '制品投产状态', type: 'select', op: 'in', options: artifactReleaseOptions },
     ...stageList.filterConfigs,
-  ];
+  ].filter((config) => stageList.isFilterable(config.field));
 
   // 归一化空值和多选值，避免把无效条件传给后端查询契约。
   const handleFilterChange = (vals) => {

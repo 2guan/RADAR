@@ -139,6 +139,32 @@ if (!process.env.RADAR_RUN_API_TESTS) {
     assert.ok(overview.json().data.list.flatMap((group) => group.cards).some((card) => card.code === appliedCode));
   });
 
+  test('版本概览申请投产点、完整任务阶段和任务状态筛选同时约束列表与导出', async () => {
+    const administrator = await get('SELECT id, phone FROM user WHERE is_super = 1 LIMIT 1');
+    const headers = { authorization: `Bearer ${await app.jwt.sign({ id: administrator.id, phone: administrator.phone })}`, 'x-requested-by': 'RADAR' };
+    const point = await run("INSERT INTO release_point (release_date, version_type) VALUES (?,?)", '20990215', '常规版本');
+    const pointId = Number(point.lastInsertRowid);
+    const code = 'OVERVIEW-FILTER-CONTRACT-001';
+    await run('INSERT INTO requirement (req_code, title, status) VALUES (?,?,?)', code, '版本概览筛选契约回归', '分析完成');
+    await run('INSERT INTO dev_task (req_code, task_code, status) VALUES (?,?,?)', code, 'DEV-OVERVIEW-FILTER-CONTRACT-001', '开发设计');
+    const apply = await run('INSERT INTO release_apply (change_code, change_content, release_point_id) VALUES (?,?,?)', 'APPLY-OVERVIEW-FILTER-CONTRACT-001', '版本概览筛选契约回归', pointId);
+    await run('INSERT INTO release_apply_reference (release_apply_id, ref_code, release_point_id) VALUES (?,?,?)', apply.lastInsertRowid, code, pointId);
+    const filters = [
+      { field: 'release_point_id', op: 'in', value: [pointId] },
+      { field: 'stage', op: 'in', value: ['开发'] },
+      { field: 'taskStatus', op: 'in', value: ['开发-开发设计'] },
+    ];
+
+    const listed = await app.inject({ method: 'POST', url: '/api/overview/list', headers, payload: { pageSize: 100, filters } });
+    assert.equal(listed.statusCode, 200, listed.body);
+    assert.deepEqual(listed.json().data.list.flatMap((group) => group.cards).map((card) => card.code), [code]);
+
+    const exported = await app.inject({ method: 'POST', url: '/api/overview/export', headers, payload: { filters } });
+    assert.equal(exported.statusCode, 200, exported.body);
+    assert.match(exported.headers['content-type'], /spreadsheetml/);
+    assert.ok(exported.rawPayload.length > 0);
+  });
+
   test('投产申请新增默认实施机构取唯一开发实施方，并安全处理无匹配和冲突', async () => {
     const administrator = await get('SELECT id, phone FROM user WHERE is_super = 1 LIMIT 1');
     const headers = { authorization: `Bearer ${await app.jwt.sign({ id: administrator.id, phone: administrator.phone })}`, 'x-requested-by': 'RADAR' };
@@ -347,6 +373,14 @@ if (!process.env.RADAR_RUN_API_TESTS) {
 
     const invalid = await app.inject({ method: 'PUT', url: '/api/user-list-preferences/requirements.analysis', headers, payload: { ...payload, visibleKeys: ['op'], orderedKeys: ['op'] } });
     assert.equal(invalid.statusCode, 400);
+    for (const width of [49, 800.5, 801]) {
+      const invalidWidth = await app.inject({
+        method: 'PUT', url: '/api/user-list-preferences/requirements.analysis', headers,
+        payload: { ...payload, widthByKey: { title: width } },
+      });
+      assert.equal(invalidWidth.statusCode, 400);
+      assert.match(invalidWidth.json().message, /列宽必须为 50 至 800 的整数/);
+    }
     assert.deepEqual((await app.inject({ method: 'GET', url: '/api/user-list-preferences/requirements.analysis', headers })).json().data, payload);
 
     const deleted = await app.inject({ method: 'DELETE', url: '/api/user-list-preferences/requirements.analysis', headers });

@@ -583,6 +583,7 @@ export default function Overview() {
   const [issueDetailId, setIssueDetailId] = useState(null);
 
   const [filterQuery, setFilterQuery] = useState([]);
+  const listRequestRef = useRef(0);
   
   // 下拉列表选项数据源
   const [points, setPoints] = useState([]);
@@ -596,18 +597,26 @@ export default function Overview() {
     apiGet('/systems/all').then(setSystems).catch(() => {});
     apiGet('/dict/by-category/process_status').then(res => {
       const opts = [];
-      const stages = ['需求', '工单', '开发', '应用组装', '非功能测试', '安全测试', '用户测试', '投产'];
-      stages.forEach(stg => {
-        opts.push({ value: `${stg}-未开始`, label: `${stg} - 未开始` });
+      const stages = [
+        ['需求分析', '需求'], ['工单分析', '工单'], ['开发', '开发'], ['应用组装测试', '应用组装'],
+        ['非功能测试', '非功能测试'], ['安全测试', '安全测试'], ['用户测试', '用户测试'], ['投产审批', '投产'],
+      ];
+      stages.forEach(([value, label]) => {
+        opts.push({ value: `${value}-未开始`, label: `${label} - 未开始` });
       });
 
       (res || []).forEach(item => {
         const stg = item.extra?.stage;
         const statusVal = item.attr_value;
-        if (stg === '需求' || stg === '工单' || stg === '开发' || stg === '投产') {
-          opts.push({ value: `${stg}-${statusVal}`, label: `${stg} - ${statusVal}` });
+        if (stg === '需求' || stg === '工单') {
+          opts.push({ value: `需求分析-${statusVal}`, label: `需求 - ${statusVal}` });
+          opts.push({ value: `工单分析-${statusVal}`, label: `工单 - ${statusVal}` });
+        } else if (stg === '开发') {
+          opts.push({ value: `开发-${statusVal}`, label: `开发 - ${statusVal}` });
+        } else if (stg === '投产') {
+          opts.push({ value: `投产审批-${statusVal}`, label: `投产 - ${statusVal}` });
         } else if (stg === '测试') {
-          opts.push({ value: `应用组装-${statusVal}`, label: `应用组装 - ${statusVal}` });
+          opts.push({ value: `应用组装测试-${statusVal}`, label: `应用组装 - ${statusVal}` });
           opts.push({ value: `非功能测试-${statusVal}`, label: `非功能测试 - ${statusVal}` });
           opts.push({ value: `安全测试-${statusVal}`, label: `安全测试 - ${statusVal}` });
           opts.push({ value: `用户测试-${statusVal}`, label: `用户测试 - ${statusVal}` });
@@ -621,14 +630,14 @@ export default function Overview() {
   const orgOptions = orgs.map(o => ({ value: o.attr_value, label: o.display_value }));
   const systemOptions = systems.map(s => ({ value: s.sys_code, label: `${s.sys_code} - ${s.sys_name}` }));
   const stageOptions = [
-    { value: '需求', label: '需求' },
-    { value: '工单', label: '工单' },
+    { value: '需求分析', label: '需求' },
+    { value: '工单分析', label: '工单' },
     { value: '开发', label: '开发' },
-    { value: '应用组装', label: '应用组装' },
+    { value: '应用组装测试', label: '应用组装' },
     { value: '非功能测试', label: '非功能测试' },
     { value: '安全测试', label: '安全测试' },
     { value: '用户测试', label: '用户测试' },
-    { value: '投产', label: '投产' },
+    { value: '投产审批', label: '投产' },
   ];
 
   const filterConfigs = [
@@ -671,14 +680,19 @@ export default function Overview() {
     return [...byOrg.values()];
   };
   const load = (page = 1) => {
+    const requestId = ++listRequestRef.current;
     if (page === 1) setLoading(true); else setLoadingMore(true);
     apiPost('/overview/list', { releasePointIds, filters: filterQuery, page, pageSize: 100 })
       .then((d) => {
+        if (requestId !== listRequestRef.current) return;
         const list = d.list || [];
         setGroups((current) => page === 1 ? list : mergeGroups(current, list));
         setPageInfo({ page: d.page || page, total: d.total || 0, hasMore: !!d.hasMore });
       })
-      .finally(() => { if (page === 1) setLoading(false); else setLoadingMore(false); });
+      .finally(() => {
+        if (requestId !== listRequestRef.current) return;
+        if (page === 1) setLoading(false); else setLoadingMore(false);
+      });
   };
   useEffect(load, [JSON.stringify(releasePointIds), JSON.stringify(filterQuery)]);
 
