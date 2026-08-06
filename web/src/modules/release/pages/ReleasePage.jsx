@@ -17,8 +17,10 @@ import { apiPost, apiGet } from '../api/index.js';
 import { useAppStore } from '../../../platform/state/app.js';
 import { exportXlsx } from '../../../platform/import-export/io.js';
 import { ReleasePointText } from '../../settings/reference-data/index.js';
+import { useStageListFields } from '../../settings/process-configuration/index.js';
 
 export default function Release() {
+  const stageList = useStageListFields('release');
   const tableRef = useRef();
   const releasePointIds = useAppStore((s) => s.releasePointIds);
   const [detailTarget, setDetailTarget] = useState(null);
@@ -49,7 +51,7 @@ export default function Release() {
     { field: 'content', label: '标题/概述', type: 'input', isPrimary: true, op: 'like', placeholder: '需求标题、工单标题或问题概述检索' },
     { field: 'status', label: '投产状态', type: 'select', op: 'in', options: statusOptions },
     { field: 'review_status', label: '评审状态', type: 'select', op: 'in', options: reviewOptions },
-  ];
+  ].filter((config) => stageList.isFilterable(config.field));
 
   // 将筛选控件的原始值统一转换为后端列表接口使用的 filters 契约。
   const handleFilterChange = (vals) => {

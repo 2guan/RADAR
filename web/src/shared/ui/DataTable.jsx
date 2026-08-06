@@ -15,8 +15,16 @@ import { useResponsive } from '../../platform/ui/useResponsive.js';
 import ResizableTitle from './ResizableTitle.jsx';
 
 const LONG_TEXT_KEY = /(?:title|summary|content|system|task_name|name)$/i;
+const MIN_COLUMN_WIDTH = 50;
+const MAX_COLUMN_WIDTH = 800;
 const columnKey = (column) => String(column.key || column.dataIndex || '');
 const isLockedColumn = (column) => column.personalizable === false || column.fixedLayout || columnKey(column) === 'op';
+
+function normalizeColumnWidth(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  return Math.min(MAX_COLUMN_WIDTH, Math.max(MIN_COLUMN_WIDTH, Math.round(numeric)));
+}
 
 function uniqueColumns(columns) {
   const seen = new Set();
@@ -43,7 +51,10 @@ function normalizeLayout(layout, columns, defaults) {
   const visible = Array.isArray(layout?.visibleKeys) ? layout.visibleKeys.filter((key) => allowed.has(key)) : [];
   const ordered = Array.isArray(layout?.orderedKeys) ? layout.orderedKeys.filter((key) => visible.includes(key)) : [];
   const missing = visible.filter((key) => !ordered.includes(key));
-  const widthByKey = Object.fromEntries(Object.entries(layout?.widthByKey || {}).filter(([key, width]) => allowed.has(key) && Number.isFinite(Number(width))));
+  const widthByKey = Object.fromEntries(Object.entries(layout?.widthByKey || {})
+    .filter(([key]) => allowed.has(key))
+    .map(([key, width]) => [key, normalizeColumnWidth(width)])
+    .filter(([, width]) => width !== null));
   // 新增字段只在用户没有个人布局时进入默认列；已有个性化布局不强制打扰用户。
   if (!visible.length) return defaults;
   return { visibleKeys: visible, orderedKeys: [...ordered, ...missing], widthByKey };
@@ -140,7 +151,9 @@ const DataTable = forwardRef(function DataTable(props, ref) {
   }, [persistLayout]);
 
   const handleResize = useCallback((key) => (width) => {
-    updateLayout((current) => ({ ...current, widthByKey: { ...current.widthByKey, [key]: Math.round(width) } }));
+    const normalizedWidth = normalizeColumnWidth(width);
+    if (normalizedWidth === null) return;
+    updateLayout((current) => ({ ...current, widthByKey: { ...current.widthByKey, [key]: normalizedWidth } }));
   }, [updateLayout]);
 
   const columns = useMemo(() => {

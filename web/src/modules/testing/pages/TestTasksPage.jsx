@@ -67,7 +67,7 @@ const TestPanel = forwardRef(function TestPanel({ testType }, ref) {
     { field: 'owners', label: '负责人', type: 'select', op: 'in', options: userOptions },
     { field: 'impl_system', label: '实施系统', type: 'select', op: 'in', options: systemOptions },
     ...stageList.filterConfigs,
-  ];
+  ].filter((config) => stageList.isFilterable(config.field));
 
   const handleFilterChange = (vals) => {
     const arr = Object.entries(vals)

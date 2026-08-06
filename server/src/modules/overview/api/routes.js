@@ -213,6 +213,17 @@ function buildChain(req, devMap, testMap, rtMap) {
   };
 }
 
+/** 列表与导出共用当前生命周期节点的筛选语义，避免短展示名与完整阶段名发生漂移。 */
+function matchesOverviewTaskFilters(current, stageFilter, taskStatusFilter) {
+  if (stageFilter && !stageFilter.includes(current.label)) return false;
+  if (!taskStatusFilter) return true;
+  return taskStatusFilter.some((value) => {
+    const separator = String(value).lastIndexOf('-');
+    if (separator < 0) return current.status === value;
+    return current.label === value.slice(0, separator) && current.status === value.slice(separator + 1);
+  });
+}
+
 /** 问题状态节点：终态由 issue_status 字典标记，其余有状态为 doing，无状态为 pending */
 function issueStatusNode(status) {
   if (!status) return { key: '问题', label: '问题状态', state: 'pending', text: null, status: null };
@@ -400,19 +411,7 @@ export default async function overviewRoutes(fastify) {
         const dones = chain.nodes.filter((n) => n.state === 'done');
         current = dones[dones.length - 1] || chain.nodes[0];
       }
-      if (stageFilter && !stageFilter.includes(current.label)) continue;
-
-      // 5. 任务状态
-      if (taskStatusFilter) {
-        const matchesStatus = taskStatusFilter.some(ts => {
-          if (ts.includes('-')) {
-            const [stg, stat] = ts.split('-');
-            return current.label === stg && current.status === stat;
-          }
-          return current.status === ts;
-        });
-        if (!matchesStatus) continue;
-      }
+      if (!matchesOverviewTaskFilters(current, stageFilter, taskStatusFilter)) continue;
 
       // 6. 主责系统
       if (mainSystemsFilter && !mainSystems.some(s => mainSystemsFilter.includes(s))) continue;
@@ -686,18 +685,7 @@ export default async function overviewRoutes(fastify) {
         const dones = chain.nodes.filter((n) => n.state === 'done');
         current = dones[dones.length - 1] || chain.nodes[0];
       }
-      if (stageFilter && !stageFilter.includes(current.label)) continue;
-      // 5. 任务状态
-      if (taskStatusFilter) {
-        const matchesStatus = taskStatusFilter.some(ts => {
-          if (ts.includes('-')) {
-            const [stg, stat] = ts.split('-');
-            return current.label === stg && current.status === stat;
-          }
-          return current.status === ts;
-        });
-        if (!matchesStatus) continue;
-      }
+      if (!matchesOverviewTaskFilters(current, stageFilter, taskStatusFilter)) continue;
       // 6. 主责系统
       if (mainSystemsFilter && !mainSystems.some(s => mainSystemsFilter.includes(s))) continue;
       // 7. 协同系统

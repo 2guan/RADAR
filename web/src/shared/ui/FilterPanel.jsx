@@ -5,7 +5,7 @@
  * 作者：hengguan
  */
 
-import { useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Input, Select, DatePicker, Button, Badge, Space, Tooltip } from 'antd';
 import { SearchOutlined, DownOutlined, UpOutlined, UndoOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
@@ -13,7 +13,24 @@ import dayjs from 'dayjs';
 export default function FilterPanel({ configs, onChange, actions }) {
   const [expanded, setExpanded] = useState(false);
   const [localValues, setLocalValues] = useState({});
+  const valuesRef = useRef({});
   const debounceRef = useRef({});
+
+  useEffect(() => () => {
+    Object.values(debounceRef.current).forEach((timer) => clearTimeout(timer));
+  }, []);
+
+  const configSignature = configs.map((config) => config.field).join('|');
+  useEffect(() => {
+    const allowed = new Set(configs.map((config) => config.field));
+    const current = valuesRef.current;
+    const next = Object.fromEntries(Object.entries(current).filter(([field]) => allowed.has(field)));
+    if (Object.keys(next).length === Object.keys(current).length) return;
+    // 输入项配置关闭筛选能力后，立即清除该字段的本地条件，避免隐藏条件继续影响列表。
+    valuesRef.current = next;
+    setLocalValues(next);
+    onChange(next);
+  }, [configSignature, configs, onChange]);
 
   // 区分主次要配置
   const primaryConfigs = configs.filter((c) => c.isPrimary);
@@ -36,7 +53,9 @@ export default function FilterPanel({ configs, onChange, actions }) {
         clearTimeout(debounceRef.current[field]);
       }
       debounceRef.current[field] = setTimeout(() => {
-        onChange(newValues);
+        // 输入条件与下拉条件可能在同一个防抖窗口内连续更新；必须发送最新快照，
+        // 不能让旧输入值覆盖刚选择的筛选条件。
+        onChange(valuesRef.current);
       }, 350);
     } else {
       onChange(newValues);
@@ -44,7 +63,8 @@ export default function FilterPanel({ configs, onChange, actions }) {
   };
 
   const handleValueChange = (field, val, type) => {
-    const nextValues = { ...localValues, [field]: val };
+    const nextValues = { ...valuesRef.current, [field]: val };
+    valuesRef.current = nextValues;
     setLocalValues(nextValues);
     
     const isInput = type === 'input';
@@ -55,7 +75,7 @@ export default function FilterPanel({ configs, onChange, actions }) {
     // 清理所有防抖计时器
     Object.values(debounceRef.current).forEach((t) => clearTimeout(t));
     debounceRef.current = {};
-    
+    valuesRef.current = {};
     setLocalValues({});
     onChange({});
   };
